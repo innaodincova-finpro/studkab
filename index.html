@@ -1,0 +1,1793 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Студенческий кабинет — курсовые и ВКР</title>
+<meta name="theme-color" content="#4E7A9E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="СтудКаб">
+<style>
+:root{
+  --ground:#F3F8FC; --ground-2:#E7F0F8;
+  --surface:#FFFFFF; --surface-top:#FFFFFF; --surface-bot:#FAFCFE;
+  --surface-2:#EDF4FA; --surface-3:#E3EDF6;
+  --panel:#28425C; --panel-top:#3C6285; --panel-bot:#1B3145;
+  --ink:#1E2C3A; --mut:#5A7185; --dim:#8698A7;
+  --line:#DFE9F1; --line-2:#C6D8E5;
+  --accent:#2F6091; --accent-2:#4C86BC; --head:#4E7A9E;
+  --ok:#3F7B5E; --ok-bg:#E8F3EC; --ok-bg2:#DCEDE3;
+  --warn:#A85147; --warn-bg:#FAEEEB; --warn-bg2:#F5E0DB;
+  --ochre:#B08347; --och-bg:#FBF2E4; --och-bg2:#F5E6CE;
+  --r:14px; --r-sm:10px; --r-lg:18px;
+  --sh-1:0 1px 1px rgba(23,42,61,.05), 0 2px 5px rgba(23,42,61,.045);
+  --sh-2:0 1px 2px rgba(23,42,61,.06), 0 6px 16px rgba(23,42,61,.07), 0 18px 38px rgba(23,42,61,.05);
+  --sh-3:0 2px 4px rgba(23,42,61,.09), 0 14px 30px rgba(23,42,61,.13), 0 32px 64px rgba(23,42,61,.09);
+  --edge:inset 0 1px 0 rgba(255,255,255,.9);
+  --ease:cubic-bezier(.2,.8,.3,1);
+}
+body.dark{
+  --ground:#0E151D; --ground-2:#141E28;
+  --surface:#19232E; --surface-top:#1E2A36; --surface-bot:#17202A;
+  --surface-2:#212D39; --surface-3:#27343F;
+  --panel:#16222E; --panel-top:#22364A; --panel-bot:#0E1821;
+  --ink:#E4ECF3; --mut:#9CAEBC; --dim:#7D8F9D;
+  --line:#28343F; --line-2:#374852;
+  --accent:#7FAAD0; --accent-2:#9CC2E2;
+  --ok:#7BB392; --ok-bg:#1A2720; --ok-bg2:#213026;
+  --warn:#D08C81; --warn-bg:#2A1D1B; --warn-bg2:#332320;
+  --ochre:#C99A5B; --och-bg:#27210F; --och-bg2:#2F2814;
+  --sh-1:0 1px 2px rgba(0,0,0,.30);
+  --sh-2:0 2px 6px rgba(0,0,0,.34), 0 14px 32px rgba(0,0,0,.30);
+  --sh-3:0 4px 12px rgba(0,0,0,.42), 0 24px 56px rgba(0,0,0,.42);
+  --edge:inset 0 1px 0 rgba(255,255,255,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0; padding:0}
+html{scroll-behavior:smooth}
+body{
+  color:var(--ink); background:var(--ground); position:relative;
+  font-family:"Golos Text","Segoe UI",system-ui,-apple-system,sans-serif;
+  font-size:15.5px; line-height:1.55; -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent;
+}
+body::before{
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:
+    radial-gradient(1100px 620px at 82% -10%, rgba(176,131,71,.12), transparent 62%),
+    radial-gradient(940px 540px at 4% -6%, rgba(78,122,158,.20), transparent 64%),
+    linear-gradient(180deg, var(--ground) 0%, var(--ground-2) 100%);
+}
+button,input,select,textarea{font:inherit; color:inherit}
+::selection{background:rgba(47,96,145,.18)}
+::-webkit-scrollbar{width:11px; height:11px}
+::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:99px; border:3px solid transparent; background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--dim); background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+.shell{display:flex; min-height:100vh; align-content:start}
+.side{
+  width:238px; flex:none; color:#E8EFF5; padding:20px 14px;
+  display:flex; flex-direction:column; gap:6px; position:sticky; top:0; height:100vh;
+  background:linear-gradient(168deg, var(--panel-top) 0%, var(--panel) 46%, var(--panel-bot) 100%);
+  box-shadow:inset -1px 0 0 rgba(255,255,255,.07), 8px 0 34px rgba(16,30,44,.20);
+  z-index:10;
+}
+.side::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(440px 240px at 22% -4%, rgba(255,255,255,.15), transparent 70%);
+}
+.side > *{position:relative; z-index:1}
+.side .brand{padding:4px 8px 16px; display:flex; align-items:center; gap:11px}
+.mark{
+  width:36px; height:36px; flex:0 0 auto; border-radius:10px;
+  background:linear-gradient(180deg,#5A88AF,#3A5F82);
+  box-shadow:0 3px 8px rgba(9,18,28,.36), inset 0 1px 0 rgba(255,255,255,.22);
+  display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:15px;
+}
+.side .brand .txt{min-width:0}
+.side .brand b{display:block; font-size:17.5px; letter-spacing:.005em; font-weight:600}
+.side .brand span{font-size:12px; opacity:.72}
+.side nav{display:flex; flex-direction:column; gap:3px}
+.side nav button{
+  background:transparent; border:none; color:#C7D8E6; text-align:left; padding:11px 13px;
+  border-radius:11px; cursor:pointer; font-size:15px; position:relative;
+  transition:background .2s, color .2s, box-shadow .2s;
+}
+.side nav button::before{
+  content:""; position:absolute; left:0; top:50%; transform:translateY(-50%);
+  width:3px; height:0; border-radius:0 3px 3px 0; background:var(--ochre); transition:height .22s var(--ease);
+}
+.side nav button:hover{background:rgba(255,255,255,.09); color:#EAF2F8}
+.side nav button.on{
+  background:linear-gradient(180deg, rgba(255,255,255,.21), rgba(255,255,255,.09));
+  color:#fff; font-weight:600;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.20), 0 5px 14px rgba(9,18,28,.30);
+}
+.side nav button.on::before{height:22px}
+.side .foot{margin-top:auto; display:flex; flex-direction:column; gap:8px; font-size:12.5px; opacity:.82}
+.side .foot button{background:rgba(255,255,255,.09); border:none; color:#DCE8F1; border-radius:9px;
+  padding:9px 11px; cursor:pointer; font-size:13px; text-align:left;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10); transition:background .18s}
+.side .foot button:hover{background:rgba(255,255,255,.16)}
+.side .saved{padding:0 4px; opacity:.8}
+.side .copy{padding:9px 4px 0; margin-top:6px; border-top:1px solid rgba(255,255,255,.13);
+  font-size:11.5px; line-height:1.4; opacity:.55}
+
+.body{flex:1; min-width:0; display:flex; flex-direction:column}
+.page{padding:30px 34px 64px; max-width:1060px; width:100%}
+.mobtop, .tabbar{display:none}
+
+@media (max-width:900px){
+  .shell{flex-direction:column}
+  .side{display:none}
+  .mobtop{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:linear-gradient(163deg, #6295BB 0%, var(--head) 52%, #3E668A 100%);
+    color:#fff; padding:13px 16px; position:sticky; top:0; z-index:20;
+    box-shadow:0 6px 22px rgba(24,42,60,.24), inset 0 1px 0 rgba(255,255,255,.24);
+  }
+  .mobtop .who{flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.22}
+  .mobtop .who b{font-size:16px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mobtop .who span{font-size:11.5px; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mobtop .mmark{width:28px; height:28px; border-radius:8px; font-size:12px}
+  .mobtop .acts{display:flex; gap:8px}
+  .mobtop button{background:rgba(255,255,255,.20); border:none; color:#fff; border-radius:9px;
+    padding:8px 11px; font-size:13px; cursor:pointer;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.28), 0 2px 6px rgba(9,18,28,.18)}
+  .page{padding:18px 15px 104px}
+  .tabbar{
+    display:grid; grid-template-columns:repeat(4,1fr); position:fixed; left:0; right:0; bottom:0; z-index:20;
+    background:rgba(255,255,255,.90); -webkit-backdrop-filter:blur(16px) saturate(1.4);
+    backdrop-filter:blur(16px) saturate(1.4);
+    border-top:1px solid rgba(198,216,229,.75);
+    padding:5px 2px env(safe-area-inset-bottom);
+    box-shadow:0 -10px 30px rgba(24,42,60,.13);
+  }
+  body.dark .tabbar{background:rgba(23,32,42,.92); border-top-color:var(--line-2)}
+  .tabbar button{
+    background:none; border:none; padding:8px 2px 7px; font-size:11.5px; font-weight:600;
+    color:#4A5F72; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px;
+    border-radius:12px; transition:color .18s;
+  }
+  body.dark .tabbar button{color:var(--mut)}
+  .tabbar button .ic{
+    font-size:19px; line-height:1; width:36px; height:27px; display:flex; align-items:center; justify-content:center;
+    border-radius:10px; transition:background .22s, color .22s, transform .22s var(--ease), box-shadow .22s;
+  }
+  .tabbar button.on{color:var(--accent)}
+  .tabbar button.on .ic{
+    background:linear-gradient(180deg, var(--accent-2), var(--accent)); color:#fff;
+    transform:translateY(-2px) scale(1.06);
+    box-shadow:0 4px 11px rgba(47,96,145,.40), inset 0 1px 0 rgba(255,255,255,.36);
+  }
+  .tabbar button:active{transform:scale(.94)}
+}
+
+h1{font-size:29px; margin:0 0 5px; font-weight:700; line-height:1.18; letter-spacing:-.022em}
+h2{font-size:19.5px; margin:0 0 11px; font-weight:700; letter-spacing:-.015em}
+h3{font-size:15.5px; margin:0 0 7px; font-weight:600}
+p{margin:0 0 10px} p:last-child{margin-bottom:0}
+.sub{color:var(--mut); font-size:14.5px; margin-bottom:22px}
+.mut{color:var(--mut)}
+.small{font-size:13px; color:var(--dim)}
+a{color:var(--accent); text-underline-offset:2px}
+@media (max-width:900px){ h1{font-size:25px} }
+
+.card{
+  background:linear-gradient(180deg, var(--surface-top), var(--surface-bot));
+  border:1px solid var(--line); border-radius:var(--r); padding:20px; margin-bottom:18px;
+  box-shadow:var(--sh-2), var(--edge);
+}
+.grid{display:grid; gap:18px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.grid .card{margin-bottom:0}
+@media (max-width:900px){ .g2{grid-template-columns:1fr} .grid{gap:14px} }
+.today{display:grid; grid-template-columns:1fr 300px; gap:24px}
+@media (max-width:900px){ .today{grid-template-columns:1fr; gap:16px} }
+
+.dayline{position:relative; padding-left:24px}
+.spine{position:absolute; left:5px; top:6px; bottom:6px; width:2px;
+  background:linear-gradient(180deg, var(--line-2), var(--line) 40%, transparent)}
+.tl-item{position:relative; margin-bottom:16px}
+.tl-dot{position:absolute; left:-24px; top:7px; width:13px; height:13px; border-radius:50%;
+  background:var(--surface); border:2px solid var(--line-2); box-shadow:0 1px 3px rgba(23,42,61,.14)}
+.tl-item.is-now .tl-dot{border-color:var(--ochre); background:var(--ochre);
+  box-shadow:0 0 0 4px rgba(176,131,71,.16)}
+.tl-time{font-size:11.5px; color:var(--dim); letter-spacing:.06em; margin-bottom:5px; font-weight:600}
+.lesson{
+  background:linear-gradient(180deg, var(--surface-top), var(--surface-bot));
+  border:1px solid var(--line); border-radius:var(--r); padding:15px 17px;
+  display:flex; flex-direction:column; gap:4px; box-shadow:var(--sh-1), var(--edge);
+}
+.lesson.is-now{border-color:rgba(176,131,71,.55); box-shadow:0 0 0 3px rgba(176,131,71,.12), var(--sh-2), var(--edge)}
+.lesson .what{font-size:14.5px}
+.lesson .row{display:flex; gap:9px; flex-wrap:wrap; margin-top:10px}
+
+.side-block{
+  background:linear-gradient(180deg, var(--surface-top), var(--surface-bot));
+  border:1px solid var(--line); border-radius:var(--r); padding:18px; margin-bottom:18px;
+  box-shadow:var(--sh-2), var(--edge);
+}
+.side-block h3{margin-bottom:12px}
+.stat{display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:14.5px}
+.stat:last-child{border-bottom:none}
+.stat b{font-variant-numeric:tabular-nums; font-weight:600}
+
+button.b{border-radius:11px; padding:11px 16px; border:1.5px solid transparent; cursor:pointer;
+  font-size:14.5px; font-weight:500; transition:transform .14s var(--ease), box-shadow .2s, background .2s}
+button.b:active{transform:translateY(1px) scale(.985)}
+button.b:focus-visible{outline:2.5px solid var(--accent-2); outline-offset:2px}
+.b-main{
+  background:linear-gradient(180deg, #5D96C8 0%, #3C72A6 48%, var(--accent) 100%); color:#fff;
+  box-shadow:0 1px 1px rgba(15,30,45,.16), 0 6px 16px rgba(47,96,145,.34), inset 0 1px 0 rgba(255,255,255,.34);
+}
+.b-alt{background:linear-gradient(180deg, var(--surface), var(--surface-bot)); color:var(--accent);
+  border-color:var(--line-2); box-shadow:var(--sh-1), var(--edge)}
+.b-quiet{background:linear-gradient(180deg, var(--surface-2), var(--surface-3)); color:var(--mut); border-color:var(--line);
+  box-shadow:var(--edge)}
+.b-quiet:hover{color:var(--ink); border-color:var(--line-2)}
+.b-sm{padding:8px 12px; font-size:13.5px; border-radius:9px}
+button.b[disabled]{opacity:.45; cursor:default; box-shadow:none; transform:none}
+
+.field{display:flex; flex-direction:column; gap:6px; margin-bottom:14px}
+.field label{font-size:13px; color:var(--mut); font-weight:500}
+input[type=text], input[type=number], input[type=date], input[type=search], select, textarea{
+  background:var(--surface); border:1.5px solid var(--line); border-radius:10px; padding:11px 13px; width:100%;
+  box-shadow:inset 0 1px 2px rgba(23,42,61,.05); transition:border-color .2s, box-shadow .2s;
+}
+input:focus, select:focus, textarea:focus{outline:none; border-color:var(--accent-2);
+  box-shadow:0 0 0 3.5px rgba(76,134,188,.16)}
+textarea{min-height:200px; resize:vertical; line-height:1.6}
+.fgrid{display:grid; grid-template-columns:1fr 1fr; gap:0 14px}
+.fgrid4{display:grid; grid-template-columns:repeat(4,1fr); gap:0 10px}
+@media (max-width:520px){ .fgrid4{grid-template-columns:repeat(2,1fr)} }
+
+.pill{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600;
+  padding:4px 10px; border-radius:99px; box-shadow:var(--edge)}
+.p-ok{background:linear-gradient(180deg, var(--ok-bg), var(--ok-bg2)); color:var(--ok)}
+.p-warn{background:linear-gradient(180deg, var(--warn-bg), var(--warn-bg2)); color:var(--warn)}
+.p-och{background:linear-gradient(180deg, var(--och-bg), var(--och-bg2)); color:var(--ochre)}
+.p-gray{background:linear-gradient(180deg, var(--surface-2), var(--surface-3)); color:var(--mut)}
+
+.list{display:flex; flex-direction:column; gap:11px}
+.item{
+  background:linear-gradient(180deg, var(--surface-top), var(--surface-bot));
+  border:1px solid var(--line); border-radius:var(--r); padding:14px 16px;
+  display:flex; gap:12px; align-items:center; justify-content:space-between; cursor:pointer;
+  box-shadow:var(--sh-1), var(--edge); transition:border-color .18s, box-shadow .18s;
+}
+.item:hover{border-color:var(--line-2); box-shadow:var(--sh-2), var(--edge)}
+.item .l{min-width:0}
+.item .l b{display:block; font-size:15.5px}
+.item .l span{font-size:13.5px; color:var(--mut)}
+.item .r{display:flex; align-items:center; gap:8px; flex:none; flex-wrap:wrap}
+@media (max-width:640px){
+  .item{flex-direction:column; align-items:stretch; gap:10px}
+  .item .r{justify-content:flex-start; flex:1 1 auto}
+}
+
+.chapters{display:block}
+.chapter-row{display:grid; grid-template-columns:28px 1fr auto; gap:12px; align-items:start;
+  padding:12px 4px; border-bottom:1px solid var(--line); cursor:pointer; border-radius:8px;
+  transition:background .16s}
+.chapter-row:hover{background:var(--surface-2)}
+.chapter-row:last-child{border-bottom:none}
+.chapter-row .n{width:24px; height:24px; border-radius:50%;
+  background:linear-gradient(180deg, var(--accent-2), var(--accent)); color:#fff; font-size:12px;
+  display:flex; align-items:center; justify-content:center; font-weight:600}
+.chapter-row .t b{display:block; font-size:14.5px}
+.chapter-row .t span{font-size:13px; color:var(--mut)}
+
+.warnbox{background:linear-gradient(180deg, var(--warn-bg), var(--warn-bg2));
+  border-left:3px solid var(--warn); border-radius:0 var(--r) var(--r) 0; padding:14px 16px;
+  font-size:14.5px; margin-bottom:16px}
+.okbox{background:linear-gradient(180deg, var(--ok-bg), var(--ok-bg2));
+  border-left:3px solid var(--ok); border-radius:0 var(--r) var(--r) 0; padding:14px 16px;
+  font-size:14.5px; margin-bottom:16px}
+.infobox{background:linear-gradient(180deg, var(--surface-2), var(--surface-3)); border-radius:var(--r);
+  padding:14px 16px; font-size:14px; color:var(--mut); margin-bottom:16px}
+.warnbox ul, .okbox ul{margin:8px 0 0; padding-left:20px}
+.warnbox li{margin-bottom:4px}
+
+.modal{position:fixed; inset:0; background:rgba(16,26,36,.52);
+  -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
+  display:flex; align-items:flex-end; justify-content:center; z-index:50}
+@media (min-width:900px){ .modal{align-items:center; padding:24px} }
+.modal .win{background:var(--ground); border-radius:20px 20px 0 0; padding:22px; width:100%; max-width:620px;
+  max-height:92vh; overflow-y:auto; box-shadow:0 -12px 48px rgba(10,18,26,.38)}
+@media (min-width:900px){ .modal .win{border-radius:var(--r-lg)} }
+.modal .win h2{margin-bottom:5px}
+.modal .close{float:right; background:none; border:none; font-size:21px; color:var(--mut); cursor:pointer;
+  line-height:1; padding:2px 8px; border-radius:8px}
+.modal .close:hover{background:var(--surface-2); color:var(--ink)}
+
+.toast{position:fixed; left:50%; transform:translateX(-50%) translateY(8px); bottom:88px;
+  background:linear-gradient(180deg, #2C3E50, var(--ink)); color:#F2F7FB;
+  padding:12px 20px; border-radius:99px; font-size:14px; font-weight:500;
+  opacity:0; pointer-events:none; transition:opacity .22s, transform .22s var(--ease); z-index:60;
+  box-shadow:0 8px 26px rgba(12,22,32,.34)}
+.toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+.hint{font-size:13px; color:var(--dim); margin-top:7px}
+.rowbtns{display:flex; gap:9px; flex-wrap:wrap; margin-top:14px}
+.bar{height:8px; background:var(--line); border-radius:99px; overflow:hidden}
+.bar i{display:block; height:100%; background:linear-gradient(90deg,var(--accent-2),var(--accent)); border-radius:99px}
+
+.toolbar{display:flex; gap:14px; align-items:flex-start; justify-content:space-between;
+  flex-wrap:wrap; margin-bottom:20px}
+.chips{display:flex; gap:8px; flex-wrap:wrap; flex:1 1 auto; min-width:0}
+.tools{display:flex; gap:8px; flex-wrap:wrap; flex:0 0 auto}
+@media (max-width:640px){ .tools{width:100%} }
+@media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important} }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><span class="mark">СК</span><span class="txt"><b>СтудКаб</b><span id="sideWho">кабинет студента</span></span></div>
+    <nav id="navSide"></nav>
+    <div class="foot">
+      <button type="button" id="btnBackSide">← Назад</button>
+      <button type="button" id="btnUndo">↶ Отменить</button>
+      <button type="button" id="btnTheme">Тема</button>
+      <span class="saved" id="savedAt">сохранено</span>
+      <div class="copy">© 2026 СтудКаб</div>
+    </div>
+  </aside>
+  <div class="body">
+    <div class="mobtop">
+      <span class="mark mmark">СК</span><span class="who"><b id="mobWho">СтудКаб</b><span id="mobRole">кабинет студента</span></span>
+      <div class="acts">
+        <button type="button" id="btnUndoM">↶</button>
+        <button type="button" id="btnThemeM">◐</button>
+      </div>
+    </div>
+    <div class="page" id="page"></div>
+  </div>
+</div>
+<div class="tabbar" id="tabbar"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ==================================================================
+   СТУДЕНЧЕСКИЙ КАБИНЕТ
+   Данные хранятся только в памяти этого устройства.
+   ================================================================== */
+
+var STATUS = {
+  draft: "Черновик",
+  in_progress: "В работе",
+  review: "На проверке",
+  revision: "Требует доработки",
+  accepted: "Принята",
+  graded: "Оценена"
+};
+var STATUS_PILL = {
+  draft:"p-gray", in_progress:"p-och", review:"p-warn",
+  revision:"p-warn", accepted:"p-ok", graded:"p-ok"
+};
+var WORK_STATUSES = ["draft","in_progress","review","revision","accepted","graded"];
+var CHAPTER_STATUSES = ["draft","in_progress","review","accepted"];
+
+var CHAPTERS = [
+  { id:"introduction", name:"Введение",                    weight:10 },
+  { id:"chapter1",     name:"Глава 1. Теоретическая часть", weight:25 },
+  { id:"chapter2",     name:"Глава 2. Практическая часть",  weight:25 },
+  { id:"chapter3",     name:"Глава 3. Результаты",          weight:20 },
+  { id:"conclusion",   name:"Заключение",                   weight:10 },
+  { id:"references",   name:"Список литературы",            weight:5  },
+  { id:"appendices",   name:"Приложения",                   weight:5  }
+];
+
+/* Оформление по умолчанию — общий ГОСТ. Требования кафедры всегда важнее. */
+function defaultFormat(){
+  return {
+    org:"", univ:"", faculty:"", kafedra:"", city:"", year:"",
+    workType:"Курсовая работа", discipline:"", supervisor:"",
+    mTop:20, mRight:15, mBottom:20, mLeft:30,
+    font:"Times New Roman", size:14, spacing:1.5, indent:1.25,
+    titlePageNum:false, toc:true
+  };
+}
+
+function emptyStructure(){
+  var ch = {};
+  CHAPTERS.forEach(function(c){ ch[c.id] = { text:"", status:"draft" }; });
+  return ch;
+}
+
+/* ---------- НАЧАЛЬНЫЕ ДАННЫЕ ---------- */
+function demoData(){
+  var t = new Date(); t.setHours(0,0,0,0);
+  function day(n){ var d = new Date(t); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+  var f1 = defaultFormat();
+  f1.univ = "Российская академия народного хозяйства и государственной службы";
+  f1.faculty = "Факультет рыночных технологий";
+  f1.kafedra = "Кафедра менеджмента";
+  f1.city = "Москва";
+  f1.discipline = "Информационные системы";
+  f1.supervisor = "доц. Николаева О. В.";
+  return {
+    settings: { name:"Иван Петров", group:"3-ИС-21", theme:"light", warnDays:3 },
+    works: [
+      {
+        id:"w1",
+        topic:"Базы данных для интернет-магазина",
+        student:"Иван Петров", group:"3-ИС-21",
+        created:day(-31), deadline:day(14),
+        requirements:"40–50 страниц, оригинальность от 70%",
+        status:"in_progress",
+        format:f1,
+        structure:{
+          introduction:{ text:"Актуальность темы обусловлена ростом электронной коммерции.", status:"accepted" },
+          chapter1:{ text:"Теоретические основы проектирования баз данных.", status:"in_progress" },
+          chapter2:{ text:"", status:"draft" },
+          chapter3:{ text:"", status:"draft" },
+          conclusion:{ text:"", status:"draft" },
+          references:{ text:"1. Иванов И. И. Базы данных. — М., 2020.\n2. Петров П. П. SQL. — СПб., 2021.", status:"in_progress" },
+          appendices:{ text:"", status:"draft" }
+        },
+        tasks:[
+          { id:"tk1", due:day(3), text:"Сдать черновик главы 1", done:false },
+          { id:"tk2", due:day(7), text:"Собрать литературу по теме", done:false }
+        ]
+      }
+    ],
+    tasks:[],
+    templates:[
+      { id:"tpl1", name:"ГОСТ 7.32-2017 (общий)",
+        description:"Поля 20/15/20/30, Times New Roman 14, интервал 1,5",
+        format: defaultFormat() }
+    ]
+  };
+}
+
+/* ---------- ХРАНЕНИЕ ---------- */
+var KEY = "student_cabinet_v3";
+var D = null, undoStack = [], redoStack = [], storageOk = true;
+
+function load(){
+  var raw = null;
+  try{ raw = localStorage.getItem(KEY); }catch(e){ storageOk = false; }
+  if (raw){ try{ D = JSON.parse(raw); }catch(e){ D = null; } }
+  if (!D){ D = demoData(); }
+  if (!D.works) D.works = [];
+  if (!D.tasks) D.tasks = [];
+  if (!D.templates) D.templates = [];
+  if (!D.icsSeq) D.icsSeq = {};
+  if (!D.settings) D.settings = { name:"Студент", group:"", theme:"light", warnDays:3 };
+  if (D.settings.warnDays === undefined) D.settings.warnDays = 3;
+  if (D.settings.registryUrl === undefined)
+    D.settings.registryUrl = "https://innaodincova-finpro.github.io/studkab/reestr.html";
+  D.works.forEach(function(w){
+    if (!w.tasks) w.tasks = [];
+    if (!w.structure) w.structure = emptyStructure();
+    CHAPTERS.forEach(function(c){
+      if (!w.structure[c.id]) w.structure[c.id] = { text:"", status:"draft" };
+    });
+    var def = defaultFormat();
+    if (!w.format) w.format = def;
+    for (var k in def){ if (w.format[k] === undefined) w.format[k] = def[k]; }
+    if (!w.req) w.req = { id:uid("rq"), contact:"", org:"", notes:"", sent:"" };
+    if (!w.req.id) w.req.id = uid("rq");
+  });
+  if (D.settings.theme === "dark") document.body.classList.add("dark");
+  save();
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(D)); markSaved(); }
+  catch(e){ storageOk = false; markSaved(); }
+}
+function change(fn){
+  undoStack.push(JSON.stringify(D));
+  if (undoStack.length > 20) undoStack.shift();
+  redoStack = [];
+  fn(); save();
+}
+function undo(){
+  if (!undoStack.length) return toast("Отменять нечего");
+  redoStack.push(JSON.stringify(D));
+  D = JSON.parse(undoStack.pop());
+  save(); render(); toast("Отменено");
+}
+function redo(){
+  if (!redoStack.length) return;
+  undoStack.push(JSON.stringify(D));
+  D = JSON.parse(redoStack.pop());
+  save(); render();
+}
+function markSaved(){
+  var el = document.getElementById("savedAt");
+  if (!el) return;
+  if (!storageOk){ el.textContent = "НЕ СОХРАНЯЕТСЯ"; el.style.color = "#E0A79E"; return; }
+  var d = new Date();
+  el.textContent = "сохранено " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+function pad(n){ return n < 10 ? "0"+n : ""+n }
+
+/* ---------- ОБЩЕЕ ---------- */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c] }); }
+function today(){ var d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+function addDays(iso,n){ var d = new Date(iso); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function ruDate(iso){
+  var M = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  var d = new Date(iso), now = new Date();
+  if (isNaN(d)) return iso || "";
+  return d.getDate()+" "+M[d.getMonth()]+(d.getFullYear()!==now.getFullYear()?" "+d.getFullYear():"");
+}
+function uid(p){ return p + Math.random().toString(36).slice(2,8) }
+function work(id){ return D.works.filter(function(w){ return w.id === id })[0]; }
+function getStatus(w){ return w.status || "draft"; }
+
+/* Готовность: пустая глава 0, начата 25, написана 50, на проверке 75, принята 100 */
+function getProgress(w){
+  var total = 0, done = 0;
+  CHAPTERS.forEach(function(c){
+    var ch = (w.structure||{})[c.id] || { text:"", status:"draft" };
+    var k = 0;
+    if (ch.status === "accepted") k = 1;
+    else if (ch.status === "review") k = .75;
+    else if (ch.status === "in_progress") k = .5;
+    else if ((ch.text||"").trim()) k = .25;
+    total += c.weight; done += c.weight * k;
+  });
+  return total ? Math.round(done/total*100) : 0;
+}
+function workChars(w){
+  var n = 0;
+  CHAPTERS.forEach(function(c){ n += ((w.structure||{})[c.id]||{}).text ? w.structure[c.id].text.length : 0; });
+  return n;
+}
+function workPages(w){ return Math.max(0, Math.round(workChars(w)/1800*10)/10); }
+
+var toastT;
+function toast(t){
+  var el = document.getElementById("toast");
+  el.textContent = t; el.classList.add("on");
+  clearTimeout(toastT); toastT = setTimeout(function(){ el.classList.remove("on") }, 2600);
+}
+
+/* ---------- ПРОВЕРКА ПЕРЕД СДАЧЕЙ (по фактическим данным) ---------- */
+function checkWork(w){
+  var out = [], f = w.format || {};
+  var empty = CHAPTERS.filter(function(c){ return !((w.structure[c.id]||{}).text||"").trim() });
+  if (empty.length) out.push("Не написаны разделы: " + empty.map(function(c){ return c.name }).join(", "));
+  if (!f.univ) out.push("Не заполнено название вуза — титульный лист выйдет неполным");
+  if (!f.workType) out.push("Не указан вид работы (курсовая, ВКР, реферат)");
+  if (!f.city || !f.year) out.push("Не заполнены город и год для нижней части титульного листа");
+  if (!f.supervisor) out.push("Не указан руководитель");
+  if (!(w.structure.references.text||"").trim()) out.push("Пустой список литературы");
+  if (w.deadline && w.deadline < today()) out.push("Срок сдачи прошёл: " + ruDate(w.deadline));
+  return out;
+}
+
+/* ==================================================================
+   ВКЛАДКИ
+   ================================================================== */
+var TABS = [
+  { id:"today",     t:"Сегодня", ic:"◔" },
+  { id:"works",     t:"Работы",  ic:"📚" },
+  { id:"templates", t:"Шаблоны", ic:"📐" },
+  { id:"more",      t:"Ещё",     ic:"⋯" }
+];
+var tab = "today", openWorkId = null, navHistory = [];
+
+function go(t,id){
+  navHistory.push({ tab:tab, open:openWorkId });
+  if (navHistory.length > 30) navHistory.shift();
+  tab = t; openWorkId = id || null; render();
+}
+function back(){
+  var h = navHistory.pop();
+  if (!h) return;
+  tab = h.tab; openWorkId = h.open; render();
+}
+
+function counts(){
+  return {
+    total: D.works.length,
+    inProgress: D.works.filter(function(w){ return getStatus(w)==="in_progress" }).length,
+    review: D.works.filter(function(w){ return getStatus(w)==="review" }).length,
+    overdue: D.works.filter(function(w){ return w.deadline && w.deadline < today() &&
+      getStatus(w)!=="accepted" && getStatus(w)!=="graded" }).length
+  };
+}
+
+function render(){
+  var nav = document.getElementById("navSide"), bar = document.getElementById("tabbar"), c = counts();
+  nav.innerHTML = TABS.map(function(x){
+    return '<button type="button" data-tab="'+x.id+'" class="'+(x.id===tab?"on":"")+'">'+x.t+'</button>';
+  }).join("");
+  bar.innerHTML = TABS.map(function(x){
+    var label = x.t;
+    if (x.id==="works" && c.review) label += " ("+c.review+")";
+    if (x.id==="today" && c.overdue) label += " ⚠"+c.overdue;
+    return '<button type="button" data-tab="'+x.id+'" class="'+(x.id===tab?"on":"")+'"><span class="ic">'+x.ic+'</span>'+label+'</button>';
+  }).join("");
+  var st = D.settings;
+  document.getElementById("mobWho").textContent = st.name || "СтудКаб";
+  document.getElementById("mobRole").textContent = st.group || "кабинет студента";
+  var sw = document.getElementById("sideWho");
+  if (sw) sw.textContent = (st.name || "Студент") + (st.group ? " · "+st.group : "");
+  var p = document.getElementById("page");
+  if (tab === "today") p.innerHTML = viewToday();
+  else if (tab === "works") p.innerHTML = openWorkId ? viewWork(openWorkId) : viewWorks();
+  else if (tab === "templates") p.innerHTML = viewTemplates();
+  else p.innerHTML = viewMore();
+  window.scrollTo(0,0);
+  markSaved();
+}
+
+/* ==================================================================
+   СЕГОДНЯ
+   ================================================================== */
+function daysLeft(iso){
+  var a = new Date(today()), b = new Date(iso);
+  if (isNaN(b)) return 9999;
+  return Math.round((b - a) / 86400000);
+}
+function ruDays(n){
+  var a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return "дней";
+  if (b > 1 && b < 5) return "дня";
+  if (b === 1) return "день";
+  return "дней";
+}
+function whenText(iso){
+  var d = daysLeft(iso);
+  if (d < 0) return "просрочено на " + (-d) + " " + ruDays(d);
+  if (d === 0) return "сегодня";
+  if (d === 1) return "завтра";
+  return "через " + d + " " + ruDays(d);
+}
+
+/* Сроки работ и задачи в одном списке */
+function reminders(){
+  var out = [];
+  D.works.forEach(function(w){
+    var st = getStatus(w);
+    if (w.deadline && st !== "accepted" && st !== "graded"){
+      out.push({ id:"dl-"+w.id, kind:"deadline", due:w.deadline,
+        text:"Сдать работу: " + w.topic, wid:w.id, wname:"" });
+    }
+    (w.tasks||[]).filter(function(x){ return !x.done }).forEach(function(x){
+      out.push({ id:x.id, kind:"task", due:x.due, text:x.text, wid:w.id, wname:w.topic });
+    });
+  });
+  D.tasks.filter(function(x){ return !x.done }).forEach(function(x){
+    out.push({ id:x.id, kind:"task", due:x.due, text:x.text, wid:null, wname:"" });
+  });
+  return out.sort(function(a,b){ return a.due < b.due ? -1 : 1 });
+}
+
+/* Короткая сводка — её можно отправить себе в Telegram */
+function buildDigest(){
+  var warn = D.settings.warnDays || 3;
+  var soon = reminders().filter(function(x){ return daysLeft(x.due) <= warn });
+  var lines = ["Учёба на " + ruDate(today())];
+  if (soon.length){
+    lines.push("", "Ближайшее:");
+    soon.forEach(function(x){ lines.push("— " + x.text + ": " + whenText(x.due) + " (" + ruDate(x.due) + ")"); });
+  } else {
+    lines.push("", "Ближайших сроков нет.");
+  }
+  if (D.works.length){
+    lines.push("", "Работы:");
+    D.works.forEach(function(w){
+      lines.push("— " + w.topic + ": " + getProgress(w) + "%, " + STATUS[getStatus(w)] +
+        (w.deadline ? ", срок " + ruDate(w.deadline) : ""));
+    });
+  }
+  return lines.join("\n");
+}
+function shareTelegram(){
+  var url = "https://t.me/share/url?url=" + encodeURIComponent(buildDigest());
+  var win = window.open(url, "_blank");
+  if (!win) toast("Разрешите открытие окон, чтобы отправить в Telegram");
+}
+function fallbackCopy(msg){
+  var ta = document.createElement("textarea");
+  ta.value = msg; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try{ document.execCommand("copy"); toast("Сводка скопирована"); }
+  catch(e){ toast("Не удалось скопировать"); }
+  document.body.removeChild(ta);
+}
+function copyText(msg){
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg).then(function(){ toast("Скопировано"); },
+      function(){ fallbackCopy(msg); });
+  } else fallbackCopy(msg);
+}
+function copyDigest(){ copyText(buildDigest()); }
+
+/* ---------- ЗАЯВКА НА ЧЕРНОВИК ---------- */
+function b64enc(str){
+  var bytes = new TextEncoder().encode(str), bin = "";
+  for (var i=0; i<bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function requestPayload(w){
+  var f = w.format || {}, r = w.req || {};
+  return {
+    v:1, id:r.id,
+    t:w.topic, k:f.workType, d:f.discipline,
+    u:f.univ, fc:f.faculty, kf:f.kafedra, ct:f.city,
+    n:w.student || D.settings.name, g:w.group || D.settings.group,
+    s:f.supervisor, dl:w.deadline, rq:w.requirements,
+    org:r.org, mn:r.notes, cn:r.contact,
+    fm:{ mt:f.mTop, mr:f.mRight, mb:f.mBottom, ml:f.mLeft,
+         fn:f.font, sz:f.size, sp:f.spacing, ind:f.indent }
+  };
+}
+function requestLink(w){
+  var base = (D.settings.registryUrl || "").trim();
+  if (!base) return "";
+  return base + "#z=" + b64enc(JSON.stringify(requestPayload(w)));
+}
+function requestText(w){
+  var f = w.format || {}, r = w.req || {};
+  var L = ["ЗАЯВКА НА ЧЕРНОВИК"];
+  function add(label, val){ if (val) L.push(label + ": " + val); }
+  add("Тема", w.topic);
+  add("Вид работы", f.workType);
+  add("Дисциплина", f.discipline);
+  add("Вуз", f.univ);
+  add("Факультет", f.faculty);
+  add("Кафедра", f.kafedra);
+  add("Студент", w.student || D.settings.name);
+  add("Группа", w.group || D.settings.group);
+  add("Руководитель", f.supervisor);
+  add("Город", f.city);
+  add("Срок", w.deadline ? ruDate(w.deadline) + " (" + w.deadline + ")" : "");
+  add("Требования", w.requirements);
+  add("Организация", r.org);
+  add("Особенности методички", r.notes);
+  add("Оформление", "поля " + f.mLeft + "/" + f.mRight + "/" + f.mTop + "/" + f.mBottom +
+      " мм (лево/право/верх/низ), " + f.font + " " + f.size + ", интервал " + f.spacing +
+      ", отступ " + f.indent + " см");
+  add("Связь", r.contact);
+  var link = requestLink(w);
+  if (link) L.push("", "Ссылка для реестра: " + link);
+  return L.join("\n");
+}
+function openRequest(workId){
+  var w = work(workId); if (!w) return;
+  var r = w.req;
+  var wrap = openModal(
+    '<button type="button" class="close" data-x="1">✕</button>'+
+    '<h2>Заявка на черновик</h2>'+
+    '<p class="small">Данные по работе подставятся сами. Допишите то, чего в кабинете нет.</p>'+
+    '<div class="field" style="margin-top:14px"><label>Как с вами связаться</label>'+
+      '<input type="text" id="rqContact" value="'+esc(r.contact||"")+'" placeholder="Телефон или ник в Telegram"></div>'+
+    '<div class="field"><label>Организация или объект исследования</label>'+
+      '<textarea id="rqOrg" style="min-height:90px" placeholder="Название, сфера деятельности, что известно">'+esc(r.org||"")+'</textarea></div>'+
+    '<div class="field"><label>Особенности методички</label>'+
+      '<textarea id="rqNotes" style="min-height:90px" placeholder="Чем требования кафедры отличаются от обычных">'+esc(r.notes||"")+'</textarea></div>'+
+    '<div class="infobox">Проверьте, что заполнены вуз, кафедра и руководитель — это раздел «Оформление». Без них черновик собрать не получится.</div>'+
+    '<div class="rowbtns">'+
+      '<button type="button" class="b b-main" data-send="wa">Отправить в WhatsApp</button>'+
+      '<button type="button" class="b b-main" data-send="tg">Отправить в Telegram</button>'+
+      '<button type="button" class="b b-alt" data-send="copy">Скопировать текст</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Закрыть</button>'+
+    '</div>'
+  );
+  wrap.addEventListener("click", function(ev){
+    var btn = ev.target.closest("[data-send]");
+    if (!btn) return;
+    change(function(){
+      r.contact = wrap.querySelector("#rqContact").value;
+      r.org = wrap.querySelector("#rqOrg").value;
+      r.notes = wrap.querySelector("#rqNotes").value;
+      r.sent = today();
+    });
+    var text = requestText(w), how = btn.getAttribute("data-send");
+    if (how === "copy"){ copyText(text); return; }
+    var url = how === "wa"
+      ? "https://wa.me/?text=" + encodeURIComponent(text)
+      : "https://t.me/share/url?url=" + encodeURIComponent(text);
+    var win = window.open(url, "_blank");
+    if (!win){ copyText(text); toast("Окно не открылось — текст скопирован"); }
+    wrap.remove(); render();
+  });
+}
+function icsEscape(s){
+  return String(s==null?"":s)
+    .replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
+}
+/* Строка в файле календаря не может быть длиннее 75 байт — переносим по правилам формата */
+function icsFold(line){
+  var enc = new TextEncoder();
+  if (enc.encode(line).length <= 73) return line;
+  var out = [], cur = "", curLen = 0, first = true;
+  for (var i=0; i<line.length; i++){
+    var chLen = enc.encode(line[i]).length;
+    var limit = first ? 73 : 72;
+    if (curLen + chLen > limit){ out.push(cur); cur = " "; curLen = 1; first = false; }
+    cur += line[i]; curLen += chLen;
+  }
+  out.push(cur);
+  return out.join("\r\n");
+}
+function icsStamp(d){
+  function p(n){ return n<10 ? "0"+n : ""+n }
+  return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+"T"+
+         p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+"Z";
+}
+function icsLocal(iso, h, m){
+  function p(n){ return n<10 ? "0"+n : ""+n }
+  return String(iso).replace(/-/g,"") + "T" + p(h) + p(m) + "00";
+}
+function buildIcs(items, stale, workId){
+  var warn = D.settings.warnDays || 3;
+  var days = [warn, 1].filter(function(v,i,a){ return v >= 1 && a.indexOf(v) === i });
+  var now = icsStamp(new Date());
+  var L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//StudKab//RU","CALSCALE:GREGORIAN","METHOD:PUBLISH"];
+
+  items.forEach(function(it){
+    /* Номер версии события: календарь по нему понимает, что запись надо обновить, а не добавить заново */
+    var rec = D.icsSeq[it.uid];
+    if (!rec) rec = D.icsSeq[it.uid] = { n:-1, w:null };
+    rec.n++;
+    rec.w = it.wid || rec.w || null;
+    rec.due = it.due; rec.title = it.title; rec.live = true;
+
+    L.push("BEGIN:VEVENT");
+    L.push("UID:" + it.uid + "@studkab");
+    L.push("SEQUENCE:" + rec.n);
+    L.push("DTSTAMP:" + now);
+    L.push("LAST-MODIFIED:" + now);
+    L.push("DTSTART:" + icsLocal(it.due, 10, 0));
+    L.push("DTEND:" + icsLocal(it.due, 10, 30));
+    L.push("SUMMARY:" + icsEscape(it.title));
+    if (it.desc) L.push("DESCRIPTION:" + icsEscape(it.desc));
+    L.push("STATUS:CONFIRMED");
+    days.forEach(function(d){
+      L.push("BEGIN:VALARM");
+      L.push("TRIGGER:-P" + d + "D");
+      L.push("ACTION:DISPLAY");
+      L.push("DESCRIPTION:" + icsEscape(it.title));
+      L.push("END:VALARM");
+    });
+    L.push("END:VEVENT");
+  });
+
+  /* Снятые задачи и удалённые работы — помечаем отменёнными, чтобы убрались из календаря */
+  (stale || []).forEach(function(uid){
+    var rec = D.icsSeq[uid];
+    if (!rec || !rec.due) return;
+    rec.n++; rec.live = false;
+    L.push("BEGIN:VEVENT");
+    L.push("UID:" + uid + "@studkab");
+    L.push("SEQUENCE:" + rec.n);
+    L.push("DTSTAMP:" + now);
+    L.push("LAST-MODIFIED:" + now);
+    L.push("DTSTART:" + icsLocal(rec.due, 10, 0));
+    L.push("DTEND:" + icsLocal(rec.due, 10, 30));
+    L.push("SUMMARY:" + icsEscape(rec.title || "Отменено"));
+    L.push("STATUS:CANCELLED");
+    L.push("END:VEVENT");
+  });
+
+  L.push("END:VCALENDAR");
+  return L.map(icsFold).join("\r\n") + "\r\n";
+}
+function calendarItems(workId){
+  var out = [];
+  var list = workId ? D.works.filter(function(w){ return w.id === workId }) : D.works;
+  list.forEach(function(w){
+    var st = getStatus(w);
+    if (w.deadline && st !== "accepted" && st !== "graded"){
+      out.push({ uid:"dl-"+w.id, wid:w.id, due:w.deadline, title:"Сдать: " + w.topic,
+        desc:(w.format && w.format.workType ? w.format.workType : "Работа") +
+             (w.requirements ? ". " + w.requirements : "") });
+    }
+    (w.tasks||[]).filter(function(x){ return !x.done }).forEach(function(x){
+      out.push({ uid:x.id, wid:w.id, due:x.due, title:x.text, desc:w.topic });
+    });
+  });
+  if (!workId){
+    D.tasks.filter(function(x){ return !x.done }).forEach(function(x){
+      out.push({ uid:x.id, wid:null, due:x.due, title:x.text, desc:"" });
+    });
+  }
+  return out;
+}
+function exportIcs(workId){
+  if (!D.icsSeq) D.icsSeq = {};
+  var items = calendarItems(workId);
+  var live = {};
+  items.forEach(function(it){ live[it.uid] = true; });
+  var stale = Object.keys(D.icsSeq).filter(function(uid){
+    var rec = D.icsSeq[uid];
+    if (live[uid] || !rec || rec.live === false) return false;
+    return workId ? rec.w === workId : true;
+  });
+  if (!items.length && !stale.length) return toast("Нечего добавлять: сроков и задач нет");
+  try{
+    var text = buildIcs(items, stale, workId);
+    save();
+    var blob = new Blob([text], { type:"text/calendar;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = (workId ? safeName(work(workId).topic) : "sroki") + ".ics";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url) }, 4000);
+    toast(stale.length && !items.length
+      ? "Файл скачан — откройте его, календарь уберёт лишнее"
+      : "Файл скачан — откройте его, календарь обновит записи");
+  }catch(e){ toast("Не удалось собрать напоминание"); }
+}
+
+function viewToday(){
+  var t = today(), c = counts(), warn = D.settings.warnDays || 3;
+  var list = reminders();
+  var overdue = list.filter(function(x){ return daysLeft(x.due) < 0 });
+  var soon = list.filter(function(x){ var d = daysLeft(x.due); return d >= 0 && d <= warn });
+  var active = D.works.filter(function(w){ return getStatus(w)==="in_progress" || getStatus(w)==="revision" });
+
+  return '<h1>Сегодня</h1><div class="sub">'+ruDate(t)+' · работ: '+c.total+
+    ' · в работе: '+c.inProgress+' · просрочено: '+c.overdue+'</div>'+
+    '<div class="today"><div>'+
+      (overdue.length ? '<div class="warnbox"><b>Просрочено</b><ul>'+
+        overdue.map(function(x){ return '<li>'+esc(x.text)+' — срок был '+ruDate(x.due)+'</li>' }).join("")+
+        '</ul></div>' : '')+
+      (!overdue.length && !soon.length && list.length
+        ? '<div class="okbox">В ближайшие '+warn+' '+ruDays(warn)+' сдавать нечего.</div>' : '')+
+      (list.length ? '<div class="dayline"><div class="spine"></div>'+
+        list.slice(0,10).map(function(x){
+          var d = daysLeft(x.due), hot = d <= warn;
+          return '<div class="tl-item '+(hot?"is-now":"")+'">'+
+            '<div class="tl-dot"></div>'+
+            '<div class="tl-time">'+whenText(x.due)+' · '+ruDate(x.due)+'</div>'+
+            '<div class="lesson '+(hot?"is-now":"")+'">'+
+              '<span class="what">'+esc(x.text)+'</span>'+
+              (x.wname ? '<span class="small">'+esc(x.wname)+'</span>' : '')+
+              '<div class="row">'+
+                (x.kind === "task"
+                  ? '<button type="button" class="b b-main b-sm" data-act="task-done" data-id="'+x.id+'">Сделано</button>'
+                  : '')+
+                (x.wid ? '<button type="button" class="b b-alt b-sm" data-act="open-work" data-id="'+x.wid+'">Открыть работу</button>' : '')+
+              '</div></div></div>';
+        }).join("")+'</div>'
+        : '<div class="infobox">Сроков и задач нет. Создайте работу — её срок сдачи появится здесь.</div>')+
+    '</div><div>'+
+      '<div class="side-block"><h3>Напомнить себе</h3>'+
+        '<p class="small" style="margin-bottom:12px">Календарь телефона напомнит сам — за '+warn+' '+ruDays(warn)+' и накануне, даже если кабинет закрыт. Поменяли срок — нажмите ещё раз, записи обновятся.</p>'+
+        '<button type="button" class="b b-main b-sm" style="width:100%;margin-bottom:8px" data-act="ics-all">Добавить сроки в календарь</button>'+
+        '<button type="button" class="b b-alt b-sm" style="width:100%;margin-bottom:8px" data-act="tg-share">Отправить сводку в Telegram</button>'+
+        '<button type="button" class="b b-quiet b-sm" style="width:100%" data-act="copy-digest">Скопировать сводку</button>'+
+      '</div>'+
+      '<div class="side-block"><h3>Работы в процессе</h3>'+
+        (active.length ? active.map(function(w){
+          return '<div class="stat"><span>'+esc(w.topic)+'</span><b>'+getProgress(w)+'%</b></div>';
+        }).join("") : '<div class="small">Активных работ нет</div>')+
+      '</div>'+
+      '<div class="side-block"><h3>Быстрые действия</h3>'+
+        '<button type="button" class="b b-main b-sm" style="width:100%;margin-bottom:8px" data-act="new-work">Новая работа</button>'+
+        '<button type="button" class="b b-alt b-sm" style="width:100%" data-act="export">Сохранить копию данных</button>'+
+      '</div>'+
+    '</div></div>';
+}
+
+/* ==================================================================
+   РАБОТЫ
+   ================================================================== */
+var WORK_FILTERS = [
+  { k:"all", t:"Все" },
+  { k:"in_progress", t:"В работе" },
+  { k:"review", t:"На проверке" },
+  { k:"revision", t:"Доработка" },
+  { k:"accepted", t:"Приняты" },
+  { k:"graded", t:"Оценены" }
+];
+var workFilter = "all";
+
+function viewWorks(){
+  var filtered = D.works.filter(function(w){
+    return workFilter === "all" ? true : getStatus(w) === workFilter;
+  });
+  return '<h1>Мои работы</h1><div class="sub">всего: '+D.works.length+' · показано: '+filtered.length+'</div>'+
+    '<div class="toolbar"><div class="chips">'+
+      WORK_FILTERS.map(function(f){
+        var n = f.k==="all" ? D.works.length : D.works.filter(function(w){ return getStatus(w)===f.k }).length;
+        return '<button type="button" class="b '+(workFilter===f.k?"b-main":"b-quiet")+' b-sm" data-act="work-filter" data-k="'+f.k+'">'+esc(f.t)+' · '+n+'</button>';
+      }).join("")+
+    '</div><div class="tools">'+
+      '<button type="button" class="b b-alt b-sm" data-act="new-work">Новая работа</button>'+
+    '</div></div>'+
+    (filtered.length ? '<div class="list">'+filtered.map(function(w){
+      var st = getStatus(w), p = getProgress(w);
+      var over = w.deadline && w.deadline < today() && st!=="accepted" && st!=="graded";
+      return '<div class="item" data-act="open-work" data-id="'+w.id+'">'+
+        '<div class="l"><b>'+esc(w.topic)+'</b><span>'+
+          (w.format && w.format.workType ? esc(w.format.workType) : "Работа")+
+          (w.deadline ? ' · срок '+ruDate(w.deadline) : '')+
+          (over ? ' · срок прошёл' : '')+
+        '</span></div>'+
+        '<div class="r"><span class="pill '+STATUS_PILL[st]+'">'+STATUS[st]+'</span>'+
+        '<span class="small">'+p+'%</span></div></div>';
+    }).join("")+'</div>'
+    : '<div class="infobox">Работ пока нет. Нажмите «Новая работа», чтобы начать.</div>');
+}
+
+/* ==================================================================
+   КАРТОЧКА РАБОТЫ
+   ================================================================== */
+function viewWork(id){
+  var w = work(id);
+  if (!w) return '<div class="infobox">Работа не найдена</div>';
+  var st = getStatus(w), p = getProgress(w), f = w.format, ch = w.structure;
+  var issues = checkWork(w);
+
+  var chaptersHtml = CHAPTERS.map(function(c,i){
+    var data = ch[c.id] || { text:"", status:"draft" };
+    var preview = (data.text||"").trim();
+    return '<div class="chapter-row" data-act="edit-chapter" data-id="'+w.id+'" data-ch="'+c.id+'">'+
+      '<span class="n">'+(i+1)+'</span>'+
+      '<span class="t"><b>'+esc(c.name)+'</b><span>'+
+        (preview ? esc(preview.slice(0,70))+(preview.length>70?"…":"") : "пусто — нажмите, чтобы написать")+
+      '</span></span>'+
+      '<span class="pill '+STATUS_PILL[data.status]+'">'+STATUS[data.status]+'</span></div>';
+  }).join("");
+
+  return '<button type="button" class="b b-quiet b-sm" data-act="back" style="margin-bottom:14px">← Назад</button>'+
+    '<h1>'+esc(w.topic)+'</h1>'+
+    '<div class="sub">'+esc(f.workType||"Работа")+
+      (f.discipline ? ' · '+esc(f.discipline) : '')+
+      (w.deadline ? ' · срок '+ruDate(w.deadline) : '')+
+      ' · <span class="pill '+STATUS_PILL[st]+'">'+STATUS[st]+'</span></div>'+
+
+    '<div class="card"><h2>Готовность</h2>'+
+      '<div class="bar"><i style="width:'+p+'%"></i></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:7px">'+
+        '<span class="small">'+p+'% готово</span>'+
+        '<span class="small">примерно '+workPages(w)+' стр. · '+workChars(w)+' знаков</span>'+
+      '</div>'+
+      (w.requirements ? '<p class="small" style="margin-top:10px">Требования: '+esc(w.requirements)+'</p>' : '')+
+    '</div>'+
+
+    '<div class="card"><h2>Разделы</h2>'+
+      '<div class="chapters">'+chaptersHtml+'</div>'+
+      '<div class="rowbtns">'+
+        '<button type="button" class="b b-main b-sm" data-act="export-word" data-id="'+w.id+'">Скачать документ Word</button>'+
+        '<button type="button" class="b b-alt b-sm" data-act="edit-format" data-id="'+w.id+'">Оформление</button>'+
+        '<button type="button" class="b b-alt b-sm" data-act="edit-work" data-id="'+w.id+'">Тема и срок</button>'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="card"><h2>Проверка перед сдачей</h2>'+
+      (issues.length
+        ? '<div class="warnbox" style="margin:0"><b>Осталось доделать:</b><ul>'+
+          issues.map(function(i){ return '<li>'+esc(i)+'</li>' }).join("")+'</ul></div>'
+        : '<div class="okbox" style="margin:0">Всё заполнено: разделы написаны, данные титульного листа на месте, список литературы не пуст.</div>')+
+      '<p class="hint">Проверяется только полнота данных. Соответствие полей и шрифта требованиям вашей кафедры задаётся в разделе «Оформление» — сверяйтесь с методичкой, общий ГОСТ подходит не всем.</p>'+
+    '</div>'+
+
+    '<div class="card"><h2>Оформление документа</h2>'+
+      '<div class="stat"><span>Вуз</span><b>'+(f.univ ? esc(f.univ) : "не указан")+'</b></div>'+
+      '<div class="stat"><span>Поля (верх/прав/низ/лев)</span><b>'+f.mTop+'/'+f.mRight+'/'+f.mBottom+'/'+f.mLeft+' мм</b></div>'+
+      '<div class="stat"><span>Шрифт</span><b>'+esc(f.font)+' '+f.size+' пт</b></div>'+
+      '<div class="stat"><span>Интервал / отступ</span><b>'+f.spacing+' / '+f.indent+' см</b></div>'+
+      '<div class="rowbtns">'+
+        '<button type="button" class="b b-alt b-sm" data-act="edit-format" data-id="'+w.id+'">Изменить</button>'+
+        '<button type="button" class="b b-quiet b-sm" data-act="save-template" data-id="'+w.id+'">Сохранить как шаблон</button>'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="card"><h2>Заявка на черновик</h2>'+
+      (w.req && w.req.sent
+        ? '<p class="small">Последний раз отправлена '+ruDate(w.req.sent)+'. Можно отправить снова — данные обновятся.</p>'
+        : '<p class="small">Отправьте данные работы — черновик придёт вам в мессенджер готовым документом.</p>')+
+      '<div class="rowbtns">'+
+        '<button type="button" class="b b-main b-sm" data-act="send-request" data-id="'+w.id+'">Отправить заявку</button>'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="card"><h2>Задачи по работе</h2>'+
+      ((w.tasks||[]).length ? (w.tasks||[]).map(function(x){
+        return '<div class="stat"><span>'+(x.done?"✓ ":"")+ruDate(x.due)+' · '+esc(x.text)+'</span>'+
+          (x.done ? '<b class="small">сделано</b>'
+                  : '<button type="button" class="b b-quiet b-sm" data-act="task-done-work" data-wid="'+w.id+'" data-tid="'+x.id+'">Отметить</button>')+
+          '</div>';
+      }).join("") : '<div class="small">Задач нет</div>')+
+      '<div class="rowbtns"><button type="button" class="b b-alt b-sm" data-act="new-task" data-id="'+w.id+'">Добавить задачу</button>'+
+      '<button type="button" class="b b-alt b-sm" data-act="ics-work" data-id="'+w.id+'">Напомнить в календаре</button></div>'+
+    '</div>'+
+
+    '<div class="card"><h2>Статус работы</h2>'+
+      '<div class="field"><label>Текущий статус</label>'+
+        '<select data-act="set-status" data-id="'+w.id+'">'+
+          WORK_STATUSES.map(function(s){
+            return '<option value="'+s+'"'+(st===s?" selected":"")+'>'+STATUS[s]+'</option>';
+          }).join("")+
+        '</select></div>'+
+      '<p class="hint">Статус работы вы ставите сами. Статусы отдельных разделов на него больше не влияют.</p>'+
+      '<div class="rowbtns"><button type="button" class="b b-quiet b-sm" data-act="delete-work" data-id="'+w.id+'">Удалить работу</button></div>'+
+    '</div>';
+}
+
+/* ==================================================================
+   ОКНА
+   ================================================================== */
+function openModal(html, onMount){
+  var wrap = document.createElement("div");
+  wrap.className = "modal";
+  wrap.innerHTML = '<div class="win">'+html+'</div>';
+  document.body.appendChild(wrap);
+  wrap.addEventListener("click", function(ev){
+    if (ev.target === wrap) return;
+    if (ev.target.closest("[data-x]")) wrap.remove();
+  });
+  if (onMount) onMount(wrap);
+  return wrap;
+}
+
+function openChapterEditor(workId, chapterId){
+  var w = work(workId); if (!w) return toast("Работа не найдена");
+  var ch = w.structure[chapterId]; if (!ch) return toast("Раздел не найден");
+  var chapter = CHAPTERS.filter(function(c){ return c.id === chapterId })[0];
+
+  var wrap = openModal(
+    '<button type="button" class="close" data-x="1">✕</button>'+
+    '<h2>'+esc(chapter.name)+'</h2>'+
+    '<p class="small">'+esc(w.topic)+'</p>'+
+    '<div class="field" style="margin-top:14px"><label>Текст раздела</label>'+
+      '<textarea id="chText"></textarea>'+
+      '<span class="hint">Для диктовки нажмите микрофон на клавиатуре телефона.</span></div>'+
+    '<div class="field"><label>Готовность раздела</label>'+
+      '<select id="chStatus">'+
+        CHAPTER_STATUSES.map(function(s){
+          return '<option value="'+s+'"'+(ch.status===s?" selected":"")+'>'+STATUS[s]+'</option>';
+        }).join("")+
+      '</select></div>'+
+    '<div class="rowbtns">'+
+      '<button type="button" class="b b-main" data-save="1">Сохранить</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Отмена</button>'+
+    '</div>',
+    function(el){ el.querySelector("#chText").value = ch.text || ""; }
+  );
+
+  wrap.addEventListener("click", function(ev){
+    if (!ev.target.closest("[data-save]")) return;
+    var text = wrap.querySelector("#chText").value;
+    var status = wrap.querySelector("#chStatus").value;
+    change(function(){
+      ch.text = text;
+      ch.status = status;
+      if (w.status === "draft" && text.trim()) w.status = "in_progress";
+    });
+    wrap.remove(); render(); toast("Раздел сохранён");
+  });
+}
+
+function openFormatEditor(workId){
+  var w = work(workId); if (!w) return;
+  var f = w.format;
+  function fld(id,label,val,type){
+    return '<div class="field"><label>'+label+'</label><input type="'+(type||"text")+'" id="'+id+'" value="'+esc(val)+'"></div>';
+  }
+  var wrap = openModal(
+    '<button type="button" class="close" data-x="1">✕</button>'+
+    '<h2>Оформление</h2>'+
+    '<p class="small">Эти данные попадут на титульный лист и зададут вид документа Word.</p>'+
+    '<div class="infobox" style="margin-top:14px">Сверьте значения с методичкой своей кафедры. У разных факультетов одного вуза требования расходятся.</div>'+
+    fld("fOrg","Учредитель (строка над названием вуза)", f.org)+
+    fld("fUniv","Вуз", f.univ)+
+    '<div class="fgrid">'+fld("fFac","Факультет", f.faculty)+fld("fKaf","Кафедра", f.kafedra)+'</div>'+
+    '<div class="fgrid">'+fld("fType","Вид работы", f.workType)+fld("fDisc","Дисциплина", f.discipline)+'</div>'+
+    fld("fSup","Руководитель", f.supervisor)+
+    '<div class="fgrid">'+fld("fCity","Город", f.city)+fld("fYear","Год", f.year || new Date().getFullYear())+'</div>'+
+    '<h3 style="margin-top:18px">Поля страницы, мм</h3>'+
+    '<div class="fgrid4">'+
+      fld("fT","Верх", f.mTop, "number")+fld("fR","Право", f.mRight, "number")+
+      fld("fB","Низ", f.mBottom, "number")+fld("fL","Лево", f.mLeft, "number")+
+    '</div>'+
+    '<div class="fgrid">'+fld("fFont","Шрифт", f.font)+fld("fSize","Кегль, пт", f.size, "number")+'</div>'+
+    '<div class="fgrid">'+fld("fSp","Межстрочный интервал", f.spacing, "number")+fld("fInd","Абзацный отступ, см", f.indent, "number")+'</div>'+
+    '<div class="field"><label>Автособираемое содержание</label>'+
+      '<select id="fToc"><option value="1"'+(f.toc?" selected":"")+'>Включить</option>'+
+      '<option value="0"'+(!f.toc?" selected":"")+'>Не нужно</option></select></div>'+
+    '<div class="rowbtns">'+
+      '<button type="button" class="b b-main" data-save="1">Сохранить</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Отмена</button>'+
+    '</div>'
+  );
+  wrap.addEventListener("click", function(ev){
+    if (!ev.target.closest("[data-save]")) return;
+    function v(id){ return wrap.querySelector("#"+id).value; }
+    function n(id,d){ var x = parseFloat(v(id)); return isNaN(x) ? d : x; }
+    change(function(){
+      f.org = v("fOrg"); f.univ = v("fUniv"); f.faculty = v("fFac"); f.kafedra = v("fKaf");
+      f.workType = v("fType"); f.discipline = v("fDisc"); f.supervisor = v("fSup");
+      f.city = v("fCity"); f.year = v("fYear");
+      f.mTop = n("fT",20); f.mRight = n("fR",15); f.mBottom = n("fB",20); f.mLeft = n("fL",30);
+      f.font = v("fFont") || "Times New Roman";
+      f.size = n("fSize",14); f.spacing = n("fSp",1.5); f.indent = n("fInd",1.25);
+      f.toc = v("fToc") === "1";
+    });
+    wrap.remove(); render(); toast("Оформление сохранено");
+  });
+}
+
+function openWorkEditor(workId){
+  var w = work(workId); if (!w) return;
+  var wrap = openModal(
+    '<button type="button" class="close" data-x="1">✕</button>'+
+    '<h2>Тема и срок</h2>'+
+    '<div class="field" style="margin-top:14px"><label>Тема работы</label><input type="text" id="eTopic" value="'+esc(w.topic)+'"></div>'+
+    '<div class="field"><label>Срок сдачи</label><input type="date" id="eDue" value="'+esc(w.deadline||"")+'"></div>'+
+    '<div class="field"><label>Требования (объём, оригинальность)</label><input type="text" id="eReq" value="'+esc(w.requirements||"")+'"></div>'+
+    '<div class="fgrid">'+
+      '<div class="field"><label>Автор</label><input type="text" id="eStud" value="'+esc(w.student||"")+'"></div>'+
+      '<div class="field"><label>Группа</label><input type="text" id="eGroup" value="'+esc(w.group||"")+'"></div>'+
+    '</div>'+
+    '<div class="rowbtns">'+
+      '<button type="button" class="b b-main" data-save="1">Сохранить</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Отмена</button>'+
+    '</div>'
+  );
+  wrap.addEventListener("click", function(ev){
+    if (!ev.target.closest("[data-save]")) return;
+    var topic = wrap.querySelector("#eTopic").value.trim();
+    if (!topic) return toast("Тема не может быть пустой");
+    change(function(){
+      w.topic = topic;
+      w.deadline = wrap.querySelector("#eDue").value;
+      w.requirements = wrap.querySelector("#eReq").value;
+      w.student = wrap.querySelector("#eStud").value;
+      w.group = wrap.querySelector("#eGroup").value;
+    });
+    wrap.remove(); render(); toast("Сохранено");
+  });
+}
+
+function openNewWork(){
+  var st = D.settings;
+  var wrap = openModal(
+    '<button type="button" class="close" data-x="1">✕</button>'+
+    '<h2>Новая работа</h2>'+
+    '<div class="field" style="margin-top:14px"><label>Тема</label><input type="text" id="nTopic" placeholder="Например: Анализ финансового состояния предприятия"></div>'+
+    '<div class="field"><label>Вид работы</label>'+
+      '<select id="nType"><option>Курсовая работа</option><option>Выпускная квалификационная работа</option>'+
+      '<option>Реферат</option><option>Контрольная работа</option><option>Эссе</option><option>Отчёт по практике</option></select></div>'+
+    '<div class="field"><label>Срок сдачи</label><input type="date" id="nDue" value="'+addDays(today(),30)+'"></div>'+
+    '<div class="field"><label>Оформление</label><select id="nTpl">'+
+      '<option value="">Общий ГОСТ (уточнить по методичке)</option>'+
+      (D.templates||[]).map(function(t){ return '<option value="'+t.id+'">'+esc(t.name)+'</option>' }).join("")+
+    '</select></div>'+
+    '<div class="rowbtns">'+
+      '<button type="button" class="b b-main" data-save="1">Создать</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Отмена</button>'+
+    '</div>'
+  );
+  wrap.addEventListener("click", function(ev){
+    if (!ev.target.closest("[data-save]")) return;
+    var topic = wrap.querySelector("#nTopic").value.trim();
+    if (!topic) return toast("Впишите тему работы");
+    var type = wrap.querySelector("#nType").value;
+    var due = wrap.querySelector("#nDue").value;
+    var tplId = wrap.querySelector("#nTpl").value;
+    var tpl = (D.templates||[]).filter(function(t){ return t.id === tplId })[0];
+    var newId = uid("w");
+    change(function(){
+      var f = tpl ? JSON.parse(JSON.stringify(tpl.format)) : defaultFormat();
+      f.workType = type;
+      if (!f.year) f.year = String(new Date().getFullYear());
+      D.works.push({
+        id:newId, topic:topic,
+        student: st.name || "", group: st.group || "",
+        created: today(), deadline: due, requirements:"",
+        status:"draft", format:f, structure: emptyStructure(), tasks:[]
+      });
+    });
+    wrap.remove(); go("works", newId); toast("Работа создана");
+  });
+}
+
+/* ==================================================================
+   ШАБЛОНЫ ОФОРМЛЕНИЯ
+   ================================================================== */
+function viewTemplates(){
+  var templates = D.templates || [];
+  return '<h1>Шаблоны оформления</h1>'+
+    '<div class="sub">Сохранённые наборы полей, шрифта и данных вуза</div>'+
+    '<div class="infobox">Шаблон — это способ не вводить одно и то же дважды. Перед сдачей всё равно сверьте поля и шрифт с методичкой своей кафедры: у разных факультетов требования разные.</div>'+
+    (templates.length ? '<div class="list">'+templates.map(function(t){
+      var f = t.format || {};
+      return '<div class="item" data-act="apply-template" data-id="'+t.id+'">'+
+        '<div class="l"><b>'+esc(t.name)+'</b><span>'+
+          esc(t.description || (f.mTop+"/"+f.mRight+"/"+f.mBottom+"/"+f.mLeft+" мм, "+f.font+" "+f.size))+
+        '</span></div>'+
+        '<div class="r"><span class="small">Применить</span>'+
+        '<button type="button" class="b b-quiet b-sm" data-act="delete-template" data-id="'+t.id+'">Удалить</button></div></div>';
+    }).join("")+'</div>' : '<div class="infobox">Шаблонов нет. Настройте оформление внутри работы и нажмите «Сохранить как шаблон».</div>');
+}
+
+function applyTemplate(tplId){
+  var tpl = (D.templates||[]).filter(function(t){ return t.id===tplId })[0];
+  if (!tpl) return;
+  if (!D.works.length) return toast("Сначала создайте работу");
+  var wrap = openModal(
+    '<button type="button" class="close" data-x="1">✕</button>'+
+    '<h2>Применить шаблон</h2>'+
+    '<p class="small">'+esc(tpl.name)+'</p>'+
+    '<div class="field" style="margin-top:14px"><label>К какой работе</label><select id="tW">'+
+      D.works.map(function(w){ return '<option value="'+w.id+'">'+esc(w.topic)+'</option>' }).join("")+
+    '</select></div>'+
+    '<div class="rowbtns">'+
+      '<button type="button" class="b b-main" data-save="1">Применить</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Отмена</button>'+
+    '</div>'
+  );
+  wrap.addEventListener("click", function(ev){
+    if (!ev.target.closest("[data-save]")) return;
+    var wid = wrap.querySelector("#tW").value, w = work(wid);
+    change(function(){
+      var keepType = w.format.workType;
+      w.format = JSON.parse(JSON.stringify(tpl.format));
+      if (!w.format.workType) w.format.workType = keepType;
+    });
+    wrap.remove(); go("works", wid); toast("Шаблон применён");
+  });
+}
+
+function saveAsTemplate(workId){
+  var w = work(workId); if (!w) return;
+  var wrap = openModal(
+    '<button type="button" class="close" data-x="1">✕</button>'+
+    '<h2>Сохранить оформление как шаблон</h2>'+
+    '<div class="field" style="margin-top:14px"><label>Название</label>'+
+      '<input type="text" id="tN" value="'+esc(w.format.kafedra || w.format.univ || "Моё оформление")+'"></div>'+
+    '<div class="field"><label>Пометка для себя</label><input type="text" id="tD" placeholder="Например: методичка 2026 года"></div>'+
+    '<div class="rowbtns">'+
+      '<button type="button" class="b b-main" data-save="1">Сохранить</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Отмена</button>'+
+    '</div>'
+  );
+  wrap.addEventListener("click", function(ev){
+    if (!ev.target.closest("[data-save]")) return;
+    var name = wrap.querySelector("#tN").value.trim() || "Оформление";
+    var desc = wrap.querySelector("#tD").value.trim();
+    change(function(){
+      D.templates.push({ id:uid("tpl"), name:name, description:desc,
+        format: JSON.parse(JSON.stringify(w.format)) });
+    });
+    wrap.remove(); render(); toast("Шаблон сохранён");
+  });
+}
+
+/* ==================================================================
+   ЕЩЁ
+   ================================================================== */
+function viewMore(){
+  var s = D.settings, c = counts();
+  var avg = c.total ? Math.round(D.works.reduce(function(a,w){ return a+getProgress(w) },0)/c.total) : 0;
+  return '<h1>Ещё</h1><div class="sub">Настройки, копии данных, статистика</div>'+
+    '<div class="grid g2">'+
+      '<div class="card"><h2>Обо мне</h2>'+
+        '<div class="field"><label>Имя</label><input type="text" id="stName" value="'+esc(s.name||"")+'"></div>'+
+        '<div class="field"><label>Группа</label><input type="text" id="stGroup" value="'+esc(s.group||"")+'"></div>'+
+        '<div class="field"><label>Предупреждать заранее, дней</label>'+
+          '<input type="number" id="stWarn" min="1" max="30" value="'+(s.warnDays||3)+'"></div>'+
+        '<div class="field"><label>Адрес реестра для заявок</label>'+
+          '<input type="text" id="stReg" value="'+esc(s.registryUrl||"")+'"></div>'+
+        '<button type="button" class="b b-main" data-act="save-settings">Сохранить</button>'+
+        '<p class="hint">Имя и группа подставляются в новые работы и на титульный лист.</p>'+
+      '</div>'+
+      '<div class="card"><h2>Напоминания</h2>'+
+        '<p class="small">Сроки уходят в календарь телефона, и напоминает он сам. Само приложение ничего не присылает: сводку в Telegram вы отправляете себе вручную.</p>'+
+        '<div class="rowbtns">'+
+          '<button type="button" class="b b-main" data-act="ics-all">Добавить сроки в календарь</button>'+
+          '<button type="button" class="b b-alt" data-act="tg-share">Сводка в Telegram</button>'+
+          '<button type="button" class="b b-quiet" data-act="copy-digest">Скопировать</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="card"><h2>Статистика</h2>'+
+        '<div class="stat"><span>Всего работ</span><b>'+c.total+'</b></div>'+
+        '<div class="stat"><span>В работе</span><b>'+c.inProgress+'</b></div>'+
+        '<div class="stat"><span>На проверке</span><b>'+c.review+'</b></div>'+
+        '<div class="stat"><span>Просрочено</span><b>'+c.overdue+'</b></div>'+
+        '<div class="stat"><span>Средняя готовность</span><b>'+avg+'%</b></div>'+
+      '</div>'+
+      '<div class="card"><h2>Копия данных</h2>'+
+        '<p class="small">Всё хранится только в памяти этого устройства. Если очистить данные браузера или сменить телефон — записи пропадут. Копию стоит сохранять регулярно.</p>'+
+        '<div class="rowbtns">'+
+          '<button type="button" class="b b-main" data-act="export">Сохранить копию</button>'+
+          '<button type="button" class="b b-alt" data-act="import">Загрузить копию</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="card"><h2>Сброс</h2>'+
+        '<p class="small">Вернуть кабинет к начальному виду с одной работой-примером.</p>'+
+        '<div class="rowbtns">'+
+          '<button type="button" class="b b-quiet" data-act="reset">Вернуть начальные данные</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+}
+
+/* ==================================================================
+   СБОРКА .DOCX
+   ================================================================== */
+var CRC_TABLE = (function(){
+  var c, t = [];
+  for (var n=0; n<256; n++){
+    c = n;
+    for (var k=0; k<8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes){
+  var c = 0xFFFFFFFF;
+  for (var i=0; i<bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function makeZip(files){
+  var enc = new TextEncoder(), parts = [], central = [], offset = 0;
+  files.forEach(function(f){
+    var name = enc.encode(f.name), data = enc.encode(f.text);
+    var crc = crc32(data), len = data.length;
+    var lh = new Uint8Array(30 + name.length), dv = new DataView(lh.buffer);
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true); dv.setUint16(6, 0x0800, true);
+    dv.setUint16(8, 0, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0, true);
+    dv.setUint32(14, crc, true); dv.setUint32(18, len, true); dv.setUint32(22, len, true);
+    dv.setUint16(26, name.length, true); dv.setUint16(28, 0, true);
+    lh.set(name, 30);
+    parts.push(lh, data);
+    var ch = new Uint8Array(46 + name.length), cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+    cv.setUint32(16, crc, true); cv.setUint32(20, len, true); cv.setUint32(24, len, true);
+    cv.setUint16(28, name.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    ch.set(name, 46);
+    central.push(ch);
+    offset += lh.length + len;
+  });
+  var cdSize = central.reduce(function(a,b){ return a + b.length }, 0);
+  var end = new Uint8Array(22), ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, offset, true); ev.setUint16(20, 0, true);
+  return new Blob(parts.concat(central).concat([end]),
+    { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+}
+
+function xesc(s){
+  return String(s==null?"":s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"");
+}
+function mm2tw(mm){ return Math.round(mm * 56.6929); }
+function cm2tw(cm){ return Math.round(cm * 566.929); }
+
+function buildDocx(w){
+  var f = w.format;
+  var line = Math.round((f.spacing || 1.5) * 240);
+  var half = Math.round((f.size || 14) * 2);
+  var ind = cm2tw(f.indent || 0);
+  var author = (w.student || D.settings.name || "").trim();
+  var group = (w.group || D.settings.group || "").trim();
+  var year = f.year || String(new Date().getFullYear());
+
+  function P(text, o){
+    o = o || {};
+    var pPr = '<w:pPr>'+
+      (o.style ? '<w:pStyle w:val="'+o.style+'"/>' : '')+
+      '<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after||0)+'" w:line="'+line+'" w:lineRule="auto"/>'+
+      '<w:ind w:firstLine="'+(o.ind||0)+'"/>'+
+      '<w:jc w:val="'+(o.jc || "both")+'"/>'+
+      '</w:pPr>';
+    var rPr = '<w:rPr>'+(o.b?'<w:b/>':'')+'<w:sz w:val="'+half+'"/><w:szCs w:val="'+half+'"/></w:rPr>';
+    var run = text === "" ? "" : '<w:r>'+rPr+'<w:t xml:space="preserve">'+xesc(text)+'</w:t></w:r>';
+    return '<w:p>'+pPr+run+'</w:p>';
+  }
+  function pageBreak(){ return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'; }
+
+  /* Титульный лист */
+  var body = "";
+  if (f.org) body += P(f.org, { jc:"center" });
+  if (f.univ) body += P(f.univ, { jc:"center", b:true });
+  if (f.faculty) body += P(f.faculty, { jc:"center" });
+  if (f.kafedra) body += P(f.kafedra, { jc:"center" });
+  body += P("", {}) + P("", {}) + P("", {}) + P("", {});
+  body += P(String(f.workType || "Курсовая работа").toUpperCase(), { jc:"center", b:true, after:120 });
+  if (f.discipline) body += P("по дисциплине «" + f.discipline + "»", { jc:"center" });
+  body += P("на тему: «" + (w.topic || "") + "»", { jc:"center", b:true, before:120 });
+  body += P("", {}) + P("", {}) + P("", {});
+  if (author) body += P("Выполнил(а): " + author, { jc:"right" });
+  if (group) body += P("Группа: " + group, { jc:"right" });
+  if (f.supervisor) body += P("Руководитель: " + f.supervisor, { jc:"right", before:120 });
+  body += P("", {}) + P("", {}) + P("", {}) + P("", {});
+  body += P(((f.city ? f.city + ", " : "") + year), { jc:"center" });
+  body += pageBreak();
+
+  /* Содержание */
+  if (f.toc){
+    body += P("СОДЕРЖАНИЕ", { jc:"center", b:true, after:240 });
+    body += '<w:p><w:pPr><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>'+
+      '<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>'+
+      '<w:r><w:instrText xml:space="preserve"> TOC \\o "1-1" \\h \\z \\u </w:instrText></w:r>'+
+      '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
+      '<w:r><w:rPr><w:sz w:val="'+half+'"/></w:rPr>'+
+      '<w:t xml:space="preserve">Чтобы проставились названия и номера страниц: щёлкните по этой строке правой кнопкой и выберите «Обновить поле» (в Word на компьютере — F9).</w:t></w:r>'+
+      '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>';
+    body += pageBreak();
+  }
+
+  /* Разделы */
+  var written = 0;
+  CHAPTERS.forEach(function(c, i){
+    var ch = (w.structure || {})[c.id] || { text:"" };
+    var text = (ch.text || "").trim();
+    if (!text) return;
+    if (written > 0) body += pageBreak();
+    written++;
+    body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 });
+    text.split(/\n+/).forEach(function(par){
+      if (par.trim()) body += P(par.trim(), { ind:ind, jc:"both" });
+    });
+  });
+  if (!written) body += P("Разделы пока не написаны.", { ind:ind });
+
+  var sectPr = '<w:sectPr>'+
+    '<w:footerReference w:type="default" r:id="rId2"/>'+
+    '<w:pgSz w:w="11906" w:h="16838"/>'+
+    '<w:pgMar w:top="'+mm2tw(f.mTop)+'" w:right="'+mm2tw(f.mRight)+'" w:bottom="'+mm2tw(f.mBottom)+
+      '" w:left="'+mm2tw(f.mLeft)+'" w:header="708" w:footer="708" w:gutter="0"/>'+
+    '<w:titlePg/></w:sectPr>';
+
+  var document_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+    '<w:body>'+body+sectPr+'</w:body></w:document>';
+
+  var fontName = xesc(f.font || "Times New Roman");
+  var styles_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'+
+    '<w:docDefaults><w:rPrDefault><w:rPr>'+
+      '<w:rFonts w:ascii="'+fontName+'" w:hAnsi="'+fontName+'" w:cs="'+fontName+'" w:eastAsia="'+fontName+'"/>'+
+      '<w:sz w:val="'+half+'"/><w:szCs w:val="'+half+'"/><w:lang w:val="ru-RU"/>'+
+    '</w:rPr></w:rPrDefault>'+
+    '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="'+line+'" w:lineRule="auto"/></w:pPr></w:pPrDefault>'+
+    '</w:docDefaults>'+
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>'+
+    '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/>'+
+      '<w:pPr><w:keepNext/><w:outlineLvl w:val="0"/><w:jc w:val="center"/>'+
+      '<w:spacing w:before="240" w:after="240" w:line="'+line+'" w:lineRule="auto"/></w:pPr>'+
+      '<w:rPr><w:b/><w:sz w:val="'+half+'"/></w:rPr></w:style>'+
+    '</w:styles>';
+
+  var footer_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'+
+    '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>'+
+    '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'+
+    '<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'+
+    '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
+    '<w:r><w:rPr><w:sz w:val="'+half+'"/></w:rPr><w:t>2</w:t></w:r>'+
+    '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>';
+
+  var content_types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+    '<Default Extension="xml" ContentType="application/xml"/>'+
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'+
+    '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'+
+    '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'+
+    '</Types>';
+
+  var rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'+
+    '</Relationships>';
+
+  var docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'+
+    '</Relationships>';
+
+  return makeZip([
+    { name:"[Content_Types].xml", text:content_types },
+    { name:"_rels/.rels", text:rels },
+    { name:"word/document.xml", text:document_xml },
+    { name:"word/_rels/document.xml.rels", text:docRels },
+    { name:"word/styles.xml", text:styles_xml },
+    { name:"word/footer1.xml", text:footer_xml }
+  ]);
+}
+
+function safeName(s){
+  return String(s||"rabota").replace(/[\\/:*?"<>|]/g,"").replace(/\s+/g," ").trim().slice(0,60) || "rabota";
+}
+
+function exportWord(workId){
+  var w = work(workId); if (!w) return toast("Работа не найдена");
+  try{
+    var blob = buildDocx(w);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = safeName(w.topic) + ".docx";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url) }, 4000);
+    toast("Документ скачан");
+  }catch(e){
+    toast("Не удалось собрать документ");
+  }
+}
+
+/* ==================================================================
+   ДЕЙСТВИЯ
+   ================================================================== */
+document.addEventListener("change", function(ev){
+  var el = ev.target;
+  if (el.tagName === "SELECT" && el.getAttribute("data-act") === "set-status"){
+    var w = work(el.getAttribute("data-id"));
+    if (!w) return;
+    var v = el.value;
+    change(function(){ w.status = v; });
+    render(); toast("Статус: " + STATUS[v]);
+  }
+});
+
+document.addEventListener("click", function(ev){
+  var el = ev.target.closest ? ev.target.closest("[data-act],[data-tab]") : null;
+  if (!el) return;
+  if (el.tagName === "SELECT") return;
+
+  var tabId = el.getAttribute("data-tab");
+  if (tabId){ go(tabId); return; }
+  var act = el.getAttribute("data-act"), id = el.getAttribute("data-id");
+
+  if (act === "back") return back();
+  if (act === "open-work") return go("works", id);
+  if (act === "work-filter"){ workFilter = el.getAttribute("data-k"); return render(); }
+  if (act === "new-work") return openNewWork();
+  if (act === "edit-work") return openWorkEditor(id);
+  if (act === "edit-format") return openFormatEditor(id);
+  if (act === "edit-chapter") return openChapterEditor(id, el.getAttribute("data-ch"));
+  if (act === "export-word") return exportWord(id);
+  if (act === "save-template") return saveAsTemplate(id);
+  if (act === "apply-template") return applyTemplate(id);
+
+  if (act === "delete-template"){
+    ev.stopPropagation();
+    if (!confirm("Удалить шаблон?")) return;
+    change(function(){ D.templates = D.templates.filter(function(t){ return t.id !== id }); });
+    render(); toast("Шаблон удалён"); return;
+  }
+
+  if (act === "task-done"){
+    change(function(){
+      var t = D.tasks.filter(function(x){ return x.id === id })[0];
+      if (t) t.done = true;
+      D.works.forEach(function(w){
+        (w.tasks||[]).forEach(function(x){ if (x.id === id) x.done = true; });
+      });
+    });
+    return render();
+  }
+  if (act === "task-done-work"){
+    var wid = el.getAttribute("data-wid"), tid = el.getAttribute("data-tid");
+    change(function(){
+      var w = work(wid); if (!w) return;
+      var t = (w.tasks||[]).filter(function(x){ return x.id === tid })[0];
+      if (t) t.done = true;
+    });
+    return render();
+  }
+  if (act === "new-task"){
+    var w = work(id); if (!w) return;
+    var wrap = openModal(
+      '<button type="button" class="close" data-x="1">✕</button>'+
+      '<h2>Новая задача</h2>'+
+      '<div class="field" style="margin-top:14px"><label>Что сделать</label><input type="text" id="tkText" placeholder="Например: сдать черновик главы 1"></div>'+
+      '<div class="field"><label>К какому числу</label><input type="date" id="tkDue" value="'+addDays(today(),7)+'"></div>'+
+      '<div class="rowbtns"><button type="button" class="b b-main" data-save="1">Добавить</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Отмена</button></div>'
+    );
+    wrap.addEventListener("click", function(e2){
+      if (!e2.target.closest("[data-save]")) return;
+      var text = wrap.querySelector("#tkText").value.trim();
+      if (!text) return toast("Впишите, что нужно сделать");
+      var due = wrap.querySelector("#tkDue").value || today();
+      change(function(){ w.tasks.push({ id:uid("tk"), due:due, text:text, done:false }); });
+      wrap.remove(); render(); toast("Задача добавлена");
+    });
+    return;
+  }
+
+  if (act === "delete-work"){
+    if (!confirm("Удалить работу вместе с текстом? Отменить это можно только кнопкой «Отменить».")) return;
+    change(function(){ D.works = D.works.filter(function(w){ return w.id !== id }); });
+    openWorkId = null; tab = "works"; render(); toast("Работа удалена");
+    return;
+  }
+
+  if (act === "send-request") return openRequest(id);
+  if (act === "tg-share") return shareTelegram();
+  if (act === "copy-digest") return copyDigest();
+  if (act === "ics-all") return exportIcs(null);
+  if (act === "ics-work") return exportIcs(id);
+
+  if (act === "save-settings"){
+    var n = document.getElementById("stName").value, g = document.getElementById("stGroup").value;
+    var wd = parseInt(document.getElementById("stWarn").value, 10);
+    var reg = document.getElementById("stReg").value.trim();
+    if (isNaN(wd) || wd < 1) wd = 3;
+    if (wd > 30) wd = 30;
+    change(function(){ D.settings.name = n; D.settings.group = g; D.settings.warnDays = wd;
+      D.settings.registryUrl = reg; });
+    render(); toast("Сохранено"); return;
+  }
+
+  if (act === "export"){
+    var blob = new Blob([JSON.stringify(D, null, 1)], { type:"application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "studkab-" + today() + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    toast("Копия сохранена"); return;
+  }
+
+  if (act === "import"){
+    var inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "application/json,.json";
+    inp.onchange = function(){
+      var file = inp.files[0]; if (!file) return;
+      var r = new FileReader();
+      r.onload = function(){
+        try{
+          var o = JSON.parse(r.result);
+          if (!o.works) throw new Error("bad");
+          change(function(){ D = o; });
+          load(); render(); toast("Данные загружены");
+        }catch(e){ toast("Этот файл не похож на копию кабинета"); }
+      };
+      r.readAsText(file);
+    };
+    inp.click(); return;
+  }
+
+  if (act === "reset"){
+    if (!confirm("Вернуть начальные данные? Все ваши работы будут удалены.")) return;
+    change(function(){ D = demoData(); });
+    tab = "today"; openWorkId = null; render(); toast("Начальные данные восстановлены");
+    return;
+  }
+});
+
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape"){
+    var m = document.querySelector(".modal");
+    if (m) m.remove();
+    return;
+  }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z"){ ev.preventDefault(); undo(); }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y"){ ev.preventDefault(); redo(); }
+});
+
+document.getElementById("btnBackSide").onclick = back;
+document.getElementById("btnUndo").onclick = undo;
+document.getElementById("btnUndoM").onclick = undo;
+function toggleTheme(){
+  document.body.classList.toggle("dark");
+  change(function(){ D.settings.theme = document.body.classList.contains("dark") ? "dark" : "light" });
+}
+document.getElementById("btnTheme").onclick = toggleTheme;
+document.getElementById("btnThemeM").onclick = toggleTheme;
+
+load();
+render();
+</script>
+</body>
+</html>

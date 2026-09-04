@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Реестр заявок</title>
+<meta name="theme-color" content="#28425C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+:root{
+  --ground:#F3F8FC; --ground-2:#E7F0F8;
+  --surface:#FFFFFF; --surface-top:#FFFFFF; --surface-bot:#FAFCFE;
+  --surface-2:#EDF4FA; --surface-3:#E3EDF6;
+  --panel:#28425C; --panel-top:#3C6285; --panel-bot:#1B3145;
+  --ink:#1E2C3A; --mut:#5A7185; --dim:#8698A7;
+  --line:#DFE9F1; --line-2:#C6D8E5;
+  --accent:#2F6091; --accent-2:#4C86BC; --head:#28425C;
+  --ok:#3F7B5E; --ok-bg:#E8F3EC; --ok-bg2:#DCEDE3;
+  --warn:#A85147; --warn-bg:#FAEEEB; --warn-bg2:#F5E0DB;
+  --ochre:#B08347; --och-bg:#FBF2E4; --och-bg2:#F5E6CE;
+  --r:14px; --r-lg:18px;
+  --sh-1:0 1px 1px rgba(23,42,61,.05), 0 2px 5px rgba(23,42,61,.045);
+  --sh-2:0 1px 2px rgba(23,42,61,.06), 0 6px 16px rgba(23,42,61,.07), 0 18px 38px rgba(23,42,61,.05);
+  --edge:inset 0 1px 0 rgba(255,255,255,.9);
+  --ease:cubic-bezier(.2,.8,.3,1);
+}
+body.dark{
+  --ground:#0E151D; --ground-2:#141E28;
+  --surface:#19232E; --surface-top:#1E2A36; --surface-bot:#17202A;
+  --surface-2:#212D39; --surface-3:#27343F;
+  --ink:#E4ECF3; --mut:#9CAEBC; --dim:#7D8F9D;
+  --line:#28343F; --line-2:#374852;
+  --accent:#7FAAD0; --accent-2:#9CC2E2;
+  --ok:#7BB392; --ok-bg:#1A2720; --ok-bg2:#213026;
+  --warn:#D08C81; --warn-bg:#2A1D1B; --warn-bg2:#332320;
+  --ochre:#C99A5B; --och-bg:#27210F; --och-bg2:#2F2814;
+  --sh-1:0 1px 2px rgba(0,0,0,.30);
+  --sh-2:0 2px 6px rgba(0,0,0,.34), 0 14px 32px rgba(0,0,0,.30);
+  --edge:inset 0 1px 0 rgba(255,255,255,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  color:var(--ink); background:var(--ground);
+  font-family:"Golos Text","Segoe UI",system-ui,-apple-system,sans-serif;
+  font-size:15.5px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
+}
+body::before{
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:
+    radial-gradient(1000px 560px at 85% -8%, rgba(176,131,71,.12), transparent 62%),
+    linear-gradient(180deg, var(--ground) 0%, var(--ground-2) 100%);
+}
+button,input,select,textarea{font:inherit; color:inherit}
+
+.top{
+  background:linear-gradient(163deg, #3C6285 0%, var(--panel) 55%, var(--panel-bot) 100%);
+  color:#fff; padding:16px 20px; position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  box-shadow:0 6px 22px rgba(24,42,60,.24), inset 0 1px 0 rgba(255,255,255,.20);
+}
+.top .who{min-width:0}
+.top .who b{display:block; font-size:17px; font-weight:600}
+.top .who span{font-size:12px; opacity:.78}
+.top .acts{display:flex; gap:8px; flex:none}
+.top button{background:rgba(255,255,255,.18); border:none; color:#fff; border-radius:9px;
+  padding:8px 12px; font-size:13px; cursor:pointer; box-shadow:inset 0 1px 0 rgba(255,255,255,.24)}
+.page{padding:22px 20px 80px; max-width:900px; margin:0 auto}
+@media (max-width:640px){ .page{padding:16px 14px 80px} }
+
+h1{font-size:26px; margin:0 0 5px; font-weight:700; letter-spacing:-.02em}
+h2{font-size:18px; margin:0 0 10px; font-weight:700}
+h3{font-size:15px; margin:0 0 6px; font-weight:600}
+p{margin:0 0 10px} p:last-child{margin-bottom:0}
+.sub{color:var(--mut); font-size:14px; margin-bottom:20px}
+.small{font-size:13px; color:var(--dim)}
+
+.card{background:linear-gradient(180deg, var(--surface-top), var(--surface-bot));
+  border:1px solid var(--line); border-radius:var(--r); padding:18px; margin-bottom:16px;
+  box-shadow:var(--sh-2), var(--edge)}
+.infobox{background:linear-gradient(180deg, var(--surface-2), var(--surface-3));
+  border-radius:var(--r); padding:14px 16px; font-size:14px; color:var(--mut); margin-bottom:16px}
+.okbox{background:linear-gradient(180deg, var(--ok-bg), var(--ok-bg2)); border-left:3px solid var(--ok);
+  border-radius:0 var(--r) var(--r) 0; padding:14px 16px; margin-bottom:16px; font-size:14.5px}
+
+button.b{border-radius:11px; padding:11px 16px; border:1.5px solid transparent; cursor:pointer;
+  font-size:14.5px; font-weight:500; transition:transform .14s var(--ease), box-shadow .2s}
+button.b:active{transform:translateY(1px) scale(.985)}
+button.b:focus-visible{outline:2.5px solid var(--accent-2); outline-offset:2px}
+.b-main{background:linear-gradient(180deg,#5D96C8 0%,#3C72A6 48%,var(--accent) 100%); color:#fff;
+  box-shadow:0 6px 16px rgba(47,96,145,.32), inset 0 1px 0 rgba(255,255,255,.32)}
+.b-alt{background:linear-gradient(180deg,var(--surface),var(--surface-bot)); color:var(--accent);
+  border-color:var(--line-2); box-shadow:var(--sh-1), var(--edge)}
+.b-quiet{background:linear-gradient(180deg,var(--surface-2),var(--surface-3)); color:var(--mut);
+  border-color:var(--line)}
+.b-sm{padding:8px 12px; font-size:13.5px; border-radius:9px}
+.rowbtns{display:flex; gap:9px; flex-wrap:wrap; margin-top:14px}
+
+.field{display:flex; flex-direction:column; gap:6px; margin-bottom:14px}
+.field label{font-size:13px; color:var(--mut); font-weight:500}
+input[type=text], input[type=search], select, textarea{
+  background:var(--surface); border:1.5px solid var(--line); border-radius:10px;
+  padding:11px 13px; width:100%; box-shadow:inset 0 1px 2px rgba(23,42,61,.05)}
+input:focus, select:focus, textarea:focus{outline:none; border-color:var(--accent-2);
+  box-shadow:0 0 0 3.5px rgba(76,134,188,.16)}
+textarea{min-height:150px; resize:vertical}
+
+.pill{display:inline-flex; align-items:center; font-size:12px; font-weight:600;
+  padding:4px 10px; border-radius:99px; box-shadow:var(--edge)}
+.p-new{background:linear-gradient(180deg,var(--och-bg),var(--och-bg2)); color:var(--ochre)}
+.p-work{background:linear-gradient(180deg,#E4EFF8,#D6E7F4); color:var(--accent)}
+.p-sent{background:linear-gradient(180deg,var(--ok-bg),var(--ok-bg2)); color:var(--ok)}
+.p-done{background:linear-gradient(180deg,var(--ok-bg),var(--ok-bg2)); color:var(--ok)}
+.p-off{background:linear-gradient(180deg,var(--surface-2),var(--surface-3)); color:var(--mut)}
+
+.chips{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
+.list{display:flex; flex-direction:column; gap:11px}
+.item{background:linear-gradient(180deg,var(--surface-top),var(--surface-bot));
+  border:1px solid var(--line); border-radius:var(--r); padding:14px 16px; cursor:pointer;
+  display:flex; gap:12px; align-items:center; justify-content:space-between;
+  box-shadow:var(--sh-1), var(--edge); transition:border-color .18s, box-shadow .18s}
+.item:hover{border-color:var(--line-2); box-shadow:var(--sh-2), var(--edge)}
+.item .l{min-width:0}
+.item .l b{display:block; font-size:15.5px}
+.item .l span{font-size:13.5px; color:var(--mut)}
+.item .r{flex:none; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+@media (max-width:600px){ .item{flex-direction:column; align-items:stretch; gap:10px}
+  .item .r{justify-content:flex-start} }
+
+.row{display:flex; justify-content:space-between; gap:12px; padding:9px 0;
+  border-bottom:1px solid var(--line); font-size:14.5px}
+.row:last-child{border-bottom:none}
+.row span:first-child{color:var(--mut); flex:0 0 42%}
+.row span:last-child{text-align:right; word-break:break-word}
+
+.toast{position:fixed; left:50%; transform:translateX(-50%) translateY(8px); bottom:28px;
+  background:linear-gradient(180deg,#2C3E50,var(--ink)); color:#F2F7FB; padding:12px 20px;
+  border-radius:99px; font-size:14px; opacity:0; pointer-events:none; z-index:60;
+  transition:opacity .22s, transform .22s var(--ease); box-shadow:0 8px 26px rgba(12,22,32,.34)}
+.toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+
+.modal{position:fixed; inset:0; background:rgba(16,26,36,.52);
+  -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
+  display:flex; align-items:flex-end; justify-content:center; z-index:50}
+@media (min-width:700px){ .modal{align-items:center; padding:24px} }
+.modal .win{background:var(--ground); border-radius:20px 20px 0 0; padding:22px;
+  width:100%; max-width:620px; max-height:92vh; overflow-y:auto}
+@media (min-width:700px){ .modal .win{border-radius:var(--r-lg)} }
+.modal .close{float:right; background:none; border:none; font-size:21px; color:var(--mut);
+  cursor:pointer; padding:2px 8px; border-radius:8px}
+@media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+</style>
+</head>
+<body>
+<div class="top">
+  <span class="who"><b>Реестр заявок</b><span id="topSub">заявок нет</span></span>
+  <div class="acts">
+    <button type="button" id="btnTheme">◐</button>
+  </div>
+</div>
+<div class="page" id="page"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+var STATUS = { new:"Новая", work:"В работе", sent:"Черновик отправлен", done:"Готово", off:"Отменена" };
+var PILL = { new:"p-new", work:"p-work", sent:"p-sent", done:"p-done", off:"p-off" };
+var ORDER = ["new","work","sent","done","off"];
+
+var KEY = "reestr_zayavok_v1";
+var D = null, view = "list", openId = null, filter = "all", query = "";
+
+/* ---------- ХРАНЕНИЕ ---------- */
+function load(){
+  var raw = null;
+  try{ raw = localStorage.getItem(KEY); }catch(e){}
+  if (raw){ try{ D = JSON.parse(raw); }catch(e){ D = null; } }
+  if (!D) D = { items:[], theme:"light" };
+  if (!D.items) D.items = [];
+  if (D.theme === "dark") document.body.classList.add("dark");
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(D)); }catch(e){} }
+
+/* ---------- ОБЩЕЕ ---------- */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c] }); }
+function today(){ var d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+function ruDate(iso){
+  if (!iso) return "";
+  var M=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+  var d=new Date(iso), now=new Date();
+  if (isNaN(d)) return iso;
+  return d.getDate()+" "+M[d.getMonth()]+(d.getFullYear()!==now.getFullYear()?" "+d.getFullYear():"");
+}
+function uid(p){ return p + Math.random().toString(36).slice(2,8) }
+function item(id){ return D.items.filter(function(x){ return x.id===id })[0]; }
+var toastT;
+function toast(t){
+  var el=document.getElementById("toast");
+  el.textContent=t; el.classList.add("on");
+  clearTimeout(toastT); toastT=setTimeout(function(){ el.classList.remove("on") },2600);
+}
+function copyText(msg){
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg).then(function(){ toast("Скопировано") }, function(){ fb(msg) });
+  } else fb(msg);
+  function fb(m){
+    var ta=document.createElement("textarea");
+    ta.value=m; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try{ document.execCommand("copy"); toast("Скопировано"); }catch(e){ toast("Не удалось скопировать"); }
+    document.body.removeChild(ta);
+  }
+}
+
+/* ---------- ПРИЁМ ЗАЯВКИ ПО ССЫЛКЕ ---------- */
+function b64dec(s){
+  s = s.replace(/-/g,"+").replace(/_/g,"/");
+  while (s.length % 4) s += "=";
+  var bin = atob(s), bytes = new Uint8Array(bin.length);
+  for (var i=0; i<bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+function fromPayload(p){
+  var f = p.fm || {};
+  return {
+    id: p.id || uid("rq"),
+    added: today(),
+    status: "new",
+    topic: p.t || "", workType: p.k || "", discipline: p.d || "",
+    univ: p.u || "", faculty: p.fc || "", kafedra: p.kf || "", city: p.ct || "",
+    student: p.n || "", group: p.g || "", supervisor: p.s || "",
+    deadline: p.dl || "", requirements: p.rq || "",
+    org: p.org || "", methodNotes: p.mn || "", contact: p.cn || "",
+    format: { mTop:f.mt, mRight:f.mr, mBottom:f.mb, mLeft:f.ml,
+              font:f.fn, size:f.sz, spacing:f.sp, indent:f.ind },
+    note: ""
+  };
+}
+function intake(){
+  var h = location.hash || "";
+  var m = h.match(/#z=(.+)$/);
+  if (!m) return null;
+  try{
+    var p = JSON.parse(b64dec(m[1]));
+    if (!p || !p.t) throw new Error("bad");
+    var rec = fromPayload(p);
+    var exist = item(rec.id);
+    if (exist){
+      /* повторная отправка той же работы — обновляем, статус не трогаем */
+      var keepStatus = exist.status, keepNote = exist.note;
+      for (var k in rec) if (k !== "id") exist[k] = rec[k];
+      exist.status = keepStatus; exist.note = keepNote;
+      save(); return { rec:exist, updated:true };
+    }
+    D.items.unshift(rec); save();
+    return { rec:rec, updated:false };
+  }catch(e){ return { error:true }; }
+  finally{
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+}
+
+/* ---------- РАЗБОР ТЕКСТОВОЙ ЗАЯВКИ ---------- */
+var LABELS = {
+  "Тема":"topic", "Вид работы":"workType", "Дисциплина":"discipline",
+  "Вуз":"univ", "Факультет":"faculty", "Кафедра":"kafedra",
+  "Студент":"student", "Группа":"group", "Руководитель":"supervisor",
+  "Город":"city", "Срок":"deadline", "Требования":"requirements",
+  "Организация":"org", "Особенности методички":"methodNotes",
+  "Оформление":"formatText", "Связь":"contact"
+};
+function parseText(text){
+  var rec = { id:uid("rq"), added:today(), status:"new", format:{}, note:"" };
+  var found = 0;
+  String(text).split(/\r?\n/).forEach(function(line){
+    var m = line.match(/^\s*([^:]{3,40}):\s*(.+)$/);
+    if (!m) return;
+    var key = LABELS[m[1].trim()];
+    if (!key) return;
+    var val = m[2].trim();
+    if (key === "deadline"){
+      var iso = val.match(/(\d{4}-\d{2}-\d{2})/);
+      rec.deadline = iso ? iso[1] : val;
+    } else rec[key] = val;
+    found++;
+  });
+  return found >= 2 ? rec : null;
+}
+
+/* ---------- ЭКРАНЫ ---------- */
+function counts(){
+  var c = { all:D.items.length };
+  ORDER.forEach(function(s){ c[s] = D.items.filter(function(x){ return x.status===s }).length });
+  return c;
+}
+function render(){
+  var c = counts();
+  document.getElementById("topSub").textContent =
+    D.items.length ? (D.items.length + " заявок · новых " + c.new) : "заявок нет";
+  document.getElementById("page").innerHTML = openId ? viewItem(openId) : viewList();
+  window.scrollTo(0,0);
+}
+
+function viewList(){
+  var c = counts();
+  var q = query.toLowerCase();
+  var list = D.items.filter(function(x){
+    if (filter !== "all" && x.status !== filter) return false;
+    if (!q) return true;
+    return [x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q) >= 0;
+  });
+  var chips = [{k:"all",t:"Все"}].concat(ORDER.map(function(s){ return {k:s,t:STATUS[s]} }));
+
+  return '<h1>Заявки</h1><div class="sub">всего: '+c.all+' · новых: '+c.new+' · в работе: '+c.work+'</div>'+
+    '<div class="card">'+
+      '<div class="rowbtns" style="margin-top:0">'+
+        '<button type="button" class="b b-main b-sm" data-act="paste">Вставить из текста</button>'+
+        '<button type="button" class="b b-alt b-sm" data-act="export">Сохранить копию</button>'+
+        '<button type="button" class="b b-alt b-sm" data-act="import">Загрузить копию</button>'+
+      '</div>'+
+      '<p class="small" style="margin-top:12px">Заявка встаёт в список сама, когда вы открываете ссылку из сообщения студента. Если ссылка не открылась — скопируйте текст заявки и нажмите «Вставить из текста».</p>'+
+    '</div>'+
+    '<div class="field"><input type="search" id="q" value="'+esc(query)+'" placeholder="Поиск по фамилии, вузу, теме"></div>'+
+    '<div class="chips">'+chips.map(function(f){
+      var n = f.k==="all" ? c.all : c[f.k];
+      return '<button type="button" class="b '+(filter===f.k?"b-main":"b-quiet")+' b-sm" data-act="filter" data-k="'+f.k+'">'+f.t+' · '+n+'</button>';
+    }).join("")+'</div>'+
+    (list.length ? '<div class="list">'+list.map(function(x){
+      var over = x.deadline && x.deadline < today() && x.status!=="done" && x.status!=="off";
+      return '<div class="item" data-act="open" data-id="'+x.id+'">'+
+        '<div class="l"><b>'+esc(x.student || "Без имени")+
+          (x.group ? ' · '+esc(x.group) : '')+'</b>'+
+          '<span>'+esc(x.univ || "вуз не указан")+'</span>'+
+          '<span>'+esc(x.topic || "тема не указана")+'</span>'+
+          '<span>'+(x.deadline ? 'срок '+ruDate(x.deadline) : 'срок не указан')+
+          (over ? ' · срок прошёл' : '')+'</span>'+
+        '</div>'+
+        '<div class="r"><span class="pill '+PILL[x.status]+'">'+STATUS[x.status]+'</span></div>'+
+      '</div>';
+    }).join("")+'</div>'
+    : '<div class="infobox">'+(D.items.length ? 'В этом отборе пусто.' : 'Заявок пока нет.')+'</div>');
+}
+
+function viewItem(id){
+  var x = item(id);
+  if (!x) return '<div class="infobox">Заявка не найдена</div>';
+  var f = x.format || {};
+  function row(label, val){ return val ? '<div class="row"><span>'+label+'</span><span>'+esc(val)+'</span></div>' : ''; }
+  var fmt = (f.mLeft!=null)
+    ? "поля "+f.mLeft+"/"+f.mRight+"/"+f.mTop+"/"+f.mBottom+" мм (лево/право/верх/низ), "+
+      (f.font||"")+" "+(f.size||"")+", интервал "+(f.spacing||"")+", отступ "+(f.indent||"")+" см"
+    : (x.formatText || "");
+
+  return '<button type="button" class="b b-quiet b-sm" data-act="back" style="margin-bottom:14px">← К списку</button>'+
+    '<h1>'+esc(x.student || "Без имени")+'</h1>'+
+    '<div class="sub">'+esc(x.group||"")+' · заявка от '+ruDate(x.added)+
+      ' · <span class="pill '+PILL[x.status]+'">'+STATUS[x.status]+'</span></div>'+
+
+    '<div class="card"><h2>Работа</h2>'+
+      row("Тема", x.topic)+row("Вид работы", x.workType)+row("Дисциплина", x.discipline)+
+      row("Срок", ruDate(x.deadline))+row("Требования", x.requirements)+
+    '</div>'+
+
+    '<div class="card"><h2>Учебное заведение</h2>'+
+      row("Вуз", x.univ)+row("Факультет", x.faculty)+row("Кафедра", x.kafedra)+
+      row("Руководитель", x.supervisor)+row("Город", x.city)+
+    '</div>'+
+
+    (x.org || x.methodNotes ? '<div class="card"><h2>Дополнительно</h2>'+
+      row("Организация", x.org)+row("Особенности методички", x.methodNotes)+
+    '</div>' : '')+
+
+    '<div class="card"><h2>Оформление</h2>'+
+      (fmt ? '<p class="small">'+esc(fmt)+'</p>' : '<p class="small">не передано</p>')+
+      '<div class="infobox" style="margin:12px 0 0">Сверьте с методичкой этой кафедры перед сборкой.</div>'+
+    '</div>'+
+
+    '<div class="card"><h2>Связь</h2>'+
+      (x.contact ? '<p>'+esc(x.contact)+'</p>' : '<p class="small">контакт не указан</p>')+
+      (x.contact ? '<div class="rowbtns">'+
+        '<button type="button" class="b b-alt b-sm" data-act="copy-contact" data-id="'+x.id+'">Скопировать</button>'+
+      '</div>' : '')+
+    '</div>'+
+
+    '<div class="card"><h2>Заготовка запроса</h2>'+
+      '<p class="small">Готовый текст для модели: данные заявки, требования по оформлению и запрет выдумывать источники.</p>'+
+      '<div class="rowbtns">'+
+        '<button type="button" class="b b-main b-sm" data-act="copy-prompt" data-id="'+x.id+'">Скопировать запрос</button>'+
+        '<button type="button" class="b b-alt b-sm" data-act="show-prompt" data-id="'+x.id+'">Посмотреть</button>'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="card"><h2>Работа по заявке</h2>'+
+      '<div class="field"><label>Статус</label><select data-act="status" data-id="'+x.id+'">'+
+        ORDER.map(function(s){ return '<option value="'+s+'"'+(x.status===s?" selected":"")+'>'+STATUS[s]+'</option>' }).join("")+
+      '</select></div>'+
+      '<div class="field"><label>Заметки для себя</label>'+
+        '<textarea id="note" style="min-height:110px">'+esc(x.note||"")+'</textarea></div>'+
+      '<div class="rowbtns">'+
+        '<button type="button" class="b b-main b-sm" data-act="save-note" data-id="'+x.id+'">Сохранить заметку</button>'+
+        '<button type="button" class="b b-quiet b-sm" data-act="delete" data-id="'+x.id+'">Удалить заявку</button>'+
+      '</div>'+
+    '</div>';
+}
+
+/* ---------- ЗАГОТОВКА ЗАПРОСА ---------- */
+function buildPrompt(x){
+  var f = x.format || {};
+  var refs = "";
+  var L = [];
+  L.push("Ты помогаешь студенту подготовить черновик учебной работы. Нужен связный текст, который студент дальше дорабатывает и проверяет сам.");
+  L.push("");
+  L.push("РАБОТА");
+  if (x.workType) L.push("Вид работы: " + x.workType);
+  if (x.topic) L.push("Тема: " + x.topic);
+  if (x.discipline) L.push("Дисциплина: " + x.discipline);
+  if (x.univ) L.push("Вуз: " + x.univ);
+  if (x.faculty) L.push("Факультет: " + x.faculty);
+  if (x.kafedra) L.push("Кафедра: " + x.kafedra);
+  if (x.requirements) L.push("Требования: " + x.requirements);
+  if (x.org){ L.push(""); L.push("ОРГАНИЗАЦИЯ ИЛИ ОБЪЕКТ ИССЛЕДОВАНИЯ"); L.push(x.org); }
+  if (x.methodNotes){ L.push(""); L.push("ОСОБЕННОСТИ МЕТОДИЧКИ"); L.push(x.methodNotes); }
+  L.push("");
+  L.push("СТРУКТУРА");
+  L.push("[вписать главы и параграфы из задания]");
+  L.push("");
+  L.push("КАК ПИСАТЬ");
+  L.push("— Пиши цельным текстом, а не тезисами: каждый параграф — законченный связный фрагмент.");
+  L.push("— Академический стиль, без канцелярита и без воды ради объёма.");
+  L.push("— Абзацы 4–8 предложений, каждый с одной мыслью.");
+  L.push("");
+  L.push("ОБЯЗАТЕЛЬНЫЕ ОГРАНИЧЕНИЯ");
+  L.push("— Не выдумывай источники. Приводи только те работы, в существовании которых уверен, и помечай каждую: [ПРОВЕРИТЬ ИСТОЧНИК]. Лучше пять реальных, чем двадцать выдуманных.");
+  L.push("— Не выдумывай цифры и факты об организации. Где нужны реальные данные, ставь: [ДАННЫЕ СТУДЕНТА: что именно нужно].");
+  L.push("— Не придумывай результаты опросов, интервью и расчётов.");
+  L.push("— Где нужен собственный вывод студента, ставь: [СФОРМУЛИРОВАТЬ САМОСТОЯТЕЛЬНО].");
+  L.push("");
+  L.push("ЧТО ВЫДАТЬ");
+  L.push("Только текст работы по разделам. Без вступлений и комментариев. Заголовки — точно как в структуре.");
+  return L.join("\n");
+}
+
+/* ---------- ОКНА ---------- */
+function openModal(html){
+  var wrap = document.createElement("div");
+  wrap.className = "modal";
+  wrap.innerHTML = '<div class="win">'+html+'</div>';
+  document.body.appendChild(wrap);
+  wrap.addEventListener("click", function(ev){
+    if (ev.target === wrap) return;
+    if (ev.target.closest("[data-x]")) wrap.remove();
+  });
+  return wrap;
+}
+
+/* ---------- ДЕЙСТВИЯ ---------- */
+document.addEventListener("input", function(ev){
+  if (ev.target.id === "q"){ query = ev.target.value; var p = ev.target.selectionStart;
+    var v = ev.target.value; render();
+    var el = document.getElementById("q");
+    if (el){ el.focus(); el.value = v; try{ el.setSelectionRange(p,p) }catch(e){} }
+  }
+});
+document.addEventListener("change", function(ev){
+  var el = ev.target;
+  if (el.tagName === "SELECT" && el.getAttribute("data-act") === "status"){
+    var x = item(el.getAttribute("data-id"));
+    if (!x) return;
+    x.status = el.value; save(); render(); toast("Статус: " + STATUS[x.status]);
+  }
+});
+document.addEventListener("click", function(ev){
+  var el = ev.target.closest ? ev.target.closest("[data-act]") : null;
+  if (!el || el.tagName === "SELECT") return;
+  var act = el.getAttribute("data-act"), id = el.getAttribute("data-id");
+
+  if (act === "back"){ openId = null; return render(); }
+  if (act === "open"){ openId = id; return render(); }
+  if (act === "filter"){ filter = el.getAttribute("data-k"); return render(); }
+
+  if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
+  if (act === "copy-prompt"){ var x2 = item(id); if (x2) copyText(buildPrompt(x2)); return; }
+  if (act === "show-prompt"){
+    var x3 = item(id); if (!x3) return;
+    openModal('<button type="button" class="close" data-x="1">✕</button>'+
+      '<h2>Заготовка запроса</h2>'+
+      '<div class="field" style="margin-top:14px"><textarea readonly style="min-height:320px">'+
+        esc(buildPrompt(x3))+'</textarea></div>'+
+      '<div class="rowbtns"><button type="button" class="b b-quiet" data-x="1">Закрыть</button></div>');
+    return;
+  }
+
+  if (act === "save-note"){
+    var x4 = item(id); if (!x4) return;
+    x4.note = document.getElementById("note").value; save(); toast("Заметка сохранена"); return;
+  }
+
+  if (act === "delete"){
+    if (!confirm("Удалить заявку? Восстановить будет нельзя.")) return;
+    D.items = D.items.filter(function(y){ return y.id !== id });
+    save(); openId = null; render(); toast("Заявка удалена"); return;
+  }
+
+  if (act === "paste"){
+    var wrap = openModal('<button type="button" class="close" data-x="1">✕</button>'+
+      '<h2>Вставить заявку из текста</h2>'+
+      '<p class="small">Скопируйте сообщение студента целиком и вставьте сюда.</p>'+
+      '<div class="field" style="margin-top:14px"><textarea id="pasteBox" placeholder="ЗАЯВКА НА ЧЕРНОВИК&#10;Тема: ...&#10;Вид работы: ..."></textarea></div>'+
+      '<div class="rowbtns"><button type="button" class="b b-main" data-go="1">Разобрать</button>'+
+      '<button type="button" class="b b-quiet" data-x="1">Отмена</button></div>');
+    wrap.addEventListener("click", function(e2){
+      if (!e2.target.closest("[data-go]")) return;
+      var text = wrap.querySelector("#pasteBox").value;
+      var link = text.match(/#z=([A-Za-z0-9\-_]+)/);
+      var rec = null;
+      if (link){
+        try{ rec = fromPayload(JSON.parse(b64dec(link[1]))); }catch(e){ rec = null; }
+      }
+      if (!rec) rec = parseText(text);
+      if (!rec) return toast("Не получилось разобрать — проверьте, что текст полный");
+      if (item(rec.id)) rec.id = uid("rq");
+      D.items.unshift(rec); save();
+      wrap.remove(); openId = rec.id; render(); toast("Заявка добавлена");
+    });
+    return;
+  }
+
+  if (act === "export"){
+    var blob = new Blob([JSON.stringify(D, null, 1)], { type:"application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "reestr-" + today() + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    toast("Копия сохранена"); return;
+  }
+
+  if (act === "import"){
+    var inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "application/json,.json";
+    inp.onchange = function(){
+      var file = inp.files[0]; if (!file) return;
+      var r = new FileReader();
+      r.onload = function(){
+        try{
+          var o = JSON.parse(r.result);
+          if (!o.items) throw new Error("bad");
+          D = o; save(); load(); render(); toast("Данные загружены");
+        }catch(e){ toast("Этот файл не похож на копию реестра"); }
+      };
+      r.readAsText(file);
+    };
+    inp.click(); return;
+  }
+});
+
+document.getElementById("btnTheme").onclick = function(){
+  document.body.classList.toggle("dark");
+  D.theme = document.body.classList.contains("dark") ? "dark" : "light";
+  save();
+};
+
+/* ---------- ЗАПУСК ---------- */
+load();
+var got = intake();
+render();
+if (got && got.error) toast("Ссылка повреждена — попробуйте «Вставить из текста»");
+else if (got && got.rec){
+  openId = got.rec.id; render();
+  toast(got.updated ? "Заявка обновлена" : "Новая заявка добавлена");
+}
+</script>
+</body>
+</html>
