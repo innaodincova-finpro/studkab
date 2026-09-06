@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Кабинет">
 <title>Кабинет студента</title>
+<link rel="manifest" href="manifest-kabinet.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/kabinet-32.png">
+<link rel="apple-touch-icon" href="icons/kabinet-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -292,6 +295,13 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 <script>
 
 "use strict";
+
+/* работа без сети и установка как приложение */
+if ("serviceWorker" in navigator && location.protocol === "https:"){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  });
+}
 
 /* ==================================================================
    СТУДЕНЧЕСКИЙ КАБИНЕТ
