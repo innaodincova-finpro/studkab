@@ -248,6 +248,16 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .sheet .close{float:right;background:none;border:0;font-size:18px;color:var(--mut);cursor:pointer;padding:0 4px;margin-top:-4px}
 .sheet .small,.sheet .mut{font-size:12px}
 
+.fold{border:1px solid var(--card-border);border-radius:16px;background:var(--card);margin-bottom:12px;padding:0 14px}
+.fold summary{list-style:none;cursor:pointer;padding:13px 0;font-size:13px;font-weight:600;color:var(--ink);display:flex;justify-content:space-between;align-items:center}
+.fold summary::-webkit-details-marker{display:none}
+.fold summary:after{content:'›';color:var(--mut);font-size:18px;transform:rotate(90deg);transition:transform .2s}
+.fold[open] summary:after{transform:rotate(-90deg)}
+.fold[open] summary{border-bottom:1px solid var(--line)}
+.fold .in{padding:10px 0 14px}
+.item .txt small{display:block}
+.stat.tapline{border-radius:8px;margin:0 -6px;padding-left:6px;padding-right:6px}
+.stat.tapline:active{background:var(--ground)}
 .toast{position:fixed;left:50%;transform:translateX(-50%) translateY(8px);bottom:150px;z-index:60;width:min(480px,92%);background:var(--toast);color:#fff;border-radius:12px;padding:11px 14px;font-size:13px;box-shadow:0 12px 28px var(--greet-sh);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
@@ -267,8 +277,9 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
       </div>
       <div class="sub" id="today-date"></div>
     </div>
-    <div class="saved" id="savedAt"></div>
+    <button type="button" id="btnTheme" title="Сменить тему" style="background:rgba(255,255,255,.18);border:0;color:#fff;border-radius:9px;padding:8px 12px;font-size:14px;cursor:pointer;flex:none">◐</button>
   </div>
+  <div id="storageWarn" class="warnbar" style="display:none;margin:12px 16px 0">Данные не сохраняются: браузер запретил хранение или память переполнена. Записи пропадут при перезагрузке.</div>
   <section class="screen" id="page"></section>
   <button class="fab" id="fab" type="button" data-act="paste"><i aria-hidden="true">＋</i><span>Из текста</span></button>
   <nav class="tabs" id="tabbar" aria-label="Основная навигация"></nav>
@@ -281,6 +292,8 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 var STATUS = { new:"Новая", work:"В работе", sent:"Черновик отправлен", done:"Готово", off:"Отменена" };
 var PILL = { new:"p-och", work:"p-gray", sent:"p-ok", done:"p-ok", off:"p-gray" };
 var ORDER = ["new","work","sent","done","off"];
+var THEMES = ["blue","green","lilac"], THEME_RU = { blue:"синяя", green:"изумрудная", lilac:"сиреневая" };
+function applyTheme(){ document.body.setAttribute("data-theme", (D && D.theme) || "blue"); }
 
 var KEY = "reestr_zayavok_v1";
 var D = null, tab = "list", openId = null, openRefId = null, filter = "all", query = "";
@@ -288,27 +301,162 @@ var D = null, tab = "list", openId = null, openRefId = null, filter = "all", que
 /* ---------- ХРАНЕНИЕ ---------- */
 function load(){
   var raw = null;
-  try{ raw = localStorage.getItem(KEY); }catch(e){}
+  try{ raw = localStorage.getItem(KEY); }catch(e){ storageOk = false; }
   if (raw){ try{ D = JSON.parse(raw); }catch(e){ D = null; } }
   if (!D) D = { items:[], theme:"light" };
   if (!D.items) D.items = [];
   if (!D.refs){ D.refs = seedRefs(); }
   if (!D.settings) D.settings = {};
-  if (D.settings.dsKey === undefined) D.settings.dsKey = "";
-  if (!D.settings.dsModel) D.settings.dsModel = "deepseek-chat";
+  delete D.settings.dsKey;
+  if (D.settings.proxyUrl === undefined) D.settings.proxyUrl = "";
+  if (D.settings.proxyToken === undefined) D.settings.proxyToken = "";
+  if (!D.settings.providers) D.settings.providers = {};
+  PROVIDERS.forEach(function(pv){
+    if (!D.settings.providers[pv.id]) D.settings.providers[pv.id] = { on: pv.id === "deepseek", model: pv.model };
+  });
+  if (!D.settings.defaultProvider) D.settings.defaultProvider = "deepseek";
   D.refs.forEach(function(r){ if (!r.id) r.id = uid("ref"); if (!r.format) r.format = {}; });
-  if (D.theme === "dark") document.body.classList.add("dark");
+  D.items.forEach(function(x){
+    if (ORDER.indexOf(x.status) < 0) x.status = "new";
+    if (!x.added) x.added = today();
+  });
+  recountRefs();
+  if (THEMES.indexOf(D.theme) < 0) D.theme = "blue";
 }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(D)); }catch(e){} }
+var storageOk = true;
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(D)); storageOk = true; return true; }
+  catch(e){ storageOk = false; showStorageWarn(); return false; }
+}
+function showStorageWarn(){
+  var el = document.getElementById("storageWarn");
+  if (el) el.style.display = storageOk ? "none" : "block";
+}
+/* сообщение показываем только если запись действительно прошла */
+function saved(msg){ if (save()) toast(msg); else toast("Не сохранено: браузер не разрешает хранение"); }
+
+/* копия проверяется до того, как заменит текущие данные */
+function isDateStr(v){
+  if (typeof v !== "string") return false;
+  var m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return false;
+  var d = new Date(+m[1], +m[2]-1, +m[3]);
+  return d.getFullYear() === +m[1] && d.getMonth() === +m[2]-1 && d.getDate() === +m[3];
+}
+function checkItemFormat(fm, n){
+  if (!fm) return null;
+  if (typeof fm !== "object" || Array.isArray(fm)) return "Повреждено оформление в заявке №" + n;
+  var lim = { mTop:[0,100], mRight:[0,100], mBottom:[0,100], mLeft:[0,100], size:[6,72], spacing:[0.5,4], indent:[0,10] };
+  for (var q in lim){
+    var v = fm[q];
+    if (v === "" || v == null) continue;
+    if (typeof v !== "number" || !isFinite(v) || v < lim[q][0] || v > lim[q][1])
+      return "Недопустимое оформление «" + q + "» в заявке №" + n;
+  }
+  if (fm.font != null && typeof fm.font !== "string") return "Повреждён шрифт в заявке №" + n;
+  return null;
+}
+/* документ проверяем поштучно: один null в списке разделов роняет редактор */
+function checkDoc(doc, n){
+  if (!doc) return null;
+  if (typeof doc !== "object" || Array.isArray(doc)) return "Повреждён документ в заявке №" + n;
+  if (!Array.isArray(doc.order)) return "Повреждён список разделов в заявке №" + n;
+  if (!doc.structure || typeof doc.structure !== "object" || Array.isArray(doc.structure))
+    return "Повреждены разделы документа в заявке №" + n;
+  var ids = {};
+  for (var i = 0; i < doc.order.length; i++){
+    var c = doc.order[i];
+    if (!c || typeof c !== "object" || Array.isArray(c)) return "Повреждён раздел №" + (i+1) + " в заявке №" + n;
+    if (typeof c.id !== "string" || !c.id) return "У раздела №" + (i+1) + " нет номера, заявка №" + n;
+    if (ids[c.id]) return "Повторяющийся номер раздела «" + c.id + "» в заявке №" + n;
+    ids[c.id] = 1;
+    if (typeof c.name !== "string") return "У раздела «" + c.id + "» повреждено название, заявка №" + n;
+    if (c.pages != null && c.pages !== "" &&
+        (typeof c.pages !== "number" || !isFinite(c.pages) || c.pages < 0 || c.pages > 500))
+      return "Недопустимый объём раздела «" + c.id + "» в заявке №" + n;
+    var sec = doc.structure[c.id];
+    if (sec === undefined) return "Нет текста раздела «" + c.id + "» в заявке №" + n;
+    if (!sec || typeof sec !== "object" || Array.isArray(sec)) return "Повреждён текст раздела «" + c.id + "», заявка №" + n;
+    if (sec.text != null && typeof sec.text !== "string") return "Текст раздела «" + c.id + "» не является текстом, заявка №" + n;
+    if (sec.by != null && typeof sec.by !== "string") return "Повреждена пометка автора раздела «" + c.id + "», заявка №" + n;
+  }
+  if (doc.updated && !isDateStr(doc.updated)) return "Неверная дата правки документа в заявке №" + n;
+  return null;
+}
+function checkBackup(o){
+  if (!o || typeof o !== "object" || Array.isArray(o)) return "Это не копия реестра";
+  if (!Array.isArray(o.items)) return "В файле нет списка заявок";
+  if (o.refs && !Array.isArray(o.refs)) return "Файл повреждён: справочник вузов";
+  if (o.settings){
+    var ss = o.settings;
+    if (typeof ss !== "object" || Array.isArray(ss)) return "Файл повреждён: настройки";
+    if (ss.proxyUrl != null && typeof ss.proxyUrl !== "string") return "Повреждён адрес посредника";
+    if (ss.proxyUrl && !/^https?:\/\//.test(ss.proxyUrl)) return "Неверный адрес посредника";
+    if (ss.defaultProvider != null){
+      if (typeof ss.defaultProvider !== "string") return "Повреждён поставщик по умолчанию";
+      if (!PROVIDERS.some(function(p){ return p.id === ss.defaultProvider })) return "Неизвестный поставщик по умолчанию";
+    }
+    if (ss.providers != null){
+      if (typeof ss.providers !== "object" || Array.isArray(ss.providers)) return "Повреждён список поставщиков";
+      for (var pk in ss.providers){
+        if (!PROVIDERS.some(function(p){ return p.id === pk })) return "Неизвестный поставщик «" + pk + "»";
+        var pc = ss.providers[pk];
+        if (!pc || typeof pc !== "object" || Array.isArray(pc)) return "Повреждены настройки поставщика «" + pk + "»";
+        if (pc.model != null && typeof pc.model !== "string") return "Повреждено название модели «" + pk + "»";
+        if (pc.on != null && typeof pc.on !== "boolean") return "Повреждён переключатель поставщика «" + pk + "»";
+      }
+    }
+  }
+  /* повторяющиеся номера ломают открытие и удаление: item(id) находит первую попавшуюся */
+  var refIds = {};
+  for (var j0 = 0; o.refs && j0 < o.refs.length; j0++){
+    var r0 = o.refs[j0];
+    if (!r0 || typeof r0 !== "object" || Array.isArray(r0)) return "Карточка вуза №" + (j0+1) + " повреждена";
+    if (typeof r0.id !== "string" || !r0.id) return "У карточки вуза №" + (j0+1) + " нет номера";
+    if (refIds[r0.id]) return "Две карточки вуза с одним номером: " + r0.id;
+    refIds[r0.id] = 1;
+  }
+  var itemIds = {};
+  for (var i = 0; i < o.items.length; i++){
+    var x = o.items[i];
+    if (!x || typeof x !== "object" || Array.isArray(x)) return "Заявка №" + (i+1) + " повреждена";
+    if (typeof x.id !== "string" || !x.id) return "У заявки №" + (i+1) + " нет номера";
+    if (itemIds[x.id]) return "Две заявки с одним номером: " + x.id;
+    itemIds[x.id] = 1;
+    if (x.refId != null){
+      if (typeof x.refId !== "string") return "У заявки №" + (i+1) + " повреждена ссылка на вуз";
+      if (x.refId && !refIds[x.refId]) return "Заявка №" + (i+1) + " ссылается на несуществующую карточку вуза";
+    }
+    if (x.status && ORDER.indexOf(x.status) < 0) return "У заявки №" + (i+1) + " неизвестный статус";
+    if (x.added && !isDateStr(x.added)) return "У заявки №" + (i+1) + " неверная дата";
+    if (x.deadline && !isDateStr(x.deadline)) return "У заявки №" + (i+1) + " неверный срок";
+    var ef = checkItemFormat(x.format, i+1);
+    if (ef) return ef;
+    var ed = checkDoc(x.doc, i+1);
+    if (ed) return ed;
+  }
+  for (var j = 0; o.refs && j < o.refs.length; j++){
+    var r = o.refs[j];
+    if (!r || typeof r !== "object" || Array.isArray(r)) return "Карточка вуза №" + (j+1) + " повреждена";
+    if (typeof r.univ !== "string") return "У карточки вуза №" + (j+1) + " нет названия";
+  }
+  return null;
+}
 
 /* ---------- ОБЩЕЕ ---------- */
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c] }); }
-function today(){ var d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+function pad2(n){ return n<10 ? "0"+n : ""+n }
+function isoLocal(d){ return d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate()); }
+function parseIso(iso){
+  var m = String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? new Date(+m[1], +m[2]-1, +m[3]) : new Date(iso);
+}
+function today(){ return isoLocal(new Date()); }
 function ruDate(iso){
   if (!iso) return "";
   var M=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
-  var d=new Date(iso), now=new Date();
+  var d=parseIso(iso), now=new Date();
   if (isNaN(d)) return iso;
   return d.getDate()+" "+M[d.getMonth()]+(d.getFullYear()!==now.getFullYear()?" "+d.getFullYear():"");
 }
@@ -320,17 +468,24 @@ function toast(t){
   el.textContent=t; el.classList.add("on");
   clearTimeout(toastT); toastT=setTimeout(function(){ el.classList.remove("on") },2600);
 }
+/* копирование асинхронно — сообщаем честный результат */
 function copyText(msg){
-  if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(msg).then(function(){ toast("Скопировано") }, function(){ fb(msg) });
-  } else fb(msg);
   function fb(m){
     var ta=document.createElement("textarea");
     ta.value=m; ta.style.position="fixed"; ta.style.opacity="0";
     document.body.appendChild(ta); ta.focus(); ta.select();
-    try{ document.execCommand("copy"); toast("Скопировано"); }catch(e){ toast("Не удалось скопировать"); }
+    var done=false;
+    try{ done=document.execCommand("copy"); }catch(e){ done=false; }
     document.body.removeChild(ta);
+    toast(done ? "Скопировано" : "Не удалось скопировать — выделите текст вручную");
+    return done;
   }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(msg).then(
+      function(){ toast("Скопировано"); return true; },
+      function(){ return fb(msg); });
+  }
+  return Promise.resolve(fb(msg));
 }
 
 /* ---------- СПРАВОЧНИК ВУЗОВ ---------- */
@@ -362,12 +517,23 @@ function refById(id){ return (D.refs||[]).filter(function(r){ return r.id===id }
 function findRef(x){
   if (!x.univ) return null;
   var key = refKey(x);
-  var exact = D.refs.filter(function(r){ return refKey(r) === key })[0];
-  if (exact) return exact;
-  /* тот же вуз, факультет и кафедра не указаны ни там, ни там — считаем совпадением по вузу */
-  var byUniv = D.refs.filter(function(r){ return normKey(r.univ) === normKey(x.univ) });
-  if (byUniv.length === 1 && !x.faculty && !x.kafedra) return byUniv[0];
-  return null;
+  return D.refs.filter(function(r){ return refKey(r) === key })[0] || null;
+}
+function findTwin(rec){
+  var st = normKey(rec.student), tp = normKey(rec.topic), un = normKey(rec.univ);
+  if (!st && !tp) return null;
+  return D.items.filter(function(x){
+    if (x.id === rec.id) return false;
+    return normKey(x.student) === st && normKey(x.topic) === tp && normKey(x.univ) === un;
+  })[0] || null;
+}
+function mergeInto(target, rec){
+  var keepId = target.id, keepStatus = target.status, keepNote = target.note, keepDoc = target.doc, keepAdded = target.added;
+  for (var k in rec) target[k] = rec[k];
+  target.id = keepId; target.status = keepStatus; target.note = keepNote;
+  target.doc = keepDoc; target.added = keepAdded;   /* дата первой заявки не меняется */
+  target.updatedAt = today();
+  return target;
 }
 var FMT_FIELDS = [["mLeft","лево, мм"],["mRight","право, мм"],["mTop","верх, мм"],["mBottom","низ, мм"],["font","шрифт"],["size","кегль"],["spacing","интервал"],["indent","отступ, см"]];
 function fmtDiff(a, b){
@@ -379,11 +545,24 @@ function fmtDiff(a, b){
   });
   return out;
 }
+function fmtShort(f){
+  if (!f || f.mLeft == null) return "оформление не задано";
+  var font = (f.font || "").replace("Times New Roman","TNR");
+  return f.mLeft + "/" + f.mRight + "/" + f.mTop + "/" + f.mBottom + " мм · " + font + " " + (f.size||"") + " · " + (f.spacing||"");
+}
 function fmtLine(f){
   if (!f || f.mLeft == null) return "не задано";
   return "поля " + f.mLeft + "/" + f.mRight + "/" + f.mTop + "/" + f.mBottom + " мм · " + (f.font||"") + " " + (f.size||"") + " · интервал " + (f.spacing||"") + " · отступ " + (f.indent||"") + " см";
 }
 /* заявка пришла — записываем вуз в справочник или сверяем с ним */
+/* счётчик считаем по фактическому числу заявок, а не прибавлением:
+   при повторном приёме той же заявки прибавление накручивало лишнее */
+function countRequests(refId){
+  return D.items.filter(function(it){ return it.refId === refId }).length;
+}
+function recountRefs(){
+  (D.refs || []).forEach(function(r){ r.requests = countRequests(r.id); });
+}
 function refIntake(x){
   if (!x.univ) return;
   var r = findRef(x);
@@ -391,12 +570,13 @@ function refIntake(x){
     r = { id:uid("ref"), univ:x.univ, faculty:x.faculty||"", kafedra:x.kafedra||"",
       format:JSON.parse(JSON.stringify(x.format||{})), refStyle:"unknown",
       notes:(x.methodNotes ? "Из заявки: " + x.methodNotes : ""), verified:false,
-      source:"заявка " + (x.student||"") , added:today(), updated:today(), requests:1 };
+      source:"заявка " + (x.student||"") , added:today(), updated:today(), requests:0 };
     D.refs.unshift(r);
-    x.refId = r.id; x.refNew = true; return;
+    x.refId = r.id; x.refNew = true;
+  } else {
+    x.refId = r.id; x.refNew = false;
   }
-  r.requests = (r.requests||0) + 1;
-  x.refId = r.id; x.refNew = false;
+  recountRefs();
 }
 
 /* ---------- ЗАГОТОВКА ЗАПРОСА ---------- */
@@ -437,6 +617,70 @@ function buildPrompt(x){
   return L.join("\n");
 }
 
+/* ---------- ПОСТАВЩИКИ НЕЙРОСЕТЕЙ ---------- */
+var PROVIDERS = [
+  { id:"deepseek",  name:"DeepSeek",  model:"deepseek-chat",     note:"дешёвый, оплата зарубежная" },
+  { id:"gigachat",  name:"GigaChat",  model:"GigaChat",          note:"Сбер, рубли, есть бесплатный запас" },
+  { id:"yandex",    name:"YandexGPT", model:"yandexgpt/latest",  note:"Яндекс, рубли" },
+  { id:"openai",    name:"OpenAI",    model:"gpt-4o-mini",       note:"оплата зарубежная" },
+  { id:"anthropic", name:"Claude",    model:"claude-sonnet-5",   note:"оплата зарубежная" }
+];
+/* считать всё, что вписано в форму настроек, до перерисовки экрана */
+function readProviderForm(){
+  var stg = D.settings, u = document.getElementById("pxUrl"), t = document.getElementById("pxTok"), df = document.getElementById("pxDef");
+  if (u) stg.proxyUrl = u.value.trim().replace(/\/+$/, "");
+  if (t) stg.proxyToken = t.value.trim();
+  if (df) stg.defaultProvider = df.value;
+  document.querySelectorAll("[data-pvmodel]").forEach(function(inp){
+    var pid = inp.getAttribute("data-pvmodel");
+    stg.providers[pid] = stg.providers[pid] || {};
+    stg.providers[pid].model = inp.value.trim();
+  });
+}
+function providerName(id){ var p = PROVIDERS.filter(function(q){ return q.id === id })[0]; return p ? p.name : id; }
+/* нейросеть готова, только если настроен посредник И отмечен хотя бы один поставщик */
+function aiReady(){
+  var st = D.settings || {};
+  return !!(st.proxyUrl && st.proxyToken && activeProviders().length);
+}
+function activeProviders(){
+  return PROVIDERS.filter(function(pv){ return (D.settings.providers[pv.id] || {}).on; });
+}
+function askAI(providerId, system, user){
+  var st = D.settings, cfg = st.providers[providerId] || {};
+  var url = (st.proxyUrl || "").trim();
+  if (url){
+    return fetch(url, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "X-Proxy-Token": st.proxyToken || "" },
+      body: JSON.stringify({ provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.7 })
+    }).then(function(r){
+      return r.json().catch(function(){ throw new Error("HTTP:proxy:" + r.status); });
+    }).then(function(j){
+      if (j.error) throw new Error(j.error);
+      if (!j.text) throw new Error("EMPTY:" + providerId);
+      return { text: j.text, tokens: j.tokens || 0, provider: j.provider || providerId };
+    });
+  }
+  return Promise.reject(new Error("NOPROXY"));
+}
+function aiErrorText(e){
+  var m = (e && e.message) || "", who = m.split(":")[1] || "";
+  var nm = who ? providerName(who) : "";
+  if (m === "NOPROVIDER") return "Не выбран поставщик: «Ещё» → «Нейросети», отметьте хотя бы одного.";
+  if (m === "NOPROXY") return "Посредник не настроен: Ещё → Нейросети.";
+  if (m === "TOKEN") return "Посредник не принял пароль — проверьте, что он одинаковый здесь и в настройках посредника.";
+  if (m === "NOTOKEN_SERVER") return "У посредника не задан PROXY_TOKEN в настройках.";
+  if (m.indexOf("NOKEY:") === 0) return "У посредника нет ключа для " + nm + " — добавьте его в настройках воркера.";
+  if (m.indexOf("AUTH:") === 0) return nm + " не принял ключ.";
+  if (m.indexOf("PAY:") === 0) return "У " + nm + " закончились деньги на счёте.";
+  if (m.indexOf("RATE:") === 0) return nm + " просит подождать — слишком много запросов подряд.";
+  if (m.indexOf("EMPTY:") === 0) return nm + " вернул пустой ответ, попробуйте ещё раз.";
+  if (m.indexOf("UNKNOWN_PROVIDER") === 0) return "Посредник не знает такого поставщика.";
+  if (m.indexOf("HTTP:") === 0) return "Ошибка связи (" + m.replace("HTTP:","") + ").";
+  return dsErrorText(e);
+}
+
 /* ---------- ДОКУМЕНТ ПО ЗАЯВКЕ ---------- */
 function defaultDoc(x){
   var big = /выпускн|вкр|диплом/i.test(x.workType || "");
@@ -474,36 +718,10 @@ function sectionPrompt(x, c){
 }
 function ruPages(n){ var a = n % 100, b = n % 10; if (a > 10 && a < 20) return "страниц"; if (b > 1 && b < 5) return "страницы"; if (b === 1) return "страница"; return "страниц"; }
 
-function askDeepseek(system, user){
-  var key = (D.settings.dsKey || "").trim();
-  if (!key) return Promise.reject(new Error("NOKEY"));
-  return fetch("https://api.deepseek.com/chat/completions", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json", "Authorization":"Bearer " + key },
-    body: JSON.stringify({
-      model: D.settings.dsModel || "deepseek-chat",
-      messages:[ { role:"system", content:system }, { role:"user", content:user } ],
-      temperature: 0.7, max_tokens: 8000
-    })
-  }).then(function(r){
-    if (r.status === 401) throw new Error("AUTH");
-    if (r.status === 402) throw new Error("PAY");
-    if (!r.ok) return r.text().then(function(t){ throw new Error("HTTP " + r.status + " " + t.slice(0,120)); });
-    return r.json();
-  }).then(function(j){
-    var txt = j && j.choices && j.choices[0] && j.choices[0].message ? j.choices[0].message.content : "";
-    if (!txt) throw new Error("EMPTY");
-    var u = j.usage || {};
-    return { text: txt.trim(), tokens: (u.prompt_tokens||0) + (u.completion_tokens||0) };
-  });
-}
 function dsErrorText(e){
   var m = (e && e.message) || "";
-  if (m === "NOKEY") return "Ключ не вписан: Ещё → Дипсик.";
-  if (m === "AUTH") return "Дипсик не принял ключ — проверьте его в настройках.";
-  if (m === "PAY") return "На счёте Дипсика закончились деньги.";
-  if (m === "EMPTY") return "Дипсик вернул пустой ответ, попробуйте ещё раз.";
-  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Из браузера до Дипсика не достучаться (обращения с сайтов запрещены или нет сети). Запасной путь: «Скопировать запрос» и вкладка chat.deepseek.com.";
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m))
+    return "Не удалось связаться с посредником — проверьте адрес и сеть.";
   return "Ошибка: " + m;
 }
 
@@ -520,31 +738,43 @@ function openDocBuilder(id){
         '<button type="button" class="del" data-secdel="' + c.id + '" title="Убрать раздел">✕</button>' +
       '</div>' +
       '<textarea class="secText" style="min-height:' + (t ? 160 : 70) + 'px;font-size:14px" placeholder="Вставьте текст или нажмите «Написать»">' + esc(t) + '</textarea>' +
-      '<div class="row" style="margin-top:6px"><span class="mut secStat">' + (t ? Math.round(t.length/1800*10)/10 + ' стр. · ' + t.length + ' знаков' : 'пусто') + '</span>' +
+      '<div class="row" style="margin-top:6px"><span class="mut secStat">' + (t ? Math.round(t.length/1800*10)/10 + ' стр. · ' + t.length + ' знаков' + ((doc.structure[c.id]||{}).by ? ' · ' + esc(providerName(doc.structure[c.id].by)) : '') : 'пусто') + '</span>' +
       '<div style="display:flex;gap:6px">' +
         '<button type="button" class="mini" data-seccopy="' + c.id + '">запрос</button>' +
-        '<button type="button" class="mini" data-secgen="' + c.id + '">написать</button>' +
+        (aiReady() ? '<button type="button" class="mini" data-secgen="' + c.id + '">написать</button>' : '') +
       '</div></div></div>';
   }
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>' +
     '<h3>Документ</h3><div class="mut" style="margin-bottom:10px">' + esc(x.topic||"") + '</div>' +
+    (aiReady()
+      ? '<div class="fld"><label>Кем писать</label><select id="docProv">' +
+          activeProviders().map(function(pv){
+            return '<option value="' + pv.id + '"' + (pv.id === D.settings.defaultProvider ? " selected" : "") + '>' + pv.name + ' · ' + esc((D.settings.providers[pv.id]||{}).model || pv.model) + '</option>';
+          }).join("") + '</select></div>'
+      : '<div class="warnbar">' +
+          (!((D.settings||{}).proxyUrl && (D.settings||{}).proxyToken)
+            ? 'Посредник не настроен — откройте «Ещё» → «Нейросети» и впишите адрес и пароль.'
+            : 'Не отмечен ни один поставщик — откройте «Ещё» → «Нейросети».') +
+          ' Пока разделы можно писать вручную или копировать запрос кнопкой «запрос» — сохранение и Word работают без нейросети.</div>') +
     '<div id="docStatus" class="infobox" style="margin:0 0 10px;display:none"></div>' +
     '<div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
     '<div class="chips" style="margin-top:4px">' +
       '<button type="button" class="chip" data-secadd="1">+ раздел</button>' +
-      '<button type="button" class="chip warn" data-genall="1">Собрать черновик целиком</button>' +
+      (aiReady()
+        ? '<button type="button" class="chip warn" data-genall="1">Собрать черновик</button>' +
+          '<button type="button" class="chip" data-genover="1">Переписать всё</button>'
+        : '') +
     '</div>' +
     '<div class="rowbtns"><button type="button" class="btn" data-docx="1" style="flex:1">Скачать Word</button>' +
-    '<button type="button" class="btn ghost" data-docsave="1" style="flex:1">Сохранить</button></div>' +
-    '<div class="hint">Черновик пишется по разделам, по очереди — так надёжнее для длинных работ. Титульный лист и оформление берутся из заявки. Пометки [ДАННЫЕ СТУДЕНТА] и [ПРОВЕРИТЬ ИСТОЧНИК] останутся в тексте — их надо пройти перед отправкой.</div>'
+    '<button type="button" class="btn ghost" data-docsave="1" style="flex:1">Сохранить</button></div>'
   );
   function readBack(){
     var order = [], st = {};
     wrap.querySelectorAll("[data-sec]").forEach(function(el){
       var cid = el.getAttribute("data-sec");
       order.push({ id:cid, name:el.querySelector(".secName").value.trim() || "Раздел", pages: parseFloat(el.querySelector(".secPages").value) || 0 });
-      st[cid] = { text: el.querySelector(".secText").value };
+      st[cid] = { text: el.querySelector(".secText").value, by: (doc.structure[cid]||{}).by || "" };
     });
     doc.order = order; doc.structure = st; doc.updated = today();
     save();
@@ -557,18 +787,22 @@ function openDocBuilder(id){
     readBack();
     var c = doc.order.filter(function(q){ return q.id === cid })[0]; if (!c) return Promise.resolve();
     var pr = sectionPrompt(x, c);
+    var provSel = wrap.querySelector("#docProv");
+    if (!provSel) return Promise.reject(new Error("NOPROVIDER"));
+    var prov = provSel.value;
     var el = wrap.querySelector('[data-sec="' + cid + '"]');
-    el.querySelector(".secStat").textContent = "пишу…";
-    return askDeepseek(pr.system, pr.user).then(function(res){
+    el.querySelector(".secStat").textContent = "пишет " + providerName(prov) + "…";
+    return askAI(prov, pr.system, pr.user).then(function(res){
       el.querySelector(".secText").value = res.text;
       el.querySelector(".secText").style.minHeight = "160px";
-      el.querySelector(".secStat").textContent = Math.round(res.text.length/1800*10)/10 + " стр. · " + res.text.length + " знаков · токенов " + res.tokens;
+      doc.structure[cid] = doc.structure[cid] || {}; doc.structure[cid].by = prov;
+      el.querySelector(".secStat").textContent = Math.round(res.text.length/1800*10)/10 + " стр. · " + res.text.length + " знаков · " + providerName(prov) + " · токенов " + res.tokens;
       readBack();
     });
   }
   wrap.addEventListener("click", function(ev){
     var t = ev.target;
-    if (t.closest("[data-docsave]")){ readBack(); toast("Сохранено"); return; }
+    if (t.closest("[data-docsave]")){ readBack(); toast(storageOk ? "Сохранено" : "Не сохранено: браузер не разрешает хранение"); return; }
     if (t.closest("[data-docx]")){
       readBack();
       try{
@@ -585,7 +819,7 @@ function openDocBuilder(id){
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(function(){ URL.revokeObjectURL(url) }, 4000);
         if (x.status === "new") { x.status = "work"; save(); }
-        toast("Документ скачан");
+        toast(storageOk ? "Документ скачан" : "Документ скачан, но изменения не сохранены");
       }catch(e){ toast("Не удалось собрать документ"); }
       return;
     }
@@ -603,19 +837,34 @@ function openDocBuilder(id){
       var pr2 = sectionPrompt(x, c2); copyText(pr2.system + "\n\n" + pr2.user); return; }
     var g1 = t.closest("[data-secgen]");
     if (g1 && !genBusy){
+      var cid1 = g1.getAttribute("data-secgen");
+      var el1 = wrap.querySelector('[data-sec="' + cid1 + '"] .secText');
+      if (el1 && el1.value.trim() && !confirm("В этом разделе уже есть текст. Заменить его тем, что напишет нейросеть?")) return;
       genBusy = true; setStatus("Пишу раздел…");
-      genOne(g1.getAttribute("data-secgen")).then(function(){ setStatus("Готово. Проверьте текст и пометки.", "ok"); })
-        .catch(function(e){ setStatus(dsErrorText(e), "err"); }).then(function(){ genBusy = false; });
+      genOne(cid1).then(function(){ setStatus("Готово. Проверьте текст и пометки.", "ok"); })
+        .catch(function(e){ setStatus(aiErrorText(e), "err"); }).then(function(){ genBusy = false; });
       return;
     }
-    if (t.closest("[data-genall]") && !genBusy){
-      readBack(); genBusy = true;
-      var queue = doc.order.slice(), n = 0, total = queue.length, tokens = 0;
+    var wantAll = t.closest("[data-genall]"), wantOver = t.closest("[data-genover]");
+    if ((wantAll || wantOver) && !genBusy){
+      readBack();
+      var queue;
+      if (wantOver){
+        var filled = doc.order.filter(function(q){ return ((doc.structure[q.id]||{}).text||"").trim() });
+        if (filled.length && !confirm("Переписать заново все разделы?\n\nНаписанный текст в " + filled.length +
+            " раздел(ах) будет заменён. Отменить это будет нельзя.")) return;
+        queue = doc.order.slice();
+      } else {
+        queue = doc.order.filter(function(q){ return !((doc.structure[q.id]||{}).text||"").trim() });
+        if (!queue.length){ setStatus("Все разделы уже написаны. Чтобы переписать, нажмите «Переписать всё».", "ok"); return; }
+      }
+      genBusy = true;
+      var n = 0, total = queue.length;
       (function next(){
         if (!queue.length){ genBusy = false; setStatus("Черновик собран: " + total + " разделов, примерно " + docPages(x) + " стр. Проверьте пометки перед отправкой.", "ok"); return; }
         var c = queue.shift(); n++;
         setStatus("Пишу " + n + " из " + total + ": " + c.name + "…");
-        genOne(c.id).then(next).catch(function(e){ genBusy = false; setStatus("Остановился на «" + c.name + "»: " + dsErrorText(e), "err"); });
+        genOne(c.id).then(next).catch(function(e){ genBusy = false; setStatus("Остановился на «" + c.name + "»: " + aiErrorText(e), "err"); });
       })();
       return;
     }
@@ -655,16 +904,18 @@ function intake(){
     var p = JSON.parse(b64dec(m[1]));
     if (!p || !p.t) throw new Error("bad");
     var rec = fromPayload(p);
+    /* по ссылке обновляем только точное совпадение номера: у двух разных работ
+       одного студента может совпасть тема, а спросить через ссылку не у кого */
     var exist = item(rec.id);
     if (exist){
-      /* повторная отправка той же работы — обновляем, статус не трогаем */
-      var keepStatus = exist.status, keepNote = exist.note;
-      for (var k in rec) if (k !== "id") exist[k] = rec[k];
-      exist.status = keepStatus; exist.note = keepNote;
-      save(); return { rec:exist, updated:true };
+      /* повторная отправка: обновляем данные, но сохраняем статус, заметку, документ и дату поступления */
+      mergeInto(exist, rec);
+      exist.refId = null; refIntake(exist);
+      var okA = save(); return { rec:exist, updated:true, stored:okA };
     }
-    D.items.unshift(rec); refIntake(rec); save();
-    return { rec:rec, updated:false };
+    D.items.unshift(rec); refIntake(rec);
+    var okB = save();
+    return { rec:rec, updated:false, stored:okB };
   }catch(e){ return { error:true }; }
   finally{
     history.replaceState(null, "", location.pathname + location.search);
@@ -681,6 +932,19 @@ var LABELS = {
   "Организация":"org", "Особенности методички":"methodNotes",
   "Оформление":"formatText", "Связь":"contact"
 };
+/* «поля 30/15/20/20 мм (лево/право/верх/низ), Times New Roman 14, интервал 1.5, отступ 1.25 см» */
+function parseFormatText(str){
+  var f = {}, t = String(str||"");
+  var m = t.match(/(\d{1,3})\s*\/\s*(\d{1,3})\s*\/\s*(\d{1,3})\s*\/\s*(\d{1,3})/);
+  if (m){ f.mLeft = +m[1]; f.mRight = +m[2]; f.mTop = +m[3]; f.mBottom = +m[4]; }
+  var fn = t.match(/(?:мм[^,]*,|^)\s*([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\s]*?)\s+(\d{1,2})(?:\s*(?:пт|pt))?\s*(?:,|$)/);
+  if (fn){ f.font = fn[1].trim(); f.size = +fn[2]; }
+  var sp = t.match(/интервал\s*([\d]+(?:[.,]\d+)?)/i);
+  if (sp) f.spacing = parseFloat(sp[1].replace(",", "."));
+  var ind = t.match(/отступ\s*([\d]+(?:[.,]\d+)?)/i);
+  if (ind) f.indent = parseFloat(ind[1].replace(",", "."));
+  return f;
+}
 function parseText(text){
   var rec = { id:uid("rq"), added:today(), status:"new", format:{}, note:"" };
   var found = 0;
@@ -693,6 +957,10 @@ function parseText(text){
     if (key === "deadline"){
       var iso = val.match(/(\d{4}-\d{2}-\d{2})/);
       rec.deadline = iso ? iso[1] : val;
+    } else if (key === "formatText"){
+      rec.formatText = val;
+      var pf = parseFormatText(val);
+      for (var fk in pf) rec.format[fk] = pf[fk];
     } else rec[key] = val;
     found++;
   });
@@ -903,13 +1171,12 @@ function safeName(s){
 }
 
 
-function safeName(s){ return String(s||"rabota").replace(/[\\/:*?"<>|]/g,"").replace(/\s+/g," ").trim().slice(0,60) || "rabota"; }
 
 /* ---------- ЭКРАНЫ ---------- */
 function card(inner, cls){ return '<div class="card' + (cls ? ' ' + cls : '') + '">' + inner + '</div>'; }
 function lab(t){ return '<div class="lab">' + esc(t) + '</div>'; }
 function pill(st){ return '<span class="pill ' + PILL[st] + '">' + STATUS[st] + '</span>'; }
-function weekdayRu(iso){ var W=["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"]; var d=new Date(iso); return isNaN(d)?"":W[d.getDay()]; }
+function weekdayRu(iso){ var W=["воскресенье","понедельник","вторник","среда","четверг","пятница","суббота"]; var d=parseIso(iso); return isNaN(d)?"":W[d.getDay()]; }
 function initials(name){
   var p = String(name||"").trim().split(/\s+/);
   return ((p[0]||"")[0]||"") + ((p[1]||"")[0]||"") || "?";
@@ -919,10 +1186,7 @@ function counts(){
   ORDER.forEach(function(s){ c[s] = D.items.filter(function(x){ return x.status===s }).length });
   return c;
 }
-function markSaved(){
-  var el = document.getElementById("savedAt"); if (!el) return;
-  var d = new Date(); el.textContent = "сохранено " + (d.getHours()<10?"0":"") + d.getHours() + ":" + (d.getMinutes()<10?"0":"") + d.getMinutes();
-}
+function markSaved(){}
 function render(){
   var c = counts();
   var bar = document.getElementById("tabbar");
@@ -949,9 +1213,17 @@ function render(){
     fab.hidden = false; fab.setAttribute("data-act","paste"); fab.removeAttribute("data-id");
     fab.innerHTML = '<i aria-hidden="true">＋</i><span>Из текста</span>';
   }
-  window.scrollTo(0,0); markSaved();
+  window.scrollTo(0,0); showStorageWarn();
 }
 
+function list0(fl, qr){
+  var q2 = String(qr||"").toLowerCase();
+  return D.items.filter(function(x){
+    if (fl !== "all" && x.status !== fl) return false;
+    if (!q2) return true;
+    return [x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q2) >= 0;
+  });
+}
 function viewList(){
   var c = counts(), q = query.toLowerCase();
   var list = D.items.filter(function(x){
@@ -960,18 +1232,18 @@ function viewList(){
     return [x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q) >= 0;
   });
   var chips = [{k:"all",t:"Все"}].concat(ORDER.map(function(s){ return {k:s,t:STATUS[s]} }));
-  var h = '<div class="fld"><input type="search" id="q" value="' + esc(query) + '" placeholder="Поиск по фамилии, вузу, теме"></div>' +
+  var h = (filter !== "all" || query
+      ? '<div class="row" style="margin-bottom:10px"><span class="mut">Отбор: ' +
+        (filter !== "all" ? STATUS[filter] : "поиск") + ' · ' + list0(filter, query).length + '</span>' +
+        '<button type="button" class="mini" data-act="filter" data-k="all">показать все</button></div>'
+      : '') + '<div class="fld"><input type="search" id="q" value="' + esc(query) + '" placeholder="Поиск по фамилии, вузу, теме"></div>' +
     '<div class="pick" style="margin-bottom:12px">' + chips.map(function(f){
       var n = f.k==="all" ? c.all : c[f.k];
       if (f.k !== "all" && !n) return "";
       return '<button type="button" aria-pressed="' + (filter===f.k) + '" data-act="filter" data-k="' + f.k + '">' + f.t + ' · ' + n + '</button>';
     }).join("") + '</div>';
   if (!D.items.length){
-    h += card(lab("Как это работает") +
-      '<div class="item"><div class="ic">1</div><div class="txt"><b>Студент жмёт «Отправить заявку»</b><small>Вам приходит сообщение в WhatsApp или Telegram</small></div></div>' +
-      '<div class="item"><div class="ic">2</div><div class="txt"><b>Вы открываете ссылку из сообщения</b><small>Заявка сама встаёт сюда</small></div></div>' +
-      '<div class="item"><div class="ic">3</div><div class="txt"><b>Если ссылка не открылась</b><small>Скопируйте текст сообщения и нажмите «Из текста» внизу</small></div></div>');
-    return h;
+    return h + '<div class="empty">Заявок нет. Откройте ссылку из сообщения студента — она встанет сюда.</div>';
   }
   h += list.length ? card(list.map(function(x){
     var over = x.deadline && x.deadline < today() && x.status!=="done" && x.status!=="off";
@@ -989,66 +1261,60 @@ function viewList(){
 function viewItem(id){
   var x = item(id);
   if (!x) return '<div class="empty">Заявка не найдена</div>';
-  var f = x.format || {};
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
-  var fmt = (f.mLeft!=null)
-    ? "поля "+f.mLeft+"/"+f.mRight+"/"+f.mTop+"/"+f.mBottom+" мм (лево/право/верх/низ), "+(f.font||"")+" "+(f.size||"")+", интервал "+(f.spacing||"")+", отступ "+(f.indent||"")+" см"
-    : (x.formatText || "");
-  var h = '<button type="button" class="mini" data-act="back" style="margin:0 0 10px">← Заявки</button>' +
-    '<div class="title" style="font-size:21px">' + esc(x.student || "Без имени") + '</div>' +
-    '<div class="mut" style="margin:4px 0 14px">' + esc(x.group||"") + (x.group ? ' · ' : '') + 'заявка от ' + ruDate(x.added) + ' · ' + pill(x.status) + '</div>';
-
-  h += card(lab("Работа") + row("Тема", x.topic) + row("Вид", x.workType) + row("Дисциплина", x.discipline) +
-    row("Срок", ruDate(x.deadline)) + row("Требования", x.requirements));
-  h += card(lab("Учебное заведение") + row("Вуз", x.univ) + row("Факультет", x.faculty) + row("Кафедра", x.kafedra) +
-    row("Направление", x.program) + row("Форма", x.form) + row("Курс", x.course) + row("Руководитель", x.supervisor) + row("Город", x.city));
-  if (x.org || x.methodNotes) h += card(lab("Дополнительно") + row("Организация", x.org) + row("Методичка", x.methodNotes));
   var r = x.refId ? refById(x.refId) : findRef(x);
   var diff = r ? fmtDiff(x.format, r.format) : [];
-  h += card(lab("Оформление из заявки") + (fmt ? '<div class="mut">' + esc(fmt) + '</div>' : '<div class="mut">не передано</div>'));
-  if (r){
-    h += card(lab("Сверка со справочником") +
-      '<div class="item tapline" data-act="ref-open" data-id="' + r.id + '"><div class="ic">' + (r.verified ? "✓" : "?") + '</div>' +
-        '<div class="txt"><b>' + esc(r.univ) + '</b><small>' + esc([r.faculty, r.kafedra].filter(Boolean).join(" · ") || "без факультета и кафедры") +
-        ' · ' + (r.verified ? "проверено по методичке" : "не проверено") + '</small></div></div>' +
-      (diff.length
-        ? '<div class="warnbar" style="margin:10px 0 0"><b>Расходится с сохранённым</b><ul>' +
-            diff.map(function(d){ return '<li>' + d.label + ': в заявке <b>' + esc(d.req) + '</b>, в справочнике <b>' + esc(d.ref) + '</b></li>' }).join("") +
-          '</ul></div>' +
-          '<div class="chips"><button type="button" class="chip warn" data-act="ref-accept" data-id="' + x.id + '">Принять из заявки в справочник</button>' +
-          '<button type="button" class="chip" data-act="ref-open" data-id="' + r.id + '">Открыть карточку вуза</button></div>'
-        : '<div class="okbar" style="margin-top:10px">Поля, шрифт и интервал совпадают с сохранёнными' + (r.refStyle !== "unknown" ? '. Ссылки: ' + REF_STYLES[r.refStyle] : '') + '.</div>' +
-          (x.refNew ? '<div class="hint">Этот вуз появился в справочнике из этой заявки — откройте карточку и отметьте, что проверили по методичке.</div>' : '')) +
-      (r.notes ? '<div class="hint">' + esc(r.notes) + '</div>' : ''));
-  } else {
-    h += card(lab("Сверка со справочником") + '<div class="mut">Вуз не указан — сверять не с чем.</div>');
-  }
-  h += card(lab("Связь") + (x.contact ? '<div style="font-size:15px">' + esc(x.contact) + '</div>' : '<div class="mut">контакт не указан</div>') +
-    (x.contact ? '<div class="chips"><button type="button" class="chip" data-act="copy-contact" data-id="' + x.id + '">Скопировать</button></div>' : ''));
   var dp = x.doc ? docPages(x) : 0;
+
+  var h = '<button type="button" class="mini" data-act="back" style="margin:0 0 10px">← Заявки</button>' +
+    '<div class="title" style="font-size:21px">' + esc(x.student || "Без имени") + '</div>' +
+    '<div class="mut" style="margin:4px 0 2px">' + esc([x.group, x.workType, x.deadline ? "срок " + ruDate(x.deadline) : ""].filter(Boolean).join(" · ")) + '</div>' +
+    '<div class="row" style="margin:0 0 14px">' +
+      (x.contact ? '<span class="mut">' + esc(x.contact) + '</span><button type="button" class="mini" data-act="copy-contact" data-id="' + x.id + '">скопировать</button>'
+                 : '<span class="mut">контакт не указан</span>') +
+    '</div>';
+
   h += card(lab("Документ") +
     (x.doc && x.doc.updated
-      ? '<div class="mut">Разделов: ' + x.doc.order.length + ' · примерно ' + dp + ' стр. · правка ' + ruDate(x.doc.updated) + '</div>'
-      : '<div class="mut">Черновик ещё не собирался. Дипсик напишет по разделам, титульный лист и оформление подставятся из заявки.</div>') +
-    '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + x.id + '">' + (x.doc && x.doc.updated ? "Открыть документ" : "Собрать документ") + '</button></div>');
-  h += card(lab("Заготовка запроса") +
-    '<div class="mut">Готовый текст для модели: данные заявки, оформление и запрет выдумывать источники.</div>' +
-    '<div class="chips"><button type="button" class="chip ok" data-act="copy-prompt" data-id="' + x.id + '">Скопировать запрос</button>' +
-    '<button type="button" class="chip" data-act="show-prompt" data-id="' + x.id + '">Посмотреть</button></div>');
-  h += card(lab("Работа по заявке") +
-    '<div class="fld"><label>Статус</label><select data-act="status" data-id="' + x.id + '">' +
-      ORDER.map(function(s){ return '<option value="' + s + '"' + (x.status===s?" selected":"") + '>' + STATUS[s] + '</option>' }).join("") +
+      ? '<div class="mut">' + x.doc.order.length + ' разделов · примерно ' + dp + ' стр. · правка ' + ruDate(x.doc.updated) + '</div>'
+      : '<div class="mut">Черновик ещё не собирался.</div>') +
+    '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + x.id + '">' + (x.doc && x.doc.updated ? "Открыть документ" : "Собрать документ") + '</button></div>', "now");
+
+  if (r && diff.length){
+    h += card(lab("Оформление расходится со справочником") +
+      '<ul style="margin:0 0 8px;padding-left:18px;font-size:13px">' +
+        diff.map(function(d){ return '<li>' + d.label + ': в заявке <b>' + esc(d.req) + '</b>, в справочнике <b>' + esc(d.ref) + '</b></li>' }).join("") + '</ul>' +
+      '<div class="chips" style="margin-top:6px"><button type="button" class="chip" data-act="ref-open" data-id="' + r.id + '">Карточка вуза</button>' +
+      '<button type="button" class="chip warn" data-act="ref-accept" data-id="' + x.id + '">Принять из заявки</button></div>');
+  } else if (r && !r.verified){
+    h += card(lab("Справочник") +
+      '<div class="item tapline" data-act="ref-open" data-id="' + r.id + '" style="padding:4px 0"><div class="ic">?</div>' +
+      '<div class="txt"><b>' + esc(r.univ) + '</b><small>' + (x.refNew ? "новый вуз, появился из этой заявки" : "требования не проверены по методичке") + '</small></div></div>');
+  }
+
+  h += card(lab("Работа") + row("Тема", x.topic) + row("Дисциплина", x.discipline) + row("Требования", x.requirements) +
+    (x.org ? row("Организация", x.org) : "") + (x.methodNotes ? row("Методичка", x.methodNotes) : ""));
+  h += '<details class="fold"><summary>Вуз и оформление</summary><div class="in">' +
+    row("Вуз", x.univ) + row("Факультет", x.faculty) + row("Кафедра", x.kafedra) +
+    row("Направление", x.program) + row("Форма", x.form) + row("Курс", x.course) + row("Руководитель", x.supervisor) + row("Город", x.city) +
+    row("Оформление", fmtShort(x.format)) +
+    (r ? '<div class="chips" style="margin-top:10px"><button type="button" class="chip" data-act="ref-open" data-id="' + r.id + '">Карточка вуза' + (r.verified ? " ✓" : "") + '</button></div>' : '') +
+    '</div></details>';
+
+  h += card(lab("Статус") +
+    '<div class="fld"><select data-act="status" data-id="' + x.id + '">' +
+      ORDER.map(function(s2){ return '<option value="' + s2 + '"' + (x.status===s2?" selected":"") + '>' + STATUS[s2] + '</option>' }).join("") +
     '</select></div>' +
-    '<div class="fld"><label>Заметки для себя</label><textarea id="note" style="min-height:90px">' + esc(x.note||"") + '</textarea></div>' +
+    '<div class="fld"><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">' + esc(x.note||"") + '</textarea></div>' +
     '<div class="row"><button type="button" class="chip" data-act="save-note" data-id="' + x.id + '">Сохранить заметку</button>' +
-    '<button type="button" class="del" data-act="delete" data-id="' + x.id + '">удалить заявку</button></div>');
+    '<button type="button" class="del" data-act="delete" data-id="' + x.id + '">удалить</button></div>');
   return h;
 }
 
 function viewRefs(){
   var refs = (D.refs||[]).slice().sort(function(a,b){ return refKey(a) < refKey(b) ? -1 : 1 });
-  var h = '<div class="infobox" style="margin-top:0">Справочник наполняется сам: первая заявка из вуза создаёт карточку, следующие сверяются с ней. Отметка «проверено» — ваша: ставьте, когда сверили с методичкой.</div>';
-  if (!refs.length) return h + '<div class="empty">Пока пусто.</div>';
+  var h = '';
+  if (!refs.length) return '<div class="empty">Справочник пуст. Первая заявка из вуза создаст карточку сама.</div>';
   var byUniv = {};
   refs.forEach(function(r){ (byUniv[r.univ] = byUniv[r.univ] || []).push(r); });
   Object.keys(byUniv).forEach(function(u){
@@ -1056,8 +1322,8 @@ function viewRefs(){
       return '<div class="item tapline" data-act="ref-open" data-id="' + r.id + '">' +
         '<div class="ic">' + (r.verified ? "✓" : "?") + '</div>' +
         '<div class="txt"><b>' + esc([r.faculty, r.kafedra].filter(Boolean).join(" · ") || "общие требования") + '</b>' +
-        '<small>' + esc(fmtLine(r.format)) + '</small>' +
-        '<small>' + (r.refStyle !== "unknown" ? "ссылки: " + REF_STYLES[r.refStyle] + " · " : "") + "заявок: " + (r.requests||0) + '</small></div>' +
+        '<small>' + esc(fmtShort(r.format)) + (r.refStyle === "footnotes" ? ' · сноски' : r.refStyle === "brackets" ? ' · [скобки]' : '') + '</small>' +
+        (r.requests ? '<small>заявок: ' + r.requests + '</small>' : '') + '</div>' +
         '<span class="pill ' + (r.verified ? "p-ok" : "p-och") + '">' + (r.verified ? "проверено" : "уточнить") + '</span></div>';
     }).join(""));
   });
@@ -1087,7 +1353,7 @@ function viewRef(id){
     card(lab("Особенности методички") +
       '<div class="fld"><textarea id="rfNotes" style="min-height:110px" placeholder="Титульный лист, приложения, объём, оригинальность, порядок источников">' + esc(r.notes||"") + '</textarea></div>' +
       '<div class="fld"><label>Проверено по методичке</label><select id="rfVer"><option value="0"' + (!r.verified?" selected":"") + '>нет, требует уточнения</option><option value="1"' + (r.verified?" selected":"") + '>да, сверено</option></select></div>' +
-      '<div class="hint">Источник: ' + esc(r.source||"") + ' · добавлено ' + ruDate(r.added) + (r.updated && r.updated!==r.added ? ' · изменено ' + ruDate(r.updated) : '') + '</div>' +
+      '<div class="hint">' + esc(r.source||"") + ' · ' + ruDate(r.added) + '</div>' +
       '<div class="row" style="margin-top:12px"><button type="button" class="chip ok" data-act="ref-save" data-id="' + r.id + '">Сохранить</button>' +
       '<button type="button" class="del" data-act="ref-delete" data-id="' + r.id + '">удалить</button></div>') +
     card(lab("Заявки из этого вуза") + (reqs.length ? reqs.map(function(x){
@@ -1116,37 +1382,54 @@ function newRef(){
     var r = { id:uid("ref"), univ:u, faculty:wrap.querySelector("#nrFac").value.trim(), kafedra:wrap.querySelector("#nrKaf").value.trim(),
       format:{ mTop:20, mRight:15, mBottom:20, mLeft:30, font:"Times New Roman", size:14, spacing:1.5, indent:1.25 },
       refStyle:"unknown", notes:"", verified:false, source:"вручную", added:today(), updated:today(), requests:0 };
-    D.refs.unshift(r); save(); wrap.remove(); openRefId = r.id; render(); toast("Карточка создана — заполните требования");
+    D.refs.unshift(r); var ok5 = save(); wrap.remove(); openRefId = r.id; render(); toast(ok5 ? "Карточка создана — заполните требования" : "Не сохранено: браузер не разрешает хранение");
   });
 }
 
 function viewMore(){
   var c = counts(), st = D.settings || {};
-  return card(lab("Дипсик") +
-      '<div class="mut" style="margin-bottom:8px">Ключ хранится только в этом браузере и в код страницы не попадает. С него списываются копейки за каждый написанный раздел.</div>' +
-      '<div class="fld"><label>Ключ API (начинается с sk-)</label><input type="password" id="dsKey" value="' + esc(st.dsKey||"") + '" placeholder="sk-…"></div>' +
-      '<div class="fld"><label>Модель</label><select id="dsModel">' +
-        [["deepseek-chat","deepseek-chat — основная"],["deepseek-reasoner","deepseek-reasoner — рассуждающая, дороже"]].map(function(m){
-          return '<option value="' + m[0] + '"' + ((st.dsModel||"deepseek-chat")===m[0]?" selected":"") + '>' + m[1] + '</option>'; }).join("") +
+  var pvs = st.providers || {};
+  var configured = aiReady();
+  var nets = '<div class="fld"><label>Адрес посредника</label><input type="text" id="pxUrl" value="' + esc(st.proxyUrl||"") + '" placeholder="https://имя.имя.workers.dev"></div>' +
+      '<div class="fld"><label>Пароль посредника</label><input type="password" id="pxTok" value="' + esc(st.proxyToken||"") + '"></div>' +
+      PROVIDERS.map(function(pv){
+        var c2 = pvs[pv.id] || {};
+        return '<div class="item" style="align-items:flex-start">' +
+          '<button type="button" class="tick' + (c2.on ? " on" : "") + '" data-act="pv-toggle" data-id="' + pv.id + '">' + (c2.on ? "✓" : "") + '</button>' +
+          '<div class="txt"><b>' + pv.name + '</b>' +
+            '<input type="text" data-pvmodel="' + pv.id + '" value="' + esc(c2.model || pv.model) + '" style="margin-top:6px;padding:8px;font-size:13px" placeholder="модель"></div>' +
+          '<button type="button" class="mini" data-act="pv-test" data-id="' + pv.id + '">проверить</button></div>';
+      }).join("") +
+      '<div class="fld" style="margin-top:12px"><label>По умолчанию</label><select id="pxDef">' +
+        PROVIDERS.map(function(pv){ return '<option value="' + pv.id + '"' + (st.defaultProvider === pv.id ? " selected" : "") + '>' + pv.name + '</option>' }).join("") +
       '</select></div>' +
-      '<div class="chips"><button type="button" class="chip ok" data-act="ds-save">Сохранить</button>' +
-      '<button type="button" class="chip" data-act="ds-test">Проверить связь</button></div>' +
-      '<div class="hint">Если проверка скажет, что из браузера не достучаться, — Дипсик не пускает сайты напрямую. Тогда запрос копируется кнопкой и вставляется на chat.deepseek.com руками.</div>') +
+      '<div class="chips"><button type="button" class="chip ok" data-act="px-save">Сохранить</button></div>';
+
+  return '<details class="fold"' + (configured ? '' : ' open') + '><summary>Нейросети' + (configured ? ' <span class="pill p-ok">подключено</span>'
+      : ' <span class="pill p-och">' + (st.proxyUrl && st.proxyToken ? 'нет поставщика' : 'не настроено') + '</span>') + '</summary><div class="in">' + nets + '</div></details>' +
     card(lab("Итоги") +
-      '<div class="stat"><span>Всего заявок</span><b>' + c.all + '</b></div>' +
-      '<div class="stat"><span>Новых</span><b>' + c.new + '</b></div>' +
-      '<div class="stat"><span>В работе</span><b>' + c.work + '</b></div>' +
-      '<div class="stat"><span>Отправлено</span><b>' + c.sent + '</b></div>' +
-      '<div class="stat"><span>Готово</span><b>' + c.done + '</b></div>' +
-      '<div class="stat"><span>Вузов в справочнике</span><b>' + (D.refs||[]).length + '</b></div>') +
+      [["all","Заявок",c.all],["new","Новых",c.new],["work","В работе",c.work],
+       ["sent","Черновик отправлен",c.sent],["done","Готово",c.done],["off","Отменено",c.off]]
+      .filter(function(q){ return q[0]==="all" || q[0]==="new" || q[2] > 0 })
+      .map(function(q){
+        var can = q[2] > 0;
+        return '<div class="stat' + (can ? ' tapline' : '') + '"' + (can ? ' data-act="go-filter" data-k="' + q[0] + '" style="cursor:pointer"' : '') + '>' +
+          '<span>' + q[1] + '</span><b>' + q[2] + (can ? ' <span class="mut">›</span>' : '') + '</b></div>';
+      }).join("") +
+      '<div class="stat' + ((D.refs||[]).length ? ' tapline' : '') + '"' + ((D.refs||[]).length ? ' data-act="go-refs" style="cursor:pointer"' : '') + '>' +
+        '<span>Вузов в справочнике</span><b>' + (D.refs||[]).length + ((D.refs||[]).length ? ' <span class="mut">›</span>' : '') + '</b></div>') +
     card(lab("Копия данных") +
-      '<div class="mut" style="margin-bottom:4px">Заявки хранятся только в этом браузере. С другого устройства их не видно. Копию стоит сохранять регулярно.</div>' +
-      '<div class="chips"><button type="button" class="chip" data-act="export">Сохранить копию</button>' +
-      '<button type="button" class="chip" data-act="import">Загрузить копию</button></div>') +
-    card(lab("Как принять заявку") +
-      '<div class="item"><div class="ic">1</div><div class="txt"><b>Открыть ссылку из сообщения</b><small>Заявка встанет в список сама</small></div></div>' +
-      '<div class="item"><div class="ic">2</div><div class="txt"><b>Если ссылка не сработала</b><small>Скопируйте текст сообщения целиком и нажмите «Из текста»</small></div></div>' +
-      '<div class="item"><div class="ic">3</div><div class="txt"><b>Повторная заявка по той же работе</b><small>Обновит данные, а ваш статус и заметки останутся</small></div></div>');
+      '<div class="chips" style="margin-top:0"><button type="button" class="chip" data-act="export">Сохранить копию</button>' +
+      '<button type="button" class="chip" data-act="import">Загрузить копию</button></div>' +
+      '<div class="hint">Всё хранится в этом браузере. Сменили устройство или почистили браузер — данные пропадут. Ключи и пароль посредника в копию не попадают — на новом устройстве впишите их заново.</div>') +
+    '<details class="fold"><summary>Как это работает</summary><div class="in">' +
+      '<div class="item"><div class="ic">1</div><div class="txt"><b>Студент отправляет заявку</b><small>Сообщение приходит в WhatsApp или Telegram</small></div></div>' +
+      '<div class="item"><div class="ic">2</div><div class="txt"><b>Вы открываете ссылку из сообщения</b><small>Заявка встаёт в список. Не открылась — «Из текста» внизу списка</small></div></div>' +
+      '<div class="item"><div class="ic">3</div><div class="txt"><b>Собираете документ</b><small>Нейросеть пишет по разделам, титульный лист из заявки. Пройдите пометки [ДАННЫЕ СТУДЕНТА] и [ПРОВЕРИТЬ ИСТОЧНИК]</small></div></div>' +
+      '<div class="item"><div class="ic">4</div><div class="txt"><b>Отправляете файл студенту</b><small>В мессенджер. Ставите статус</small></div></div>' +
+      '<div class="item"><div class="ic">5</div><div class="txt"><b>Справочник вузов</b><small>Наполняется из заявок сам. «Проверено» ставите вы, когда сверили с методичкой</small></div></div>' +
+      '<div class="item"><div class="ic">6</div><div class="txt"><b>Ключи нейросетей</b><small>Хранятся у посредника на Cloudflare. Подключение — по инструкции</small></div></div>' +
+    '</div></details>';
 }
 
 function openModal(html){
@@ -1173,7 +1456,7 @@ document.addEventListener("change", function(ev){
   var el = ev.target;
   if (el.tagName === "SELECT" && el.getAttribute("data-act") === "status"){
     var x = item(el.getAttribute("data-id")); if (!x) return;
-    x.status = el.value; save(); render(); toast("Статус: " + STATUS[x.status]);
+    x.status = el.value; var okk = save(); render(); toast(okk ? "Статус: " + STATUS[x.status] : "Не сохранено: браузер не разрешает хранение");
   }
 });
 document.addEventListener("keydown", function(ev){
@@ -1186,36 +1469,44 @@ document.addEventListener("click", function(ev){
   if (tb){ tab = tb; openId = null; openRefId = null; return render(); }
   var act = el.getAttribute("data-act"), id = el.getAttribute("data-id");
 
+  if (act === "go-filter"){ tab = "list"; openId = null; filter = el.getAttribute("data-k"); query = ""; return render(); }
+  if (act === "go-refs"){ tab = "refs"; openRefId = null; return render(); }
   if (act === "back"){ openId = null; return render(); }
   if (act === "ref-back"){ openRefId = null; return render(); }
   if (act === "ref-open"){ tab = "refs"; openRefId = id; openId = null; return render(); }
   if (act === "open-from-ref"){ tab = "list"; openId = id; openRefId = null; return render(); }
   if (act === "ref-new") return newRef();
-  if (act === "ref-save"){ var rr = refById(id); if (!rr) return; readRefForm(rr); save(); render(); toast("Сохранено"); return; }
+  if (act === "ref-save"){ var rr = refById(id); if (!rr) return; readRefForm(rr); var ok4 = save(); render(); toast(ok4 ? "Сохранено" : "Не сохранено: браузер не разрешает хранение"); return; }
   if (act === "ref-delete"){
     if (!confirm("Удалить карточку вуза? Заявки останутся.")) return;
     D.refs = D.refs.filter(function(r){ return r.id !== id }); D.items.forEach(function(x){ if (x.refId === id) delete x.refId; });
-    save(); openRefId = null; render(); toast("Карточка удалена"); return;
+    var ok6 = save(); openRefId = null; render(); toast(ok6 ? "Карточка удалена" : "Не сохранено: браузер не разрешает хранение"); return;
   }
   if (act === "ref-accept"){
     var xx = item(id); if (!xx) return;
     var rr2 = xx.refId ? refById(xx.refId) : findRef(xx); if (!rr2) return;
     rr2.format = JSON.parse(JSON.stringify(xx.format||{})); rr2.updated = today(); rr2.verified = false;
     if (xx.methodNotes && (rr2.notes||"").indexOf(xx.methodNotes) < 0) rr2.notes = (rr2.notes ? rr2.notes + "\n" : "") + "Из заявки " + (xx.student||"") + ": " + xx.methodNotes;
-    save(); render(); toast("Справочник обновлён по заявке"); return;
+    var ok7 = save(); render(); toast(ok7 ? "Справочник обновлён по заявке" : "Не сохранено: браузер не разрешает хранение"); return;
   }
   if (act === "open"){ openId = id; return render(); }
-  if (act === "filter"){ filter = el.getAttribute("data-k"); return render(); }
+  if (act === "filter"){ var nf = el.getAttribute("data-k"); if (nf === "all" && filter === "all") query = ""; filter = nf; if (nf === "all") query = ""; return render(); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
   if (act === "doc-open") return openDocBuilder(id);
-  if (act === "ds-save"){
-    var k = document.getElementById("dsKey").value.trim(), md = document.getElementById("dsModel").value;
-    D.settings.dsKey = k; D.settings.dsModel = md; save(); toast(k ? "Ключ сохранён" : "Ключ удалён"); return;
+  if (act === "px-save"){ readProviderForm(); saved("Сохранено"); return; }
+  if (act === "pv-toggle"){
+    readProviderForm();
+    var pc = D.settings.providers[id] = D.settings.providers[id] || {}; pc.on = !pc.on;
+    var okP = save(); render();
+    if (!okP) toast("Не сохранено: браузер не разрешает хранение");
+    return;
   }
-  if (act === "ds-test"){
-    var btn = el; btn.textContent = "проверяю…";
-    askDeepseek("Ты помощник.", "Ответь одним словом: работает").then(function(r){ toast("Дипсик отвечает: " + r.text.slice(0,40)); })
-      .catch(function(e){ toast(dsErrorText(e)); }).then(function(){ btn.textContent = "Проверить связь"; });
+  if (act === "pv-test"){
+    var b2 = el; b2.textContent = "…";
+    readProviderForm();
+    if (!save()) toast("Настройки не сохранены: браузер не разрешает хранение");
+    askAI(id, "Ты помощник.", "Ответь одним словом: работает").then(function(r){ toast(providerName(id) + " отвечает: " + r.text.slice(0,40)); })
+      .catch(function(e){ toast(aiErrorText(e)); }).then(function(){ b2.textContent = "проверить"; });
     return;
   }
   if (act === "copy-prompt"){ var x2 = item(id); if (x2) copyText(buildPrompt(x2)); return; }
@@ -1227,10 +1518,10 @@ document.addEventListener("click", function(ev){
       .addEventListener("click", function(e2){ if (e2.target.closest("[data-copy]")) copyText(buildPrompt(x3)); });
     return;
   }
-  if (act === "save-note"){ var x4 = item(id); if (!x4) return; x4.note = document.getElementById("note").value; save(); toast("Заметка сохранена"); return; }
+  if (act === "save-note"){ var x4 = item(id); if (!x4) return; x4.note = document.getElementById("note").value; saved("Заметка сохранена"); return; }
   if (act === "delete"){
     if (!confirm("Удалить заявку? Восстановить будет нельзя.")) return;
-    D.items = D.items.filter(function(y){ return y.id !== id }); save(); openId = null; render(); toast("Заявка удалена"); return;
+    D.items = D.items.filter(function(y){ return y.id !== id }); recountRefs(); var okd = save(); openId = null; render(); toast(okd ? "Заявка удалена" : "Не сохранено: браузер не разрешает хранение"); return;
   }
   if (act === "paste"){
     var wrap = openModal('<button type="button" class="close" data-x="1">✕</button><h3>Вставить заявку из текста</h3>' +
@@ -1245,15 +1536,29 @@ document.addEventListener("click", function(ev){
       if (link){ try{ rec = fromPayload(JSON.parse(b64dec(link[1]))); }catch(e){ rec = null; } }
       if (!rec) rec = parseText(text);
       if (!rec) return toast("Не получилось разобрать — проверьте, что текст полный");
-      if (item(rec.id)) rec.id = uid("rq");
-      D.items.unshift(rec); refIntake(rec); save(); wrap.remove(); openId = rec.id; render(); toast("Заявка добавлена");
+      var same = item(rec.id) || findTwin(rec);
+      if (same){
+        if (!confirm("Такая заявка уже есть: " + (same.student||"без имени") + ", " + (same.topic||"без темы") +
+            ".\n\nОК — обновить её (статус, заметка и документ сохранятся).\nОтмена — добавить как новую.")){
+          rec.id = uid("rq"); D.items.unshift(rec); refIntake(rec); var ok1 = save(); wrap.remove(); openId = rec.id; render(); toast(ok1 ? "Добавлена как новая" : "Не сохранено: браузер не разрешает хранение");
+          return;
+        }
+        mergeInto(same, rec); same.refId = null; refIntake(same); var ok2 = save(); wrap.remove(); openId = same.id; render(); toast(ok2 ? "Заявка обновлена" : "Не сохранено: браузер не разрешает хранение");
+        return;
+      }
+      D.items.unshift(rec); refIntake(rec); var ok3 = save(); wrap.remove(); openId = rec.id; render(); toast(ok3 ? "Заявка добавлена" : "Не сохранено: браузер не разрешает хранение");
     });
     return;
   }
   if (act === "export"){
-    var blob = new Blob([JSON.stringify(D, null, 1)], { type:"application/json" });
-    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "reestr-" + today() + ".json";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); toast("Копия сохранена"); return;
+    var safe = JSON.parse(JSON.stringify(D));
+    if (safe.settings) delete safe.settings.proxyToken;
+    var blob = new Blob([JSON.stringify(safe, null, 1)], { type:"application/json" });
+    var urlB = URL.createObjectURL(blob);
+    var a = document.createElement("a"); a.href = urlB; a.download = "reestr-" + today() + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(urlB) }, 4000);
+    toast("Копия сохранена"); return;
   }
   if (act === "import"){
     var inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
@@ -1261,8 +1566,18 @@ document.addEventListener("click", function(ev){
       var file = inp.files[0]; if (!file) return;
       var r = new FileReader();
       r.onload = function(){
-        try{ var o = JSON.parse(r.result); if (!o.items) throw new Error("bad"); D = o; save(); load(); D.items.forEach(function(x){ if (!x.refId) refIntake(x); }); save(); render(); toast("Данные загружены"); }
-        catch(e){ toast("Этот файл не похож на копию реестра"); }
+        try{
+          var o = JSON.parse(r.result);
+          var bad = checkBackup(o);
+          if (bad){ toast(bad); return; }
+          var keepToken = (D.settings||{}).proxyToken || "";
+          D = o; if (!D.settings) D.settings = {};
+          D.settings.proxyToken = keepToken;
+          var okI = save(); load(); D.items.forEach(function(x){ if (!x.refId) refIntake(x); });
+          okI = save() && okI; render();
+          toast(okI ? "Данные загружены" : "Данные показаны, но не сохранены: браузер не разрешает хранение");
+        }
+        catch(e){ toast("Файл повреждён или это не копия реестра"); }
       };
       r.readAsText(file);
     };
@@ -1272,11 +1587,21 @@ document.addEventListener("click", function(ev){
 
 /* ---------- ЗАПУСК ---------- */
 load();
-document.body.setAttribute("data-theme", "blue");
+applyTheme();
+document.getElementById("btnTheme").onclick = function(){
+  var i = THEMES.indexOf(D.theme || "blue");
+  D.theme = THEMES[(i + 1) % THEMES.length];
+  var okT = save(); applyTheme();
+  toast(okT ? "Тема: " + THEME_RU[D.theme] : "Тема изменена, но не сохранена: браузер не разрешает хранение");
+};
 var got = intake();
 render();
 if (got && got.error) toast("Ссылка повреждена — попробуйте «Из текста»");
-else if (got && got.rec){ openId = got.rec.id; render(); toast(got.updated ? "Заявка обновлена" : "Новая заявка добавлена"); }
+else if (got && got.rec){
+  openId = got.rec.id; render();
+  toast(got.stored === false ? "Не сохранено: браузер не разрешает хранение"
+        : got.updated ? "Заявка обновлена" : "Новая заявка добавлена");
+}
 
 </script>
 </body>
