@@ -12,6 +12,9 @@
 <link rel="manifest" href="manifest-kabinet.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/kabinet-32.png">
 <link rel="apple-touch-icon" href="icons/kabinet-180.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="oblako-config.js"></script>
+<script src="oblako.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -308,6 +311,8 @@ if ("serviceWorker" in navigator && location.protocol === "https:"){
    Данные хранятся только в памяти этого устройства.
    ================================================================== */
 
+var CLOUD_APP = "kabinet";
+
 var STATUS = {
   draft: "Черновик",
   in_progress: "В работе",
@@ -450,7 +455,8 @@ function load(){
   save();
 }
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify(D)); lastSaved = new Date(); markSaved(); }
+  try{ localStorage.setItem(KEY, JSON.stringify(D)); lastSaved = new Date(); markSaved();
+        if (window.Oblako) Oblako.touch(); }
   catch(e){ storageOk = false; markSaved(); }
 }
 function change(fn){
@@ -1779,6 +1785,13 @@ function viewMore(){
       return '<button type="button" aria-pressed="' + ((s.theme || "blue") === t[0]) + '" data-act="theme" data-k="' + t[0] + '">' + t[1] + '</button>';
     }).join("") + '</div>');
 
+  h += card('<div class="row" style="margin-bottom:6px">' + lab("Хранение записей").replace("margin-bottom:8px","") +
+      '<span id="cloudBadge" class="pill p-gray">на устройстве</span></div>' +
+    '<div class="mut" id="cloudLine">' + esc(window.Oblako ? Oblako.statusText() : "только на этом устройстве") + '</div>' +
+    '<div class="chips"><button type="button" class="chip" data-act="cloud">' +
+      (window.Oblako && Oblako.mode === "cloud" ? "Вход и синхронизация" : "Войти по коду") + '</button></div>' +
+    '<div class="hint">С входом записи доступны с телефона и компьютера и не пропадут при смене устройства.</div>');
+
   h += card(lab("Настройки") +
     '<div class="fld"><label>Предупреждать заранее, дней</label><input type="number" id="stWarn" min="1" max="30" value="' + (s.warnDays || 3) + '"></div>' +
     '<div class="fld"><label>Адрес реестра для заявок</label><input type="text" id="stReg" value="' + esc(s.registryUrl || "") + '"></div>' +
@@ -1823,6 +1836,171 @@ function viewMore(){
 }
 
 function applyTheme(){ document.body.setAttribute("data-theme", D.settings.theme || "blue"); }
+
+/* ==================================================================
+   ОБЛАКО: вход по коду и хранение записей в базе
+   ================================================================== */
+var cloudNote = "";           /* короткая строка состояния для экрана */
+
+function cloudInit(){
+  if (!window.Oblako) return;
+  Oblako.init({
+    app: CLOUD_APP,
+    getData: function(){ return D; },
+    onChange: function(){ cloudPaint(); },
+    onConflict: function(res){ cloudConflict(res); }
+  }).then(function(){
+    if (Oblako.mode === "cloud") cloudFirstPull();
+  });
+}
+
+/* при входе решаем, чьи записи оставить */
+function cloudFirstPull(){
+  Oblako.pull({ silent:true }).then(function(res){
+    if (!res) return;
+    if (res.status === "empty"){
+      /* в базе пусто: если на устройстве что-то есть — предлагаем перенести */
+      if (cloudHasLocal()){
+        if (confirm("В базе пока пусто.\n\nПеренести записи с этого устройства в базу?")){
+          Oblako.push(D, true).then(function(){ cloudPaint(); toast("Записи перенесены в базу"); });
+        }
+      } else {
+        Oblako.push(D, true);
+      }
+      return;
+    }
+    if (res.status === "loaded"){
+      var remoteEmpty = cloudIsEmpty(res.remote);
+      if (!cloudHasLocal() || remoteEmpty){
+        if (!remoteEmpty) cloudApply(res.remote);
+        else Oblako.push(D, true);
+        cloudPaint(); return;
+      }
+      /* и там, и там есть записи — спрашиваем */
+      var when = res.remoteAt ? new Date(res.remoteAt) : null;
+      var msg = "Записи есть и в базе, и на этом устройстве.\n\n" +
+        "ОК — взять из базы" + (when ? " (изменены " + when.toLocaleString("ru-RU") + ")" : "") + "\n" +
+        "Отмена — оставить записи этого устройства и записать их в базу";
+      if (confirm(msg)) { cloudApply(res.remote); toast("Взяты записи из базы"); }
+      else Oblako.push(D, true).then(function(){ toast("Записи этого устройства сохранены в базе"); });
+      cloudPaint();
+    }
+  });
+}
+
+/* на другом устройстве записали новее */
+function cloudConflict(res){
+  var when = res.updated_at ? new Date(res.updated_at).toLocaleString("ru-RU") : "";
+  var msg = "Эти записи менялись на другом устройстве" + (when ? " (" + when + ")" : "") + ".\n\n" +
+    "ОК — забрать оттуда (здешние несохранённые правки пропадут)\n" +
+    "Отмена — оставить здешние и перезаписать базу";
+  if (confirm(msg)){
+    Oblako.pull().then(function(r){
+      if (r && r.status === "loaded"){ cloudApply(r.remote); toast("Взяты записи из базы"); }
+    });
+  } else {
+    Oblako.push(D, true).then(function(){ toast("База перезаписана записями этого устройства"); });
+  }
+}
+
+function cloudApply(remote){
+  if (!remote || typeof remote !== "object") return;
+  var bad = checkBackup(remote);
+  if (bad){ toast("Записи в базе повреждены: " + bad); return; }
+  D = remote; save(); load(); render();
+}
+
+function cloudPaint(){
+  cloudNote = window.Oblako ? Oblako.statusText() : "";
+  var el = document.getElementById("cloudLine");
+  if (el) el.textContent = cloudNote;
+  var b = document.getElementById("cloudBadge");
+  if (b){
+    var on = window.Oblako && Oblako.mode === "cloud";
+    b.className = "pill " + (on ? "p-ok" : "p-gray");
+    b.textContent = on ? "в базе" : "на устройстве";
+  }
+}
+
+function cloudHasLocal(){ return !!(D && ((D.works||[]).length || (D.tasks||[]).length || (D.events||[]).length || (D.settings&&D.settings.name))); }
+function cloudIsEmpty(x){ return !x || !((x.works||[]).length || (x.tasks||[]).length || (x.events||[]).length || (x.settings&&x.settings.name)); }
+
+/* окно входа */
+function openCloud(){
+  if (!window.Oblako || !Oblako.ready){
+    openModal('<button type="button" class="close" data-x="1">✕</button>' +
+      '<h3>Синхронизация не подключена</h3>' +
+      '<div class="mut" style="margin-top:10px">Записи хранятся только на этом устройстве. ' +
+      'Чтобы они были доступны с телефона и компьютера, нужно один раз настроить базу — ' +
+      'файл oblako-config.js и инструкция.</div>' +
+      '<div class="rowbtns"><button type="button" class="btn ghost" data-x="1">Понятно</button></div>');
+    return;
+  }
+  if (Oblako.mode === "cloud"){
+    var w0 = openModal('<button type="button" class="close" data-x="1">✕</button>' +
+      '<h3>Вход выполнен</h3>' +
+      '<div class="mut" style="margin-top:8px">' + esc(Oblako.email) + '</div>' +
+      '<div class="mut">' + esc(Oblako.statusText()) + '</div>' +
+      '<div class="rowbtns">' +
+        '<button type="button" class="btn" data-pull="1" style="flex:1">Обновить с базы</button>' +
+        '<button type="button" class="btn ghost" data-out="1" style="flex:1">Выйти</button>' +
+      '</div>' +
+      '<div class="hint">После выхода записи останутся на этом устройстве.</div>');
+    w0.addEventListener("click", function(ev){
+      if (ev.target.closest("[data-pull]")){
+        Oblako.pull().then(function(r){
+          if (r && r.status === "loaded"){ cloudApply(r.remote); toast("Обновлено из базы"); }
+          else if (r && r.status === "empty") toast("В базе пока пусто");
+          w0.remove(); render();
+        });
+      }
+      if (ev.target.closest("[data-out]")){
+        Oblako.signOut().then(function(){ w0.remove(); render(); toast("Вы вышли"); });
+      }
+    });
+    return;
+  }
+  var w = openModal('<button type="button" class="close" data-x="1">✕</button>' +
+    '<h3>Вход по коду</h3>' +
+    '<div class="mut" style="margin-top:8px">Пароль придумывать не нужно: на почту придёт код из шести цифр.</div>' +
+    '<div class="fld" style="margin-top:12px"><label>Почта</label>' +
+      '<input type="text" id="clEmail" placeholder="you@mail.ru" autocomplete="email"></div>' +
+    '<div id="clStep2" style="display:none">' +
+      '<div class="fld"><label>Код из письма</label>' +
+        '<input type="text" id="clCode" inputmode="numeric" maxlength="6" placeholder="123456"></div>' +
+    '</div>' +
+    '<div id="clMsg" class="hint"></div>' +
+    '<div class="rowbtns">' +
+      '<button type="button" class="btn" data-send="1" style="flex:1">Прислать код</button>' +
+      '<button type="button" class="btn ghost" data-x="1" style="flex:1">Отмена</button>' +
+    '</div>');
+  var msg = w.querySelector("#clMsg");
+  function say(t){ msg.textContent = t || ""; }
+  w.addEventListener("click", function(ev){
+    if (ev.target.closest("[data-send]")){
+      var em = w.querySelector("#clEmail").value;
+      say("Отправляю…");
+      Oblako.sendCode(em).then(function(){
+        w.querySelector("#clStep2").style.display = "block";
+        w.querySelector("[data-send]").textContent = "Войти";
+        w.querySelector("[data-send]").setAttribute("data-send", "2");
+        say("Код отправлен на " + em + ". Письмо может попасть в «Спам».");
+        var c = w.querySelector("#clCode"); if (c) c.focus();
+      }).catch(function(e){ say(e.message); });
+      return;
+    }
+    if (ev.target.closest('[data-send="2"]')){
+      var em2 = w.querySelector("#clEmail").value;
+      var code = w.querySelector("#clCode").value;
+      say("Проверяю…");
+      Oblako.verifyCode(em2, code).then(function(){
+        w.remove(); cloudFirstPull(); render(); toast("Вход выполнен");
+      }).catch(function(e){ say(e.message); });
+    }
+  });
+  var f = w.querySelector("#clEmail"); if (f && window.innerWidth > 600) f.focus();
+}
+
 /* ---------- ОКНА СНИЗУ ---------- */
 function openModal(html, onMount){
   var wrap = document.createElement("div");
@@ -2145,6 +2323,7 @@ document.addEventListener("click", function(ev){
   if (tabId){ go(tabId); return; }
   var act = el.getAttribute("data-act"), id = el.getAttribute("data-id");
 
+  if (act === "cloud") return openCloud();
   if (act === "go-profile"){ tab = "more"; openWorkId = null; return render(); }
   if (act === "go-works"){ workFilter = el.getAttribute("data-k"); tab = "works"; openWorkId = null; return render(); }
   if (act === "go-cal"){ tab = "cal"; calMode = "month"; calCursor = null; calSel = null; return render(); }
@@ -2294,6 +2473,7 @@ document.addEventListener("keydown", function(ev){
 
 load();
 render();
+cloudInit();
 
 </script>
 </body>
