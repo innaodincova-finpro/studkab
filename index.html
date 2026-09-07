@@ -1781,12 +1781,15 @@ function viewWork(id){
 
 /* ---------- ПРОФИЛЬ ---------- */
 function viewMore(){
+  function section(title, body){
+    return '<details class="fold profile-fold"><summary>' + esc(title) + '</summary><div class="in">' + body + '</div></details>';
+  }
   var s = D.settings, c = counts();
   function fld(id, label, val, ph){
     return '<div class="fld"><label>' + label + '</label><input type="text" id="' + id + '" value="' + esc(val || "") + '"' +
       (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
   }
-  var h = card(lab("Данные студента") +
+  var h = section("Данные студента",
 
     fld("stName", "Фамилия, имя, отчество", s.name, "Полностью, как в зачётке") +
     fld("stUniv", "Учебное заведение", s.univ, "Полное название вуза или колледжа") +
@@ -1802,24 +1805,24 @@ function viewMore(){
     fld("stContact", "Связь (телефон или Telegram)", s.contact, "Подставится в заявку") +
     '<button type="button" class="btn" data-act="save-settings">Сохранить</button>');
 
-  h += card(lab("Оформление") +
+  h += section("Оформление",
     '<div class="pick">' + [["blue","Синяя"],["green","Изумрудная"],["lilac","Сиреневая"]].map(function(t){
       return '<button type="button" aria-pressed="' + ((s.theme || "blue") === t[0]) + '" data-act="theme" data-k="' + t[0] + '">' + t[1] + '</button>';
     }).join("") + '</div>');
 
-  h += card('<div class="row" style="margin-bottom:6px">' + lab("Хранение записей").replace("margin-bottom:8px","") +
+  h += section("Хранение записей", '<div class="row" style="margin-bottom:6px">' +
       '<span id="cloudBadge" class="pill p-gray">на устройстве</span></div>' +
     '<div class="mut" id="cloudLine">' + esc(window.Oblako ? Oblako.statusText() : "только на этом устройстве") + '</div>' +
     '<div class="chips"><button type="button" class="chip" data-act="cloud">' +
-      (window.Oblako && Oblako.mode === "cloud" ? "Вход и синхронизация" : "Войти по коду") + '</button></div>' +
+      (window.Oblako && Oblako.mode === "cloud" ? "Вход и синхронизация" : "Войти через Google") + '</button></div>' +
     '<div class="hint">С входом записи доступны с телефона и компьютера и не пропадут при смене устройства.</div>');
 
-  h += card(lab("Настройки") +
+  h += section("Настройки",
     '<div class="fld"><label>Предупреждать заранее, дней</label><input type="number" id="stWarn" min="1" max="30" value="' + (s.warnDays || 3) + '"></div>' +
     '<div class="fld"><label>Адрес реестра для заявок</label><input type="text" id="stReg" value="' + esc(s.registryUrl || "") + '"></div>' +
     '<button type="button" class="btn ghost" data-act="save-settings">Сохранить</button>');
 
-  h += card(lab("Итоги") +
+  h += section("Итоги",
     [["all","Всего работ",c.total],["in_progress","В работе",c.inProgress],
      ["review","На проверке",c.review],["accepted","Приняты",D.works.filter(function(w){ return getStatus(w)==="accepted" }).length],
      ["graded","Оценены",D.works.filter(function(w){ return getStatus(w)==="graded" }).length]]
@@ -1831,14 +1834,14 @@ function viewMore(){
     }).join("") +
     (c.overdue ? '<div class="stat tapline" data-act="go-cal" style="cursor:pointer"><span>Просрочено</span><b>' + c.overdue + ' <span class="mut">›</span></b></div>' : ''));
 
-  h += card(lab("Напоминания и сводка") +
+  h += section("Напоминания и сводка",
     '<div class="chips">' +
       '<button type="button" class="chip" data-act="ics-all">В календарь</button>' +
       '<button type="button" class="chip" data-act="tg-share">В Telegram</button>' +
       '<button type="button" class="chip" data-act="copy-digest">Скопировать</button>' +
     '</div>');
 
-  h += card(lab("Копия данных") +
+  h += section("Копия данных",
     '<div class="chips" style="margin-top:0">' +
       '<button type="button" class="chip" data-act="export">Сохранить копию</button>' +
       '<button type="button" class="chip" data-act="import">Загрузить копию</button>' +

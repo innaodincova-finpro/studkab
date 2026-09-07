@@ -13,6 +13,7 @@ for(const file of ['index.html','reestr.html']){
  test(file+': download and restore backup through UI',async({page})=>{
    await page.goto('http://127.0.0.1:4173/'+file);
    await page.locator('[data-tab="more"]').click();
+   if(file==='index.html') await page.getByText('Копия данных',{exact:true}).click();
    const downloaded=page.waitForEvent('download');
    await page.getByRole('button',{name:'Сохранить копию',exact:true}).click();
    const data=JSON.parse(await fs.readFile(await (await downloaded).path(),'utf8'));
@@ -23,8 +24,25 @@ for(const file of ['index.html','reestr.html']){
    await (await upload).setFiles({name:'test-backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});
    await expect(page.locator('#toast')).toContainText('Данные загружены');
    await page.reload();await page.locator('[data-tab="more"]').click();
+   if(file==='index.html') await page.getByText('Копия данных',{exact:true}).click();
    const exported=page.waitForEvent('download');await page.getByRole('button',{name:'Сохранить копию',exact:true}).click();
    const roundtrip=JSON.parse(await fs.readFile(await (await exported).path(),'utf8'));
    expect(roundtrip.settings.name).toBe(marker);
  });
 }
+
+test('profile sections collapse without losing unsaved input',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.locator('[data-tab="more"]').click();
+ await expect(page.locator('.profile-fold[open]')).toHaveCount(0);
+ await page.getByText('Данные студента',{exact:true}).click();
+ await page.locator('#stName').fill('Проверка профиля');
+ await page.getByText('Данные студента',{exact:true}).click();
+ await expect(page.locator('#stName')).toBeHidden();
+ await page.getByText('Данные студента',{exact:true}).click();
+ await expect(page.locator('#stName')).toHaveValue('Проверка профиля');
+ await page.locator('.profile-fold').filter({has:page.locator('#stName')}).getByRole('button',{name:'Сохранить',exact:true}).click();
+ await page.reload();await page.locator('[data-tab="more"]').click();
+ await page.getByText('Данные студента',{exact:true}).click();
+ await expect(page.locator('#stName')).toHaveValue('Проверка профиля');
+});

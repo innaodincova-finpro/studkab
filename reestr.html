@@ -1447,7 +1447,7 @@ function viewMore(){
       '<span id="cloudBadge" class="pill p-gray">на устройстве</span></div>' +
       '<div class="mut" id="cloudLine">' + esc(window.Oblako ? Oblako.statusText() : "только на этом устройстве") + '</div>' +
       '<div class="chips"><button type="button" class="chip" data-act="cloud">' +
-        (window.Oblako && Oblako.mode === "cloud" ? "Вход и синхронизация" : "Войти по коду") + '</button></div>' +
+        (window.Oblako && Oblako.mode === "cloud" ? "Вход и синхронизация" : "Войти через Google") + '</button></div>' +
       '<div class="hint">С входом заявки доступны с телефона и компьютера и не пропадут при смене устройства.</div>') +
     card(lab("Итоги") +
       [["all","Заявок",c.all],["new","Новых",c.new],["work","В работе",c.work],
