@@ -93,6 +93,24 @@
   };
 
   /* ---------- вход ---------- */
+  Oblako.signInGoogle = function () {
+    if (!client) return Promise.reject(new Error("Облако не настроено"));
+    if (Oblako.busy || inFlight) return Promise.reject(new Error("Дождитесь завершения текущей операции"));
+    var target = new URL(Oblako.app === "reestr" ? "reestr.html" : "./", global.location.href);
+    target.search = ""; target.hash = "";
+    Oblako.busy = true; notify();
+    return Promise.resolve().then(function () {
+      return client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: target.href } });
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      Oblako.busy = false; notify();
+      return true;
+    }).catch(function (e) {
+      Oblako.busy = false; notify();
+      throw new Error(humanAuth(e));
+    });
+  };
+
   Oblako.sendCode = function (email) {
     if (!client) return Promise.reject(new Error("Облако не настроено"));
     email = String(email || "").trim().toLowerCase();
