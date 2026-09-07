@@ -144,11 +144,27 @@
       .catch(function (e) { Oblako.busy = false; notify(); throw new Error(humanAuth(e)); });
   };
 
+  Oblako.pushRequest = async function (body) {
+    if (!client || !userId || Oblako.app !== "kabinet") throw new Error("Сначала войдите через Google");
+    var expected = userId;
+    var r = await client.auth.getSession();
+    var session = r.data && r.data.session;
+    if (!session || session.user.id !== expected) throw new Error("Войдите в кабинет заново");
+    var res = await fetch(global.OBLAKO_CONFIG.url + "/functions/v1/studkab-push", {
+      method:"POST", headers:{"Content-Type":"application/json", Authorization:"Bearer " + session.access_token},
+      body:JSON.stringify(body), signal:AbortSignal.timeout(15000)
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Не удалось подключить уведомления");
+    if (userId !== expected) throw new Error("Аккаунт изменился. Повторите действие");
+    return data;
+  };
+
   Oblako.signOut = function () {
     if (!client) return Promise.resolve();
     if (inFlight) return Promise.reject(new Error("Дождитесь завершения сохранения"));
     Oblako.pause();
-    return client.auth.signOut({ scope: "local" }).then(function (r) {
+    return Promise.resolve().then(function(){ return global.StudPush ? global.StudPush.disable() : null; }).then(function(){ return client.auth.signOut({ scope: "local" }); }).then(function (r) {
       if (r.error) throw r.error;
       useUser(null);
       Oblako.mode = "local"; Oblako.email = ""; Oblako.rev = 0; Oblako.lastSync = null;

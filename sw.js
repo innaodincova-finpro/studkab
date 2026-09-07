@@ -3,14 +3,15 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v5";
+const CACHE = "studkab-v6";
 const SHELL = [
   "./",
+  "./push.js?v=1",
   "./index.html",
   "./reestr.html",
   "./manifest-kabinet.webmanifest",
   "./manifest-reestr.webmanifest",
-  "./oblako.js?v=5",
+  "./oblako.js?v=6",
   "./oblako-config.js"
 ];
 
@@ -68,4 +69,25 @@ self.addEventListener("fetch", (e) => {
       return cached || fresh;
     })
   );
+});
+
+self.addEventListener('push', event => {
+ event.waitUntil((async()=>{
+  let data;try{data=event.data.json();}catch{return;}
+  if(!data || Date.now()>Number(data.expiresAt))return;
+  await self.registration.showNotification('Кабинет студента', {
+   body:String(data.body||'Откройте кабинет, чтобы посмотреть напоминание.').slice(0,250),
+   tag:String(data.tag||'studkab').slice(0,250),data:{url:new URL('./',self.registration.scope).href}
+  });
+ })());
+});
+self.addEventListener('notificationclick', event => {
+ event.notification.close();
+ event.waitUntil((async()=>{
+  const url=new URL('./',self.registration.scope).href;
+  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+  const existing=windows.find(w=>w.url===url || w.url===url+'index.html');
+  if(existing)return existing.focus();
+  return self.clients.openWindow(url);
+ })());
 });

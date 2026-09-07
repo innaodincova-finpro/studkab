@@ -44,3 +44,20 @@ with tempfile.TemporaryDirectory() as tmp:
  actual=subprocess.check_output(['psql','-X','-qAt','-d','safety_restore','-c',"select md5(string_agg(row_to_json(d)::text, '' order by user_id, app)) from app_data d;"],text=True).strip()
  assert actual==expected
 print('PASS: captured schema upgrade and pg_dump restoration preserve all synthetic records')
+
+sql('create role service_role bypassrls;')
+migration=(root/'supabase/migrations/202609070001_studkab_push.sql').read_text().split('-- Runs as the job owner.')[0]
+sql(migration)
+sub=sql(f"insert into studkab_push_subscriptions(user_id,endpoint,subscription,timezone) values('{uid}','https://fcm.googleapis.com/test','{{}}','UTC') returning id;")
+assert sql(f"set role service_role; select claim_studkab_push_delivery('test-key','{sub}');")=='t'
+assert sql(f"set role service_role; select claim_studkab_push_delivery('test-key','{sub}');")=='f'
+sql("update studkab_push_deliveries set claimed_at=now()-interval '3 minutes';")
+assert sql(f"set role service_role; select claim_studkab_push_delivery('test-key','{sub}');")=='t'
+sql("update studkab_push_deliveries set sent_at=now(),claimed_at=now()-interval '3 minutes';")
+assert sql(f"set role service_role; select claim_studkab_push_delivery('test-key','{sub}');")=='f'
+for role in ['anon','authenticated']:
+ for query in ['select * from studkab_push_configuration',f"select claim_studkab_push_delivery('unauthorized','{sub}')"]:
+  try:sql(f'set role {role}; '+query)
+  except subprocess.CalledProcessError:pass
+  else:raise AssertionError('Push secrets or dispatch available to '+role)
+print('PASS: push secrets restricted, claims deduplicate and retry, sent deliveries never reclaimed')
