@@ -1,0 +1,13 @@
+{
+  "name": "studkab",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "test": "node --test tests/safety.test.cjs",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "vite": "8.2.2",
+    "@playwright/test": "1.63.0"
+  }
+}
