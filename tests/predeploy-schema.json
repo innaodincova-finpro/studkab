@@ -1,0 +1,41 @@
+{
+  "columns": [
+    {
+      "data_type": "uuid",
+      "column_name": "user_id",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "column_name": "app",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "jsonb",
+      "column_name": "data",
+      "is_nullable": "NO",
+      "column_default": "'{}'::jsonb"
+    },
+    {
+      "data_type": "bigint",
+      "column_name": "rev",
+      "is_nullable": "NO",
+      "column_default": "1"
+    },
+    {
+      "data_type": "timestamp with time zone",
+      "column_name": "updated_at",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    }
+  ],
+  "row_count": 0,
+  "captured_at": "2026-09-07T05:48:43.764462+00:00",
+  "constraints": [
+    "PRIMARY KEY (user_id, app)",
+    "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+  ],
+  "function_definition": "CREATE OR REPLACE FUNCTION public.save_app_data(p_app text, p_data jsonb, p_rev bigint)\n RETURNS TABLE(ok boolean, rev bigint, updated_at timestamp with time zone, conflict boolean)\n LANGUAGE plpgsql\nAS $function$begin if not exists (select 1 from public.app_data d where d.user_id = auth.uid() and d.app = p_app) then insert into public.app_data(user_id, app, data) values (auth.uid(), p_app, p_data); elsif p_rev <> 0 and exists (select 1 from public.app_data d where d.user_id = auth.uid() and d.app = p_app and d.rev <> p_rev) then return query select false, d.rev, d.updated_at, true from public.app_data d where d.user_id = auth.uid() and d.app = p_app; return; else update public.app_data d set data = p_data, rev = d.rev + 1, updated_at = now() where d.user_id = auth.uid() and d.app = p_app; end if; return query select true, d.rev, d.updated_at, false from public.app_data d where d.user_id = auth.uid() and d.app = p_app; end$function$\n"
+}

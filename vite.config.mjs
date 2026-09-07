@@ -1,0 +1,24 @@
+import { defineConfig } from 'vite';
+import fs from 'node:fs';
+import path from 'node:path';
+export default defineConfig({
+ server:{host:'0.0.0.0',allowedHosts:['terminal.local']},
+ plugins:[{name:'isolated-acceptance',configureServer(server){
+   server.middlewares.use((req,res,next)=>{
+     const url=new URL(req.url,'http://local');
+     if(url.pathname==='/oblako-config.js') {
+       res.setHeader('Content-Type','application/javascript');
+       return res.end('window.OBLAKO_CONFIG={url:"http://terminal.local:4173",key:"test-only"};');
+     }
+     if(url.pathname==='/sw.js') {res.setHeader('Content-Type','application/javascript');return res.end('/* No worker in acceptance preview. */');}
+     if(['/','/index.html','/reestr.html'].includes(url.pathname)){
+       let html=fs.readFileSync(path.resolve(url.pathname==='/reestr.html'?'reestr.html':'index.html'),'utf8');
+       html=html.replace(/<script[^>]+src="https:\/\/cdn.jsdelivr.net\/npm\/@supabase[^>]*><\/script>/g,'<script src="/tests/qa-cloud.js"></script>');
+       res.setHeader('Content-Type','text/html; charset=utf-8');
+       res.setHeader('Content-Security-Policy',"connect-src 'self'; worker-src 'none'");
+       return res.end(html);
+     }
+     next();
+   });
+ }}]
+});

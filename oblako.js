@@ -36,6 +36,7 @@
   var conflictRev = null;
   var userId = "";
   var epoch = 0;
+  var identityReady = false;
   Oblako.accept = function () { writable = true; conflictRev = null; Oblako.lastError = ""; notify(); };
   Oblako.pause = function () { writable = false; clearTimeout(pushTimer); pending = false; };
   function useUser(user) {
@@ -44,7 +45,9 @@
     Oblako.pause(); epoch++; userId = id;
     Oblako.rev = 0; Oblako.lastSync = null; conflictRev = null;
     Oblako.mode = id ? "cloud" : "local";
+    identityReady = false;
     if (opts && opts.switchUser) opts.switchUser(id);
+    identityReady = !!id;
   }
   function cleanData(data) {
     var copy = JSON.parse(JSON.stringify(data));
@@ -66,9 +69,12 @@
     Oblako.ready = true;
     client.auth.onAuthStateChange(function (event, session) {
       if (event === "SIGNED_OUT") { useUser(null); Oblako.email = ""; notify(); }
-      else if (session && userId && session.user.id !== userId) {
-        useUser(session.user); Oblako.email = session.user.email || "";
-        if (opts.onAccountChange) setTimeout(opts.onAccountChange, 0);
+      else if (event === "SIGNED_IN" && session && session.user.id !== userId) {
+        setTimeout(function () {
+          if (session.user.id === userId) return;
+          useUser(session.user); Oblako.email = session.user.email || "";
+          if (opts.onAccountChange) opts.onAccountChange();
+        }, 0);
       }
     });
 
@@ -135,7 +141,7 @@
   /* Возвращает: {status:"empty"|"loaded"|"choose", remote, remoteAt} */
   Oblako.pull = function (o) {
     o = o || {};
-    if (!client || Oblako.mode !== "cloud") return Promise.resolve({ status: "offline" });
+    if (!client || Oblako.mode !== "cloud" || !identityReady) return Promise.resolve({ status: "offline" });
     if (inFlight) return Promise.resolve({ status: "busy" });
     Oblako.pause();
     var requestEpoch = epoch;
@@ -161,7 +167,7 @@
   /* ---------- запись в базу ---------- */
   /* Explicit overwrite still compares the version presented to the user. */
   Oblako.push = function (data, force) {
-    if (!client || Oblako.mode !== "cloud") return Promise.resolve({ status: "offline" });
+    if (!client || Oblako.mode !== "cloud" || !identityReady) return Promise.resolve({ status: "offline" });
     if (inFlight) return Promise.resolve({ status: "busy" });
     if (!writable && !(force && conflictRev !== null)) {
       return Promise.resolve({ status: "blocked", error: "Сначала загрузите и выберите записи из базы" });

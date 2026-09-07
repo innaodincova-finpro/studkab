@@ -1478,13 +1478,14 @@ var cloudNote = "";           /* короткая строка состояни�
 function cloudSwitchUser(id){
   var target = id ? CLOUD_LOCAL_KEY + ":user:" + id : CLOUD_LOCAL_KEY + ":guest";
   var legacy = localStorage.getItem(CLOUD_LOCAL_KEY);
-  if (id && legacy === null && KEY === CLOUD_LOCAL_KEY + ":guest" && cloudHasLocal() &&
+  if (id && localStorage.getItem(target) === null && legacy === null && KEY === CLOUD_LOCAL_KEY + ":guest" && cloudHasLocal() &&
       confirm("Перенести локальные записи в этот аккаунт?")) legacy = JSON.stringify(D);
   if (id && legacy !== null && localStorage.getItem(target) === null) {
     localStorage.setItem(target, legacy);
     localStorage.setItem(CLOUD_LOCAL_KEY + ":scoped", "1");
     localStorage.removeItem(CLOUD_LOCAL_KEY);
   }
+  if (id) localStorage.setItem(CLOUD_LOCAL_KEY + ":scoped", "1");
   KEY = target; D = null;
   if (typeof undoStack !== "undefined") { undoStack = []; redoStack = []; }
   if (typeof openId !== "undefined") { openId = null; openRefId = null; }
