@@ -1569,11 +1569,11 @@ function cloudPaint(){
   if (b){
     var on = window.Oblako && Oblako.mode === "cloud";
     b.className = "pill " + (on ? "p-ok" : "p-gray");
-    b.textContent = on ? "в базе" : "на устройстве";
+    b.textContent = on ? "облако подключено" : "на устройстве";
   }
 }
 
-function cloudHasLocal(){ return !!(D && ((D.items||[]).length || (D.refs||[]).some(function(r){ return r.verified || r.requests }))); }
+function cloudHasLocal(){ return !!(D && Object.keys(D).length); }
 function cloudIsEmpty(x){ return !x || !((x.items||[]).length); }
 
 /* окно входа */

@@ -15,6 +15,10 @@ for(const file of ['index.html','reestr.html']){
  check(!w.checkBackup(backup),file+': собственная резервная копия проходит проверку');
  backup.settings.name='Restored';check(w.cloudApply(backup),file+': резервная копия применена');
  check(w.D.settings.name==='Restored',file+': восстановлены значения');
+ const oldSet=w.Storage.prototype.setItem;const before=w.D;
+ w.Storage.prototype.setItem=function(){throw new Error('QuotaExceededError')};
+ check(w.cloudApply(backup)===false && w.D===before,file+': отказ хранилища не заменяет данные');
+ w.Storage.prototype.setItem=oldSet;w.Oblako.accept();
  w.QA.failWrite=true;let bad=await w.cloudSave('FALSE SUCCESS');
  check(bad.status==='error'&&!w.document.querySelector('#toast').textContent.includes('FALSE SUCCESS'),file+': отказ записи не показывает успех');
  w.QA.failWrite=false;
