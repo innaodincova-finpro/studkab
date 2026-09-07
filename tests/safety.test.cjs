@@ -10,7 +10,7 @@ async function cloud(){
  c.setTimeout=fn=>{let key={};c.timers.set(key,fn);return key};c.clearTimeout=k=>c.timers.delete(k);c.addEventListener=()=>{};c.window=c;
  c.OBLAKO_CONFIG={url:'test',key:'public'};
  const q={select(){return this},eq(){return this},maybeSingle(){return Promise.resolve(c.nextRead)}};
- c.supabase={createClient:()=>({auth:{onAuthStateChange(fn){c.authEvent=fn},getSession:async()=>({data:{session:{user:c.user}}}),signOut:async()=>c.logout||{},verifyOtp:async()=>({data:{user:c.user}})},from:()=>q,rpc:(name,args)=>{c.calls.push({name,args});return Promise.resolve(c.nextWrite)}})};
+ c.supabase={createClient:()=>({auth:{onAuthStateChange(fn){c.authEvent=fn},getSession:async()=>({data:{session:{user:c.user}}}),signOut:async()=>c.logout||{},signInWithOAuth:async args=>{c.oauth=args;return c.oauthResult||{}},verifyOtp:async()=>({data:{user:c.user}})},from:()=>q,rpc:(name,args)=>{c.calls.push({name,args});return Promise.resolve(c.nextWrite)}})};
  vm.createContext(c);vm.runInContext(read('oblako.js'),c);
  await c.Oblako.init({app:'reestr',getData:()=>({items:[]}),switchUser:id=>c.changes.push(id)});
  return c;
@@ -32,9 +32,21 @@ for(const f of ['index.html','reestr.html']){
  test(f+': cancel both dialogs leaves cloud untouched',async()=>{let c=ui(),pushes=0;c.cloudHasLocal=()=>true;c.confirm=()=>false;c.Oblako.push=async()=>{pushes++};await c.cloudFirstPull();assert.equal(pushes,0)});
  test(f+': account A data survives signout but is not visible in account B',()=>{let map=new Map([['base',JSON.stringify({items:[{id:'private'}]})]]);let c={KEY:'base',CLOUD_LOCAL_KEY:'base',D:null,cloudHasLocal:()=>false,localStorage:{getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)},load(){c.D=JSON.parse(map.get(c.KEY)||'{"items":[]}')},render(){}};vm.createContext(c);vm.runInContext(html.slice(html.indexOf('function cloudSwitchUser('),html.indexOf('function cloudInit(')),c);c.cloudSwitchUser('a');assert.equal(c.D.items[0].id,'private');c.cloudSwitchUser('');assert.equal(c.D.items.length,0);c.cloudSwitchUser('b');assert.equal(c.D.items.length,0);c.cloudSwitchUser('a');assert.equal(c.D.items[0].id,'private')});
 }
-test('service worker removes only its own obsolete caches',async()=>{let handlers={},deleted=[];const c={self:{addEventListener:(n,f)=>handlers[n]=f,clients:{claim:async()=>{}}},caches:{keys:async()=>['studkab-v3','studkab-v4','other-v1'],delete:async k=>deleted.push(k)}};vm.runInNewContext(read('sw.js'),c);let done;handlers.activate({waitUntil:p=>done=p});await done;assert.deepEqual(deleted,['studkab-v3'])});
+test('service worker removes only its own obsolete caches',async()=>{let handlers={},deleted=[];const c={self:{addEventListener:(n,f)=>handlers[n]=f,clients:{claim:async()=>{}}},caches:{keys:async()=>['studkab-v3','studkab-v5','other-v1'],delete:async k=>deleted.push(k)}};vm.runInNewContext(read('sw.js'),c);let done;handlers.activate({waitUntil:p=>done=p});await done;assert.deepEqual(deleted,['studkab-v3'])});
 test('SIGNED_IN after logout switches storage before allowing cloud writes',async()=>{
  const c=await cloud();await c.Oblako.signOut();c.authEvent('SIGNED_IN',{user:{id:'b',email:'b@test'}});
  for(const fn of [...c.timers.values()])fn();
  assert.equal(c.changes.at(-1),'b');assert.equal((await c.Oblako.push({})).status,'blocked');
+});
+
+test('Google login returns to the correct app and does not write data',async()=>{
+ for(const app of ['kabinet','reestr']){
+  const c=await cloud();c.URL=URL;c.location={href:'https://example.test/studkab/index.html?x=1#home'};c.Oblako.app=app;
+  await c.Oblako.signInGoogle();
+  assert.equal(c.oauth.provider,'google');
+  assert.equal(c.oauth.options.redirectTo,'https://example.test/studkab/'+(app==='reestr'?'reestr.html':''));
+  assert.equal(c.calls.length,0);
+  c.oauthResult={error:{message:'Provider unavailable'}};
+  await assert.rejects(c.Oblako.signInGoogle());assert.equal(c.Oblako.busy,false);
+ }
 });
