@@ -420,7 +420,11 @@ function demoData(){
 /* ---------- ХРАНЕНИЕ ---------- */
 var CLOUD_LOCAL_KEY = "student_cabinet_v3";
 var KEY = CLOUD_LOCAL_KEY;
-try { if (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped")) KEY += ":guest"; } catch(e) {}
+try {
+  var activeLocalUser = localStorage.getItem(CLOUD_LOCAL_KEY + ":active-user");
+  if (activeLocalUser && /^[a-zA-Z0-9_-]{1,128}$/.test(activeLocalUser)) KEY += ":user:" + activeLocalUser;
+  else if (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped")) KEY += ":guest";
+} catch(e) {}
 var D = null, undoStack = [], redoStack = [], storageOk = true;
 
 function load(){
@@ -1861,7 +1865,8 @@ function applyTheme(){ document.body.setAttribute("data-theme", D.settings.theme
 var cloudNote = "";           /* короткая строка состояния для экрана */
 
 function cloudSwitchUser(id){
-  var target = id ? CLOUD_LOCAL_KEY + ":user:" + id : CLOUD_LOCAL_KEY + ":guest";
+  var target = id ? CLOUD_LOCAL_KEY + ":user:" + id :
+    (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped") ? CLOUD_LOCAL_KEY + ":guest" : CLOUD_LOCAL_KEY);
   var legacy = localStorage.getItem(CLOUD_LOCAL_KEY);
   if (id && localStorage.getItem(target) === null && legacy === null && KEY === CLOUD_LOCAL_KEY + ":guest" && cloudHasLocal() &&
       confirm("Перенести локальные записи в этот аккаунт?")) legacy = JSON.stringify(D);
@@ -1871,6 +1876,7 @@ function cloudSwitchUser(id){
     localStorage.removeItem(CLOUD_LOCAL_KEY);
   }
   if (id) localStorage.setItem(CLOUD_LOCAL_KEY + ":scoped", "1");
+  localStorage.setItem(CLOUD_LOCAL_KEY + ":active-user", id || "");
   KEY = target; D = null;
   if (typeof undoStack !== "undefined") { undoStack = []; redoStack = []; }
   tab = "today"; openWorkId = null; navHistory = [];

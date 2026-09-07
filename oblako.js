@@ -34,7 +34,7 @@
   var writable = false;
   var inFlight = false;
   var conflictRev = null;
-  var userId = "";
+  var userId = null;
   var epoch = 0;
   var identityReady = false;
   Oblako.accept = function () { writable = true; conflictRev = null; Oblako.lastError = ""; notify(); };
@@ -87,6 +87,7 @@
         notify();
         return;
       }
+      useUser(null);
       notify();
     }).catch(function (e) { fail(e); });
   };

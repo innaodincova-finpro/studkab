@@ -14,6 +14,7 @@ export default defineConfig({
      if(['/','/index.html','/reestr.html'].includes(url.pathname)){
        let html=fs.readFileSync(path.resolve(url.pathname==='/reestr.html'?'reestr.html':'index.html'),'utf8');
        html=html.replace(/<script[^>]+src="https:\/\/cdn.jsdelivr.net\/npm\/@supabase[^>]*><\/script>/g,'<script src="/tests/qa-cloud.js"></script>');
+       if(url.searchParams.has('no-sdk')) html=html.replace('<script src="/tests/qa-cloud.js"></script>','<script>window.supabase=null;</script>');
        res.setHeader('Content-Type','text/html; charset=utf-8');
        res.setHeader('Content-Security-Policy',"connect-src 'self'; worker-src 'none'");
        return res.end(html);

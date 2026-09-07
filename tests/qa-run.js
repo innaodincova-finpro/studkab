@@ -22,6 +22,10 @@ for(const file of ['index.html','reestr.html']){
  w.QA.failWrite=true;let bad=await w.cloudSave('FALSE SUCCESS');
  check(bad.status==='error'&&!w.document.querySelector('#toast').textContent.includes('FALSE SUCCESS'),file+': отказ записи не показывает успех');
  w.QA.failWrite=false;
+ const offlineFrame=document.createElement('iframe');document.querySelector('#frames').append(offlineFrame);
+ await new Promise(r=>{offlineFrame.onload=r;offlineFrame.src='/'+file+'?no-sdk=1'});await delay(100);
+ check(offlineFrame.contentWindow.D.settings.name==='Restored',file+': повторное открытие без библиотеки облака сохраняет доступ к локальным данным');
+ offlineFrame.remove();
  w.QA.switchUser('');await delay(100);w.QA.switchUser('qa-b');await delay(350);
  check(w.D.settings.name!=='Restored' && w.D.settings.name!=='QA Alice',file+': B не видит данные A');
  w.QA.switchUser('qa-a');await delay(350);
