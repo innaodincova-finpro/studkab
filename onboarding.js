@@ -1,8 +1,11 @@
 /* Shared first-entry controls. Invitations stay only in the open dialog. */
 (function(global){
  'use strict';
+ var styles=document.createElement('style');
+ styles.textContent='#cloudPanel .hint,[data-account-identity] .hint,[data-invitation-identity] .hint{font-size:14px;line-height:1.5} [data-account-identity] label,[data-invitation-identity] label{font-size:15px} [data-account-identity] input,[data-invitation-identity] input,[data-invitation-identity] textarea{font-size:16px} [data-account-identity] summary{padding:12px 0;cursor:pointer} [data-account-identity] button,[data-invitation-identity] button{min-height:44px}';
+ document.head.appendChild(styles);
  function passwordField(id,label,autocomplete){
-  return '<div class="fld"><label for="'+id+'">'+label+'</label><div style="display:flex;gap:8px;align-items:center"><input style="min-width:0;flex:1;width:100%" id="'+id+'" type="password" autocomplete="'+autocomplete+'" '+(autocomplete==='new-password'?'minlength="8" ':'')+'required><button type="button" class="chip" style="width:auto;margin:0;min-height:44px;flex-shrink:0" data-password-toggle="'+id+'" aria-controls="'+id+'" aria-label="Показать пароль: '+label+'" aria-pressed="false">Показать</button></div></div>';
+  return '<div class="fld"><label for="'+id+'">'+label+'</label><div style="display:flex;gap:8px;align-items:center"><input style="min-width:0;flex:1;width:100%;font-size:16px;min-height:44px" id="'+id+'" type="password" autocomplete="'+autocomplete+'" '+(autocomplete==='new-password'?'minlength="8" ':'')+'required><button type="button" class="chip" style="width:auto;margin:0;min-height:44px;flex-shrink:0" data-password-toggle="'+id+'" aria-controls="'+id+'" aria-label="Показать пароль: '+label+'" aria-pressed="false">Показать</button></div></div>';
  }
  document.addEventListener('click',function(e){
   var b=e.target.closest('[data-password-toggle]');if(!b)return;
