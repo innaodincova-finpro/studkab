@@ -333,12 +333,12 @@
     if (!Oblako.ready) return "не подключено";
     if (Oblako.mode !== "cloud") return "только на этом устройстве";
     if (Oblako.lastError) return Oblako.lastError;
-    if (Oblako.busy) return "синхронизация…";
-    if (!writable) return "нужно загрузить и выбрать записи";
-    if (pending) return "есть несохранённые изменения";
+    if (Oblako.busy) return "Синхронизация с облаком…";
+    if (!writable) return "Облако подключено. Нужно выбрать записи для синхронизации";
+    if (pending) return "Изменения ещё не отправлены в облако";
     if (Oblako.lastSync) {
       var d = Oblako.lastSync;
-      return "сохранено в базе " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+      return "Сохранено в облаке в " + pad(d.getHours()) + ":" + pad(d.getMinutes());
     }
     return "вошли";
   };
