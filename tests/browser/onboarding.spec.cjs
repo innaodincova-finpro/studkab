@@ -3,7 +3,8 @@ const base='http://127.0.0.1:4173/';
 async function account(page,file='reestr.html'){
  await page.goto(base+file);
  await page.evaluate(()=>QA.switchUser('onboarding'));
- await expect.poll(()=>page.evaluate(()=>Oblako.canSync())).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
+ await expect(page.locator('#toast')).toHaveCSS('opacity','0');
 }
 test('invitation contains guide, shares and copies whole message; cancellation is not success',async({page})=>{
  await account(page);await page.setViewportSize({width:390,height:844});
