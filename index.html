@@ -685,7 +685,7 @@ function checkWork(w){
   var out = [], f = w.format || {};
   var empty = CHAPTERS.filter(function(c){ return !((w.structure[c.id]||{}).text||"").trim() });
   if (empty.length) out.push("Не написаны разделы: " + empty.map(function(c){ return c.name }).join(", "));
-  if (!(w.student || D.settings.name)) out.push("Не заполнено ФИО студента — раздел «Ещё → Данные студента»");
+  if (!(w.student || D.settings.name)) out.push("Не заполнено ФИО студента — раздел «Профиль → Данные студента»");
   if (!f.univ) out.push("Не заполнено название вуза — титульный лист выйдет неполным");
   if (!f.workType) out.push("Не указан вид работы (курсовая, ВКР, реферат)");
   if (!f.city || !f.year) out.push("Не заполнены город и год для нижней части титульного листа");
