@@ -865,7 +865,7 @@ function requestLink(w){
 function requestText(w, withLink){
   var f = w.format || {}, r = w.req || {};
   var L = ["ЗАЯВКА НА ЧЕРНОВИК"];
-  function add(label, val){ if (val) L.push(label + ": " + val); }
+  function add(label, val){ if (val) L.push(label + ": " + String(val).replace(/\r\n?/g, "\n").replace(/\n/g, "\n  ")); }
   add("Тема", w.topic);
   add("Вид работы", f.workType);
   add("Дисциплина", f.discipline);
