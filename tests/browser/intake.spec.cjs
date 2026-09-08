@@ -44,3 +44,34 @@ test('registry document edited, saved, downloaded and status set',async({page})=
  await page.locator('[data-act="status"]').selectOption('done');await page.reload();
  expect(await page.evaluate(()=>item('rq-doc').status)).toBe('done');
 });
+test('direct request confirms only server acknowledgement and keeps retry ID',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  D.works=[{id:'w-direct',topic:'Тест прямой заявки',format:{},req:{id:'rq-direct',contact:'test',org:'',notes:''}}];
+  window.requestsSeen=[];
+  Oblako.requestApi=async body=>{requestsSeen.push(body);return {saved:true,id:'11111111-1111-4111-8111-111111111111',number:42};};
+  openRequest('w-direct');
+ });
+ await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>D.works[0].req.sentBy)).toBe('direct');
+ expect(await page.evaluate(()=>D.works[0].req.number)).toBe(42);
+ await page.evaluate(()=>{Oblako.requestApi=async body=>{requestsSeen.push(body);throw Error('Сеть недоступна');};openRequest('w-direct');});
+ await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>requestsSeen.map(x=>x.payload.id))).toEqual(['rq-direct','rq-direct']);
+ expect(await page.evaluate(()=>D.works[0].req.number)).toBe(42);
+});
+test('cloud inbox repeated load preserves executor document and notes',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ const result=await page.evaluate(async()=>{
+  D.items=[];D.refs=[];
+  const id='11111111-1111-4111-8111-111111111111';
+  Oblako.requestApi=async()=>({rows:[{id,number:42,payload:{id:'student-request',t:'Тема',cn:'test'}}],next:null});
+  await receiveInbox();
+  item(id).note='Заметка исполнителя';item(id).doc={marker:'doc'};item(id).status='done';
+  await receiveInbox();
+  return {count:D.items.length,item:item(id)};
+ });
+ expect(result.count).toBe(1);expect(result.item.note).toBe('Заметка исполнителя');
+ expect(result.item.doc.marker).toBe('doc');expect(result.item.status).toBe('done');
+});
