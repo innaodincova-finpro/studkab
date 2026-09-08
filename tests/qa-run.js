@@ -8,6 +8,7 @@ for(const file of ['index.html','reestr.html']){
  w.confirm=()=>true;
  check(!!w.D && !!w.Oblako,file+': страница и облачный модуль запущены');
  w.QA.switchUser('qa-a');await delay(350);
+ const later=w.document.querySelector('[data-cloud-choice="2"]');if(later){later.click();await delay(50);}
  check(w.KEY.endsWith(':user:qa-a'),file+': вход A выбирает отдельное хранилище');
  w.D.settings.name='QA Alice';w.save();await delay(1700);
  check(Object.values(w.QA.rows).some(r=>r.data.settings?.name==='QA Alice'),file+': автосохранение подтверждено');
@@ -29,6 +30,7 @@ for(const file of ['index.html','reestr.html']){
  w.QA.switchUser('');await delay(100);w.QA.switchUser('qa-b');await delay(350);
  check(w.D.settings.name!=='Restored' && w.D.settings.name!=='QA Alice',file+': B не видит данные A');
  w.QA.switchUser('qa-a');await delay(350);
+ const later=w.document.querySelector('[data-cloud-choice="2"]');if(later){later.click();await delay(50);}
  check(w.KEY.endsWith(':user:qa-a'),file+': возврат A');
  w.QA.failRead=true;await w.Oblako.pull();let count=w.QA.writes.length;w.save();await delay(1700);
  check(w.QA.writes.length===count,file+': ошибка чтения блокирует автозапись');

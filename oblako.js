@@ -1,5 +1,5 @@
 /* ==================================================================
-   ОБЛАКО: вход по коду на почту и хранение записей в базе.
+   ОБЛАКО: вход через Google или пароль приложения и хранение записей в базе.
 
    Как устроено:
    — записи по-прежнему живут в памяти устройства и работают без входа;
@@ -23,6 +23,8 @@
     rev: 0,                // номер версии, полученный из базы
     busy: false,
     lastSync: null,
+    lastLoaded: null,
+    lastSaved: null,
     lastError: "",
     app: "",
   };
@@ -37,13 +39,13 @@
   var userId = null;
   var epoch = 0;
   var identityReady = false;
-  Oblako.accept = function () { writable = true; conflictRev = null; Oblako.lastError = ""; notify(); };
+  Oblako.accept = function (data) { if (data) remember(data); writable = true; conflictRev = null; Oblako.lastError = ""; notify(); };
   Oblako.pause = function () { writable = false; clearTimeout(pushTimer); pending = false; };
   function useUser(user) {
     var id = user ? user.id : "";
     if (id === userId) return;
     Oblako.pause(); epoch++; userId = id;
-    Oblako.rev = 0; Oblako.lastSync = null; conflictRev = null;
+    Oblako.rev = 0; Oblako.lastSync = null; Oblako.lastLoaded = null; Oblako.lastSaved = null; Oblako.lastError = ""; conflictRev = null;
     Oblako.mode = id ? "cloud" : "local";
     identityReady = false;
     if (opts && opts.switchUser) opts.switchUser(id);
@@ -54,6 +56,23 @@
     if (copy.settings) { delete copy.settings.proxyToken; delete copy.settings.dsKey; }
     return copy;
   }
+
+  // A per-account baseline detects unsent changes even after closing the app.
+  function canonical(value) {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object") {
+      var out = {}; Object.keys(value).sort().forEach(function(k){out[k]=canonical(value[k]);}); return out;
+    }
+    return value;
+  }
+  Oblako.snapshot = function(data){ return JSON.stringify(canonical(cleanData(data))); };
+  function baselineKey(){return "oblako-baseline:" + Oblako.app + ":" + userId;}
+  function remember(data){try { global.localStorage.setItem(baselineKey(), Oblako.snapshot(data)); } catch(e) { /* Reconcile conservatively if unavailable. */ }}
+  Oblako.baseline = function(){try{return global.localStorage.getItem(baselineKey());}catch(e){return null;}};
+  Oblako.canSync = function(){return writable;};
+  Oblako.identity = function(){return epoch;};
+  Oblako.hasPending = function(){return pending || inFlight;};
+  Oblako.retry = function(){return flush();};
 
   /* ---------- запуск ---------- */
   Oblako.init = function (o) {
@@ -231,7 +250,7 @@
           return { status: "empty" };
         }
         Oblako.rev = r.data.rev || 0;
-        Oblako.lastSync = new Date();
+        Oblako.lastLoaded = new Date();
         notify();
         return { status: "loaded", remote: r.data.data, remoteAt: r.data.updated_at, rev: Oblako.rev };
       })
@@ -248,11 +267,12 @@
     }
     var expectedRev = force && conflictRev !== null ? conflictRev : Oblako.rev;
     var requestEpoch = epoch;
+    var sentData = cleanData(data);
     inFlight = true;
     Oblako.busy = true; notify();
     return client.rpc("save_app_data_v2", {
       p_app: Oblako.app,
-      p_data: cleanData(data),
+      p_data: sentData,
       p_rev: expectedRev
     }).then(function (r) {
       inFlight = false;
@@ -272,7 +292,8 @@
       }
       writable = true; conflictRev = null;
       Oblako.rev = row.rev;
-      Oblako.lastSync = new Date();
+      Oblako.lastSync = new Date(); Oblako.lastSaved = Oblako.lastSync;
+      remember(sentData);
       Oblako.lastError = "";
       notify();
       return { status: "ok", rev: row.rev };
@@ -283,7 +304,7 @@
      Отправка идёт не сразу, а через полторы секунды после последнего изменения. */
   Oblako.touch = function () {
     if (Oblako.mode !== "cloud") return;
-    pending = true;
+    pending = true; notify();
     clearTimeout(pushTimer);
     pushTimer = setTimeout(flush, 1500);
   };
@@ -291,10 +312,11 @@
   function flush() {
     if (inFlight || !writable || !pending || Oblako.mode !== "cloud" || !opts || !opts.getData) return;
     pending = false;
-    Oblako.push(opts.getData()).then(function (res) {
+    return Oblako.push(opts.getData()).then(function (res) {
       if (res.status === "conflict" && opts.onConflict) opts.onConflict(res);
       else if (res.status !== "ok") pending = true;   // попробуем в следующий раз
       if (pending && res.status === "ok") { clearTimeout(pushTimer); pushTimer = setTimeout(flush, 1500); }
+      notify(); return res;
     });
   }
 
@@ -313,7 +335,7 @@
 
   function human(e) {
     var m = (e && (e.message || e.error_description || e.msg)) || String(e || "");
-    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Нет связи с базой — запишем, когда появится сеть";
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Нет связи с облаком. Записи на устройстве сохранены; повторите синхронизацию после подключения";
     if (/JWT|token is expired|invalid claim/i.test(m)) return "Вход устарел — войдите заново";
     if (/row-level security|permission denied/i.test(m)) return "Нет доступа к этим записям";
     if (/relation .* does not exist|function .* does not exist/i.test(m)) return "База не настроена: выполните baza.sql";
@@ -330,18 +352,17 @@
   }
 
   Oblako.statusText = function () {
-    if (!Oblako.ready) return "не подключено";
-    if (Oblako.mode !== "cloud") return "только на этом устройстве";
+    if (!Oblako.ready) return "Облако временно недоступно. Записи сохраняются на устройстве";
+    if (Oblako.mode !== "cloud") return "Записи сохраняются в этом браузере. Войдите, чтобы пользоваться ими на других устройствах";
+    if (Oblako.busy) return "Синхронизация… Не закрывайте приложение до завершения";
     if (Oblako.lastError) return Oblako.lastError;
-    if (Oblako.busy) return "Синхронизация с облаком…";
-    if (!writable) return "Облако подключено. Нужно выбрать записи для синхронизации";
-    if (pending) return "Изменения ещё не отправлены в облако";
-    if (Oblako.lastSync) {
-      var d = Oblako.lastSync;
-      return "Сохранено в облаке в " + pad(d.getHours()) + ":" + pad(d.getMinutes());
-    }
-    return "вошли";
+    if (!writable) return "Вход выполнен. Синхронизация ещё не завершена";
+    if (pending) return "На устройстве сохранено. Ожидается отправка в облако";
+    if (Oblako.lastSaved) return "Изменения сохранены в облаке в " + clock(Oblako.lastSaved);
+    if (Oblako.lastLoaded) return "Записи загружены из облака в " + clock(Oblako.lastLoaded);
+    return "Облако готово. Новые записи будут сохраняться автоматически";
   };
+  function clock(d){return pad(d.getHours()) + ":" + pad(d.getMinutes());}
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
 
   global.Oblako = Oblako;

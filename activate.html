@@ -1,11 +1,13 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Доступ — Кабинет студента</title>
-<style>*{box-sizing:border-box}body{margin:0;padding:24px 16px;background:#f5eff8;color:#382e45;font:17px/1.5 system-ui,sans-serif}main{max-width:480px;margin:5vh auto;background:white;border-radius:24px;padding:28px}h1{font-size:27px}label{display:block;margin:18px 0 6px}input,button{width:100%;font:inherit;padding:13px;border-radius:12px;border:1px solid #cdbbda}button{margin-top:24px;background:#785498;color:white;border:0;cursor:pointer}button:disabled{opacity:.6}#status{overflow-wrap:anywhere}a{color:#70408f}.mut{font-size:14px;color:#665871}</style>
+<style>*{box-sizing:border-box}body{margin:0;padding:24px 16px;background:#edf3f8;color:#19344c;font:17px/1.5 system-ui,sans-serif}main{max-width:480px;margin:5vh auto;background:white;border-radius:24px;padding:28px}h1{font-size:27px}label{display:block;margin:18px 0 6px}input,button{width:100%;font:inherit;padding:13px;border-radius:12px;border:1px solid #c7d8e7}button{margin-top:24px;background:#4e7a9e;color:white;border:0;cursor:pointer}button:disabled{opacity:.6}#status{overflow-wrap:anywhere}a{color:#315e84}.mut{font-size:14px;color:#597086}</style>
 </head><body><main><h1>Добро пожаловать в «Кабинет студента»</h1><p id="account"></p><p>Придумайте пароль для приложения. Пароль от вашего почтового ящика здесь не нужен.</p>
-<form id="activate"><label for="password">Пароль — не менее 8 символов</label><input id="password" type="password" autocomplete="new-password" minlength="8" required><label for="repeat">Повторите пароль</label><input id="repeat" type="password" autocomplete="new-password" minlength="8" required><button id="submit">Сохранить пароль и открыть приложение</button></form><p id="status" role="status" aria-live="polite"></p><p class="mut">После входа добавьте первую запись. В разделе «Профиль» проверьте надпись «Сохранено в облаке».</p><a href="./">Открыть приложение</a></main>
+<form id="activate"><label for="password">Пароль — не менее 8 символов</label><input id="password" type="password" autocomplete="new-password" minlength="8" required><label for="repeat">Повторите пароль</label><input id="repeat" type="password" autocomplete="new-password" minlength="8" required><button id="submit">Сохранить пароль и открыть приложение</button></form><p id="status" role="status" aria-live="polite"></p><p class="mut">Пароль общий для кабинета и «Точки дня». В разделе «Профиль» проверьте надпись «Сохранено в облаке».</p><a href="./">Открыть приложение</a></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script>
 const params=new URLSearchParams(location.hash.slice(1));
 const invitationToken=params.get('token'), invitationEmail=params.get('email');
+const accessType=params.get('type')==='recovery'?'recovery':'invite';
+if(accessType==='recovery')document.querySelector('h1').textContent='Восстановление доступа';
 const status=document.getElementById('status'), button=document.getElementById('submit');
 document.getElementById('account').textContent=invitationEmail?'Доступ для '+invitationEmail:'';
 const client=window.supabase?.createClient('https://dcpthwmuiodrjepifzsd.supabase.co','sb_publishable_OL_S1GutrvcvpaRaLzKpsQ_ExxamvKt',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:"oblako-kabinet"}});
@@ -20,7 +22,7 @@ document.getElementById('activate').addEventListener('submit',async event=>{
   if(!accepted){
    const {data,error}=await client.auth.getSession();if(error)throw error;
    if(data.session){status.textContent='На этом устройстве уже выполнен вход. Откройте приложение. Для подключения другого человека используйте его устройство.';return;}
-   const result=await client.auth.verifyOtp({token_hash:invitationToken,type:'invite'});
+   const result=await client.auth.verifyOtp({token_hash:invitationToken,type:accessType});
    if(result.error){status.textContent='Ссылка истекла или уже использована. Если вы уже задавали пароль — откройте приложение и войдите. Иначе попросите исполнителя создать новую ссылку.';return;}
    if(result.data?.user?.email?.toLowerCase()!==invitationEmail.toLowerCase()){await client.auth.signOut({scope:'local'});status.textContent='Адрес в ссылке не совпадает с аккаунтом. Запросите новое приглашение.';return;}
    accepted=true;history.replaceState(null,'',location.pathname);

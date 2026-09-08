@@ -56,12 +56,13 @@ export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
     if(result.limited)return json({error:'Достигнут дневной лимит заявок. Попробуйте завтра.'},429);
     return json({...result,saved:true,telegram:'queued',email:'not_configured'});
    }
-   if(input.action==='invite'){
+   if(input.action==='invite'||input.action==='recover'){
+    if(input.action==='recover'&&input.identityVerified!==true)return json({error:'Сначала подтвердите личность получателя'},400);
     const cfg=await config();
     if(user.email.toLowerCase()!==cfg.executor_email.toLowerCase())return json({error:'Приглашения доступны только исполнителю'},403);
     const email=typeof input.email==='string'?input.email.trim().toLowerCase():'';
     if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Проверьте адрес почты'},400);
-    return json(await invite(email));
+    return json(await invite(email,input.action==='recover'));
    }
    if(input.action==='inbox'){
     const cfg=await config();
