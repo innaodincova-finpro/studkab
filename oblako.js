@@ -354,9 +354,9 @@
   Oblako.statusText = function () {
     if (!Oblako.ready) return "Облако временно недоступно. Записи сохраняются на устройстве";
     if (Oblako.mode !== "cloud") return "Записи сохраняются в этом браузере. Войдите, чтобы пользоваться ими на других устройствах";
-    if (Oblako.busy) return "Синхронизация… Не закрывайте приложение до завершения";
+    if (Oblako.busy) return "Проверяем облачные записи… Дождитесь завершения";
     if (Oblako.lastError) return Oblako.lastError;
-    if (!writable) return "Вход выполнен. Синхронизация ещё не завершена";
+    if (!writable) return "Нужно проверить записи перед автоматическим сохранением";
     if (pending) return "На устройстве сохранено. Ожидается отправка в облако";
     if (Oblako.lastSaved) return "Изменения сохранены в облаке в " + clock(Oblako.lastSaved);
     if (Oblako.lastLoaded) return "Записи загружены из облака в " + clock(Oblako.lastLoaded);
