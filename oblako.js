@@ -146,11 +146,29 @@
     } finally { Oblako.busy = false; notify(); }
   };
 
+  function passwordFailure(e) {
+    var code=String(e && e.code || ''), status=Number(e && e.status || 0);
+    var messages={
+      same_password:'Этот пароль уже установлен. Чтобы изменить его, введите другой пароль.',
+      weak_password:'Сервис отклонил пароль как недостаточно надёжный. Используйте более длинный пароль с заглавными и строчными буквами, цифрами и символами.',
+      reauthentication_needed:'Для смены пароля нужно заново подтвердить вход в аккаунт. После подтверждения повторите смену пароля.',
+      session_not_found:'Сеанс входа больше не действует. Для смены пароля потребуется повторный вход.',
+      refresh_token_not_found:'Сеанс входа больше не действует. Для смены пароля потребуется повторный вход.',
+      bad_jwt:'Сервис не подтвердил сеанс входа. Для смены пароля потребуется повторный вход.',
+      over_request_rate_limit:'Слишком много попыток. Подождите несколько минут перед следующей попыткой.'
+    };
+    if(messages[code])return messages[code];
+    if(status===429)return 'Слишком много попыток. Подождите несколько минут перед следующей попыткой.';
+    if(e && (e.name==='AuthRetryableFetchError' || e.name==='TypeError'))return 'Не удалось получить ответ сервиса. Проверьте интернет. Сохранение пароля не подтверждено.';
+    var safeCode=/^[a-z_]{1,64}$/.test(code)?code:'unknown';
+    return 'Не удалось сохранить пароль: сервис отклонил запрос. Код ошибки: '+safeCode+(status?' (HTTP '+status+')':'')+'. Сообщите исполнителю этот код. Пароль присылать не нужно.';
+  }
+
   Oblako.setPassword = async function(password) {
     if (!client || !userId || Oblako.busy || inFlight) throw new Error("Сначала войдите и дождитесь сохранения");
     if (password.length < 8) throw new Error("Пароль должен содержать не менее 8 символов");
     Oblako.busy = true; notify();
-    try { var r = await client.auth.updateUser({password:password}); if(r.error) throw new Error("Пароль не сохранён. Повторите позже или выполните вход заново."); }
+    try { var r = await client.auth.updateUser({password:password}); if(r.error) throw r.error; } catch(e) { throw new Error(passwordFailure(e)); }
     finally { Oblako.busy = false; notify(); }
   };
 
