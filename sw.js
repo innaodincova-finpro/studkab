@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v11";
+const CACHE = "studkab-v12";
 const SHELL = [
   "./",
   "./push.js?v=1",
@@ -43,33 +43,54 @@ self.addEventListener("fetch", (e) => {
   const isPage = req.mode === "navigate" ||
                  (req.headers.get("accept") || "").includes("text/html");
 
+  // Only this worker's cache may supply an application response.
+  const cachePromise = caches.open(CACHE);
+  const remember = (res) => {
+    if (res.ok) {
+      const copy = res.clone();
+      e.waitUntil(cachePromise.then(c => c.put(req, copy)).catch(() => {}));
+    }
+    return res;
+  };
+  const unavailable = () => new Response('Нет соединения. Подключитесь к интернету и откройте страницу снова.', {
+    status: 503, headers: {'Content-Type': 'text/plain; charset=utf-8'}
+  });
+
   if (isPage) {
-    /* страницы: сначала сеть, копия — только если сети нет */
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => caches.match(req).then((r) => r || caches.match("./index.html")))
-    );
+    const fallback = async () => {
+      const cache = await cachePromise;
+      const exact = await cache.match(req);
+      if (exact?.ok) return exact;
+      const scope = new URL(self.registration.scope);
+      // Query parameters do not turn the registry into the cabinet.
+      const relative = url.pathname.slice(scope.pathname.length);
+      if (url.pathname.startsWith(scope.pathname) && ['', 'index.html', 'reestr.html'].includes(relative)) {
+        const saved = await cache.match(new URL(relative || 'index.html', scope).href);
+        if (saved?.ok) return saved;
+      }
+    };
+    e.respondWith((async () => {
+      try {
+        const res = await fetch(req);
+        if (res.ok) return remember(res);
+        // Do not hide permission errors or missing pages behind a stale copy.
+        if (res.status >= 500) return await fallback() || res;
+        return res;
+      } catch {
+        return await fallback() || unavailable();
+      }
+    })());
     return;
   }
 
-  /* картинки и описания: сначала копия, потом тихо обновляем */
-  e.respondWith(
-    caches.match(req).then((cached) => {
-      const fresh = fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => cached);
-      return cached || fresh;
-    })
-  );
+  // Refresh assets without replacing a good copy with an HTTP error.
+  const fresh = fetch(req).then(remember);
+  e.waitUntil(fresh.catch(() => {}));
+  e.respondWith((async () => {
+    const cached = await (await cachePromise).match(req);
+    if (cached?.ok) return cached;
+    try { return await fresh; } catch { return unavailable(); }
+  })());
 });
 
 self.addEventListener('push', event => {
