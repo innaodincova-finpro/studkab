@@ -84,7 +84,8 @@ test('password entry and logged-out notifications are usable on a narrow screen'
  expect(await page.evaluate(()=>window.loginArgs)).toEqual({email:'student@example.test',password:'password123'});
  await page.evaluate(()=>{Oblako.mode='local';tab='more';render();});
  expect(await page.locator('[data-act="push-enable"]').count()).toBe(0);
- await expect(page.getByRole('button',{name:'Войти, чтобы включить уведомления'})).toHaveCount(1);
+ await page.getByText('Уведомления',{exact:true}).click();
+ await expect(page.getByRole('button',{name:'Войти, чтобы включить уведомления'})).toBeVisible();
 });
 test('invitation verifies once, retries password save and uses cabinet session storage',async({page})=>{
  await page.route('https://cdn.jsdelivr.net/**',route=>route.fulfill({contentType:'application/javascript',body:`window.supabase={createClient:(url,key,options)=>{window.storageKey=options.auth.storageKey;window.verifyCount=0;window.updateCount=0;return {auth:{getSession:async()=>({data:{session:null}}),verifyOtp:async()=>{window.verifyCount++;return {data:{user:{email:'student@example.test'}}}},updateUser:async()=>{window.updateCount++;return {error:{message:'temporary'}}}}}}};`}));
