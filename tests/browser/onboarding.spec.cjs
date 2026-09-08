@@ -17,7 +17,7 @@ test('invitation contains guide, shares and copies whole message; cancellation i
  expect(text).toContain('https://example.test/activate#token=fixture');expect(text).toContain('Пароль от почтового ящика');expect(text).toContain('На экран Домой');expect(text).toContain('Профиль');
  await page.getByRole('button',{name:'Скопировать приглашение',exact:true}).click();expect(await page.evaluate(()=>copied)).toBe(text);
  await page.getByRole('button',{name:'Поделиться приглашением',exact:true}).click();expect(await page.evaluate(()=>shared.text)).toBe(text);
- await page.evaluate(()=>{navigator.share=async()=>{throw new DOMException('cancel','AbortError')};});
+ await page.evaluate(()=>{Object.defineProperty(navigator,'share',{configurable:true,value:async()=>{throw new DOMException('cancel','AbortError')}});});
  await page.getByRole('button',{name:'Поделиться приглашением',exact:true}).click();await expect(page.locator('#inviteShareStatus')).toContainText('Отправка отменена');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.evaluate(()=>QA.switchUser('other'));await expect(message).toHaveCount(0);

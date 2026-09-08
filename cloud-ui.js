@@ -42,7 +42,7 @@
   if(activeChoice && activeChoice.identity!==o().identity())activeChoice.cancel();
   document.querySelectorAll('[data-account-identity], [data-invitation-identity]').forEach(function(w){
    var identity=w.dataset.accountIdentity||w.dataset.invitationIdentity;
-   if(identity!==o().identity()){w.remove();return;}
+   if(identity!==String(o().identity())){w.remove();return;}
    var status=w.querySelector('[data-account-status]');if(status)status.textContent=o().statusText();
    var auto=w.querySelector('[data-account-auto]');if(auto)auto.textContent=autoText();
    var retry=w.querySelector('[data-account-retry]');if(retry)retry.innerHTML=retryButton();
