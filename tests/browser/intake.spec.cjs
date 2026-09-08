@@ -80,7 +80,7 @@ test('password entry and logged-out notifications are usable on a narrow screen'
  await page.goto('http://127.0.0.1:4173/index.html');
  await page.evaluate(()=>{Oblako.ready=true;Oblako.mode='local';Oblako.signInPassword=async(email,password)=>{window.loginArgs={email,password};Oblako.mode='cloud';};tab='more';render();openCloud();});
  await page.locator('#clEmail').fill('student@example.test');await page.locator('#clPassword').fill('password123');
- await page.locator('#clForm button').click();
+ await page.locator('#clForm button[type=submit]').click();
  expect(await page.evaluate(()=>window.loginArgs)).toEqual({email:'student@example.test',password:'password123'});
  await page.evaluate(()=>{Oblako.mode='local';tab='more';render();});
  expect(await page.locator('[data-act="push-enable"]').count()).toBe(0);

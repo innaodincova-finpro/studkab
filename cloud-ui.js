@@ -3,16 +3,50 @@
  'use strict';
  var running=null, runningIdentity=null, activeChoice=null;
  function o(){return global.Oblako;}
+ function retryButton(){
+  var api=o();
+  return api && !api.busy && (api.lastError || !api.canSync()) ? '<button class="chip" type="button" data-act="cloud-sync">'+(api.lastError?'Повторить подключение':'Проверить записи')+'</button>' : '';
+ }
+ function autoText(){
+  var api=o();
+  return api && api.mode==='cloud' && api.canSync() && !api.lastError && !api.busy ? 'Изменения сохраняются автоматически. Нажимать отдельную кнопку сохранения не нужно.' : '';
+ }
+ function openAccount(){
+  var identity=o().identity();
+  var w=openModal('<button type="button" class="close" data-x="1" aria-label="Закрыть аккаунт">✕</button><h3>Вы вошли в аккаунт</h3><p class="mut" style="overflow-wrap:anywhere">'+esc(o().email)+'</p><p data-account-status role="status" aria-live="polite">'+esc(o().statusText())+'</p><p data-account-auto class="hint">'+autoText()+'</p><div data-account-retry>'+retryButton()+'</div><details><summary>Способы входа</summary><p class="hint">Можно входить через Google или по почте и паролю приложения. Здесь можно задать или изменить пароль. Пароль от почтового ящика вводить не нужно. Если вы пользуетесь «Точкой дня» с этой же почтой, новый пароль будет действовать и там.</p><form id="accountPasswordForm">'+Onboarding.passwordField('accountPassword','Новый пароль','new-password')+Onboarding.passwordField('accountRepeat','Повторите пароль','new-password')+'<p class="hint">Не менее 8 символов. Пароль никому сообщать не нужно.</p><button type="submit" class="btn" data-password>Сохранить пароль</button><p id="passwordMsg" role="status"></p></form></details><div class="rowbtns"><button type="button" class="btn" data-x="1">Понятно</button><button type="button" class="btn ghost" data-out>Выйти из аккаунта</button></div><p class="hint">После выхода записи этого аккаунта будут скрыты на устройстве. Войдите с той же почтой, чтобы снова открыть их.</p>');
+  w.dataset.accountIdentity=identity;
+  var busy=false;
+  w.querySelector('form').addEventListener('submit',async function(e){
+   e.preventDefault();if(busy)return;
+   var first=w.querySelector('#accountPassword'),repeat=w.querySelector('#accountRepeat'),msg=w.querySelector('#passwordMsg');
+   var error=Onboarding.passwordError(first.value,repeat.value);if(error){msg.textContent=error;return;}
+   busy=true;var button=w.querySelector('[data-password]');button.disabled=true;first.readOnly=true;repeat.readOnly=true;msg.textContent='Сохраняем пароль…';
+   try{await o().setPassword(first.value);first.value='';repeat.value='';first.type=repeat.type='password';w.querySelectorAll('[data-password-toggle]').forEach(function(b){b.textContent='Показать';b.setAttribute('aria-pressed','false');b.setAttribute('aria-label','Показать пароль: '+document.querySelector('label[for="'+b.dataset.passwordToggle+'"]').textContent);});msg.textContent='Пароль сохранён. Используйте его для следующего входа.';}
+   catch(err){msg.textContent=err.message||'Пароль не сохранён. Повторите попытку.';}
+   finally{busy=false;button.disabled=false;first.readOnly=false;repeat.readOnly=false;}
+  });
+  w.querySelector('[data-out]').addEventListener('click',function(){
+   choose('Выйти из аккаунта?',o().hasPending()?'Последние изменения ещё не отправлены в облако. Лучше остаться и дождаться сохранения. При выходе они останутся только в копии этого аккаунта на данном устройстве.':'Записи останутся в облаке. Чтобы снова открыть их, войдите с той же почтой.',[{label:'Остаться в аккаунте',value:'later'},{label:'Выйти на этом устройстве',value:'out'}]).then(async function(action){if(action!=='out'||identity!==o().identity())return;await o().signOut();w.remove();render();toast('Вы вышли');}).catch(function(err){toast(err.message||'Не удалось выйти');});
+  });
+ }
  function panel(){
   var on=o() && o().mode==='cloud';
   return '<div id="cloudPanel"><div id="cloudBadge" style="font-weight:600">'+(on?'Облачное хранение':'Хранение на устройстве')+'</div>'+
    (on?'<p id="cloudAccount" class="mut" style="overflow-wrap:anywhere">'+esc(o().email)+'</p>':'')+
    '<p id="cloudLine" class="hint" role="status" aria-live="polite">'+esc(o()?o().statusText():'Облако временно недоступно')+'</p>'+
-   '<div class="chips">'+(on?'<button class="chip" type="button" data-act="cloud-sync">Синхронизировать</button><button class="chip" type="button" data-act="cloud">Аккаунт</button>':'<button class="chip" type="button" data-act="cloud">Войти по почте и паролю</button><button class="chip" type="button" data-act="cloud-google">Войти через Google</button>')+'</div>'+
+   '<div class="chips">'+(on?retryButton()+'<button class="chip" type="button" data-act="cloud">Аккаунт</button>':'<button class="chip" type="button" data-act="cloud">Войти по почте и паролю</button><button class="chip" type="button" data-act="cloud-google">Войти через Google</button>')+'</div>'+
+   (on?'<p class="hint">'+autoText()+'</p>':'')+
    (!on?'<p class="hint">Без входа можно продолжать работу на этом устройстве. Первый вход по почте — по приглашению исполнителя.</p>':'')+'</div>';
  }
  function paint(){
   if(activeChoice && activeChoice.identity!==o().identity())activeChoice.cancel();
+  document.querySelectorAll('[data-account-identity], [data-invitation-identity]').forEach(function(w){
+   var identity=w.dataset.accountIdentity||w.dataset.invitationIdentity;
+   if(identity!==String(o().identity())){w.remove();return;}
+   var status=w.querySelector('[data-account-status]');if(status)status.textContent=o().statusText();
+   var auto=w.querySelector('[data-account-auto]');if(auto)auto.textContent=autoText();
+   var retry=w.querySelector('[data-account-retry]');if(retry)retry.innerHTML=retryButton();
+  });
   var node=document.getElementById('cloudPanel');
   if(node){var focus=node.contains(document.activeElement)?document.activeElement.getAttribute('data-act'):null;node.outerHTML=panel();if(focus){var button=document.querySelector('#cloudPanel [data-act="'+focus+'"]');if(button)button.focus();}}
  }
@@ -97,5 +131,5 @@
   if(act==='cloud-google'){e.preventDefault();o().signInGoogle().catch(function(e){toast(e.message);});}
   if(act==='cloud-before-copy'){e.preventDefault();downloadBackup();}
  });
- global.CloudUI={panel:panel,paint:paint,choose:choose,sync:sync};
+ global.CloudUI={openAccount:openAccount,panel:panel,paint:paint,choose:choose,sync:sync};
 })(window);
