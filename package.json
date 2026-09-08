@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "test": "node --test tests/safety.test.cjs tests/push.test.cjs",
+    "test": "node --test tests/safety.test.cjs tests/push.test.cjs tests/email.test.cjs",
     "test:browser": "playwright test"
   },
   "devDependencies": {

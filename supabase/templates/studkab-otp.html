@@ -1,0 +1,10 @@
+<!-- Use this branch in BOTH existing Confirm signup and Magic link templates.
+     Preserve the existing template content for every other application's RedirectTo. -->
+{{ if or (eq .RedirectTo "https://innaodincova-finpro.github.io/studkab/") (eq .RedirectTo "https://innaodincova-finpro.github.io/studkab/reestr.html") }}
+<h2>Код входа в кабинет</h2>
+<p>Введите этот код в окне входа:</p>
+<p style="font-size:28px;font-weight:bold;letter-spacing:5px">{{ .Token }}</p>
+<p>Если вы не запрашивали вход, ничего делать не нужно.</p>
+{{ else }}
+<!-- Insert the EXISTING template here before saving; do not publish this placeholder. -->
+{{ end }}

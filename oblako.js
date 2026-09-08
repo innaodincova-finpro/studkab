@@ -113,10 +113,13 @@
 
   Oblako.sendCode = function (email) {
     if (!client) return Promise.reject(new Error("Облако не настроено"));
+    if (Oblako.busy || inFlight) return Promise.reject(new Error("Дождитесь завершения текущей операции"));
     email = String(email || "").trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Promise.reject(new Error("Проверьте адрес почты"));
     Oblako.busy = true; notify();
-    return client.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } })
+    var target = new URL(Oblako.app === "reestr" ? "reestr.html" : "./", global.location.href);
+    target.search = ""; target.hash = "";
+    return client.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true, emailRedirectTo: target.href } })
       .then(function (r) {
         Oblako.busy = false; notify();
         if (r.error) throw new Error(humanAuth(r.error));
@@ -127,6 +130,7 @@
 
   Oblako.verifyCode = function (email, code) {
     if (!client) return Promise.reject(new Error("Облако не настроено"));
+    if (Oblako.busy || inFlight) return Promise.reject(new Error("Дождитесь завершения текущей операции"));
     email = String(email || "").trim().toLowerCase();
     code = String(code || "").replace(/\s+/g, "");
     if (!/^\d{6}$/.test(code)) return Promise.reject(new Error("Код — шесть цифр из письма"));
@@ -144,13 +148,15 @@
       .catch(function (e) { Oblako.busy = false; notify(); throw new Error(humanAuth(e)); });
   };
 
-  Oblako.pushRequest = async function (body) {
-    if (!client || !userId || Oblako.app !== "kabinet") throw new Error("Сначала войдите через Google");
+  Oblako.pushRequest = function (body) { return request("studkab-push", body); };
+  Oblako.emailRequest = function (body) { return request("studkab-email", body); };
+  async function request(service, body) {
+    if (!client || !userId || Oblako.app !== "kabinet") throw new Error("Сначала войдите в кабинет");
     var expected = userId;
     var r = await client.auth.getSession();
     var session = r.data && r.data.session;
     if (!session || session.user.id !== expected) throw new Error("Войдите в кабинет заново");
-    var res = await fetch(global.OBLAKO_CONFIG.url + "/functions/v1/studkab-push", {
+    var res = await fetch(global.OBLAKO_CONFIG.url + "/functions/v1/" + service, {
       method:"POST", headers:{"Content-Type":"application/json", Authorization:"Bearer " + session.access_token},
       body:JSON.stringify(body), signal:AbortSignal.timeout(15000)
     });

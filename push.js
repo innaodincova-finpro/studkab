@@ -13,7 +13,7 @@
   localStorage.removeItem(key);
  }
  async function enable(){
-  if(!global.Oblako || Oblako.mode!=='cloud')throw new Error('Сначала откройте «Хранение записей» и войдите через Google.');
+  if(!global.Oblako || Oblako.mode!=='cloud')throw new Error('Сначала откройте «Хранение записей» и войдите в кабинет.');
   supported();
   // Request synchronously from the button gesture, before any network await (iOS).
   const permission=await Notification.requestPermission();
