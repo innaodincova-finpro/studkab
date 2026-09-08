@@ -22,7 +22,7 @@ export function validatePayload(p) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -46,7 +46,7 @@ export function handler({auth,config,db,send,now=()=>Date.now()}) {
    }
    const bearer=req.headers.get('authorization');
    const user=bearer?.startsWith('Bearer ') ? await auth(bearer) : null;
-   if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в приложение через Google'},401);
+   if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>16000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
    if(input.action==='submit'){
@@ -55,6 +55,13 @@ export function handler({auth,config,db,send,now=()=>Date.now()}) {
     if(result.conflict)return json({error:'Эта заявка уже передана. Для изменения условий свяжитесь с исполнителем.'},409);
     if(result.limited)return json({error:'Достигнут дневной лимит заявок. Попробуйте завтра.'},429);
     return json({...result,saved:true,telegram:'queued',email:'not_configured'});
+   }
+   if(input.action==='invite'){
+    const cfg=await config();
+    if(user.email.toLowerCase()!==cfg.executor_email.toLowerCase())return json({error:'Приглашения доступны только исполнителю'},403);
+    const email=typeof input.email==='string'?input.email.trim().toLowerCase():'';
+    if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Проверьте адрес почты'},400);
+    return json(await invite(email));
    }
    if(input.action==='inbox'){
     const cfg=await config();

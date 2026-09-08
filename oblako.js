@@ -111,6 +111,30 @@
     });
   };
 
+  Oblako.signInPassword = async function(email, password) {
+    if (!client || Oblako.busy || inFlight) throw new Error("Дождитесь завершения текущей операции");
+    email = String(email || "").trim().toLowerCase();
+    if (!email || !password) throw new Error("Введите почту и пароль приложения");
+    Oblako.busy = true; notify();
+    try {
+      var r = await client.auth.signInWithPassword({email:email, password:password});
+      if (r.error) throw new Error("Не удалось войти. Проверьте почту и пароль приложения. Для первого входа нужна персональная ссылка.");
+      var changed = userId !== r.data.user.id;
+      useUser(r.data.user); Oblako.email = r.data.user.email || email;
+      Oblako.busy = false;
+      if (changed && opts.onAccountChange) await opts.onAccountChange();
+      return true;
+    } finally { Oblako.busy = false; notify(); }
+  };
+
+  Oblako.setPassword = async function(password) {
+    if (!client || !userId || Oblako.busy || inFlight) throw new Error("Сначала войдите и дождитесь сохранения");
+    if (password.length < 8) throw new Error("Пароль должен содержать не менее 8 символов");
+    Oblako.busy = true; notify();
+    try { var r = await client.auth.updateUser({password:password}); if(r.error) throw new Error("Пароль не сохранён. Повторите позже или выполните вход заново."); }
+    finally { Oblako.busy = false; notify(); }
+  };
+
   Oblako.sendCode = function (email) {
     if (!client) return Promise.reject(new Error("Облако не настроено"));
     email = String(email || "").trim().toLowerCase();
@@ -145,7 +169,7 @@
   };
 
   Oblako.pushRequest = async function (body) {
-    if (!client || !userId || Oblako.app !== "kabinet") throw new Error("Сначала войдите через Google");
+    if (!client || !userId || Oblako.app !== "kabinet") throw new Error("Сначала войдите в аккаунт");
     var expected = userId;
     var r = await client.auth.getSession();
     var session = r.data && r.data.session;
@@ -161,7 +185,7 @@
   };
 
   Oblako.requestApi = async function(body) {
-    if (!client || !userId) throw new Error("Сначала войдите через Google");
+    if (!client || !userId) throw new Error("Сначала войдите в аккаунт");
     var expected = userId, expectedEpoch = epoch;
     var r = await client.auth.getSession(), session = r.data && r.data.session;
     if (!session || session.user.id !== expected || epoch !== expectedEpoch) throw new Error("Войдите заново");

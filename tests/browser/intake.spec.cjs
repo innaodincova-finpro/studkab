@@ -75,3 +75,23 @@ test('cloud inbox repeated load preserves executor document and notes',async({pa
  expect(result.count).toBe(1);expect(result.item.note).toBe('Заметка исполнителя');
  expect(result.item.doc.marker).toBe('doc');expect(result.item.status).toBe('done');
 });
+test('password entry and logged-out notifications are usable on a narrow screen',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{Oblako.ready=true;Oblako.mode='local';Oblako.signInPassword=async(email,password)=>{window.loginArgs={email,password};Oblako.mode='cloud';};tab='more';render();openCloud();});
+ await page.locator('#clEmail').fill('student@example.test');await page.locator('#clPassword').fill('password123');
+ await page.locator('#clForm button').click();
+ expect(await page.evaluate(()=>window.loginArgs)).toEqual({email:'student@example.test',password:'password123'});
+ await page.evaluate(()=>{Oblako.mode='local';tab='more';render();});
+ expect(await page.locator('[data-act="push-enable"]').count()).toBe(0);
+ await page.getByText('Уведомления',{exact:true}).click();
+ await expect(page.getByRole('button',{name:'Войти, чтобы включить уведомления'})).toBeVisible();
+});
+test('invitation verifies once, retries password save and uses cabinet session storage',async({page})=>{
+ await page.route('https://cdn.jsdelivr.net/**',route=>route.fulfill({contentType:'application/javascript',body:`window.supabase={createClient:(url,key,options)=>{window.storageKey=options.auth.storageKey;window.verifyCount=0;window.updateCount=0;return {auth:{getSession:async()=>({data:{session:null}}),verifyOtp:async()=>{window.verifyCount++;return {data:{user:{email:'student@example.test'}}}},updateUser:async()=>{window.updateCount++;return {error:{message:'temporary'}}}}}}};`}));
+ await page.goto('http://127.0.0.1:4173/activate.html#token=test&email=student%40example.test');
+ await page.locator('#password').fill('password123');await page.locator('#repeat').fill('password123');await page.locator('#submit').click();
+ await expect(page.locator('#status')).toContainText('пароль не сохранён');
+ await page.locator('#submit').click();await expect(page.locator('#status')).toContainText('пароль не сохранён');
+ expect(await page.evaluate(()=>({verify:verifyCount,update:updateCount,key:storageKey,hash:location.hash}))).toEqual({verify:1,update:2,key:'oblako-kabinet',hash:''});
+});

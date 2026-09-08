@@ -17,4 +17,21 @@ async function send(row:any){
  const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:owner.owner_chat_id,text,reply_markup:{inline_keyboard:[[{text:'Открыть заявку в реестре',url:'https://innaodincova-finpro.github.io/studkab/reestr.html#request='+row.id}]]}}),signal:AbortSignal.timeout(10000)});
  const data=await r.json();if(!r.ok||!data.ok)throw Error('Telegram unavailable');
 }
-Deno.serve(handler({auth,db,send,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
+async function invite(email:string){
+ const headers={apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'};
+ // Existing verified accounts must never be reset or replaced by an invitation.
+ for(let page=1;;page++){
+  const response=await fetch(base+'/auth/v1/admin/users?per_page=200&page='+page,{headers,signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw Error('Auth unavailable');
+  const users=(await response.json()).users;
+  if(!Array.isArray(users))throw Error('Invalid auth response');
+  if(users.some((u:any)=>String(u.email||'').toLowerCase()===email&&(u.email_confirmed_at||u.last_sign_in_at)))return {existing:true};
+  if(users.length<200)break;
+ }
+ const response=await fetch(base+'/auth/v1/admin/generate_link',{method:'POST',headers,body:JSON.stringify({type:'invite',email}),signal:AbortSignal.timeout(10000)});
+ if(!response.ok)throw Error('Invitation unavailable');
+ const link=await response.json();
+ if(!link.hashed_token||link.verification_type!=='invite')throw Error('Invalid invitation');
+ return {url:'https://innaodincova-finpro.github.io/studkab/activate.html#token='+encodeURIComponent(link.hashed_token)+'&email='+encodeURIComponent(email)};
+}
+Deno.serve(handler({auth,db,send,invite,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
