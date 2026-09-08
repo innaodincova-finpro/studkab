@@ -268,6 +268,14 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .toast{position:fixed;left:50%;transform:translateX(-50%) translateY(8px);bottom:150px;z-index:60;width:min(480px,92%);background:var(--toast);color:#fff;border-radius:12px;padding:11px 14px;font-size:13px;box-shadow:0 12px 28px var(--greet-sh);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
+/* Mobile shell: navigation occupies layout space, never overlays the scroll pane. */
+@media (max-width:599px){
+  html,body{height:100%;overflow:hidden}
+  .phone{height:100vh;height:100dvh;min-height:0;overflow:hidden}
+  .appbar{position:relative;top:auto;flex-shrink:0}
+  .screen{min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding-bottom:90px;-webkit-overflow-scrolling:touch}
+  .tabs{position:relative;left:auto;bottom:auto;transform:none;flex-shrink:0;margin-top:auto}
+}
 </style>
 </head>
 <body>
@@ -2125,6 +2133,7 @@ function render(){
     fab.hidden = false; fab.setAttribute("data-act", "new-work"); fab.removeAttribute("data-id");
     fab.innerHTML = '<i aria-hidden="true">＋</i><span>Новая работа</span>';
   }
+  document.getElementById("page").scrollTop = 0;
   window.scrollTo(0, 0);
   markSaved();
 }
