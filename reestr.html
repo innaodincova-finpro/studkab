@@ -915,9 +915,19 @@ function b64dec(s){
   for (var i=0; i<bin.length; i++) out += "%" + ("0" + bin.charCodeAt(i).toString(16)).slice(-2);
   return decodeURIComponent(out);
 }
+function validateRequest(rec){
+  var fields = ["topic", "workType", "discipline", "univ", "faculty", "kafedra", "city", "student", "group", "supervisor", "program", "form", "course", "deadline", "requirements", "org", "methodNotes", "contact"];
+  fields.forEach(function(k){
+    if (rec[k] != null && (typeof rec[k] !== "string" || rec[k].length > 20000)) throw new Error("bad field");
+  });
+  if (!rec.topic || !rec.topic.trim() || checkBackup({items:[rec], refs:[]})) throw new Error("bad request");
+  return rec;
+}
 function fromPayload(p){
+  if (!p || typeof p !== "object" || Array.isArray(p) || checkSafeIds(p, 0)) throw new Error("bad payload");
+  if (p.fm != null && (typeof p.fm !== "object" || Array.isArray(p.fm))) throw new Error("bad format");
   var f = p.fm || {};
-  return {
+  return validateRequest({
     id: p.id || uid("rq"),
     added: today(),
     status: "new",
@@ -930,7 +940,7 @@ function fromPayload(p){
     format: { mTop:f.mt, mRight:f.mr, mBottom:f.mb, mLeft:f.ml,
               font:f.fn, size:f.sz, spacing:f.sp, indent:f.ind },
     note: ""
-  };
+  });
 }
 function intake(){
   var h = location.hash || "";
@@ -983,24 +993,30 @@ function parseFormatText(str){
 }
 function parseText(text){
   var rec = { id:uid("rq"), added:today(), status:"new", format:{}, note:"" };
-  var found = 0;
-  String(text).split(/\r?\n/).forEach(function(line){
-    var m = line.match(/^\s*([^:]{3,40}):\s*(.+)$/);
-    if (!m) return;
-    var key = LABELS[m[1].trim()];
-    if (!key) return;
+  var found = 0, current = null;
+  String(text).replace(/\r\n?/g, "\n").split("\n").forEach(function(line){
+    // Two spaces mark a continuation in messages produced by the cabinet.
+    if (current && /^  /.test(line)) { rec[current] += "\n" + line.slice(2); return; }
+    var m = line.match(/^\s*([^:]{3,40}):\s*(.*)$/);
+    var key = m && Object.prototype.hasOwnProperty.call(LABELS, m[1].trim()) ? LABELS[m[1].trim()] : null;
+    if (/^\s*Ссылка для реестра:/.test(line)) { current = null; return; }
+    if (!key){ if (current) rec[current] += "\n" + line; return; }
+    current = key;
     var val = m[2].trim();
     if (key === "deadline"){
       var iso = val.match(/(\d{4}-\d{2}-\d{2})/);
       rec.deadline = iso ? iso[1] : val;
+      current = null;
     } else if (key === "formatText"){
       rec.formatText = val;
       var pf = parseFormatText(val);
       for (var fk in pf) rec.format[fk] = pf[fk];
+      current = null;
     } else rec[key] = val;
     found++;
   });
-  return found >= 2 ? rec : null;
+  Object.keys(rec).forEach(function(k){ if (typeof rec[k] === "string") rec[k] = rec[k].trim(); });
+  try { return found >= 2 ? validateRequest(rec) : null; } catch(e) { return null; }
 }
 
 
@@ -1283,7 +1299,7 @@ function viewList(){
   }
   h += list.length ? card(list.map(function(x){
     var over = x.deadline && x.deadline < today() && x.status!=="done" && x.status!=="off";
-    return '<div class="item tapline" data-act="open" data-id="' + x.id + '">' +
+    return '<div class="item tapline" data-act="open" data-id="' + esc(x.id) + '">' +
       '<div class="ic">' + esc(initials(x.student)) + '</div>' +
       '<div class="txt"><b>' + esc(x.student || "Без имени") + (x.group ? ' · ' + esc(x.group) : '') + '</b>' +
       '<small>' + esc(x.univ || "вуз не указан") + '</small>' +
@@ -1306,7 +1322,7 @@ function viewItem(id){
     '<div class="title" style="font-size:21px">' + esc(x.student || "Без имени") + '</div>' +
     '<div class="mut" style="margin:4px 0 2px">' + esc([x.group, x.workType, x.deadline ? "срок " + ruDate(x.deadline) : ""].filter(Boolean).join(" · ")) + '</div>' +
     '<div class="row" style="margin:0 0 14px">' +
-      (x.contact ? '<span class="mut">' + esc(x.contact) + '</span><button type="button" class="mini" data-act="copy-contact" data-id="' + x.id + '">скопировать</button>'
+      (x.contact ? '<span class="mut">' + esc(x.contact) + '</span><button type="button" class="mini" data-act="copy-contact" data-id="' + esc(x.id) + '">скопировать</button>'
                  : '<span class="mut">контакт не указан</span>') +
     '</div>';
 
@@ -1314,14 +1330,14 @@ function viewItem(id){
     (x.doc && x.doc.updated
       ? '<div class="mut">' + x.doc.order.length + ' разделов · примерно ' + dp + ' стр. · правка ' + ruDate(x.doc.updated) + '</div>'
       : '<div class="mut">Черновик ещё не собирался.</div>') +
-    '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + x.id + '">' + (x.doc && x.doc.updated ? "Открыть документ" : "Собрать документ") + '</button></div>', "now");
+    '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (x.doc && x.doc.updated ? "Открыть документ" : "Собрать документ") + '</button></div>', "now");
 
   if (r && diff.length){
     h += card(lab("Оформление расходится со справочником") +
       '<ul style="margin:0 0 8px;padding-left:18px;font-size:13px">' +
         diff.map(function(d){ return '<li>' + d.label + ': в заявке <b>' + esc(d.req) + '</b>, в справочнике <b>' + esc(d.ref) + '</b></li>' }).join("") + '</ul>' +
       '<div class="chips" style="margin-top:6px"><button type="button" class="chip" data-act="ref-open" data-id="' + r.id + '">Карточка вуза</button>' +
-      '<button type="button" class="chip warn" data-act="ref-accept" data-id="' + x.id + '">Принять из заявки</button></div>');
+      '<button type="button" class="chip warn" data-act="ref-accept" data-id="' + esc(x.id) + '">Принять из заявки</button></div>');
   } else if (r && !r.verified){
     h += card(lab("Справочник") +
       '<div class="item tapline" data-act="ref-open" data-id="' + r.id + '" style="padding:4px 0"><div class="ic">?</div>' +
@@ -1338,12 +1354,12 @@ function viewItem(id){
     '</div></details>';
 
   h += card(lab("Статус") +
-    '<div class="fld"><select data-act="status" data-id="' + x.id + '">' +
+    '<div class="fld"><select data-act="status" data-id="' + esc(x.id) + '">' +
       ORDER.map(function(s2){ return '<option value="' + s2 + '"' + (x.status===s2?" selected":"") + '>' + STATUS[s2] + '</option>' }).join("") +
     '</select></div>' +
     '<div class="fld"><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">' + esc(x.note||"") + '</textarea></div>' +
-    '<div class="row"><button type="button" class="chip" data-act="save-note" data-id="' + x.id + '">Сохранить заметку</button>' +
-    '<button type="button" class="del" data-act="delete" data-id="' + x.id + '">удалить</button></div>');
+    '<div class="row"><button type="button" class="chip" data-act="save-note" data-id="' + esc(x.id) + '">Сохранить заметку</button>' +
+    '<button type="button" class="del" data-act="delete" data-id="' + esc(x.id) + '">удалить</button></div>');
   return h;
 }
 
@@ -1394,7 +1410,7 @@ function viewRef(id){
       '<button type="button" class="del" data-act="ref-delete" data-id="' + r.id + '">удалить</button></div>') +
     card(lab("Заявки из этого вуза") + (reqs.length ? reqs.map(function(x){
       var d = fmtDiff(x.format, r.format);
-      return '<div class="item tapline" data-act="open-from-ref" data-id="' + x.id + '"><div class="ic">' + esc(initials(x.student)) + '</div>' +
+      return '<div class="item tapline" data-act="open-from-ref" data-id="' + esc(x.id) + '"><div class="ic">' + esc(initials(x.student)) + '</div>' +
         '<div class="txt"><b>' + esc(x.student||"Без имени") + '</b><small>' + esc(x.topic||"") + (d.length ? ' · расходится: ' + d.map(function(q){ return q.label }).join(", ") : ' · совпадает') + '</small></div>' +
         pill(x.status) + '</div>';
     }).join("") : '<div class="empty">Заявок пока не было.</div>'));
@@ -1441,7 +1457,7 @@ function viewMore(){
       '</select></div>' +
       '<div class="chips"><button type="button" class="chip ok" data-act="px-save">Сохранить</button></div>';
 
-  return '<details class="fold"' + (configured ? '' : ' open') + '><summary>Нейросети' + (configured ? ' <span class="pill p-ok">подключено</span>'
+  return '<details class="fold"' + (configured ? '' : ' open') + '><summary>Нейросети' + (configured ? ' <span class="pill p-ok">настройки сохранены</span>'
       : ' <span class="pill p-och">' + (st.proxyUrl && st.proxyToken ? 'нет поставщика' : 'не настроено') + '</span>') + '</summary><div class="in">' + nets + '</div></details>' +
     card('<div class="row" style="margin-bottom:6px">' + lab("Хранение записей").replace("margin-bottom:8px","") +
       '<span id="cloudBadge" class="pill p-gray">на устройстве</span></div>' +
@@ -1463,7 +1479,7 @@ function viewMore(){
     card(lab("Копия данных") +
       '<div class="chips" style="margin-top:0"><button type="button" class="chip" data-act="export">Сохранить копию</button>' +
       '<button type="button" class="chip" data-act="import">Загрузить копию</button></div>' +
-      '<div class="hint">Всё хранится в этом браузере. Сменили устройство или почистили браузер — данные пропадут. Ключи и пароль посредника в копию не попадают — на новом устройстве впишите их заново.</div>') +
+      '<div class="hint">Без входа данные хранятся только в этом браузере. После входа доступно облачное сохранение. Копию можно скачать отдельно. Ключи и пароль посредника в копию не попадают — на новом устройстве впишите их заново.</div>') +
     '<details class="fold"><summary>Как это работает</summary><div class="in">' +
       '<div class="item"><div class="ic">1</div><div class="txt"><b>Студент отправляет заявку</b><small>Сообщение приходит в WhatsApp или Telegram</small></div></div>' +
       '<div class="item"><div class="ic">2</div><div class="txt"><b>Вы открываете ссылку из сообщения</b><small>Заявка встаёт в список. Не открылась — «Из текста» внизу списка</small></div></div>' +
@@ -1737,7 +1753,7 @@ document.addEventListener("click", function(ev){
       if (!e2.target.closest("[data-go]")) return;
       var text = wrap.querySelector("#pasteBox").value;
       var link = text.match(/#z=([A-Za-z0-9\-_]+)/), rec = null;
-      if (link){ try{ rec = fromPayload(JSON.parse(b64dec(link[1]))); }catch(e){ rec = null; } }
+      if (link){ try{ rec = fromPayload(JSON.parse(b64dec(link[1]))); }catch(e){ return toast("Ссылка заявки повреждена — попросите студента отправить её заново"); } }
       if (!rec) rec = parseText(text);
       if (!rec) return toast("Не получилось разобрать — проверьте, что текст полный");
       var same = item(rec.id) || findTwin(rec);
