@@ -67,3 +67,18 @@ test('recovery link uses existing account only; invite never resets it',async()=
  calls=[];const result=await accessLink({...args,recovery:true});assert.match(result.url,/type=recovery/);assert.equal(JSON.parse(calls[1].body).type,'recovery');
  calls=[];assert.equal((await accessLink({...args,email:'missing@example.test',recovery:true})).missing,true);assert.equal(calls.length,1);
 });
+
+// Email transport is not connected to production until sender verification.
+import {invitationMailer} from '../supabase/functions/studkab-requests/invitation-mail.mjs';
+test('mail preparation never generates a token without configured delivery',async()=>{
+ let calls=0;const mail=invitationMailer({createLink:async()=>{calls++}});
+ assert.equal((await mail('student@example.test')).status,'not_configured');assert.equal(calls,0);
+});
+test('mail accepts only one recipient and distinguishes acceptance from uncertain delivery',async()=>{
+ let calls=0,message;const deps={from:'sender@example.test',createLink:async()=>{calls++;return {existing:true}},render:(email,url,kind)=>kind,transport:{sendMail:async m=>{message=m;return {accepted:['student@example.test']}}}};
+ const mail=invitationMailer(deps);
+ assert.equal((await mail('student@example.test,other@example.test')).status,'invalid_email');assert.equal(calls,0);
+ assert.equal((await mail('student@example.test')).status,'accepted');assert.equal(message.text,'existing');assert.equal(message.to.length,1);assert.equal(message.from.name,'Кабинет студента');
+ deps.transport.sendMail=async()=>{throw {code:'ETIMEDOUT',message:'private token'}};
+ assert.deepEqual(await mail('student@example.test'),{status:'unknown'});
+});
