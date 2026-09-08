@@ -46,3 +46,26 @@ test('profile sections collapse without losing unsaved input',async({page})=>{
  await page.getByText('Данные студента',{exact:true}).click();
  await expect(page.locator('#stName')).toHaveValue('Проверка профиля');
 });
+
+for(const file of ['index.html','reestr.html']){
+ test(file+': email code errors, retry and successful login on mobile',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('http://127.0.0.1:4173/'+file);
+  await page.evaluate(()=>{
+   window.OBLAKO_CONFIG.emailEnabled=true;
+   window.emailCalls=[];
+   window.Oblako={ready:true,mode:'local',statusText:()=>'',sendCode:async(email)=>{emailCalls.push(email)},verifyCode:async(email,code)=>{if(code!=='123456')throw Error('Код неверный');emailCalls.push('verified:'+email);}};
+   openCloud();
+  });
+  await page.locator('#loginEmail').fill('student@example.test');
+  await page.getByRole('button',{name:'Получить код',exact:true}).click();
+  await expect(page.locator('[data-email-message]')).toContainText('Код запрошен');
+  await page.getByRole('button',{name:'Отправить снова'}).click();
+  await expect(page.locator('[data-email-message]')).toContainText('Повторная отправка');
+  await page.locator('#loginCode').fill('111111');await page.getByRole('button',{name:'Войти',exact:true}).click();
+  await expect(page.locator('[data-email-message]')).toContainText('Код неверный');
+  await page.locator('#loginCode').fill('123456');await page.getByRole('button',{name:'Войти',exact:true}).click();
+  await expect(page.locator('#loginEmail')).toHaveCount(0);
+  expect(await page.evaluate(()=>emailCalls)).toEqual(['student@example.test','verified:student@example.test']);
+ });
+}

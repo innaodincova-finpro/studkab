@@ -61,3 +61,28 @@ for role in ['anon','authenticated']:
   except subprocess.CalledProcessError:pass
   else:raise AssertionError('Push secrets or dispatch available to '+role)
 print('PASS: push secrets restricted, claims deduplicate and retry, sent deliveries never reclaimed')
+
+sql((root/'supabase/migrations/20260908063915_studkab_email.sql').read_text())
+sql(f"insert into studkab_email_preferences(user_id,email,timezone,consented_at,enabled) values('{uid}','test@example.test','UTC',now(),true),('{other}','other@example.test','UTC',now(),true);")
+def email_claim(key,owner=uid):
+ return sql(f"set role service_role;select claim_studkab_email('{key}','{owner}');")
+assert email_claim('mail-1')=='t'
+sql("update studkab_email_configuration set next_send_at=now()-interval '1 second';")
+assert email_claim('mail-1')=='f' # in-flight delivery is never blindly resent
+sql("update studkab_email_deliveries set state='retry',claimed_at=now()-interval '3 minutes';")
+assert email_claim('mail-1')=='t'
+sql("update studkab_email_configuration set next_send_at=now()-interval '1 second'; update studkab_email_deliveries set state='accepted',claimed_at=now()-interval '3 minutes';")
+assert email_claim('mail-1')=='f'
+with concurrent.futures.ThreadPoolExecutor(2) as pool:
+ results=list(pool.map(lambda _:email_claim('concurrent-email'),range(2)))
+assert results.count('t')==1
+sql("update studkab_email_configuration set next_send_at=now()-interval '1 second',attempts_today=daily_limit;")
+assert email_claim('over-budget')=='f'
+assert sql(f"set role service_role; select schedule_studkab_email_test('{uid}');")=='t'
+assert sql(f"set role service_role; select schedule_studkab_email_test('{uid}');")=='f'
+for role in ['anon','authenticated']:
+ for query in ['select * from studkab_email_preferences', 'select * from studkab_email_configuration', f"select claim_studkab_email('attack','{uid}')", f"select schedule_studkab_email_test('{uid}')"]:
+  try:sql(f'set role {role}; '+query)
+  except subprocess.CalledProcessError:pass
+  else:raise AssertionError('Email state accessible to '+role)
+print('PASS: email consent and secrets private; concurrent sends deduplicated; budget and test throttles enforced')

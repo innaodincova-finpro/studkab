@@ -32,7 +32,7 @@ for(const f of ['index.html','reestr.html']){
  test(f+': cancel both dialogs leaves cloud untouched',async()=>{let c=ui(),pushes=0;c.cloudHasLocal=()=>true;c.confirm=()=>false;c.Oblako.push=async()=>{pushes++};await c.cloudFirstPull();assert.equal(pushes,0)});
  test(f+': account A data survives signout but is not visible in account B',()=>{let map=new Map([['base',JSON.stringify({items:[{id:'private'}]})]]);let c={KEY:'base',CLOUD_LOCAL_KEY:'base',D:null,cloudHasLocal:()=>false,localStorage:{getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)},load(){c.D=JSON.parse(map.get(c.KEY)||'{"items":[]}')},render(){}};vm.createContext(c);vm.runInContext(html.slice(html.indexOf('function cloudSwitchUser('),html.indexOf('function cloudInit(')),c);c.cloudSwitchUser('a');assert.equal(c.D.items[0].id,'private');c.cloudSwitchUser('');assert.equal(c.D.items.length,0);c.cloudSwitchUser('b');assert.equal(c.D.items.length,0);c.cloudSwitchUser('a');assert.equal(c.D.items[0].id,'private')});
 }
-test('service worker removes only its own obsolete caches',async()=>{let handlers={},deleted=[];const c={self:{addEventListener:(n,f)=>handlers[n]=f,clients:{claim:async()=>{}}},caches:{keys:async()=>['studkab-v3','studkab-v6','other-v1'],delete:async k=>deleted.push(k)}};vm.runInNewContext(read('sw.js'),c);let done;handlers.activate({waitUntil:p=>done=p});await done;assert.deepEqual(deleted,['studkab-v3'])});
+test('service worker removes only its own obsolete caches',async()=>{let handlers={},deleted=[];const c={self:{addEventListener:(n,f)=>handlers[n]=f,clients:{claim:async()=>{}}},caches:{keys:async()=>['studkab-v3','studkab-v7','other-v1'],delete:async k=>deleted.push(k)}};vm.runInNewContext(read('sw.js'),c);let done;handlers.activate({waitUntil:p=>done=p});await done;assert.deepEqual(deleted,['studkab-v3'])});
 test('SIGNED_IN after logout switches storage before allowing cloud writes',async()=>{
  const c=await cloud();await c.Oblako.signOut();c.authEvent('SIGNED_IN',{user:{id:'b',email:'b@test'}});
  for(const fn of [...c.timers.values()])fn();
@@ -49,4 +49,11 @@ test('Google login returns to the correct app and does not write data',async()=>
   c.oauthResult={error:{message:'Provider unavailable'}};
   await assert.rejects(c.Oblako.signInGoogle());assert.equal(c.Oblako.busy,false);
  }
+});
+
+test('email OTP uses exact app redirect, rejects concurrent auth, preserves write barrier',async()=>{
+ const c=await cloud();c.URL=URL;c.location={href:'https://example.test/studkab/index.html?x=1#profile'};
+ c.Oblako.busy=true;await assert.rejects(c.Oblako.sendCode('test@example.test'),/Дождитесь/);await assert.rejects(c.Oblako.verifyCode('test@example.test','123456'),/Дождитесь/);c.Oblako.busy=false;
+ await assert.rejects(c.Oblako.verifyCode('test@example.test','bad'),/шесть/);
+ await c.Oblako.verifyCode('test@example.test','123456');assert.equal((await c.Oblako.push({})).status,'blocked');
 });
