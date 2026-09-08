@@ -1,8 +1,11 @@
 const {test,expect}=require('@playwright/test');
 for(const browserName of ['chromium','webkit']){
  test.describe(browserName+' mobile navigation',()=>{
-  test.use({browserName,viewport:{width:390,height:844},isMobile:true,hasTouch:true});
-  test('menu stays below scrolling content after input, resize and restored height',async({page})=>{
+  test('menu stays below scrolling content after input, resize and restored height',async({playwright})=>{
+   const browser=await playwright[browserName].launch();
+   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+   const page=await context.newPage();
+   try {
    await page.goto('http://127.0.0.1:4173/index.html');
    await page.evaluate(()=>{tab='more';render();document.querySelectorAll('#page details').forEach(d=>d.open=true);});
    const check=async()=>{
@@ -22,6 +25,7 @@ for(const browserName of ['chromium','webkit']){
    await page.locator('#tabbar button').first().click();
    expect(await page.locator('#page').evaluate(p=>p.scrollTop)).toBe(0);
    await check();
+   } finally {await browser.close();}
   });
  });
 }
