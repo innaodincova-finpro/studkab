@@ -99,13 +99,13 @@ test('storage mode remains consistent when reopening profile after cloud login',
  for(const file of ['index.html','reestr.html']){
   await page.goto('http://127.0.0.1:4173/'+file);
   await page.evaluate(()=>{Oblako.mode='cloud';Oblako.statusText=()=> 'Сохранено в облаке в 17:06';tab='more';render();});
-  await expect(page.locator('#cloudBadge')).toHaveText('Хранение: облако подключено');
+  await expect(page.locator('#cloudBadge')).toHaveText('Облачное хранение');
   await expect(page.locator('#cloudLine')).toHaveText('Сохранено в облаке в 17:06');
   await page.evaluate(()=>{tab='more';render();});
-  await expect(page.locator('#cloudBadge')).toHaveText('Хранение: облако подключено');
+  await expect(page.locator('#cloudBadge')).toHaveText('Облачное хранение');
   await page.evaluate(()=>{Oblako.statusText=()=> 'Нет связи с облаком';cloudPaint();});
   await expect(page.locator('#cloudLine')).toHaveText('Нет связи с облаком');
   await page.evaluate(()=>{Oblako.mode='local';Oblako.statusText=()=> 'только на этом устройстве';render();});
-  await expect(page.locator('#cloudBadge')).toHaveText('Хранение: только на этом устройстве');
+  await expect(page.locator('#cloudBadge')).toHaveText('Хранение на устройстве');
  }
 });

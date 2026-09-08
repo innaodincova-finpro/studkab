@@ -49,3 +49,21 @@ test('only confirmed executor can create invitations; invalid email never reache
  assert.equal((await handler(deps)(req('bad'))).status,400);assert.equal(calls,0);
  assert.equal((await handler(deps)(req('a@test.ru'))).status,200);assert.equal(calls,1);
 });
+
+test('recovery is executor-only and requires explicit identity verification',async()=>{
+ const make=(email)=>handler({auth:async()=>({id:'a',email,email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),invite:async(email,recovery)=>({email,recovery})});
+ const req=(verified)=>new Request('https://test/',{method:'POST',headers:{authorization:'Bearer token','Content-Type':'application/json'},body:JSON.stringify({action:'recover',email:'student@example.test',identityVerified:verified})});
+ assert.equal((await make('student@example.test')(req(true))).status,403);
+ assert.equal((await make('owner@example.test')(req(false))).status,400);
+ const response=await make('owner@example.test')(req(true));assert.equal(response.status,200);assert.equal((await response.json()).recovery,true);
+});
+
+test('recovery link uses existing account only; invite never resets it',async()=>{
+ const {accessLink}=await import('../supabase/functions/studkab-requests/access-links.mjs');
+ let calls=[];
+ const request=async(url,opts)=>{calls.push({url,body:opts.body});if(url.includes('/admin/users'))return Response.json({users:[{email:'s@example.test',email_confirmed_at:'yes'}]});return Response.json({hashed_token:'one-time-test',verification_type:'recovery'});};
+ const args={base:'https://test',key:'test',email:'s@example.test',request};
+ assert.equal((await accessLink(args)).existing,true);assert.equal(calls.length,1);
+ calls=[];const result=await accessLink({...args,recovery:true});assert.match(result.url,/type=recovery/);assert.equal(JSON.parse(calls[1].body).type,'recovery');
+ calls=[];assert.equal((await accessLink({...args,email:'missing@example.test',recovery:true})).missing,true);assert.equal(calls.length,1);
+});

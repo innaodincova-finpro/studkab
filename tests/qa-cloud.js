@@ -6,7 +6,7 @@
  const current=()=>state.user?{id:state.user,email:state.user+'@example.test'}:null;
  state.switchUser=id=>{state.user=id;sessionStorage.setItem('qa-user',id);state.callbacks.forEach(fn=>fn(id?'SIGNED_IN':'SIGNED_OUT',id?{user:current()}:null));};
  const chain={select(){return this},eq(key,val){this[key]=val;return this},maybeSingle:async function(){return state.failRead?{error:{message:'NetworkError'}}:{data:state.rows[state.user+':'+this.app]||null}}};
- window.supabase={createClient:()=>({auth:{onAuthStateChange(fn){state.callbacks.push(fn);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:current()?{user:current()}:null}}),signOut:async()=>{state.switchUser('');return {}},signInWithOtp:async()=>({}),verifyOtp:async()=>({data:{user:current()}})},from:()=>Object.create(chain),rpc:async(name,args)=>{
+ window.supabase={createClient:()=>({auth:{onAuthStateChange(fn){state.callbacks.push(fn);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:current()?{user:current()}:null}}),signOut:async()=>{state.switchUser('');return {}},signInWithPassword:async({email,password})=>{if(password!=="test-password-123")return {error:{message:"Invalid login credentials"}};state.switchUser(email.split("@")[0]);return {data:{user:current()}};},updateUser:async()=>({}),signInWithOtp:async()=>({}),verifyOtp:async()=>({data:{user:current()}})},from:()=>Object.create(chain),rpc:async(name,args)=>{
   state.writes.push(JSON.parse(JSON.stringify(args)));
   if(state.failWrite)return {error:{message:'Test write rejected'}};
   const key=state.user+':'+args.p_app,row=state.rows[key];
