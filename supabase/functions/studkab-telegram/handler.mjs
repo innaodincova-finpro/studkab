@@ -53,8 +53,8 @@ export function handler({token, db, telegram, now=()=>Date.now()}) {
         bound = String(row.owner_chat_id) === String(m.chat.id) || await db.bind(row.owner_hash,m.chat.id,new Date(now()).toISOString());
       }
       const message = bound
-        ? 'Ваш Telegram привязан как получатель заявок. Подключение заявок из кабинета ещё готовится. Личные контакты студентам не показываются.'
-        : 'Кабинет студента — заявки. Подключение сервиса ещё готовится. Приём заявок и переписка пока недоступны.';
+        ? 'Ваш Telegram привязан как получатель заявок. Уведомления о новых заявках будут приходить сюда. Личные контакты студентам не показываются.'
+        : 'Кабинет студента — заявки. Заявки отправляются из кабинета студента. Переписка с исполнителем через бота пока не подключена.';
       await telegram('sendMessage',{chat_id:m.chat.id,text:message});
       return json({ok:true});
     } catch {

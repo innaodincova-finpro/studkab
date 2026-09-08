@@ -61,3 +61,29 @@ for role in ['anon','authenticated']:
   except subprocess.CalledProcessError:pass
   else:raise AssertionError('Push secrets or dispatch available to '+role)
 print('PASS: push secrets restricted, claims deduplicate and retry, sent deliveries never reclaimed')
+
+sql((root/'telegram-setup.sql').read_text())
+sql((root/'request-delivery.sql').read_text())
+sql('grant usage on schema public to service_role;')
+payload=json.dumps({'id':'request-1','t':'Test','cn':'test'})
+def submit(who=uid,body=payload):
+ return json.loads(sql(f"set role service_role; select submit_studkab_request('{who}','{body}');"))
+with concurrent.futures.ThreadPoolExecutor(2) as pool:
+ pair=list(pool.map(lambda _:submit(),range(2)))
+assert pair[0]['id']==pair[1]['id']
+assert sorted(x['duplicate'] for x in pair)==[False,True]
+assert submit(other)['id']!=pair[0]['id']
+assert submit(body=json.dumps({'id':'request-1','t':'Changed','cn':'test'}))['conflict']
+for role in ['anon','authenticated']:
+ for query in ['select * from studkab_requests','select * from studkab_request_config','select * from studkab_telegram_setup',f"select submit_studkab_request('{uid}','{payload}')",'select claim_studkab_requests()']:
+  try:sql(f'set role {role}; '+query)
+  except subprocess.CalledProcessError:pass
+  else:raise AssertionError('Request privileges leaked to '+role)
+first=json.loads(sql("set role service_role; select coalesce(json_agg(id),'[]') from claim_studkab_requests();"))
+second=json.loads(sql("set role service_role; select coalesce(json_agg(id),'[]') from claim_studkab_requests();"))
+assert len(first)==2 and second==[]
+sql("update studkab_requests set lease_until=now()-interval '1 minute';")
+assert sql('set role service_role; select count(*) from claim_studkab_requests();')=='2'
+sql('update studkab_requests set telegram_sent_at=now();')
+assert sql('set role service_role; select count(*) from claim_studkab_requests();')=='0'
+print('PASS: requests deduplicate concurrently, separate students, reject changed retries, restrict access and lease delivery')
