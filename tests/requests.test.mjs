@@ -39,3 +39,13 @@ test('Telegram failure leaves request pending with retry, successful send marks 
  assert.equal(patches[0].telegram_sent_at,undefined);assert.ok(patches[0].retry_at);
  fail=false;await app(request({}, {'x-job-key':'job'}));assert.ok(patches[1].telegram_sent_at);
 });
+
+test('only confirmed executor can create invitations; invalid email never reaches admin API',async()=>{
+ let calls=0;
+ const deps={auth:async()=>({id:'s',email:'student@test.ru',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@test.ru'}),invite:async()=>{calls++;return {url:'private'}}};
+ const req=email=>new Request('https://example.test',{method:'POST',headers:{authorization:'Bearer x'},body:JSON.stringify({action:'invite',email})});
+ assert.equal((await handler(deps)(req('a@test.ru'))).status,403);assert.equal(calls,0);
+ deps.auth=async()=>({id:'o',email:'owner@test.ru',email_confirmed_at:'yes'});
+ assert.equal((await handler(deps)(req('bad'))).status,400);assert.equal(calls,0);
+ assert.equal((await handler(deps)(req('a@test.ru'))).status,200);assert.equal(calls,1);
+});
