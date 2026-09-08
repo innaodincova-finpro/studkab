@@ -1889,12 +1889,14 @@ function applyTheme(){ document.body.setAttribute("data-theme", D.settings.theme
    ОБЛАКО: вход по коду и хранение записей в базе
    ================================================================== */
 var cloudGuestCandidate = null;
+var cloudInitialSnapshot = null;
 var cloudNote = "";           /* короткая строка состояния для экрана */
 
 function cloudSwitchUser(id){
   var target = id ? CLOUD_LOCAL_KEY + ":user:" + id :
     (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped") ? CLOUD_LOCAL_KEY + ":guest" : CLOUD_LOCAL_KEY);
   cloudGuestCandidate = null;
+  var freshAccount = id && localStorage.getItem(target) === null;
   if (id && localStorage.getItem(target) === null && KEY === CLOUD_LOCAL_KEY + ":guest" && !cloudIsEmpty(D)) cloudGuestCandidate = JSON.parse(JSON.stringify(D));
   var legacy = localStorage.getItem(CLOUD_LOCAL_KEY);
   if (id && legacy !== null && localStorage.getItem(target) === null) {
@@ -1910,6 +1912,7 @@ function cloudSwitchUser(id){
   tab = "today"; openWorkId = null; navHistory = [];
   if (typeof openId !== "undefined") { openId = null; openRefId = null; }
   load(); render();
+  cloudInitialSnapshot = freshAccount && legacy === null ? Oblako.snapshot(D) : null;
 }
 
 function cloudInit(){

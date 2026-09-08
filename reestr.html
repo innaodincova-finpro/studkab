@@ -1519,12 +1519,14 @@ function viewMore(){
    ОБЛАКО: вход по коду и хранение записей в базе
    ================================================================== */
 var cloudGuestCandidate = null;
+var cloudInitialSnapshot = null;
 var cloudNote = "";           /* короткая строка состояния для экрана */
 
 function cloudSwitchUser(id){
   var target = id ? CLOUD_LOCAL_KEY + ":user:" + id :
     (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped") ? CLOUD_LOCAL_KEY + ":guest" : CLOUD_LOCAL_KEY);
   cloudGuestCandidate = null;
+  var freshAccount = id && localStorage.getItem(target) === null;
   if (id && localStorage.getItem(target) === null && KEY === CLOUD_LOCAL_KEY + ":guest" && !cloudIsEmpty(D)) cloudGuestCandidate = JSON.parse(JSON.stringify(D));
   var legacy = localStorage.getItem(CLOUD_LOCAL_KEY);
   if (id && legacy !== null && localStorage.getItem(target) === null) {
@@ -1539,6 +1541,7 @@ function cloudSwitchUser(id){
   if (typeof undoStack !== "undefined") { undoStack = []; redoStack = []; }
   if (typeof openId !== "undefined") { openId = null; openRefId = null; }
   load(); render();
+  cloudInitialSnapshot = freshAccount && legacy === null ? Oblako.snapshot(D) : null;
 }
 
 function cloudInit(){
@@ -1658,7 +1661,7 @@ function openInvitation(recovery){
   var w=openModal('<button class="close" data-x="1">✕</button><h3>'+ (recovery?'Восстановить доступ':'Пригласить студента') +'</h3>'+ (recovery?'<p class="hint">Сначала лично подтвердите, кто обращается. Ссылка позволит сменить общий пароль кабинета и «Точки дня». Передавайте её только владельцу аккаунта по ранее проверенному каналу связи.</p>':'') +'<form id="inviteForm"><div class="fld"><label for="inviteEmail">Почта студента</label><input type="email" id="inviteEmail" autocomplete="off" required></div>'+(recovery?'<label><input type="checkbox" id="identityVerified" required> Личность владельца аккаунта подтверждена</label>':'')+'<button class="btn" type="submit">Создать ссылку</button></form><p class="hint" id="inviteMsg" role="status"></p><textarea id="inviteUrl" readonly hidden aria-label="Персональная ссылка"></textarea><button class="chip" id="inviteCopy" hidden>Скопировать ссылку</button>');
   w.querySelector('#inviteForm').addEventListener('submit',async function(e){
     e.preventDefault();var btn=this.querySelector('button'), msg=w.querySelector('#inviteMsg'), out=w.querySelector('#inviteUrl'), cp=w.querySelector('#inviteCopy');
-    if(btn.disabled)return;btn.disabled=true;out.hidden=true;out.value='';cp.hidden=true;msg.textContent='Создаём приглашение…';
+    if(btn.disabled)return;btn.disabled=true;out.hidden=true;out.value='';cp.hidden=true;msg.textContent=recovery?'Создаём ссылку восстановления…':'Создаём приглашение…';
     try{var r=await Oblako.requestApi({action:recovery?'recover':'invite',identityVerified:recovery&&w.querySelector('#identityVerified').checked,email:w.querySelector('#inviteEmail').value});
       if(r.missing)msg.textContent='Аккаунт с этой почтой не найден. Проверьте адрес; для нового студента создайте приглашение.';
       else if(r.existing)msg.textContent='Аккаунт уже существует. Студент может войти с почтой и паролем «Точки дня» или через Google. Новый аккаунт не создан.';

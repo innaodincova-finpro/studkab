@@ -50,7 +50,7 @@
    if(identity!==api.identity()||importGuest==='later')return;
    if(importGuest==='import'){
     var invalid=checkBackup(guest);if(invalid)throw Error('Не удалось проверить локальные записи: '+invalid);
-    localStorage.setItem(KEY, JSON.stringify(guest));D=guest;load();render();
+    localStorage.setItem(KEY, JSON.stringify(guest));D=guest;global.cloudInitialSnapshot=null;load();render();
    }
    global.cloudGuestCandidate=null;
   }
@@ -67,7 +67,7 @@
   var bad=checkBackup(res.remote);if(bad){toast('Не удалось проверить облачные записи: '+bad);return;}
   var remote=api.snapshot(res.remote);
   if(local===remote){api.accept(D);return;}
-  if(cloudIsEmpty(D)||baseline===local){cloudApply(res.remote);return;}
+  if(cloudIsEmpty(D)||baseline===local||global.cloudInitialSnapshot===local){cloudApply(res.remote);return;}
   if(baseline===remote){api.accept();await cloudSave('Изменения сохранены в облаке');return;}
   var action=await choose('Записи на устройствах различаются',
    'На этом устройстве: '+summary(D)+'. В облаке: '+summary(res.remote)+'. Выберите, какие записи использовать. Перед заменой обе версии сохранятся в разделе «Копия данных».',
