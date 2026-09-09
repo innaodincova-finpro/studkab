@@ -828,7 +828,9 @@ function openDocBuilder(id){
     var missing=DraftQuality.preflight(x);if(missing.length)return Promise.reject(Error(missing.join("; ")));
     var c = doc.order.filter(function(q){ return q.id === cid })[0]; if (!c) return Promise.resolve();
     if(c.id==='refs'){
-      wrap.querySelector('[data-sec="'+cid+'"] .secText').value=DraftQuality.inputs(x).sources;
+      var refsText=DraftQuality.inputs(x).sources;
+      wrap.querySelector('[data-sec="'+cid+'"] .secText').value=refsText;
+      wrap.querySelector('[data-sec="'+cid+'"] .secStat').textContent=refsText.length+' знаков · Предоставленные источники';
       readBack();return Promise.resolve();
     }
     var pr = sectionPrompt(x, c);
