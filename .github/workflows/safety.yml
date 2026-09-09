@@ -33,6 +33,14 @@ jobs:
           PGPASSWORD: test-only
           PGDATABASE: safety_test
       - run: npm ci
+      - name: Exclude unused Google Chrome apt repository
+        run: |
+          # Playwright downloads its own browsers. A broken third-party Chrome
+          # package index must not block Ubuntu system dependency installation.
+          # Package signature and checksum verification remain enabled.
+          if [ -f /etc/apt/sources.list.d/google-chrome.list ]; then
+            sudo mv /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.list.disabled
+          fi
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4
