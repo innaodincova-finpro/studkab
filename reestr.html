@@ -850,6 +850,9 @@ function openDocBuilder(id){
       doc.structure[cid] = doc.structure[cid] || {}; doc.structure[cid].by = prov;
       el.querySelector(".secStat").textContent = Math.round(res.text.length/1800*10)/10 + " стр. · " + res.text.length + " знаков · " + providerName(prov) + " · токенов " + res.tokens;
       readBack();if(!storageOk)throw Error("Раздел подготовлен, но не сохранён. Скачайте Word и проверьте доступное место.");
+    }).catch(function(e){
+      el.querySelector(".secStat").textContent = "Подготовка остановлена. Причина указана над разделами.";
+      throw e;
     });
   }
   wrap.addEventListener("click", function(ev){
@@ -1537,7 +1540,7 @@ function viewMore(){
     '<details class="fold"><summary>Как это работает</summary><div class="in">' +
       '<div class="item"><div class="ic">1</div><div class="txt"><b>Студент отправляет заявку</b><small>Сообщение приходит в WhatsApp или Telegram</small></div></div>' +
       '<div class="item"><div class="ic">2</div><div class="txt"><b>Вы открываете ссылку из сообщения</b><small>Заявка встаёт в список. Не открылась — «Из текста» внизу списка</small></div></div>' +
-      '<div class="item"><div class="ic">3</div><div class="txt"><b>Собираете документ</b><small>Нейросеть пишет по разделам, титульный лист из заявки. Пройдите пометки [ДАННЫЕ СТУДЕНТА] и [ПРОВЕРИТЬ ИСТОЧНИК]</small></div></div>' +
+      '<div class="item"><div class="ic">3</div><div class="txt"><b>Готовите документ</b><small>Добавьте материалы и проверенные источники один раз, затем нажмите «Подготовить весь черновик». Проверьте факты, расчёты и оформление перед передачей студенту.</small></div></div>' +
       '<div class="item"><div class="ic">4</div><div class="txt"><b>Отправляете файл студенту</b><small>В мессенджер. Ставите статус</small></div></div>' +
       '<div class="item"><div class="ic">5</div><div class="txt"><b>Справочник вузов</b><small>Наполняется из заявок сам. «Проверено» ставите вы, когда сверили с методичкой</small></div></div>' +
       '<div class="item"><div class="ic">6</div><div class="txt"><b>Ключи нейросетей</b><small>Хранятся у посредника на Cloudflare. Подключение — по инструкции</small></div></div>' +
