@@ -693,9 +693,13 @@ function askAI(providerId, system, user){
       headers:{ "Content-Type":"application/json", "X-Proxy-Token": st.proxyToken || "" },
       body: JSON.stringify({ provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.2 })
     }).then(function(r){
-      return r.json().catch(function(){ throw new Error("HTTP:proxy:" + r.status); });
+      return r.json().catch(function(){ throw new Error("HTTP:proxy:" + r.status); }).then(function(j){
+        if (!r.ok) throw new Error(j && j.error || "HTTP:proxy:" + r.status);
+        return j;
+      });
     }).then(function(j){
       if (j.error) throw new Error(j.error);
+      if (j.complete === false) throw new Error("INCOMPLETE:" + providerId);
       if (!j.text) throw new Error("EMPTY:" + providerId);
       return { text: j.text, tokens: j.tokens || 0, provider: j.provider || providerId };
     });
@@ -707,6 +711,10 @@ function aiErrorText(e){
   var nm = who ? providerName(who) : "";
   if (m === "NOPROVIDER") return "Не выбран поставщик: «Ещё» → «Нейросети», отметьте хотя бы одного.";
   if (m === "NOPROXY") return "Посредник не настроен: Ещё → Нейросети.";
+  if (m === "CONTEXT_TOO_BIG" || m === "TOO_BIG") return "Материалы и предыдущие разделы превышают допустимый объём запроса. Ничего не обрезано. Сократите материалы, сохранив нужные факты, и повторите подготовку.";
+  if (m.indexOf("INCOMPLETE:") === 0) return "Нейросеть не завершила раздел. Незавершённый ответ не заменил сохранённый текст. Уменьшите объём раздела или разделите его на подразделы и повторите подготовку.";
+  if (m.indexOf("TIMEOUT:") === 0) return "Нейросеть не ответила за три минуты. Сохранённые разделы доступны; повторный запуск продолжит подготовку с остановленного раздела.";
+  if (m.indexOf("UPSTREAM:") === 0) return "Посредник не получил корректный ответ нейросети. Сохранённый текст не заменён. Повторите подготовку позже.";
   if (m === "TOKEN") return "Посредник не принял пароль — проверьте, что он одинаковый здесь и в настройках посредника.";
   if (m === "NOTOKEN_SERVER") return "У посредника не задан PROXY_TOKEN в настройках.";
   if (m.indexOf("NOKEY:") === 0) return "У посредника нет ключа для " + nm + " — добавьте его в настройках воркера.";
@@ -741,6 +749,7 @@ function sectionPrompt(x, c){
   var sys = buildPrompt(x).replace("[вписать главы и параграфы из задания]",
     doc.order.map(function(q, i){ return (i+1) + ". " + q.name + (q.pages ? " — примерно " + q.pages + " стр." : ""); }).join("\n"));
   sys += "\n"+DraftQuality.context(x);
+  if(DraftQuality.financial(x))sys += "\nНе смешивай перенос срока погашения неизменной суммы долга с ростом общей суммы обязательств. Только чистая переклассификация долга при неизменных капитале и активах не меняет автономию. При изменении капитала или активов опирайся на рассчитанную автономию за каждый год. Рост показателя не называй безусловным улучшением без достаточных данных.";
   var previous=doc.order.filter(function(q){return q.id!==c.id && (doc.structure[q.id]||{}).text;}).map(function(q){return q.name+":\n"+doc.structure[q.id].text;}).join("\n\n");
   if(sys.length+previous.length>180000)throw Error("Материалы и документ превышают объём одного запроса. Сократите материалы без потери необходимых данных.");
   var user="Подготовь раздел «"+c.name+"». Целевой объём около "+((c.pages||3)*1800)+" знаков. Не увеличивай объём повторениями. Верни только текст, без повторения названия раздела.\n"+
