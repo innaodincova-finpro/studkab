@@ -60,7 +60,7 @@ function cm2tw(cm){ return Math.round(cm * 566.929); }
 function buildDocx(w, chapters){
   var f = Object.assign({font:"Times New Roman",size:14,spacing:1.5,indent:1.25,mTop:20,mBottom:20,mLeft:30,mRight:15},w.format||{});
   // Historical records may contain absent or nonnumeric formatting.
-  var limits={size:[8,28,14],spacing:[1,3,1.5],indent:[0,5,1.25],mTop:[5,50,20],mBottom:[5,50,20],mLeft:[5,50,30],mRight:[5,50,15]};
+  var limits={size:[8,24,14],spacing:[1,3,1.5],indent:[0,5,1.25],mTop:[0,100,20],mBottom:[0,100,20],mLeft:[0,100,30],mRight:[0,100,15]};
   Object.keys(limits).forEach(function(k){var a=limits[k],n=Number(f[k]);f[k]=f[k]!==null&&f[k]!==""&&Number.isFinite(n)&&n>=a[0]&&n<=a[1]?n:a[2];});
   var line = Math.round((f.spacing || 1.5) * 240);
   var half = Math.round((f.size || 14) * 2);

@@ -21,5 +21,6 @@ test('financial recommendations flag repeated metrics and unsupported policy pre
  const text='Ликвидность 1,5, автономия 0,4 и рентабельность 10%. Закрепить нормативы в учётной политике.';
  assert.equal(q.sectionNotes(x,c,text).length,2);
  assert.equal(q.sectionNotes(x,{id:'ch2'},text).length,0);
+ assert.equal(q.sectionNotes(x,c,'За 2024 и 2025 годы уточнить состав оборотного капитала. Подобрать отраслевые ориентиры ликвидности, автономии и рентабельности.').length,0);
  assert.equal(q.sectionNotes(x,c,'Сопоставить сроки поступления платежей и погашения обязательств; проверить результат по платёжному календарю.').length,0);
 });

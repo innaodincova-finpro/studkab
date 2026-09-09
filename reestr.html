@@ -742,7 +742,7 @@ function defaultDoc(x){
   return { order:list, structure:st, updated:"" };
 }
 function docOf(x){ if (!x.doc) x.doc = defaultDoc(x); return x.doc; }
-function docPages(x){ var n = 0; docOf(x).order.forEach(function(c){ n += ((x.doc.structure[c.id]||{}).text||"").length; }); return Math.round(n/1800*10)/10; }
+function docCharacters(x){ var n = 0; docOf(x).order.forEach(function(c){ n += ((x.doc.structure[c.id]||{}).text||"").length; }); return n; }
 
 function sectionPrompt(x, c){
   var doc = docOf(x);
@@ -1393,7 +1393,7 @@ function viewItem(id){
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
   var r = x.refId ? refById(x.refId) : findRef(x);
   var diff = r ? fmtDiff(x.format, r.format) : [];
-  var dp = x.doc ? docPages(x) : 0;
+  var dp = x.doc ? docCharacters(x) : 0;
 
   var h = '<button type="button" class="mini" data-act="back" style="margin:0 0 10px">← Заявки</button>' +
     '<div class="title" style="font-size:21px">' + esc(x.student || "Без имени") + '</div>' +
@@ -1405,7 +1405,7 @@ function viewItem(id){
 
   h += card(lab("Документ") +
     (x.doc && x.doc.updated
-      ? '<div class="mut">' + x.doc.order.length + ' разделов · примерно ' + dp + ' стр. · правка ' + ruDate(x.doc.updated) + '</div>'
+      ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков · правка ' + ruDate(x.doc.updated) + '</div>'
       : '<div class="mut">Черновик ещё не собирался.</div>') +
     '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (x.doc && x.doc.updated ? "Открыть документ" : "Собрать документ") + '</button></div>', "now");
 
