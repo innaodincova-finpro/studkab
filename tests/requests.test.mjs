@@ -107,6 +107,10 @@ test('delivered Word preserves custom sections and escapes markup',async()=>{
  const doc=validateResult(documentFixture);const blob=c.window.ResultDocx(doc,doc.chapters),bytes=new Uint8Array(await blob.arrayBuffer());
  assert.equal(bytes[0],80);assert.equal(bytes[1],75);
  const zip=new TextDecoder().decode(bytes);assert.match(zip,/Текст черновика &lt;не HTML&gt;/);assert.match(zip,/Тема &amp; &lt;проверка&gt;/);
+ const withToc=c.window.ResultDocx({...doc,format:{...doc.format,toc:true}},doc.chapters);
+ const tocZip=new TextDecoder().decode(await withToc.arrayBuffer());
+ assert.match(tocZip,/<w:updateFields w:val="true"/);assert.match(tocZip,/Target="settings.xml"/);
+ assert.match(tocZip,/PAGEREF section_0/);assert.match(tocZip,/w:name="section_0"/);assert.match(tocZip,/w:anchor="section_0"/);
 });
 
 test('delivery rejects unfinished placeholders in otherwise nonempty documents',async()=>{

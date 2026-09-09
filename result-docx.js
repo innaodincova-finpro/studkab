@@ -106,13 +106,15 @@ function buildDocx(w, chapters){
   /* Содержание */
   if (f.toc){
     body += P("СОДЕРЖАНИЕ", { jc:"center", b:true, after:240 });
-    body += '<w:p><w:pPr><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>'+
-      '<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>'+
-      '<w:r><w:instrText xml:space="preserve"> TOC \\o "1-1" \\h \\z \\u </w:instrText></w:r>'+
-      '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
-      '<w:r><w:rPr><w:sz w:val="'+half+'"/></w:rPr>'+
-      '<w:t xml:space="preserve">'+chapters.filter(function(c){return ((w.structure||{})[c.id]||{}).text;}).map(function(c){return xesc(c.name);}).join('</w:t><w:br/><w:t xml:space="preserve">')+'</w:t></w:r>'+
-      '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>';
+    var entries=chapters.map(function(c,i){return {chapter:c,index:i};}).filter(function(e){return ((w.structure||{})[e.chapter.id]||{}).text;});
+    entries.forEach(function(e,i){
+      var anchor='section_'+e.index;
+      body+='<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="'+(11906-mm2tw(f.mLeft)-mm2tw(f.mRight))+'"/></w:tabs><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>';
+      if(i===0)body+='<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-1" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>';
+      body+='<w:hyperlink w:anchor="'+anchor+'"><w:r><w:t>'+xesc(e.chapter.name)+'</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF '+anchor+' \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t> </w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink>';
+      if(i===entries.length-1)body+='<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+      body+='</w:p>';
+    });
     body += pageBreak();
   }
 
@@ -124,7 +126,7 @@ function buildDocx(w, chapters){
     if (!text) return;
     if (written > 0) body += pageBreak();
     written++;
-    body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 });
+    body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 }).replace('</w:pPr>','</w:pPr><w:bookmarkStart w:id="'+i+'" w:name="section_'+i+'"/>').replace('</w:p>','<w:bookmarkEnd w:id="'+i+'"/></w:p>');
     var lines=text.split(/\n+/),row=0;
     // The section title is already emitted above. Remove only an exact leading
     // duplicate, preserving subsection headings and the author's body text.
