@@ -10,7 +10,7 @@ async function cloud(){
  c.setTimeout=fn=>{let key={};c.timers.set(key,fn);return key};c.clearTimeout=k=>c.timers.delete(k);c.addEventListener=()=>{};c.window=c;
  c.OBLAKO_CONFIG={url:'test',key:'public'};
  const q={select(){return this},eq(){return this},maybeSingle(){return Promise.resolve(c.nextRead)}};
- c.supabase={createClient:()=>({auth:{onAuthStateChange(fn){c.authEvent=fn},getSession:async()=>({data:{session:{user:c.user}}}),signOut:async()=>c.logout||{},signInWithPassword:async args=>{c.passwordArgs=args;return c.passwordResult||{data:{user:c.user}}},updateUser:async args=>{c.passwordUpdate=args;if(c.passwordThrow)throw c.passwordThrow;return c.passwordResponse||{}},signInWithOAuth:async args=>{c.oauth=args;return c.oauthResult||{}},verifyOtp:async()=>({data:{user:c.user}})},from:()=>q,rpc:(name,args)=>{c.calls.push({name,args});return Promise.resolve(c.nextWrite)}})};
+ c.supabase={createClient:()=>({auth:{onAuthStateChange(fn){c.authEvent=fn},getSession:async()=>({data:{session:{user:c.user}}}),signOut:async()=>c.logout||{},signInWithPassword:async args=>{c.passwordArgs=args;return c.passwordResult||{data:{user:c.user}}},updateUser:async args=>{c.passwordUpdate=args;if(c.passwordThrow)throw c.passwordThrow;return c.passwordResponse||{data:{user:c.user}}},signInWithOAuth:async args=>{c.oauth=args;return c.oauthResult||{}},verifyOtp:async()=>({data:{user:c.user}})},from:()=>q,rpc:(name,args)=>{c.calls.push({name,args});return Promise.resolve(c.nextWrite)}})};
  vm.createContext(c);vm.runInContext(read('oblako.js'),c);
  await c.Oblako.init({app:'reestr',getData:()=>({items:[]}),switchUser:id=>c.changes.push(id)});
  return c;
@@ -30,7 +30,7 @@ for(const f of ['index.html','reestr.html']){
  test(f+': save failure never shows success toast',async()=>{let c=ui();await c.cloudSave('SUCCESS');assert.deepEqual(c.toasts,['denied'])});
  test(f+': account A data survives signout but is not visible in account B',()=>{let map=new Map([['base',JSON.stringify({items:[{id:'private'}]})]]);let c={KEY:'base',CLOUD_LOCAL_KEY:'base',D:null,Oblako:{snapshot:x=>JSON.stringify(x)},cloudHasLocal:()=>false,cloudIsEmpty:x=>!x?.items?.length,localStorage:{getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)},load(){c.D=JSON.parse(map.get(c.KEY)||'{"items":[]}')},render(){}};vm.createContext(c);vm.runInContext(html.slice(html.indexOf('function cloudSwitchUser('),html.indexOf('function cloudInit(')),c);c.cloudSwitchUser('a');assert.equal(c.D.items[0].id,'private');c.cloudSwitchUser('');assert.equal(c.D.items.length,0);c.cloudSwitchUser('b');assert.equal(c.D.items.length,0);c.cloudSwitchUser('a');assert.equal(c.D.items[0].id,'private')});
 }
-test('service worker removes only its own obsolete caches',async()=>{let handlers={},deleted=[];const c={self:{addEventListener:(n,f)=>handlers[n]=f,clients:{claim:async()=>{}}},caches:{keys:async()=>['studkab-v3','studkab-v7','studkab-v8','studkab-v9','studkab-v10','studkab-v11','studkab-v12','studkab-v13','studkab-v14','studkab-v15','studkab-v16','other-v1'],delete:async k=>deleted.push(k)}};vm.runInNewContext(read('sw.js'),c);let done;handlers.activate({waitUntil:p=>done=p});await done;assert.deepEqual(deleted,['studkab-v3','studkab-v7','studkab-v8','studkab-v9','studkab-v10','studkab-v11','studkab-v12','studkab-v13','studkab-v14','studkab-v15'])});
+test('service worker removes only its own obsolete caches',async()=>{let handlers={},deleted=[];const c={self:{addEventListener:(n,f)=>handlers[n]=f,clients:{claim:async()=>{}}},caches:{keys:async()=>['studkab-v3','studkab-v7','studkab-v8','studkab-v9','studkab-v10','studkab-v11','studkab-v12','studkab-v13','studkab-v14','studkab-v15','studkab-v16','studkab-v17','other-v1'],delete:async k=>deleted.push(k)}};vm.runInNewContext(read('sw.js'),c);let done;handlers.activate({waitUntil:p=>done=p});await done;assert.deepEqual(deleted,['studkab-v3','studkab-v7','studkab-v8','studkab-v9','studkab-v10','studkab-v11','studkab-v12','studkab-v13','studkab-v14','studkab-v15','studkab-v16'])});
 test('SIGNED_IN after logout switches storage before allowing cloud writes',async()=>{
  const c=await cloud();await c.Oblako.signOut();c.authEvent('SIGNED_IN',{user:{id:'b',email:'b@test'}});
  for(const fn of [...c.timers.values()])fn();
@@ -69,6 +69,14 @@ test('password failures explain service rejection without leaking raw details or
   await assert.rejects(c.Oblako.setPassword('test-only-password'),e=>pattern.test(e.message)&&!e.message.includes('secret'));
   assert.equal(c.Oblako.busy,false);assert.equal(c.calls.length,0);
  }
- c.passwordResponse={};await c.Oblako.setPassword('test-only-password');assert.equal(c.Oblako.busy,false);
+ c.passwordResponse={data:{user:c.user}};await c.Oblako.setPassword('test-only-password');assert.equal(c.Oblako.busy,false);
  c.passwordThrow={name:'AuthRetryableFetchError'};await assert.rejects(c.Oblako.setPassword('test-only-password'),/интернет/);assert.equal(c.Oblako.busy,false);
+});
+
+test('password update rejects missing acknowledgement and a session from another account',async()=>{
+ const c=await cloud();c.passwordResponse={};
+ await assert.rejects(c.Oblako.setPassword('test-only-password'),/не подтвердил/);
+ c.passwordUpdate=null;c.user={id:'another',email:'other@test'};
+ await assert.rejects(c.Oblako.setPassword('test-only-password'),/Сеанс/);
+ assert.equal(c.passwordUpdate,null);assert.equal(c.Oblako.busy,false);
 });

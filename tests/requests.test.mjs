@@ -67,3 +67,44 @@ test('recovery link uses existing account only; invite never resets it',async()=
  calls=[];const result=await accessLink({...args,recovery:true});assert.match(result.url,/type=recovery/);assert.equal(JSON.parse(calls[1].body).type,'recovery');
  calls=[];assert.equal((await accessLink({...args,email:'missing@example.test',recovery:true})).missing,true);assert.equal(calls.length,1);
 });
+
+const requestId='11111111-1111-4111-8111-111111111111';
+const deliveryId='22222222-2222-4222-8222-222222222222';
+const documentFixture={topic:'Тема & <проверка>',student:'Тестовый студент',group:'Т-1',format:{size:14},chapters:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Текст черновика <не HTML>'}}};
+test('result delivery is executor-only; a student cannot read another student result',async()=>{
+ let who=student,reads=0;
+ const app=handler({auth:async()=>who,config:async()=>({executor_email:owner.email}),db:async(path)=>{reads++;return path.startsWith('studkab_requests?')?[{id:requestId,student_id:student.id}]:[{document:documentFixture}];}});
+ assert.equal((await app(request({action:'deliver',id:requestId,deliveryId,document:documentFixture}))).status,403);assert.equal(reads,0);
+ who={...student,id:'another'};
+ assert.equal((await app(request({action:'result',id:requestId}))).status,404);assert.equal(reads,1);
+ who=student;
+ const result=await (await app(request({action:'result',id:requestId}))).json();assert.equal(result.result.document.topic,documentFixture.topic);
+});
+test('submitted request flows through inbox to immutable result and student retrieval',async()=>{
+ let who=student,row,delivered;
+ const app=handler({auth:async()=>who,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>{
+  if(path==='rpc/submit_studkab_request'){row={id:requestId,number:1,payload:body.content,student_id:body.student};return{id:row.id,number:1};}
+  if(path.startsWith('studkab_requests?'))return [row];
+  if(path==='rpc/deliver_studkab_result'){delivered={delivery_id:body.delivery,document:body.content,created_at:'2026-09-09T00:00:00Z'};return{deliveryId:body.delivery};}
+  if(path.startsWith('studkab_results?'))return delivered?[delivered]:[];
+  throw Error('Unexpected path');
+ }});
+ assert.equal((await app(request({action:'submit',payload:p}))).status,200);
+ assert.equal((await (await app(request({action:'result',id:requestId}))).json()).result,null);
+ who=owner;assert.equal((await (await app(request({action:'inbox'}))).json()).rows[0].id,requestId);
+ const ack=await (await app(request({action:'deliver',id:requestId,deliveryId,document:documentFixture}))).json();assert.equal(ack.saved,true);
+ who=student;assert.equal((await (await app(request({action:'result',id:requestId}))).json()).result.document.structure.intro.text,documentFixture.structure.intro.text);
+});
+test('result validation rejects empty text, dangerous keys, oversized sections and invalid formatting',async()=>{
+ const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
+ for(const bad of [null,{}, {...documentFixture,chapters:[{id:'__proto__',name:'X'}]}, {...documentFixture,chapters:[{id:'intro',name:'A'},{id:'intro',name:'B'}]}, {...documentFixture,structure:{intro:{text:''}}},{...documentFixture,structure:{intro:{text:'x'.repeat(100001)}}},{...documentFixture,format:{size:999}}])assert.throws(()=>validateResult(bad));
+ assert.equal(validateResult({...documentFixture,secret:'strip'}).secret,undefined);
+});
+test('delivered Word preserves custom sections and escapes markup',async()=>{
+ const vm=await import('node:vm'),fs=await import('node:fs');
+ const c={window:{},TextEncoder,Blob,Uint8Array,DataView,Date};vm.runInNewContext(fs.readFileSync(new URL('../result-docx.js',import.meta.url),'utf8'),c);
+ const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
+ const doc=validateResult(documentFixture);const blob=c.window.ResultDocx(doc,doc.chapters),bytes=new Uint8Array(await blob.arrayBuffer());
+ assert.equal(bytes[0],80);assert.equal(bytes[1],75);
+ const zip=new TextDecoder().decode(bytes);assert.match(zip,/Текст черновика &lt;не HTML&gt;/);assert.match(zip,/Тема &amp; &lt;проверка&gt;/);
+});

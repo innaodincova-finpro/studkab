@@ -149,6 +149,7 @@
   function passwordFailure(e) {
     var code=String(e && e.code || ''), status=Number(e && e.status || 0);
     var messages={
+      save_not_confirmed:'Сервис не подтвердил сохранение пароля. Не выходите из аккаунта. Повторите попытку позже.',
       same_password:'Этот пароль уже установлен. Чтобы изменить его, введите другой пароль.',
       weak_password:'Сервис отклонил пароль как недостаточно надёжный. Используйте более длинный пароль с заглавными и строчными буквами, цифрами и символами.',
       reauthentication_needed:'Для смены пароля нужно заново подтвердить вход в аккаунт. После подтверждения повторите смену пароля.',
@@ -168,7 +169,16 @@
     if (!client || !userId || Oblako.busy || inFlight) throw new Error("Сначала войдите и дождитесь сохранения");
     if (password.length < 8) throw new Error("Пароль должен содержать не менее 8 символов");
     Oblako.busy = true; notify();
-    try { var r = await client.auth.updateUser({password:password}); if(r.error) throw r.error; } catch(e) { throw new Error(passwordFailure(e)); }
+    try {
+      var expected=userId, expectedEpoch=epoch;
+      var current=await client.auth.getSession();
+      if(current.error) throw current.error;
+      if(!current.data || !current.data.session || current.data.session.user.id!==expected || epoch!==expectedEpoch) throw {code:"session_not_found"};
+      var r = await client.auth.updateUser({password:password});
+      if(r.error) throw r.error;
+      if(epoch!==expectedEpoch || userId!==expected) throw {code:"session_not_found"};
+      if(!r.data || !r.data.user || r.data.user.id!==expected) throw {code:"save_not_confirmed"};
+    } catch(e) { throw new Error(passwordFailure(e)); }
     finally { Oblako.busy = false; notify(); }
   };
 
