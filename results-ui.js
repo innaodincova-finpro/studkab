@@ -17,7 +17,11 @@
  function documentDummy(a){global.document.body.appendChild(a);a.click();a.remove();}
  function deliver(x){
   if(!x.requestNumber)return toast('Эта запись получена вне кабинета. Передайте документ через согласованный мессенджер.');
-  var payload;try{payload=snapshot(x);}catch(e){return toast(e.message);}
+  var payload;try{
+   var problems=DraftQuality.issues(x.doc||{});
+   if(problems.length)throw Error('Передача недоступна: '+problems.join('; '));
+   if(!x.doc || x.doc.review!==DraftQuality.stamp(x))throw Error('Откройте документ и нажмите «Проверить готовность» перед передачей');
+   payload=snapshot(x);}catch(e){return toast(e.message);}
   var data=D,identity=Oblako.identity(),deliveryId=crypto.randomUUID(),busy=false;
   var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Передать черновик студенту</h3><p>'+esc(x.student||'Студент')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Будет передана сохранённая версия документа. Новая передача сохраняется отдельно от предыдущей.</p><button type="button" class="chip" data-preview>Проверить Word перед передачей</button><p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="btn" data-deliver>Передать в кабинет студента</button><p role="status" data-result-status></p>');
   wrap.dataset.accountIdentity=String(identity);

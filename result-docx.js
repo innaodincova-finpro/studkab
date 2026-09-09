@@ -125,9 +125,25 @@ function buildDocx(w, chapters){
     if (written > 0) body += pageBreak();
     written++;
     body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 });
-    text.split(/\n+/).forEach(function(par){
-      if (par.trim()) body += P(par.trim(), { ind:ind, jc:"both" });
-    });
+    var lines=text.split(/\n+/),row=0;
+    while(row<lines.length){
+      var par=lines[row].trim();
+      if(/^\|.*\|$/.test(par)){
+        var grid=[];
+        while(row<lines.length && /^\s*\|.*\|\s*$/.test(lines[row])){
+          var cells=lines[row++].trim().slice(1,-1).split('|').map(function(v){return v.trim();});
+          if(!cells.every(function(v){return /^:?-+:?$/.test(v);}))grid.push(cells);
+        }
+        var cols=Math.max.apply(null,grid.map(function(r){return r.length;}));
+        if(cols>8)throw Error('В таблице слишком много столбцов для страницы');
+        var tableWidth=11906-mm2tw(f.mLeft)-mm2tw(f.mRight),cw=Math.floor(tableWidth/cols);
+        body+='<w:tbl><w:tblPr><w:tblW w:w="'+tableWidth+'" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(k){return '<w:'+k+' w:val="single" w:sz="4" w:color="D9D9D9"/>';}).join('')+'</w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+Array(cols).fill('<w:gridCol w:w="'+cw+'"/>').join('')+'</w:tblGrid>';
+        grid.forEach(function(cells,ri){body+='<w:tr><w:trPr><w:cantSplit/>'+(ri===0?'<w:tblHeader/>':'')+'</w:trPr>';for(var ci=0;ci<cols;ci++)body+='<w:tc><w:tcPr><w:tcW w:w="'+cw+'" w:type="dxa"/>'+(ri===0?'<w:shd w:fill="E8EEF4"/>':'')+'</w:tcPr>'+P(cells[ci]||'',{jc:ci?'center':'left',b:ri===0})+'</w:tc>';body+='</w:tr>';});body+='</w:tbl>'+P('');
+      }else{
+        if(par)body+=P(par,{ind:/^\d+\.\d+/.test(par)?0:ind,jc:/^\d+\.\d+/.test(par)?'left':'both',b:/^\d+\.\d+/.test(par),style:/^\d+\.\d+/.test(par)?'Heading2':undefined});
+        row++;
+      }
+    }
   });
   if (!written) body += P("Разделы пока не написаны.", { ind:ind });
 

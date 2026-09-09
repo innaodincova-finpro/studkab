@@ -5,7 +5,7 @@ test('executor reviews Word, retries safely and receives an honest delivery conf
  await account(page,'reestr.html');await page.setViewportSize({width:390,height:844});
  await page.evaluate(()=>{
   window.deliveries=[];Oblako.requestApi=async body=>{deliveries.push(body);if(deliveries.length===1)throw Error('Временный сбой');return{saved:true,deliveryId:body.deliveryId};};
-  StudResults.deliver({id:'11111111-1111-4111-8111-111111111111',requestNumber:1,topic:'Проверка документа',student:'Тестовый студент',format:{},doc:{order:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Проверенный черновик'}}}});
+  const candidate={id:'11111111-1111-4111-8111-111111111111',requestNumber:1,topic:'Проверка документа',student:'Тестовый студент',format:{},doc:{order:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Проверенный черновик'}}}};candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);
  });
  await page.getByRole('button',{name:'Передать в кабинет студента',exact:true}).click();await expect(page.locator('[data-result-status]')).toContainText('Проверьте документ');expect(await page.evaluate(()=>deliveries.length)).toBe(0);
  const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Проверить Word перед передачей'}).click();expect((await downloaded).suggestedFilename()).toMatch(/\.docx$/);

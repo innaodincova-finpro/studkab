@@ -108,3 +108,10 @@ test('delivered Word preserves custom sections and escapes markup',async()=>{
  assert.equal(bytes[0],80);assert.equal(bytes[1],75);
  const zip=new TextDecoder().decode(bytes);assert.match(zip,/Текст черновика &lt;не HTML&gt;/);assert.match(zip,/Тема &amp; &lt;проверка&gt;/);
 });
+
+test('delivery rejects unfinished placeholders in otherwise nonempty documents',async()=>{
+ const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
+ const base={topic:'Тема',chapters:[{id:'a',name:'Глава'}],structure:{a:{text:'[ДАННЫЕ СТУДЕНТА: прибыль]'}}};
+ assert.throws(()=>validateResult(base),/не готов/);
+ base.structure.a.text='[СФОРМУЛИРОВАТЬ САМОСТОЯТЕЛЬНО: вывод]';assert.throws(()=>validateResult(base),/не готов/);
+});

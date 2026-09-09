@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v18";
+const CACHE = "studkab-v19";
 const SHELL = [
   "./",
   "./push.js?v=1",
@@ -13,8 +13,10 @@ const SHELL = [
   "./manifest-reestr.webmanifest",
   "./oblako.js?v=13",
   "./cloud-ui.js?v=3",
-  "./result-docx.js?v=1",
-  "./results-ui.js?v=1",
+  "./draft-quality.js?v=1",
+  "./draft-editor.js?v=1",
+  "./result-docx.js?v=2",
+  "./results-ui.js?v=2",
   "./onboarding.js?v=2",
   "./oblako-config.js"
 ];
