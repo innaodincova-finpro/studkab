@@ -58,7 +58,10 @@ function mm2tw(mm){ return Math.round(mm * 56.6929); }
 function cm2tw(cm){ return Math.round(cm * 566.929); }
 
 function buildDocx(w, chapters){
-  var f = w.format;
+  var f = Object.assign({font:"Times New Roman",size:14,spacing:1.5,indent:1.25,mTop:20,mBottom:20,mLeft:30,mRight:15},w.format||{});
+  // Historical records may contain absent or nonnumeric formatting.
+  var limits={size:[8,24,14],spacing:[1,3,1.5],indent:[0,5,1.25],mTop:[0,100,20],mBottom:[0,100,20],mLeft:[0,100,30],mRight:[0,100,15]};
+  Object.keys(limits).forEach(function(k){var a=limits[k],n=Number(f[k]);f[k]=f[k]!==null&&f[k]!==""&&Number.isFinite(n)&&n>=a[0]&&n<=a[1]?n:a[2];});
   var line = Math.round((f.spacing || 1.5) * 240);
   var half = Math.round((f.size || 14) * 2);
   var ind = cm2tw(f.indent || 0);
@@ -103,16 +106,17 @@ function buildDocx(w, chapters){
   body += P(((f.city ? f.city + ", " : "") + year), { jc:"center" });
   body += pageBreak();
 
-  /* Содержание */
+  /* Entries follow the saved structure; PAGEREF calculates real pages.
+     An outer cached TOC field prevents LibreOffice from refreshing these references. */
   if (f.toc){
     body += P("СОДЕРЖАНИЕ", { jc:"center", b:true, after:240 });
-    body += '<w:p><w:pPr><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>'+
-      '<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>'+
-      '<w:r><w:instrText xml:space="preserve"> TOC \\o "1-1" \\h \\z \\u </w:instrText></w:r>'+
-      '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
-      '<w:r><w:rPr><w:sz w:val="'+half+'"/></w:rPr>'+
-      '<w:t xml:space="preserve">Чтобы проставились названия и номера страниц: щёлкните по этой строке правой кнопкой и выберите «Обновить поле» (в Word на компьютере — F9).</w:t></w:r>'+
-      '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>';
+    var entries=chapters.map(function(c,i){return {chapter:c,index:i};}).filter(function(e){return ((w.structure||{})[e.chapter.id]||{}).text;});
+    entries.forEach(function(e,i){
+      var anchor='section_'+e.index;
+      body+='<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="'+(11906-mm2tw(f.mLeft)-mm2tw(f.mRight))+'"/></w:tabs><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>';
+      body+='<w:hyperlink w:anchor="'+anchor+'"><w:r><w:t>'+xesc(e.chapter.name)+'</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF '+anchor+' \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t> </w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink>';
+      body+='</w:p>';
+    });
     body += pageBreak();
   }
 
@@ -124,10 +128,30 @@ function buildDocx(w, chapters){
     if (!text) return;
     if (written > 0) body += pageBreak();
     written++;
-    body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 });
-    text.split(/\n+/).forEach(function(par){
-      if (par.trim()) body += P(par.trim(), { ind:ind, jc:"both" });
-    });
+    body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 }).replace('</w:pPr>','</w:pPr><w:bookmarkStart w:id="'+i+'" w:name="section_'+i+'"/>').replace('</w:p>','<w:bookmarkEnd w:id="'+i+'"/></w:p>');
+    var lines=text.split(/\n+/),row=0;
+    // The section title is already emitted above. Remove only an exact leading
+    // duplicate, preserving subsection headings and the author's body text.
+    var normalizedTitle=function(v){return String(v).trim().replace(/^#{1,6}\s+/, '').replace(/^\*\*(.*)\*\*$/, '$1').trim().toLowerCase();};
+    if(lines.length && normalizedTitle(lines[0])===normalizedTitle(c.name))row=1;
+    while(row<lines.length){
+      var par=lines[row].trim();
+      if(/^\|.*\|$/.test(par)){
+        var grid=[];
+        while(row<lines.length && /^\s*\|.*\|\s*$/.test(lines[row])){
+          var cells=lines[row++].trim().slice(1,-1).split('|').map(function(v){return v.trim();});
+          if(!cells.every(function(v){return /^:?-+:?$/.test(v);}))grid.push(cells);
+        }
+        var cols=Math.max.apply(null,grid.map(function(r){return r.length;}));
+        if(cols>8)throw Error('В таблице слишком много столбцов для страницы');
+        var tableWidth=11906-mm2tw(f.mLeft)-mm2tw(f.mRight),cw=Math.floor(tableWidth/cols);
+        body+='<w:tbl><w:tblPr><w:tblW w:w="'+tableWidth+'" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(k){return '<w:'+k+' w:val="single" w:sz="4" w:color="D9D9D9"/>';}).join('')+'</w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+Array(cols).fill('<w:gridCol w:w="'+cw+'"/>').join('')+'</w:tblGrid>';
+        grid.forEach(function(cells,ri){body+='<w:tr><w:trPr><w:cantSplit/>'+(ri===0?'<w:tblHeader/>':'')+'</w:trPr>';for(var ci=0;ci<cols;ci++)body+='<w:tc><w:tcPr><w:tcW w:w="'+cw+'" w:type="dxa"/>'+(ri===0?'<w:shd w:fill="E8EEF4"/>':'')+'</w:tcPr>'+P(cells[ci]||'',{jc:ci?'center':'left',b:ri===0})+'</w:tc>';body+='</w:tr>';});body+='</w:tbl>'+P('');
+      }else{
+        if(par)body+=P(par,{ind:/^\d+\.\d+/.test(par)?0:ind,jc:/^\d+\.\d+/.test(par)?'left':'both',b:/^\d+\.\d+/.test(par),style:/^\d+\.\d+/.test(par)?'Heading2':undefined});
+        row++;
+      }
+    }
   });
   if (!written) body += P("Разделы пока не написаны.", { ind:ind });
 
@@ -174,6 +198,7 @@ function buildDocx(w, chapters){
     '<Default Extension="xml" ContentType="application/xml"/>'+
     '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'+
     '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'+
+    '<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>'+
     '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'+
     '</Types>';
 
@@ -186,6 +211,7 @@ function buildDocx(w, chapters){
     '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
     '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
     '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'+
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>'+
     '</Relationships>';
 
   return makeZip([
@@ -194,6 +220,7 @@ function buildDocx(w, chapters){
     { name:"word/document.xml", text:document_xml },
     { name:"word/_rels/document.xml.rels", text:docRels },
     { name:"word/styles.xml", text:styles_xml },
+    { name:"word/settings.xml", text:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:updateFields w:val="true"/></w:settings>' },
     { name:"word/footer1.xml", text:footer_xml }
   ]);
 }

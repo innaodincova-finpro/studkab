@@ -16,7 +16,10 @@ export default defineConfig({
        html=html.replace(/<script[^>]+src="https:\/\/cdn.jsdelivr.net\/npm\/@supabase[^>]*><\/script>/g,'<script src="/tests/qa-cloud.js"></script>');
        if(url.searchParams.has('no-sdk')) html=html.replace('<script src="/tests/qa-cloud.js"></script>','<script>window.supabase=null;</script>');
        res.setHeader('Content-Type','text/html; charset=utf-8');
-       res.setHeader('Content-Security-Policy',"connect-src 'self'; worker-src 'none'");
+       // Explicit live-AI QA opt-in. Mocked cloud remains isolated; only the
+       // existing owner-provided AI endpoint is allowed, never arbitrary URLs.
+       const aiOrigin=url.searchParams.get('ai-qa')==='1'?' https://calm-bird-dae8.bf6mhynzgm.workers.dev':'';
+       res.setHeader('Content-Security-Policy',"connect-src 'self'"+aiOrigin+"; worker-src 'none'");
        return res.end(html);
      }
      next();

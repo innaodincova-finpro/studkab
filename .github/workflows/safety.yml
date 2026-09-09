@@ -33,6 +33,26 @@ jobs:
           PGPASSWORD: test-only
           PGDATABASE: safety_test
       - run: npm ci
+      - name: Exclude unused Google Chrome apt repository
+        run: |
+          # Playwright downloads its own browsers. A broken third-party Chrome
+          # package index must not block Ubuntu system dependency installation.
+          # Package signature and checksum verification remain enabled.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          for path in Path('/etc/apt/sources.list.d').iterdir():
+              if path.suffix not in ('.list', '.sources'):
+                  continue
+              text = path.read_text()
+              if 'dl.google.com/linux/chrome' not in text:
+                  continue
+              if path.suffix == '.list':
+                  text = '\n'.join(line for line in text.splitlines() if 'dl.google.com/linux/chrome' not in line) + '\n'
+              else:
+                  text = '\n\n'.join(block for block in text.split('\n\n') if 'dl.google.com/linux/chrome' not in block) + '\n'
+              path.write_text(text)
+              print('Excluded Chrome source from', path.name)
+          PY
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4

@@ -5,7 +5,7 @@ test('executor reviews Word, retries safely and receives an honest delivery conf
  await account(page,'reestr.html');await page.setViewportSize({width:390,height:844});
  await page.evaluate(()=>{
   window.deliveries=[];Oblako.requestApi=async body=>{deliveries.push(body);if(deliveries.length===1)throw Error('Временный сбой');return{saved:true,deliveryId:body.deliveryId};};
-  StudResults.deliver({id:'11111111-1111-4111-8111-111111111111',requestNumber:1,topic:'Проверка документа',student:'Тестовый студент',format:{},doc:{order:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Проверенный черновик'}}}});
+  const candidate={id:'11111111-1111-4111-8111-111111111111',requestNumber:1,topic:'Проверка документа',student:'Тестовый студент',format:{},doc:{order:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Проверенный черновик'}}}};candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);
  });
  await page.getByRole('button',{name:'Передать в кабинет студента',exact:true}).click();await expect(page.locator('[data-result-status]')).toContainText('Проверьте документ');expect(await page.evaluate(()=>deliveries.length)).toBe(0);
  const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Проверить Word перед передачей'}).click();expect((await downloaded).suggestedFilename()).toMatch(/\.docx$/);
@@ -29,4 +29,18 @@ test('student receives Word without overwriting own work; changed account cannot
  await expect.poll(()=>page.evaluate(()=>Oblako.email)).toBe('other@example.test');
  // Account switching closes sheets in the application; no old result can be downloaded.
  await expect(page.getByRole('button',{name:'Скачать черновик Word'})).toHaveCount(0);
+});
+
+test('editing a recipient or document after opening delivery prevents sending',async({page})=>{
+ await account(page,'reestr.html');
+ await page.evaluate(()=>{
+  window.deliveries=[];Oblako.requestApi=async body=>{deliveries.push(body);return{saved:true,deliveryId:body.deliveryId};};
+  window.candidate={id:'11111111-1111-4111-8111-111111111111',requestNumber:1,topic:'Проверка',student:'Получатель',format:{},doc:{order:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Проверенный текст'}}}};
+  candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);
+ });
+ await page.getByRole('checkbox').check();
+ await page.evaluate(()=>{candidate.id='22222222-2222-4222-8222-222222222222';});
+ await page.getByRole('button',{name:'Передать в кабинет студента',exact:true}).click();
+ await expect(page.locator('[data-result-status]')).toContainText('Документ или получатель изменился');
+ expect(await page.evaluate(()=>deliveries.length)).toBe(0);
 });

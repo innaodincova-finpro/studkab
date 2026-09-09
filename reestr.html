@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=13"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="result-docx.js?v=1"></script><script src="results-ui.js?v=1"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=3"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -621,7 +621,7 @@ function buildPrompt(x){
   var f = x.format || {};
   var refs = "";
   var L = [];
-  L.push("Ты помогаешь студенту подготовить черновик учебной работы. Нужен связный текст, который студент дальше дорабатывает и проверяет сам.");
+  L.push("Ты помогаешь студенту подготовить черновик учебной работы. Нужен обоснованный связный черновик для проверки исполнителем и дальнейшей работы студента.");
   L.push("");
   L.push("РАБОТА");
   if (x.workType) L.push("Вид работы: " + x.workType);
@@ -631,9 +631,10 @@ function buildPrompt(x){
   if (x.faculty) L.push("Факультет: " + x.faculty);
   if (x.kafedra) L.push("Кафедра: " + x.kafedra);
   if (x.program) L.push("Направление подготовки: " + x.program);
-  if (x.requirements) L.push("Требования: " + x.requirements);
-  if (x.org){ L.push(""); L.push("ОРГАНИЗАЦИЯ ИЛИ ОБЪЕКТ ИССЛЕДОВАНИЯ"); L.push(x.org); }
-  if (x.methodNotes){ L.push(""); L.push("ОСОБЕННОСТИ МЕТОДИЧКИ"); L.push(x.methodNotes); }
+  var packet=DraftQuality.inputs(x);
+  if (packet.requirements) L.push("Требования: " + packet.requirements);
+  if (packet.organization){ L.push(""); L.push("ОРГАНИЗАЦИЯ ИЛИ ОБЪЕКТ ИССЛЕДОВАНИЯ"); L.push(packet.organization); }
+
   L.push("");
   L.push("СТРУКТУРА");
   L.push("[вписать главы и параграфы из задания]");
@@ -644,10 +645,10 @@ function buildPrompt(x){
   L.push("— Абзацы 4–8 предложений, каждый с одной мыслью.");
   L.push("");
   L.push("ОБЯЗАТЕЛЬНЫЕ ОГРАНИЧЕНИЯ");
-  L.push("— Не выдумывай источники. Приводи только те работы, в существовании которых уверен, и помечай каждую: [ПРОВЕРИТЬ ИСТОЧНИК]. Лучше пять реальных, чем двадцать выдуманных.");
-  L.push("— Не выдумывай цифры и факты об организации. Где нужны реальные данные, ставь: [ДАННЫЕ СТУДЕНТА: что именно нужно].");
+  L.push("— Используй только предоставленные источники и выдержки. Не дополняй библиографию по памяти. Ссылки в тексте должны однозначно указывать источник из предоставленного списка.");
+  L.push("— Не выдумывай цифры, факты, проверки или результаты. Если данных недостаточно для раздела, ответь только НЕДОСТАТОЧНО ДАННЫХ: и перечисли, чего не хватает. Не создавай текст с пропусками.");
   L.push("— Не придумывай результаты опросов, интервью и расчётов.");
-  L.push("— Где нужен собственный вывод студента, ставь: [СФОРМУЛИРОВАТЬ САМОСТОЯТЕЛЬНО].");
+  L.push("— Обосновывай выводы конкретными предоставленными данными. Не утверждай выполнение всех задач без доказательств. Не подменяй анализ общими рассуждениями. Не предписывай универсальные нормы без источника и контекста.");
   L.push("");
   L.push("ЧТО ВЫДАТЬ");
   L.push("Только текст работы по разделам. Без вступлений и комментариев. Заголовки — точно как в структуре.");
@@ -690,11 +691,15 @@ function askAI(providerId, system, user){
     return fetch(url, {
       method:"POST",
       headers:{ "Content-Type":"application/json", "X-Proxy-Token": st.proxyToken || "" },
-      body: JSON.stringify({ provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.7 })
+      body: JSON.stringify({ provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.2 })
     }).then(function(r){
-      return r.json().catch(function(){ throw new Error("HTTP:proxy:" + r.status); });
+      return r.json().catch(function(){ throw new Error("HTTP:proxy:" + r.status); }).then(function(j){
+        if (!r.ok) throw new Error(j && j.error || "HTTP:proxy:" + r.status);
+        return j;
+      });
     }).then(function(j){
       if (j.error) throw new Error(j.error);
+      if (j.complete === false) throw new Error("INCOMPLETE:" + providerId);
       if (!j.text) throw new Error("EMPTY:" + providerId);
       return { text: j.text, tokens: j.tokens || 0, provider: j.provider || providerId };
     });
@@ -706,6 +711,10 @@ function aiErrorText(e){
   var nm = who ? providerName(who) : "";
   if (m === "NOPROVIDER") return "Не выбран поставщик: «Ещё» → «Нейросети», отметьте хотя бы одного.";
   if (m === "NOPROXY") return "Посредник не настроен: Ещё → Нейросети.";
+  if (m === "CONTEXT_TOO_BIG" || m === "TOO_BIG") return "Материалы и предыдущие разделы превышают допустимый объём запроса. Ничего не обрезано. Сократите материалы, сохранив нужные факты, и повторите подготовку.";
+  if (m.indexOf("INCOMPLETE:") === 0) return "Нейросеть не завершила раздел. Незавершённый ответ не заменил сохранённый текст. Уменьшите объём раздела или разделите его на подразделы и повторите подготовку.";
+  if (m.indexOf("TIMEOUT:") === 0) return "Нейросеть не ответила за три минуты. Сохранённые разделы доступны; повторный запуск продолжит подготовку с остановленного раздела.";
+  if (m.indexOf("UPSTREAM:") === 0) return "Посредник не получил корректный ответ нейросети. Сохранённый текст не заменён. Повторите подготовку позже.";
   if (m === "TOKEN") return "Посредник не принял пароль — проверьте, что он одинаковый здесь и в настройках посредника.";
   if (m === "NOTOKEN_SERVER") return "У посредника не задан PROXY_TOKEN в настройках.";
   if (m.indexOf("NOKEY:") === 0) return "У посредника нет ключа для " + nm + " — добавьте его в настройках воркера.";
@@ -733,24 +742,20 @@ function defaultDoc(x){
   return { order:list, structure:st, updated:"" };
 }
 function docOf(x){ if (!x.doc) x.doc = defaultDoc(x); return x.doc; }
-function docPages(x){ var n = 0; docOf(x).order.forEach(function(c){ n += ((x.doc.structure[c.id]||{}).text||"").length; }); return Math.round(n/1800*10)/10; }
+function docCharacters(x){ var n = 0; docOf(x).order.forEach(function(c){ n += ((x.doc.structure[c.id]||{}).text||"").length; }); return n; }
 
 function sectionPrompt(x, c){
   var doc = docOf(x);
   var sys = buildPrompt(x).replace("[вписать главы и параграфы из задания]",
     doc.order.map(function(q, i){ return (i+1) + ". " + q.name + (q.pages ? " — примерно " + q.pages + " стр." : ""); }).join("\n"));
-  var user;
-  if (c.id === "refs"){
-    var seen = doc.order.filter(function(q){ return q.id !== "refs" && (doc.structure[q.id]||{}).text })
-      .map(function(q){ return q.name + ":\n" + doc.structure[q.id].text.slice(0, 1500); }).join("\n\n");
-    user = "Составь раздел «" + c.name + "» к работе. Включи только те источники, на которые опираются написанные разделы (фрагменты ниже). " +
-      "Каждый источник — отдельной строкой с номером, в формате библиографического описания по ГОСТ, и с пометкой [ПРОВЕРИТЬ ИСТОЧНИК] в конце. " +
-      "Не добавляй источники ради количества. Выдай только список.\n\n" + seen;
-  } else {
-    user = "Напиши раздел «" + c.name + "». Объём примерно " + (c.pages || 3) + " " + ruPages(c.pages || 3) +
-      " (около " + ((c.pages || 3) * 1800) + " знаков). Выдай только текст этого раздела, без его заголовка и без вступлений. " +
-      "Внутри раздела можно использовать подзаголовки параграфов (например, 1.1, 1.2), каждый на отдельной строке.";
-  }
+  sys += "\n"+DraftQuality.context(x);
+  if(DraftQuality.financial(x))sys += "\nТочность терминов: чистый оборотный капитал здесь равен оборотным активам минус краткосрочные обязательства; не называй его средствами, профинансированными исключительно собственным капиталом. Это абсолютный показатель, а не коэффициент. Автономия равна капиталу / активам. Рост общей суммы долга сам по себе не определяет направление изменения этой доли: нужны оба значения капитала и активов. Чистая переклассификация обязательств при неизменном итоге баланса не меняет автономию. Не используй оценку «положительная динамика» вместо точных слов «увеличился», «снизился», «не изменился». Оценка качества требует обоснования, сопоставимых условий и данных. Не называй все краткосрочные обязательства наиболее срочными. Не выводи платёжеспособность из одного коэффициента.";
+  var previous=doc.order.filter(function(q){return q.id!==c.id && (doc.structure[q.id]||{}).text;}).map(function(q){return q.name+":\n"+doc.structure[q.id].text;}).join("\n\n");
+  if(sys.length+previous.length>180000)throw Error("Материалы и документ превышают объём одного запроса. Сократите материалы без потери необходимых данных.");
+  var budget=DraftQuality.budget(c);
+  var user="Подготовь раздел «"+c.name+"». "+DraftQuality.sectionRules(c)+"\nОбъём основного текста с пробелами: от "+budget.min+" до "+budget.max+" знаков, ориентир "+budget.target+". Таблицы программы в этот объём не входят. Не увеличивай объём повторениями. Если фактов мало, пиши короче, не выдумывай. Верни только текст, без повторения названия раздела.\n"+
+   "Согласуй его с приведёнными ниже уже написанными разделами. Не меняй организацию, период и расчётные значения. "+(DraftQuality.financial(x)?"Таблицы 1 и 2 с исходными и рассчитанными показателями добавляет программа, не повторяй и не переименовывай их. Другие таблицы нумеруй начиная с 3.":"Таблицы создавай только по предоставленным данным; продолжай нумерацию уже имеющихся таблиц, а если их нет — начни с 1.")+" Оформляй таблицы как Markdown с заголовком «Таблица N — Название».\n"+
+   "Не описывай неподтверждённые характеристики организации. Допущения и ограничения называй явно.\nУЖЕ ПОДГОТОВЛЕНО:\n"+previous;
   return { system: sys, user: user };
 }
 function ruPages(n){ var a = n % 100, b = n % 10; if (a > 10 && a < 20) return "страниц"; if (b > 1 && b < 5) return "страницы"; if (b === 1) return "страница"; return "страниц"; }
@@ -765,20 +770,22 @@ function dsErrorText(e){
 var genBusy = false;
 function openDocBuilder(id){
   var x = item(id); if (!x) return;
-  var doc = docOf(x);
+  if(genBusy){toast("Подготовка уже идёт. Дождитесь её завершения.");return;}
+  var doc = docOf(x), expectedData=D, expectedIdentity=Oblako.identity();
+  function current(){if(D!==expectedData||Oblako.identity()!==expectedIdentity||!wrap.isConnected)throw Error("Подготовка остановлена: окно закрыто или аккаунт изменился. Уже сохранённые разделы доступны в прежнем аккаунте.");}
   function sec(c, i){
     var t = (doc.structure[c.id]||{}).text || "";
     return '<div class="card" data-sec="' + c.id + '" style="padding:12px">' +
       '<div class="row" style="gap:6px;margin-bottom:6px">' +
         '<input type="text" class="secName" value="' + esc(c.name) + '" style="flex:1;padding:8px;font-size:14px;font-weight:500">' +
-        '<input type="number" class="secPages" value="' + (c.pages||"") + '" min="0" style="width:64px;padding:8px;font-size:13px" title="страниц">' +
+        '<input type="number" class="secPages" value="' + (c.pages||"") + '" min="0" style="width:64px;padding:8px;font-size:13px" title="Ориентир объёма текста" aria-label="страниц">' +
         '<button type="button" class="del" data-secdel="' + c.id + '" title="Убрать раздел">✕</button>' +
       '</div>' +
-      '<textarea class="secText" style="min-height:' + (t ? 160 : 70) + 'px;font-size:14px" placeholder="Вставьте текст или нажмите «Написать»">' + esc(t) + '</textarea>' +
-      '<div class="row" style="margin-top:6px"><span class="mut secStat">' + (t ? Math.round(t.length/1800*10)/10 + ' стр. · ' + t.length + ' знаков' + ((doc.structure[c.id]||{}).by ? ' · ' + esc(providerName(doc.structure[c.id].by)) : '') : 'пусто') + '</span>' +
+      '<textarea class="secText" style="min-height:' + (t ? 160 : 70) + 'px;font-size:14px" placeholder="Текст появится после общей подготовки">' + esc(t) + '</textarea>' +
+      '<div class="row" style="margin-top:6px"><span class="mut secStat">' + (t ? t.length + ' знаков' + ((doc.structure[c.id]||{}).by ? ' · ' + esc(providerName(doc.structure[c.id].by)) : '') : 'пусто') + '</span>' +
       '<div style="display:flex;gap:6px">' +
         '<button type="button" class="mini" data-seccopy="' + c.id + '">запрос</button>' +
-        (aiReady() ? '<button type="button" class="mini" data-secgen="' + c.id + '">написать</button>' : '') +
+        (aiReady() ? '<button type="button" class="mini" data-secgen="' + c.id + '">Переработать раздел</button>' : '') +
       '</div></div></div>';
   }
   var wrap = openModal(
@@ -794,19 +801,25 @@ function openDocBuilder(id){
             ? 'Посредник не настроен — откройте «Ещё» → «Нейросети» и впишите адрес и пароль.'
             : 'Не отмечен ни один поставщик — откройте «Ещё» → «Нейросети».') +
           ' Пока разделы можно писать вручную или копировать запрос кнопкой «запрос» — сохранение и Word работают без нейросети.</div>') +
+    DraftEditor.form(x) +
+    (aiReady()?'<button type="button" class="btn" data-genall="1">Подготовить весь черновик</button><p class="hint">Один запуск для всех разделов. После сбоя продолжается с сохранённого места. Во время подготовки держите это окно открытым.</p>':'') +
     '<div id="docStatus" class="infobox" style="margin:0 0 10px;display:none"></div>' +
-    '<div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
+    '<p class="hint">Число рядом с названием — ориентир объёма текста: 1 соответствует 1800 знакам с пробелами. Число страниц Word зависит от таблиц и оформления. Слишком длинный ответ сокращается автоматически одной дополнительной попыткой.</p><div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
     '<div class="chips" style="margin-top:4px">' +
       '<button type="button" class="chip" data-secadd="1">+ раздел</button>' +
       (aiReady()
-        ? '<button type="button" class="chip warn" data-genall="1">Собрать черновик</button>' +
-          '<button type="button" class="chip" data-genover="1">Переписать всё</button>'
+        ? '<button type="button" class="chip" data-genover="1">Подготовить новую версию</button>'
         : '') +
     '</div>' +
+    '<button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
     '<div class="rowbtns"><button type="button" class="btn" data-docx="1" style="flex:1">Скачать Word</button>' +
     '<button type="button" class="btn ghost" data-docsave="1" style="flex:1">Сохранить</button></div>'
   );
+  wrap.dataset.accountIdentity=String(expectedIdentity);
+  DraftEditor.bind(wrap,x,readBack);
   function readBack(){
+    current();
+    DraftEditor.read(wrap,x);
     var order = [], st = {};
     wrap.querySelectorAll("[data-sec]").forEach(function(el){
       var cid = el.getAttribute("data-sec");
@@ -821,8 +834,15 @@ function openDocBuilder(id){
     el.style.display = "block"; el.className = kind === "err" ? "warnbar" : kind === "ok" ? "okbar" : "infobox"; el.style.margin = "0 0 10px"; el.textContent = msg;
   }
   function genOne(cid){
-    readBack();
+    current();readBack();
+    var missing=DraftQuality.preflight(x);if(missing.length)return Promise.reject(Error(missing.join("; ")));
     var c = doc.order.filter(function(q){ return q.id === cid })[0]; if (!c) return Promise.resolve();
+    if(c.id==='refs'){
+      var refsText=DraftQuality.inputs(x).sources;
+      wrap.querySelector('[data-sec="'+cid+'"] .secText').value=refsText;
+      wrap.querySelector('[data-sec="'+cid+'"] .secStat').textContent=refsText.length+' знаков · Предоставленные источники';
+      readBack();return Promise.resolve();
+    }
     var pr = sectionPrompt(x, c);
     var provSel = wrap.querySelector("#docProv");
     if (!provSel) return Promise.reject(new Error("NOPROVIDER"));
@@ -830,15 +850,34 @@ function openDocBuilder(id){
     var el = wrap.querySelector('[data-sec="' + cid + '"]');
     el.querySelector(".secStat").textContent = "пишет " + providerName(prov) + "…";
     return askAI(prov, pr.system, pr.user).then(function(res){
+      current();res.text=DraftQuality.cleanSection(res.text,c);
+      var budget=DraftQuality.budget(c),editorial=DraftQuality.sectionNotes(x,c,res.text);
+      if((res.text.length<=budget.max&&!editorial.length)||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))return res;
+      el.querySelector('.secStat').textContent='Редактирую повторы и проверяю объём…';
+      // One bounded revision; a failed revision must not discard the first answer.
+      var edit=pr.user+'\n\nРедакторская проверка: '+editorial.join(' ')+'\nОтредактируй приведённый текст раздела «'+c.name+'» до '+budget.min+'–'+budget.max+' знаков с пробелами. '+DraftQuality.sectionRules(c)+' Удали повторы и вводные обороты. Сохрани все существенные результаты, числа, ссылки, оговорки и смысл. Не добавляй факты, не обрывай предложения. Верни только итоговый текст.\nТЕКСТ:\n'+res.text;
+      return askAI(prov,pr.system,edit).then(function(revised){current();revised.text=DraftQuality.cleanSection(revised.text,c);if(!revised.text||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(revised.text)||DraftQuality.issues({order:[c],structure:{[cid]:{text:revised.text}}}).some(function(e){return /пометок/.test(e);}))return res;var remaining=DraftQuality.sectionNotes(x,c,revised.text);return remaining.length<=editorial.length&&(remaining.length<editorial.length||revised.text.length<res.text.length)?revised:res;}).catch(function(){current();return res;});
+    }).then(function(res){
+      current();
+      if(/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))throw Error(res.text.slice(0,2000));
+      var errors=DraftQuality.issues({order:[c],structure:{[cid]:{text:res.text}}}).filter(function(e){return /пометок/.test(e);});
+      if(errors.length)throw Error("Раздел содержит незаполненные пометки. Уточните материалы и продолжите подготовку.");
+      if(cid==='ch2' && DraftQuality.financial(x))res.text=DraftQuality.finance(DraftQuality.inputs(x).finance).text+"\n\n"+res.text;
       el.querySelector(".secText").value = res.text;
       el.querySelector(".secText").style.minHeight = "160px";
       doc.structure[cid] = doc.structure[cid] || {}; doc.structure[cid].by = prov;
-      el.querySelector(".secStat").textContent = Math.round(res.text.length/1800*10)/10 + " стр. · " + res.text.length + " знаков · " + providerName(prov) + " · токенов " + res.tokens;
-      readBack();
+      el.querySelector(".secStat").textContent = res.text.length + " знаков · " + providerName(prov);
+      readBack();if(!storageOk)throw Error("Раздел подготовлен, но не сохранён. Скачайте Word и проверьте доступное место.");
+    }).catch(function(e){
+      el.querySelector(".secStat").textContent = "Подготовка остановлена. Причина указана над разделами.";
+      throw e;
     });
   }
   wrap.addEventListener("click", function(ev){
     var t = ev.target;
+    if(genBusy){return;}
+    if(t.closest('[data-draft-check]')){readBack();DraftEditor.check(x);return;}
+    if(t.closest('[data-draft-restore]')){readBack();if(DraftEditor.restore(x)) {wrap.remove();openDocBuilder(id);}return;}
     if (t.closest("[data-docsave]")){ readBack(); toast(storageOk ? "Сохранено" : "Не сохранено: браузер не разрешает хранение"); return; }
     if (t.closest("[data-docx]")){
       readBack();
@@ -850,7 +889,7 @@ function openDocBuilder(id){
           font:(x.format||{}).font || "Times New Roman", size:(x.format||{}).size || 14, spacing:(x.format||{}).spacing || 1.5, indent:(x.format||{}).indent || 1.25
         });
         var w = { topic:x.topic, student:x.student, group:x.group, format:f, structure:doc.structure };
-        var blob = buildDocx(w, doc.order);
+        var blob = ResultDocx(w, doc.order);
         var url = URL.createObjectURL(blob), a = document.createElement("a");
         a.href = url; a.download = safeName((x.student||"") + " " + (x.topic||"")) + ".docx";
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -877,31 +916,40 @@ function openDocBuilder(id){
       var cid1 = g1.getAttribute("data-secgen");
       var el1 = wrap.querySelector('[data-sec="' + cid1 + '"] .secText');
       if (el1 && el1.value.trim() && !confirm("В этом разделе уже есть текст. Заменить его тем, что напишет нейросеть?")) return;
-      genBusy = true; setStatus("Пишу раздел…");
-      genOne(cid1).then(function(){ setStatus("Готово. Проверьте текст и пометки.", "ok"); })
-        .catch(function(e){ setStatus(aiErrorText(e), "err"); }).then(function(){ genBusy = false; });
+      readBack();
+      var missing=DraftQuality.preflight(x);if(missing.length){setStatus(missing.join("; "),"err");return;}
+      if(!DraftEditor.backup(x))return;
+      genBusy = true; DraftEditor.lock(wrap,true);setStatus("Пишу раздел…");
+      Promise.resolve().then(function(){return genOne(cid1);}).then(function(){ setStatus("Готово. Проверьте текст и пометки.", "ok"); })
+        .catch(function(e){ setStatus(aiErrorText(e), "err"); }).then(function(){ genBusy = false;DraftEditor.lock(wrap,false); });
       return;
     }
     var wantAll = t.closest("[data-genall]"), wantOver = t.closest("[data-genover]");
     if ((wantAll || wantOver) && !genBusy){
       readBack();
+      var missing=DraftQuality.preflight(x);if(missing.length){setStatus(missing.join("; "),"err");return;}
+      if(doc.basis && doc.basis!==DraftEditor.basis(x) && !wantOver){setStatus("Материалы или структура изменены. Подготовьте новую версию, чтобы разделы не противоречили друг другу.","err");return;}
+      if(!doc.basis && doc.order.some(function(c){return ((doc.structure[c.id]||{}).text||'').trim();}) && !wantOver){setStatus("Документ создан по прежней схеме. Подготовьте новую версию после заполнения материалов; прежняя сохранится отдельно.","err");return;}
       var queue;
       if (wantOver){
         var filled = doc.order.filter(function(q){ return ((doc.structure[q.id]||{}).text||"").trim() });
         if (filled.length && !confirm("Переписать заново все разделы?\n\nНаписанный текст в " + filled.length +
-            " раздел(ах) будет заменён. Отменить это будет нельзя.")) return;
-        queue = doc.order.slice();
+            " раздел(ах) будет заменён. Предыдущая версия сохранится для восстановления.")) return;
+        queue = DraftQuality.sequence(doc);
       } else {
-        queue = doc.order.filter(function(q){ return !((doc.structure[q.id]||{}).text||"").trim() });
-        if (!queue.length){ setStatus("Все разделы уже написаны. Чтобы переписать, нажмите «Переписать всё».", "ok"); return; }
+        queue = DraftQuality.sequence(doc).filter(function(q){ return !((doc.structure[q.id]||{}).text||"").trim() });
+        if (!queue.length){ setStatus("Все разделы уже написаны. Чтобы переписать, нажмите «Подготовить новую версию».", "ok"); return; }
       }
-      genBusy = true;
+      if((wantOver||!doc.previous)&&!DraftEditor.backup(x))return;
+      if(wantOver){doc.order.forEach(function(c){doc.structure[c.id]={text:''};wrap.querySelector('[data-sec="'+c.id+'"] .secText').value='';});}
+      doc.basis=DraftEditor.basis(x);delete doc.review;save();
+      genBusy = true;DraftEditor.lock(wrap,true);
       var n = 0, total = queue.length;
       (function next(){
-        if (!queue.length){ genBusy = false; setStatus("Черновик собран: " + total + " разделов, примерно " + docPages(x) + " стр. Проверьте пометки перед отправкой.", "ok"); return; }
+        if (!queue.length){ genBusy = false;DraftEditor.lock(wrap,false);setStatus("Текст подготовлен. Теперь нажмите «Проверить готовность»: передача разрешается после проверки документа.", "ok"); return; }
         var c = queue.shift(); n++;
         setStatus("Пишу " + n + " из " + total + ": " + c.name + "…");
-        genOne(c.id).then(next).catch(function(e){ genBusy = false; setStatus("Остановился на «" + c.name + "»: " + aiErrorText(e), "err"); });
+        Promise.resolve().then(function(){return genOne(c.id);}).then(next).catch(function(e){ genBusy = false;DraftEditor.lock(wrap,false);setStatus("Остановился на «" + c.name + "»: " + aiErrorText(e), "err"); });
       })();
       return;
     }
@@ -1345,7 +1393,7 @@ function viewItem(id){
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
   var r = x.refId ? refById(x.refId) : findRef(x);
   var diff = r ? fmtDiff(x.format, r.format) : [];
-  var dp = x.doc ? docPages(x) : 0;
+  var dp = x.doc ? docCharacters(x) : 0;
 
   var h = '<button type="button" class="mini" data-act="back" style="margin:0 0 10px">← Заявки</button>' +
     '<div class="title" style="font-size:21px">' + esc(x.student || "Без имени") + '</div>' +
@@ -1357,7 +1405,7 @@ function viewItem(id){
 
   h += card(lab("Документ") +
     (x.doc && x.doc.updated
-      ? '<div class="mut">' + x.doc.order.length + ' разделов · примерно ' + dp + ' стр. · правка ' + ruDate(x.doc.updated) + '</div>'
+      ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков · правка ' + ruDate(x.doc.updated) + '</div>'
       : '<div class="mut">Черновик ещё не собирался.</div>') +
     '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (x.doc && x.doc.updated ? "Открыть документ" : "Собрать документ") + '</button></div>', "now");
 
@@ -1510,7 +1558,7 @@ function viewMore(){
     '<details class="fold"><summary>Как это работает</summary><div class="in">' +
       '<div class="item"><div class="ic">1</div><div class="txt"><b>Студент отправляет заявку</b><small>Сообщение приходит в WhatsApp или Telegram</small></div></div>' +
       '<div class="item"><div class="ic">2</div><div class="txt"><b>Вы открываете ссылку из сообщения</b><small>Заявка встаёт в список. Не открылась — «Из текста» внизу списка</small></div></div>' +
-      '<div class="item"><div class="ic">3</div><div class="txt"><b>Собираете документ</b><small>Нейросеть пишет по разделам, титульный лист из заявки. Пройдите пометки [ДАННЫЕ СТУДЕНТА] и [ПРОВЕРИТЬ ИСТОЧНИК]</small></div></div>' +
+      '<div class="item"><div class="ic">3</div><div class="txt"><b>Готовите документ</b><small>Добавьте материалы и проверенные источники один раз, затем нажмите «Подготовить весь черновик». Проверьте факты, расчёты и оформление перед передачей студенту.</small></div></div>' +
       '<div class="item"><div class="ic">4</div><div class="txt"><b>Отправляете файл студенту</b><small>В мессенджер. Ставите статус</small></div></div>' +
       '<div class="item"><div class="ic">5</div><div class="txt"><b>Справочник вузов</b><small>Наполняется из заявок сам. «Проверено» ставите вы, когда сверили с методичкой</small></div></div>' +
       '<div class="item"><div class="ic">6</div><div class="txt"><b>Ключи нейросетей</b><small>Хранятся у посредника на Cloudflare. Подключение — по инструкции</small></div></div>' +
