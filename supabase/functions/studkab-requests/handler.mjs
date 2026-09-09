@@ -1,3 +1,4 @@
+import {resultAction} from './results.mjs';
 const fields={id:100,t:300,k:100,d:200,u:300,fc:300,kf:300,ct:100,n:200,g:100,pr:200,fo:100,co:50,s:200,dl:10,rq:500,org:1500,mn:1500,cn:200};
 export function validatePayload(p) {
  if(!p||typeof p!=='object'||Array.isArray(p))throw Error('Неверная заявка');
@@ -47,8 +48,12 @@ export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
    const bearer=req.headers.get('authorization');
    const user=bearer?.startsWith('Bearer ') ? await auth(bearer) : null;
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
-   const raw=await req.text();if(raw.length>16000)return json({error:'Заявка слишком большая'},413);
+   const raw=await req.text();if(raw.length>4000000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
+   if(input.action==='deliver'||input.action==='result'){
+    const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
+   }
+   if(raw.length>16000)return json({error:'Заявка слишком большая'},413);
    if(input.action==='submit'){
     let payload;try{payload=validatePayload(input.payload);}catch(e){return json({error:e.message},400);}
     const result=await db('rpc/submit_studkab_request','POST',{student:user.id,content:payload});

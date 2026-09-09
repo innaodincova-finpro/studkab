@@ -87,3 +87,20 @@ assert sql('set role service_role; select count(*) from claim_studkab_requests()
 sql('update studkab_requests set telegram_sent_at=now();')
 assert sql('set role service_role; select count(*) from claim_studkab_requests();')=='0'
 print('PASS: requests deduplicate concurrently, separate students, reject changed retries, restrict access and lease delivery')
+
+sql((root/'result-delivery.sql').read_text())
+request_id=pair[0]['id']
+delivery_id='33333333-3333-4333-8333-333333333333'
+def deliver(body='{"topic":"Test","text":"Version 1"}'):
+ return json.loads(sql(f"set role service_role; select deliver_studkab_result('{request_id}','{delivery_id}','{body}');"))
+with concurrent.futures.ThreadPoolExecutor(2) as pool:
+ results=list(pool.map(lambda _:deliver(),range(2)))
+assert sorted(x['duplicate'] for x in results)==[False,True]
+assert deliver('{"topic":"Different"}')['conflict']
+assert sql('select count(*) from studkab_results;')=='1'
+for role in ['anon','authenticated']:
+ for query in ['select * from studkab_results',f"select deliver_studkab_result('{request_id}','{delivery_id}','{{}}')"]:
+  try:sql(f'set role {role}; '+query)
+  except subprocess.CalledProcessError:pass
+  else:raise AssertionError('Result privileges leaked to '+role)
+print('PASS: immutable result versions, concurrent retries, denied direct access')
