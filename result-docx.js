@@ -111,7 +111,7 @@ function buildDocx(w, chapters){
       '<w:r><w:instrText xml:space="preserve"> TOC \\o "1-1" \\h \\z \\u </w:instrText></w:r>'+
       '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
       '<w:r><w:rPr><w:sz w:val="'+half+'"/></w:rPr>'+
-      '<w:t xml:space="preserve">Чтобы проставились названия и номера страниц: щёлкните по этой строке правой кнопкой и выберите «Обновить поле» (в Word на компьютере — F9).</w:t></w:r>'+
+      '<w:t xml:space="preserve">'+chapters.filter(function(c){return ((w.structure||{})[c.id]||{}).text;}).map(function(c){return xesc(c.name);}).join('</w:t><w:br/><w:t xml:space="preserve">')+'</w:t></w:r>'+
       '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>';
     body += pageBreak();
   }
