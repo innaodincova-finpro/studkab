@@ -110,7 +110,7 @@ test('delivered Word preserves custom sections and escapes markup',async()=>{
  const withToc=c.window.ResultDocx({...doc,format:{...doc.format,toc:true}},doc.chapters);
  const tocZip=new TextDecoder().decode(await withToc.arrayBuffer());
  assert.match(tocZip,/<w:updateFields w:val="true"/);assert.match(tocZip,/Target="settings.xml"/);
- assert.match(tocZip,/PAGEREF section_0/);assert.match(tocZip,/w:name="section_0"/);assert.match(tocZip,/w:anchor="section_0"/);
+ assert.doesNotMatch(tocZip,/ TOC /);assert.match(tocZip,/PAGEREF section_0/);assert.match(tocZip,/w:name="section_0"/);assert.match(tocZip,/w:anchor="section_0"/);
 });
 
 test('delivery rejects unfinished placeholders in otherwise nonempty documents',async()=>{
@@ -118,4 +118,15 @@ test('delivery rejects unfinished placeholders in otherwise nonempty documents',
  const base={topic:'Тема',chapters:[{id:'a',name:'Глава'}],structure:{a:{text:'[ДАННЫЕ СТУДЕНТА: прибыль]'}}};
  assert.throws(()=>validateResult(base),/не готов/);
  base.structure.a.text='[СФОРМУЛИРОВАТЬ САМОСТОЯТЕЛЬНО: вывод]';assert.throws(()=>validateResult(base),/не готов/);
+});
+
+test('Word export normalizes incomplete historical formatting without mutating it',async()=>{
+ const vm=await import('node:vm'),fs=await import('node:fs');
+ const c={window:{},TextEncoder,Blob,Uint8Array,DataView,Date};vm.runInNewContext(fs.readFileSync(new URL('../result-docx.js',import.meta.url),'utf8'),c);
+ for(const format of [undefined,{}, {mLeft:'bad',mRight:null,size:999,spacing:0,indent:0}]){
+  const doc={...documentFixture,format},before=JSON.stringify(doc);
+  const xml=new TextDecoder().decode(await c.window.ResultDocx(doc,doc.chapters).arrayBuffer());
+  assert.doesNotMatch(xml,/NaN|Infinity/);assert.match(xml,/w:left="1701"/);assert.match(xml,/w:right="850"/);
+  assert.equal(JSON.stringify(doc),before);
+ }
 });

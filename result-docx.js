@@ -58,7 +58,10 @@ function mm2tw(mm){ return Math.round(mm * 56.6929); }
 function cm2tw(cm){ return Math.round(cm * 566.929); }
 
 function buildDocx(w, chapters){
-  var f = w.format;
+  var f = Object.assign({font:"Times New Roman",size:14,spacing:1.5,indent:1.25,mTop:20,mBottom:20,mLeft:30,mRight:15},w.format||{});
+  // Historical records may contain absent or nonnumeric formatting.
+  var limits={size:[8,28,14],spacing:[1,3,1.5],indent:[0,5,1.25],mTop:[5,50,20],mBottom:[5,50,20],mLeft:[5,50,30],mRight:[5,50,15]};
+  Object.keys(limits).forEach(function(k){var a=limits[k],n=Number(f[k]);f[k]=f[k]!==null&&f[k]!==""&&Number.isFinite(n)&&n>=a[0]&&n<=a[1]?n:a[2];});
   var line = Math.round((f.spacing || 1.5) * 240);
   var half = Math.round((f.size || 14) * 2);
   var ind = cm2tw(f.indent || 0);
@@ -103,16 +106,15 @@ function buildDocx(w, chapters){
   body += P(((f.city ? f.city + ", " : "") + year), { jc:"center" });
   body += pageBreak();
 
-  /* Содержание */
+  /* Entries follow the saved structure; PAGEREF calculates real pages.
+     An outer cached TOC field prevents LibreOffice from refreshing these references. */
   if (f.toc){
     body += P("СОДЕРЖАНИЕ", { jc:"center", b:true, after:240 });
     var entries=chapters.map(function(c,i){return {chapter:c,index:i};}).filter(function(e){return ((w.structure||{})[e.chapter.id]||{}).text;});
     entries.forEach(function(e,i){
       var anchor='section_'+e.index;
       body+='<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="'+(11906-mm2tw(f.mLeft)-mm2tw(f.mRight))+'"/></w:tabs><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>';
-      if(i===0)body+='<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-1" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>';
       body+='<w:hyperlink w:anchor="'+anchor+'"><w:r><w:t>'+xesc(e.chapter.name)+'</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF '+anchor+' \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t> </w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink>';
-      if(i===entries.length-1)body+='<w:r><w:fldChar w:fldCharType="end"/></w:r>';
       body+='</w:p>';
     });
     body += pageBreak();

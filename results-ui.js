@@ -22,17 +22,18 @@
    if(problems.length)throw Error('Передача недоступна: '+problems.join('; '));
    if(!x.doc || x.doc.review!==DraftQuality.stamp(x))throw Error('Откройте документ и нажмите «Проверить готовность» перед передачей');
    payload=snapshot(x);}catch(e){return toast(e.message);}
-  var data=D,identity=Oblako.identity(),deliveryId=crypto.randomUUID(),busy=false;
+  var data=D,identity=Oblako.identity(),deliveryId=crypto.randomUUID(),requestId=x.id,reviewStamp=x.doc.review,busy=false;
   var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Передать черновик студенту</h3><p>'+esc(x.student||'Студент')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Будет передана сохранённая версия документа. Новая передача сохраняется отдельно от предыдущей.</p><button type="button" class="chip" data-preview>Проверить Word перед передачей</button><p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="btn" data-deliver>Передать в кабинет студента</button><p role="status" data-result-status></p>');
   wrap.dataset.accountIdentity=String(identity);
   var msg=wrap.querySelector('[data-result-status]');
   wrap.querySelector('[data-preview]').onclick=function(){if(!same(data,identity)){msg.textContent='Аккаунт изменился. Откройте документ заново.';return;}download(payload);};
   wrap.querySelector('[data-deliver]').onclick=async function(){
    if(busy)return;if(!same(data,identity)){msg.textContent='Аккаунт изменился. Откройте передачу заново.';return;}
+   if(reviewStamp!==DraftQuality.stamp(x)){msg.textContent='Документ или получатель изменился. Закройте окно и повторите проверку.';return;}
    if(!wrap.querySelector('[data-reviewed]').checked){msg.textContent='Проверьте документ и подтвердите получателя.';return;}
    busy=true;this.disabled=true;msg.textContent='Передаём документ…';
    try{
-    var result=await Oblako.requestApi({action:'deliver',id:x.id,deliveryId:deliveryId,document:payload});
+    var result=await Oblako.requestApi({action:'deliver',id:requestId,deliveryId:deliveryId,document:payload});
     if(!same(data,identity))throw Error('Аккаунт изменился. Проверьте результат после повторного входа.');
     if(!result.saved||result.deliveryId!==deliveryId)throw Error('Передача не подтверждена. Повторите попытку.');
     msg.textContent='Черновик доступен студенту в его работе: «Результат от исполнителя». Уведомление в мессенджер не отправлялось.';

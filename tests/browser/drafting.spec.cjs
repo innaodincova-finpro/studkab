@@ -6,8 +6,22 @@ test('failed section resumes without repeating saved sections or erasing backup'
 test('stale AI response never writes to another account',async({page})=>{await setup(page);await fill(page);await page.evaluate(()=>askAI=()=>new Promise(r=>window.resolveDraft=r));await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();await expect.poll(()=>page.evaluate(()=>!!window.resolveDraft)).toBe(true);await page.evaluate(()=>QA.switchUser('other-draft'));await expect.poll(()=>page.evaluate(()=>Oblako.email)).toBe('other-draft@example.test');await page.evaluate(()=>resolveDraft({text:'Запоздалый текст',tokens:1}));await expect.poll(()=>page.evaluate(()=>genBusy)).toBe(false);expect(await page.evaluate(()=>JSON.stringify(D))).not.toContain('Запоздалый текст');});
 test('long answer is revised once and an unavailable revision preserves the answer',async({page})=>{
  await setup(page);await fill(page);for(const field of await page.locator('.secPages').all())await field.fill('1');
- await page.evaluate(()=>{window.edits=0;askAI=async(p,s,u)=>{if(u.startsWith('Сократи')){edits++;throw Error('Редактор недоступен');}return {text:'Достоверный текст. '.repeat(140),tokens:1};};});
+ await page.evaluate(()=>{window.edits=0;askAI=async(p,s,u)=>{if(u.includes('Редакторская проверка:')){edits++;throw Error('Редактор недоступен');}return {text:'Достоверный текст. '.repeat(140),tokens:1};};});
  await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();await expect(page.locator('#docStatus')).toContainText('Текст подготовлен');
  expect(await page.evaluate(()=>edits)).toBe(5);expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toContain('Достоверный текст.');
  await page.getByRole('button',{name:'Проверить готовность',exact:true}).click();await expect(page.getByText('Замечания к объёму и повторам:',{exact:true})).toBeVisible();
+});
+
+test('one automatic revision removes flagged recommendations without an extra user action',async({page})=>{
+ await setup(page);await fill(page);
+ await page.evaluate(()=>{window.edits=0;askAI=async(p,s,u)=>{
+  if(u.includes('Редакторская проверка:')){edits++;return{text:'На основании главы 2 следует составить платёжный календарь. Сопоставить сроки ожидаемых поступлений с обязательствами и проверить наличие кассовых разрывов. Эффект заранее не рассчитан.',tokens:1};}
+  if(u.startsWith('Подготовь раздел «Глава 3'))return{text:'Ликвидность 1,5, автономия 0,4 и рентабельность 10%. Закрепить нормативы в учётной политике.',tokens:1};
+  return{text:'Содержательный текст по предоставленным материалам.',tokens:1};
+ };});
+ await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();
+ await expect(page.locator('#docStatus')).toContainText('Текст подготовлен');
+ expect(await page.evaluate(()=>edits)).toBe(1);
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch3.text)).toContain('платёжный календарь');
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch3.text)).not.toContain('учётной политике');
 });

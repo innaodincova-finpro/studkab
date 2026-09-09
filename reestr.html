@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=13"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=2"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=4"></script><script src="results-ui.js?v=2"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=3"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -851,12 +851,12 @@ function openDocBuilder(id){
     el.querySelector(".secStat").textContent = "пишет " + providerName(prov) + "…";
     return askAI(prov, pr.system, pr.user).then(function(res){
       current();res.text=DraftQuality.cleanSection(res.text,c);
-      var budget=DraftQuality.budget(c);
-      if(res.text.length<=budget.max||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))return res;
-      el.querySelector('.secStat').textContent='Сокращаю повторы и проверяю объём…';
+      var budget=DraftQuality.budget(c),editorial=DraftQuality.sectionNotes(x,c,res.text);
+      if((res.text.length<=budget.max&&!editorial.length)||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))return res;
+      el.querySelector('.secStat').textContent='Редактирую повторы и проверяю объём…';
       // One bounded revision; a failed revision must not discard the first answer.
-      var edit='Сократи приведённый текст раздела «'+c.name+'» до '+budget.min+'–'+budget.max+' знаков с пробелами. '+DraftQuality.sectionRules(c)+' Удали повторы и вводные обороты. Сохрани все существенные результаты, числа, ссылки, оговорки и смысл. Не добавляй факты, не обрывай предложения. Верни только итоговый текст.\nТЕКСТ:\n'+res.text;
-      return askAI(prov,pr.system,edit).then(function(revised){current();revised.text=DraftQuality.cleanSection(revised.text,c);if(!revised.text||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(revised.text)||DraftQuality.issues({order:[c],structure:{[cid]:{text:revised.text}}}).some(function(e){return /пометок/.test(e);}))return res;return revised.text.length<res.text.length?revised:res;}).catch(function(){current();return res;});
+      var edit=pr.user+'\n\nРедакторская проверка: '+editorial.join(' ')+'\nОтредактируй приведённый текст раздела «'+c.name+'» до '+budget.min+'–'+budget.max+' знаков с пробелами. '+DraftQuality.sectionRules(c)+' Удали повторы и вводные обороты. Сохрани все существенные результаты, числа, ссылки, оговорки и смысл. Не добавляй факты, не обрывай предложения. Верни только итоговый текст.\nТЕКСТ:\n'+res.text;
+      return askAI(prov,pr.system,edit).then(function(revised){current();revised.text=DraftQuality.cleanSection(revised.text,c);if(!revised.text||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(revised.text)||DraftQuality.issues({order:[c],structure:{[cid]:{text:revised.text}}}).some(function(e){return /пометок/.test(e);}))return res;var remaining=DraftQuality.sectionNotes(x,c,revised.text);return remaining.length<=editorial.length&&(remaining.length<editorial.length||revised.text.length<res.text.length)?revised:res;}).catch(function(){current();return res;});
     }).then(function(res){
       current();
       if(/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))throw Error(res.text.slice(0,2000));

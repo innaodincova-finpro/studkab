@@ -9,3 +9,17 @@ test('introduction and conclusion follow body, sources last; edits invalidate re
 test('volume notes exclude supplied financial tables and bibliography',()=>{const x={topic:'Анализ финансового состояния',doc:{inputs:{finance:data},order:[{id:'ch2',name:'Анализ',pages:1},{id:'refs',name:'Источники',pages:1}],structure:{ch2:{text:q.finance(data).text+'\n\n'+'А'.repeat(1800)},refs:{text:'Источник'}}}};assert.deepEqual(q.editorialNotes(x),[]);x.doc.structure.ch2.text+='Б'.repeat(500);assert.match(q.editorialNotes(x)[0],/длиннее/);});
 test('repeated paragraphs are reported across sections, short quotations are not',()=>{const paragraph='Проверяем содержательное повторение текста в двух главах. '.repeat(4);const x={doc:{order:[{id:'a',name:'А',pages:1},{id:'b',name:'Б',pages:1}],structure:{a:{text:paragraph},b:{text:paragraph}}}};assert(q.editorialNotes(x).some(n=>n.includes('полностью повторяющий')));x.doc.structure.b.text='Другая мысль.';assert(!q.editorialNotes(x).some(n=>n.includes('полностью повторяющий')));});
 test('only an exact leading duplicate title is removed',()=>{const c={name:'Глава 3. Результаты'};assert.equal(q.cleanSection('## Глава 3. Результаты\n\n3.1 Выводы\nТекст',c),'3.1 Выводы\nТекст');assert.equal(q.cleanSection('Глава 3. Результаты анализа показывают рост.',c),'Глава 3. Результаты анализа показывают рост.');assert.deepEqual(q.budget({pages:1}),{target:1800,min:1350,max:2070});});
+
+test('review is invalidated by formatting, author and recipient edits',()=>{
+ const base={id:'a',requestNumber:1,topic:'Т',student:'С',format:{size:14},doc:{order:[],structure:{}}};
+ for(const [k,value] of [['id','b'],['student','Другой'],['format',{size:12}],['supervisor','Другой руководитель']]){
+  const x=structuredClone(base),before=q.stamp(x);x[k]=value;assert.notEqual(q.stamp(x),before);
+ }
+});
+test('financial recommendations flag repeated metrics and unsupported policy prescriptions',()=>{
+ const x={topic:'Анализ финансового состояния'},c={id:'ch3'};
+ const text='Ликвидность 1,5, автономия 0,4 и рентабельность 10%. Закрепить нормативы в учётной политике.';
+ assert.equal(q.sectionNotes(x,c,text).length,2);
+ assert.equal(q.sectionNotes(x,{id:'ch2'},text).length,0);
+ assert.equal(q.sectionNotes(x,c,'Сопоставить сроки поступления платежей и погашения обязательств; проверить результат по платёжному календарю.').length,0);
+});
