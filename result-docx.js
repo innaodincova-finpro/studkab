@@ -126,6 +126,10 @@ function buildDocx(w, chapters){
     written++;
     body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 });
     var lines=text.split(/\n+/),row=0;
+    // The section title is already emitted above. Remove only an exact leading
+    // duplicate, preserving subsection headings and the author's body text.
+    var normalizedTitle=function(v){return String(v).trim().replace(/^#{1,6}\s+/, '').replace(/^\*\*(.*)\*\*$/, '$1').trim().toLowerCase();};
+    if(lines.length && normalizedTitle(lines[0])===normalizedTitle(c.name))row=1;
     while(row<lines.length){
       var par=lines[row].trim();
       if(/^\|.*\|$/.test(par)){
