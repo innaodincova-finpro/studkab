@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=13"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=1"></script><script src="draft-editor.js?v=1"></script><script src="result-docx.js?v=2"></script><script src="results-ui.js?v=2"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=2"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=3"></script><script src="results-ui.js?v=2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -749,10 +749,11 @@ function sectionPrompt(x, c){
   var sys = buildPrompt(x).replace("[вписать главы и параграфы из задания]",
     doc.order.map(function(q, i){ return (i+1) + ". " + q.name + (q.pages ? " — примерно " + q.pages + " стр." : ""); }).join("\n"));
   sys += "\n"+DraftQuality.context(x);
-  if(DraftQuality.financial(x))sys += "\nНе смешивай перенос срока погашения неизменной суммы долга с ростом общей суммы обязательств. Только чистая переклассификация долга при неизменных капитале и активах не меняет автономию. При изменении капитала или активов опирайся на рассчитанную автономию за каждый год. Рост показателя не называй безусловным улучшением без достаточных данных.";
+  if(DraftQuality.financial(x))sys += "\nТочность терминов: чистый оборотный капитал здесь равен оборотным активам минус краткосрочные обязательства; не называй его средствами, профинансированными исключительно собственным капиталом. Это абсолютный показатель, а не коэффициент. Автономия равна капиталу / активам. Рост общей суммы долга сам по себе не определяет направление изменения этой доли: нужны оба значения капитала и активов. Чистая переклассификация обязательств при неизменном итоге баланса не меняет автономию. Не используй оценку «положительная динамика» вместо точных слов «увеличился», «снизился», «не изменился». Оценка качества требует обоснования, сопоставимых условий и данных. Не называй все краткосрочные обязательства наиболее срочными. Не выводи платёжеспособность из одного коэффициента.";
   var previous=doc.order.filter(function(q){return q.id!==c.id && (doc.structure[q.id]||{}).text;}).map(function(q){return q.name+":\n"+doc.structure[q.id].text;}).join("\n\n");
   if(sys.length+previous.length>180000)throw Error("Материалы и документ превышают объём одного запроса. Сократите материалы без потери необходимых данных.");
-  var user="Подготовь раздел «"+c.name+"». Целевой объём около "+((c.pages||3)*1800)+" знаков. Не увеличивай объём повторениями. Верни только текст, без повторения названия раздела.\n"+
+  var budget=DraftQuality.budget(c);
+  var user="Подготовь раздел «"+c.name+"». "+DraftQuality.sectionRules(c)+"\nОбъём основного текста с пробелами: от "+budget.min+" до "+budget.max+" знаков, ориентир "+budget.target+". Таблицы программы в этот объём не входят. Не увеличивай объём повторениями. Если фактов мало, пиши короче, не выдумывай. Верни только текст, без повторения названия раздела.\n"+
    "Согласуй его с приведёнными ниже уже написанными разделами. Не меняй организацию, период и расчётные значения. "+(DraftQuality.financial(x)?"Таблицы 1 и 2 с исходными и рассчитанными показателями добавляет программа, не повторяй и не переименовывай их. Другие таблицы нумеруй начиная с 3.":"Таблицы создавай только по предоставленным данным; продолжай нумерацию уже имеющихся таблиц, а если их нет — начни с 1.")+" Оформляй таблицы как Markdown с заголовком «Таблица N — Название».\n"+
    "Не описывай неподтверждённые характеристики организации. Допущения и ограничения называй явно.\nУЖЕ ПОДГОТОВЛЕНО:\n"+previous;
   return { system: sys, user: user };
@@ -777,11 +778,11 @@ function openDocBuilder(id){
     return '<div class="card" data-sec="' + c.id + '" style="padding:12px">' +
       '<div class="row" style="gap:6px;margin-bottom:6px">' +
         '<input type="text" class="secName" value="' + esc(c.name) + '" style="flex:1;padding:8px;font-size:14px;font-weight:500">' +
-        '<input type="number" class="secPages" value="' + (c.pages||"") + '" min="0" style="width:64px;padding:8px;font-size:13px" title="страниц">' +
+        '<input type="number" class="secPages" value="' + (c.pages||"") + '" min="0" style="width:64px;padding:8px;font-size:13px" title="Ориентир объёма текста" aria-label="страниц">' +
         '<button type="button" class="del" data-secdel="' + c.id + '" title="Убрать раздел">✕</button>' +
       '</div>' +
       '<textarea class="secText" style="min-height:' + (t ? 160 : 70) + 'px;font-size:14px" placeholder="Текст появится после общей подготовки">' + esc(t) + '</textarea>' +
-      '<div class="row" style="margin-top:6px"><span class="mut secStat">' + (t ? Math.round(t.length/1800*10)/10 + ' стр. · ' + t.length + ' знаков' + ((doc.structure[c.id]||{}).by ? ' · ' + esc(providerName(doc.structure[c.id].by)) : '') : 'пусто') + '</span>' +
+      '<div class="row" style="margin-top:6px"><span class="mut secStat">' + (t ? t.length + ' знаков' + ((doc.structure[c.id]||{}).by ? ' · ' + esc(providerName(doc.structure[c.id].by)) : '') : 'пусто') + '</span>' +
       '<div style="display:flex;gap:6px">' +
         '<button type="button" class="mini" data-seccopy="' + c.id + '">запрос</button>' +
         (aiReady() ? '<button type="button" class="mini" data-secgen="' + c.id + '">Переработать раздел</button>' : '') +
@@ -803,7 +804,7 @@ function openDocBuilder(id){
     DraftEditor.form(x) +
     (aiReady()?'<button type="button" class="btn" data-genall="1">Подготовить весь черновик</button><p class="hint">Один запуск для всех разделов. После сбоя продолжается с сохранённого места. Во время подготовки держите это окно открытым.</p>':'') +
     '<div id="docStatus" class="infobox" style="margin:0 0 10px;display:none"></div>' +
-    '<div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
+    '<p class="hint">Число рядом с названием — ориентир объёма текста: 1 соответствует 1800 знакам с пробелами. Число страниц Word зависит от таблиц и оформления. Слишком длинный ответ сокращается автоматически одной дополнительной попыткой.</p><div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
     '<div class="chips" style="margin-top:4px">' +
       '<button type="button" class="chip" data-secadd="1">+ раздел</button>' +
       (aiReady()
@@ -849,6 +850,14 @@ function openDocBuilder(id){
     var el = wrap.querySelector('[data-sec="' + cid + '"]');
     el.querySelector(".secStat").textContent = "пишет " + providerName(prov) + "…";
     return askAI(prov, pr.system, pr.user).then(function(res){
+      current();res.text=DraftQuality.cleanSection(res.text,c);
+      var budget=DraftQuality.budget(c);
+      if(res.text.length<=budget.max||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))return res;
+      el.querySelector('.secStat').textContent='Сокращаю повторы и проверяю объём…';
+      // One bounded revision; a failed revision must not discard the first answer.
+      var edit='Сократи приведённый текст раздела «'+c.name+'» до '+budget.min+'–'+budget.max+' знаков с пробелами. '+DraftQuality.sectionRules(c)+' Удали повторы и вводные обороты. Сохрани все существенные результаты, числа, ссылки, оговорки и смысл. Не добавляй факты, не обрывай предложения. Верни только итоговый текст.\nТЕКСТ:\n'+res.text;
+      return askAI(prov,pr.system,edit).then(function(revised){current();revised.text=DraftQuality.cleanSection(revised.text,c);if(!revised.text||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(revised.text)||DraftQuality.issues({order:[c],structure:{[cid]:{text:revised.text}}}).some(function(e){return /пометок/.test(e);}))return res;return revised.text.length<res.text.length?revised:res;}).catch(function(){current();return res;});
+    }).then(function(res){
       current();
       if(/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))throw Error(res.text.slice(0,2000));
       var errors=DraftQuality.issues({order:[c],structure:{[cid]:{text:res.text}}}).filter(function(e){return /пометок/.test(e);});
@@ -857,7 +866,7 @@ function openDocBuilder(id){
       el.querySelector(".secText").value = res.text;
       el.querySelector(".secText").style.minHeight = "160px";
       doc.structure[cid] = doc.structure[cid] || {}; doc.structure[cid].by = prov;
-      el.querySelector(".secStat").textContent = Math.round(res.text.length/1800*10)/10 + " стр. · " + res.text.length + " знаков · " + providerName(prov) + " · токенов " + res.tokens;
+      el.querySelector(".secStat").textContent = res.text.length + " знаков · " + providerName(prov);
       readBack();if(!storageOk)throw Error("Раздел подготовлен, но не сохранён. Скачайте Word и проверьте доступное место.");
     }).catch(function(e){
       el.querySelector(".secStat").textContent = "Подготовка остановлена. Причина указана над разделами.";
