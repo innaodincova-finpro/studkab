@@ -295,16 +295,21 @@ begin
  ) then raise exception 'workflow_disabled'; end if;
  select * into current from public.studkab_request_process where request_id=target for update;
  if not found then raise exception 'request_process_not_found'; end if;
- if current.revision<>expected_revision then raise exception 'revision_conflict'; end if;
+ if current.revision is distinct from expected_revision then raise exception 'revision_conflict'; end if;
  previous_status:=current.status;
  allowed := (previous_status,next_status) in (
   ('submitted','completeness_review'),('completeness_review','needs_information'),('completeness_review','passport_draft'),
-  ('needs_information','completeness_review'),('passport_draft','needs_information'),('passport_draft','passport_approved'),
-  ('passport_approved','preparing'),('preparing','quality_review'),('quality_review','changes_required'),
-  ('changes_required','preparing'),('quality_review','ready_to_deliver'),('ready_to_deliver','delivered'),('delivered','closed'))
+  ('needs_information','completeness_review'),('passport_draft','needs_information'),
+  ('passport_approved','preparing'),('quality_review','changes_required'),
+  ('changes_required','preparing'),('delivered','closed'))
   or (next_status='cancelled' and previous_status not in ('closed','cancelled'));
  if not allowed then raise exception 'invalid_transition'; end if;
  if actor_kind not in ('student','executor','service') or reason !~ '^[a-z0-9_]{1,80}$' then raise exception 'invalid_audit_data'; end if;
+ if next_status='changes_required' then
+  update public.studkab_document_versions set state='changes_required'
+   where id=current.active_document_id and request_id=target and state='ready_for_review';
+  if not found then raise exception 'document_not_ready'; end if;
+ end if;
  update public.studkab_request_process set status=next_status,revision=revision+1,updated_at=clock_timestamp()
   where request_id=target returning * into current;
  insert into public.studkab_status_events(request_id,from_status,to_status,actor_id,actor_type,reason_code,entity_type,entity_id)
@@ -371,7 +376,7 @@ begin
 
  elsif command_name='submit_passport' then
   select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
-  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status not in ('completeness_review','needs_information','passport_draft') then raise exception 'revision_conflict'; end if;
+  if process_row.revision is distinct from (payload->>'expectedRevision')::bigint or process_row.status not in ('completeness_review','needs_information','passport_draft') then raise exception 'revision_conflict'; end if;
   if coalesce(jsonb_typeof(payload->'items'),'null')<>'array' or coalesce(jsonb_array_length(payload->'items'),0) not between 1 and 100 then raise exception 'invalid_requirements'; end if;
   select coalesce(max(version),0)+1 into next_version from public.studkab_requirement_passports where request_id=studkab_run_command.request_id;
   insert into public.studkab_requirement_passports(request_id,version,profile_code,profile_version,source_set_hash,created_by)
@@ -385,7 +390,7 @@ begin
 
  elsif command_name='approve_passport' then
   select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
-  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'passport_draft' then raise exception 'revision_conflict'; end if;
+  if process_row.revision is distinct from (payload->>'expectedRevision')::bigint or process_row.status<>'passport_draft' then raise exception 'revision_conflict'; end if;
   update public.studkab_requirement_passports set state='superseded' where request_id=studkab_run_command.request_id and state='approved';
   update public.studkab_requirement_passports set state='approved',approved_by=actor,approved_at=clock_timestamp()
    where id=(payload->>'passportId')::uuid and request_id=studkab_run_command.request_id and state='draft' returning * into passport_row;
@@ -396,7 +401,7 @@ begin
 
  elsif command_name='ask_clarification' then
   select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
-  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status not in ('completeness_review','passport_draft') then raise exception 'revision_conflict'; end if;
+  if process_row.revision is distinct from (payload->>'expectedRevision')::bigint or process_row.status not in ('completeness_review','passport_draft') then raise exception 'revision_conflict'; end if;
   insert into public.studkab_clarifications(request_id,requirement_id,question,asked_by)
   values(request_id,nullif(payload->>'requirementId','')::uuid,payload->>'question',actor) returning * into clarification_row;
   update public.studkab_request_process set status='needs_information',revision=revision+1,updated_at=clock_timestamp() where request_id=studkab_run_command.request_id returning * into process_row;
@@ -405,7 +410,7 @@ begin
  elsif command_name='answer_clarification' then
   if actor<>owner_id then raise exception 'not_owner'; end if;
   select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
-  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'needs_information' then raise exception 'revision_conflict'; end if;
+  if process_row.revision is distinct from (payload->>'expectedRevision')::bigint or process_row.status<>'needs_information' then raise exception 'revision_conflict'; end if;
   update public.studkab_clarifications set answer=payload->>'answer',answered_by=actor,answered_at=clock_timestamp(),state='answered'
    where id=(payload->>'clarificationId')::uuid and request_id=studkab_run_command.request_id and state='open' returning * into clarification_row;
   if not found then raise exception 'clarification_not_found'; end if;
@@ -415,7 +420,7 @@ begin
 
  elsif command_name='create_document_version' then
   select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
-  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'preparing' then raise exception 'revision_conflict'; end if;
+  if process_row.revision is distinct from (payload->>'expectedRevision')::bigint or process_row.status<>'preparing' then raise exception 'revision_conflict'; end if;
   select coalesce(max(version),0)+1 into next_version from public.studkab_document_versions where request_id=studkab_run_command.request_id;
   insert into public.studkab_document_versions(request_id,passport_id,version,state,content,content_sha256,docx_file_id,docx_sha256,exporter_version,created_by)
   values(request_id,(payload->>'passportId')::uuid,next_version,'ready_for_review',payload->'content',payload->>'contentSha256',
@@ -426,8 +431,11 @@ begin
   result=jsonb_build_object('documentId',document_row.id,'version',document_row.version,'revision',process_row.revision);
 
  elsif command_name='record_checks' then
-  select * into document_row from public.studkab_document_versions where id=(payload->>'documentId')::uuid and request_id=studkab_run_command.request_id;
+  select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
+  select * into document_row from public.studkab_document_versions where id=(payload->>'documentId')::uuid and request_id=studkab_run_command.request_id for update;
   if not found then raise exception 'document_not_found'; end if;
+  if process_row.status is distinct from 'quality_review' or process_row.active_document_id is distinct from document_row.id
+   or document_row.state is distinct from 'ready_for_review' then raise exception 'checks_locked'; end if;
   for item in select * from jsonb_array_elements(coalesce(payload->'checks','[]')) loop
    if not exists(select 1 from public.studkab_requirement_items where id=(item->>'requirementId')::uuid and passport_id=document_row.passport_id) then raise exception 'requirement_mismatch'; end if;
    insert into public.studkab_criterion_results(document_id,requirement_id,status,evaluator_type,evidence,comment,decided_by,checker_version)
@@ -438,9 +446,16 @@ begin
 
  elsif command_name='approve_document' then
   select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
-  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'quality_review' then raise exception 'revision_conflict'; end if;
+  if process_row.revision is distinct from (payload->>'expectedRevision')::bigint or process_row.status<>'quality_review' then raise exception 'revision_conflict'; end if;
   select * into document_row from public.studkab_document_versions where id=(payload->>'documentId')::uuid and request_id=studkab_run_command.request_id for update;
   if not found or document_row.state<>'ready_for_review' or document_row.docx_file_id is null then raise exception 'document_not_ready'; end if;
+  if process_row.active_document_id is distinct from document_row.id or process_row.active_passport_id is distinct from document_row.passport_id then raise exception 'document_not_ready'; end if;
+  -- Package detection is not proof that Word opens. Require human evidence even for older automatic-only passports.
+  if exists(select 1 from public.studkab_requirement_items i where i.passport_id=document_row.passport_id
+   and i.code='DOC-06' and i.applicability='applicable' and not exists(
+    select 1 from public.studkab_criterion_results c where c.document_id=document_row.id and c.requirement_id=i.id
+    and c.evaluator_type='human' and c.status='pass' and length(btrim(coalesce(c.comment,'')))>0
+   )) then raise exception 'critical_checks_incomplete'; end if;
   if not exists(select 1 from public.studkab_request_files where id=document_row.docx_file_id and request_id=studkab_run_command.request_id and purpose='result_docx' and state='accepted' and sha256=document_row.docx_sha256) then raise exception 'docx_not_verified'; end if;
   if exists(
    select 1 from public.studkab_requirement_items i
@@ -457,11 +472,12 @@ begin
 
  elsif command_name='deliver_document' then
   select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
-  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'ready_to_deliver' then raise exception 'revision_conflict'; end if;
+  if process_row.revision is distinct from (payload->>'expectedRevision')::bigint or process_row.status<>'ready_to_deliver' then raise exception 'revision_conflict'; end if;
   update public.studkab_document_versions set state='delivered' where id=(payload->>'documentId')::uuid and request_id=studkab_run_command.request_id and state='approved' returning * into document_row;
   if not found then raise exception 'document_not_ready'; end if;
   update public.studkab_request_process set delivered_document_id=document_row.id,status='delivered',revision=revision+1,updated_at=clock_timestamp()
    where request_id=studkab_run_command.request_id and active_document_id=document_row.id returning * into process_row;
+  if not found then raise exception 'document_not_ready'; end if;
   result=jsonb_build_object('documentId',document_row.id,'sha256',document_row.docx_sha256,'revision',process_row.revision);
 
  elsif command_name='get_delivered_document' then

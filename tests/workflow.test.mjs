@@ -41,6 +41,8 @@ test('database conflicts and kill switch become safe client errors',async()=>{
  error='workflow_disabled';assert.equal((await app(req('transition_request'))).status,503);
  error='not_owner';assert.equal((await app(req('get_snapshot'))).status,403);
  error='request_not_found';assert.equal((await app(req('transition_request'))).status,404);
+ error='checks_locked';assert.equal((await app(req('record_checks',{checks:[]}))).status,409);
+ for(error of ['critical_checks_incomplete','invalid_transition','document_not_ready'])assert.equal((await app(req('approve_document'))).status,422);
  error='secret database detail';const response=await app(req('transition_request'));assert.equal(response.status,503);assert.doesNotMatch(await response.text(),/secret/);
 });
 

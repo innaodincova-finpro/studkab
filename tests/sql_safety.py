@@ -164,3 +164,51 @@ passport_payload=json.dumps({'expectedRevision':3,'profileCode':'financial-cours
 passport=json.loads(sql(f"set role service_role; select studkab_submit_passport('{request_id}','99999999-9999-4999-8999-999999999999','{uid}','{passport_payload}');"))
 assert passport['revision']==4 and sql(f"select status from studkab_request_process where request_id='{request_id}'")=='passport_draft'
 print('PASS: uniform workflow RPC contracts enforce ownership and idempotent retries')
+
+# Regression: protected transitions, rework, immutable approval, mandatory Word review.
+import uuid
+def workflow(name, payload):
+ body=json.dumps(payload).replace("'", "''")
+ return json.loads(sql(f"set role service_role; select studkab_{name}('{request_id}','{uuid.uuid4()}','{uid}','{body}');"))
+def denied(name, payload):
+ try: workflow(name,payload)
+ except subprocess.CalledProcessError: return
+ raise AssertionError('Expected rejection: '+name)
+def stage():
+ return json.loads(sql(f"select row_to_json(p) from studkab_request_process p where request_id='{request_id}'"))
+def transition(status):
+ return workflow('transition_request',{'expectedRevision':stage()['revision'],'nextStatus':status,'reason':'test'})
+denied('transition_request',{'expectedRevision':None,'nextStatus':'needs_information','reason':'test'})
+denied('approve_passport',{'passportId':passport['passportId']})
+denied('transition_request',{'expectedRevision':4,'nextStatus':'passport_approved','reason':'bypass'})
+workflow('approve_passport',{'passportId':passport['passportId'],'expectedRevision':4})
+transition('preparing')
+denied('transition_request',{'expectedRevision':stage()['revision'],'nextStatus':'quality_review','reason':'bypass'})
+file_id=str(uuid.uuid4())
+sql(f"insert into studkab_request_files(id,request_id,student_id,purpose,version,storage_path,original_name,declared_mime,size_bytes,sha256,state,accepted_at) values('{file_id}','{request_id}','{uid}','result_docx',1,'{request_id}/{file_id}/1','test.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',100,'{'a'*64}','accepted',now())")
+def register():
+ return workflow('create_document_version',{'expectedRevision':stage()['revision'],'passportId':passport['passportId'],'content':{},'contentSha256':'a'*64,'docxFileId':file_id,'docxSha256':'a'*64,'exporterVersion':'test'})
+doc=register()
+denied('transition_request',{'expectedRevision':stage()['revision'],'nextStatus':'ready_to_deliver','reason':'bypass'})
+criterion=sql(f"select id from studkab_requirement_items where passport_id='{passport['passportId']}'")
+def check_payload(document_id, evaluator='automatic', comment=None):
+ return {'documentId':document_id,'checks':[{'requirementId':criterion,'status':'pass','evaluatorType':evaluator,'comment':comment,'checkerVersion':'test'}]}
+workflow('record_checks',check_payload(doc['documentId']))
+denied('approve_document',{'documentId':doc['documentId'],'expectedRevision':stage()['revision']})
+transition('changes_required')
+denied('record_checks',check_payload(doc['documentId'],'human','opened'))
+transition('preparing')
+new_doc=register()
+assert new_doc['version']==2 and new_doc['documentId']!=doc['documentId']
+denied('record_checks',check_payload(doc['documentId']))
+denied('approve_document',{'documentId':doc['documentId'],'expectedRevision':stage()['revision']})
+denied('approve_document',{'documentId':new_doc['documentId'],'expectedRevision':stage()['revision']})
+workflow('record_checks',check_payload(new_doc['documentId']))
+workflow('record_checks',check_payload(new_doc['documentId'],'human','Opened synthetic test document'))
+workflow('approve_document',{'documentId':new_doc['documentId'],'expectedRevision':stage()['revision']})
+denied('record_checks',check_payload(new_doc['documentId']))
+denied('transition_request',{'expectedRevision':stage()['revision'],'nextStatus':'delivered','reason':'bypass'})
+workflow('deliver_document',{'documentId':new_doc['documentId'],'expectedRevision':stage()['revision']})
+denied('record_checks',check_payload(new_doc['documentId'],'human','changed'))
+assert stage()['delivered_document_id']==new_doc['documentId']
+print('PASS: no bypass, NULL revisions rejected, rework creates a fresh checklist, approved and delivered checks locked')

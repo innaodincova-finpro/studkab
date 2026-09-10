@@ -20,7 +20,7 @@ export async function runAutomaticChecks({input,user,db}){
  const file=document.docx_file_id?await db('studkab_request_files?id=eq.'+document.docx_file_id+'&select=id,student_id,state,detected_mime,sha256','GET'):null;
  const request=await db('studkab_requests?id=eq.'+input.requestId+'&select=id,student_id','GET');
  const list=Array.isArray(requirements)?requirements:requirements?[requirements]:[];
- const checks=list.map(r=>{const pass=result(r.code,{document,file,request});return {requirementId:r.id,status:pass===true?'pass':pass===false?'fail':'unable_to_verify',evaluatorType:'automatic',evidence:{check:r.code},comment:pass===null?'Критерий требует ручной или специализированной проверки':null,checkerVersion:'workflow-deterministic-1'};});
+ const checks=list.map(r=>{const pass=result(r.code,{document,file,request});return {requirementId:r.id,status:pass===true?'pass':pass===false?'fail':'unable_to_verify',evaluatorType:'automatic',evidence:{check:r.code},comment:r.code==='DOC-06'?'Проверен тип принятого пакета. Открытие, текст и оформление подтверждает исполнитель.':pass===null?'Критерий требует ручной или специализированной проверки':null,checkerVersion:'workflow-deterministic-2'};});
  return db('rpc/studkab_record_checks','POST',{request:input.requestId,command_id:input.commandId,actor:user.id,payload:{documentId,checks}});
 }
 export {result};

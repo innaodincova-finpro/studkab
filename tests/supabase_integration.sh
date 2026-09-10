@@ -129,6 +129,10 @@ jq -e '.result.recorded == 3' <<<"$(workflow "$AUTO")" >/dev/null
 MANUAL_ID=$(psql "$DB_URL" -X -qAt -v ON_ERROR_STOP=1 -c "select id from public.studkab_requirement_items where passport_id='$PASSPORT_ID' and code='DOC-01'")
 MANUAL=$(jq -nc --arg requestId "$REQUEST_ID" --arg documentId "$DOCUMENT_ID" --arg requirementId "$MANUAL_ID" '{action:"record_checks",requestId:$requestId,commandId:"ffffffff-ffff-4fff-8fff-ffffffffffff",payload:{documentId:$documentId,checks:[{requirementId:$requirementId,status:"pass",evaluatorType:"human",evidence:{confirmedInUi:true},comment:"integration",checkerVersion:"integration-1"}]}}')
 jq -e '.result.recorded == 1' <<<"$(workflow "$MANUAL")" >/dev/null
+# Synthetic confirmation exercises the gate, not a claim of visual Word acceptance.
+WORD_ID=$(psql "$DB_URL" -X -qAt -v ON_ERROR_STOP=1 -c "select id from public.studkab_requirement_items where passport_id='$PASSPORT_ID' and code='DOC-06'")
+WORD_REVIEW=$(jq --arg id "$WORD_ID" '.commandId="14141414-1414-4414-8414-141414141414" | .payload.checks[0].requirementId=$id | .payload.checks[0].comment="Synthetic Word review for integration test"' <<<"$MANUAL")
+jq -e '.result.recorded == 1' <<<"$(workflow "$WORD_REVIEW")" >/dev/null
 APPROVE_DOCUMENT=$(jq -nc --arg requestId "$REQUEST_ID" --arg documentId "$DOCUMENT_ID" '{action:"approve_document",requestId:$requestId,commandId:"12121212-1212-4212-8212-121212121212",payload:{documentId:$documentId,expectedRevision:6}}')
 jq -e '.result.revision == 7' <<<"$(workflow "$APPROVE_DOCUMENT")" >/dev/null
 DELIVER=$(jq -nc --arg requestId "$REQUEST_ID" --arg documentId "$DOCUMENT_ID" '{action:"deliver_document",requestId:$requestId,commandId:"13131313-1313-4313-8313-131313131313",payload:{documentId:$documentId,expectedRevision:7}}')

@@ -42,7 +42,7 @@ test('workflow client uses the signed-in token and private non-overwriting uploa
 test('quality workflow UI is present in both roles and parses independently',()=>{
  const source=read('workflow-ui.js');new vm.Script(source);
  assert.match(read('index.html'),/data-role="student"/);assert.match(read('reestr.html'),/data-role="executor"/);
- assert.match(read('sw.js'),/workflow-ui\.js\?v=2/);
+ assert.match(read('sw.js'),/workflow-ui\.js\?v=3/);
 });
 test('SIGNED_IN after logout switches storage before allowing cloud writes',async()=>{
  const c=await cloud();await c.Oblako.signOut();c.authEvent('SIGNED_IN',{user:{id:'b',email:'b@test'}});

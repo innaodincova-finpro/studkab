@@ -62,6 +62,9 @@ export function handler({auth,isExecutor,execute,verifyUpload,runAutomaticChecks
   }catch(e){
    const code=String(e?.message||'');
    if(code.includes('revision_conflict'))return json({error:'Документ изменился. Обновите данные и повторите действие.'},409);
+   if(code.includes('checks_locked'))return json({error:'Контрольный лист этой версии закрыт. Для изменений верните документ на доработку.'},409);
+   if(code.includes('critical_checks_incomplete'))return json({error:'Не завершены обязательные проверки. Для Word подтвердите открытие файла и добавьте комментарий.'},422);
+   if(code.includes('invalid_transition')||code.includes('document_not_ready')||code.includes('passport_not_ready'))return json({error:'Переход недоступен: сначала завершите обязательные действия текущего этапа.'},422);
    if(code.includes('workflow_disabled'))return json({error:'Новый процесс пока не включён'},503);
    if(code.includes('not_owner'))return json({error:'Нет доступа к этой заявке'},403);
    if(code.includes('not_found'))return json({error:'Заявка не найдена'},404);
