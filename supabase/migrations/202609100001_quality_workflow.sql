@@ -479,4 +479,33 @@ end $$;
 revoke all on function public.studkab_transition_request(uuid,uuid,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.studkab_transition_request(uuid,uuid,uuid,jsonb) to service_role;
 
+create function public.studkab_get_workflow_snapshot(request uuid, command_id uuid, actor uuid, payload jsonb)
+returns jsonb language plpgsql security invoker set search_path=pg_catalog,public as $$
+declare owner_id uuid; executor_access boolean; process jsonb;
+begin
+ select student_id into owner_id from public.studkab_requests where id=request;
+ if not found then raise exception 'request_not_found'; end if;
+ executor_access:=exists(select 1 from public.studkab_executors where user_id=actor and active);
+ if actor<>owner_id and not executor_access then raise exception 'not_owner'; end if;
+ select to_jsonb(p) into process from public.studkab_request_process p where p.request_id=request;
+ if process is null then raise exception 'workflow_disabled'; end if;
+ if executor_access then
+  return jsonb_build_object(
+   'role','executor','process',process,
+   'files',coalesce((select jsonb_agg(to_jsonb(f) order by f.created_at) from public.studkab_request_files f where f.request_id=request and f.state<>'deleted'),'[]'::jsonb),
+   'passports',coalesce((select jsonb_agg(to_jsonb(p) order by p.version) from public.studkab_requirement_passports p where p.request_id=request),'[]'::jsonb),
+   'requirements',coalesce((select jsonb_agg(to_jsonb(i) order by i.code) from public.studkab_requirement_items i join public.studkab_requirement_passports p on p.id=i.passport_id where p.request_id=request),'[]'::jsonb),
+   'documents',coalesce((select jsonb_agg(to_jsonb(d)-'content' order by d.version) from public.studkab_document_versions d where d.request_id=request),'[]'::jsonb),
+   'criteria',coalesce((select jsonb_agg(to_jsonb(c) order by c.decided_at) from public.studkab_criterion_results c join public.studkab_document_versions d on d.id=c.document_id where d.request_id=request),'[]'::jsonb),
+   'clarifications',coalesce((select jsonb_agg(to_jsonb(c) order by c.asked_at) from public.studkab_clarifications c where c.request_id=request),'[]'::jsonb));
+ end if;
+ return jsonb_build_object(
+  'role','student','process',process,
+  'files',coalesce((select jsonb_agg(jsonb_build_object('id',f.id,'purpose',f.purpose,'version',f.version,'originalName',f.original_name,'sizeBytes',f.size_bytes,'state',f.state,'rejectionCode',f.rejection_code,'createdAt',f.created_at) order by f.created_at) from public.studkab_request_files f where f.request_id=request and f.student_id=actor and f.purpose<>'result_docx' and f.state<>'deleted'),'[]'::jsonb),
+  'documents',coalesce((select jsonb_agg(jsonb_build_object('id',d.id,'version',d.version,'state',d.state,'createdAt',d.created_at,'approvedAt',d.approved_at) order by d.version) from public.studkab_document_versions d where d.request_id=request and d.state='delivered'),'[]'::jsonb),
+  'clarifications',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'question',c.question,'state',c.state,'askedAt',c.asked_at,'answer',c.answer,'answeredAt',c.answered_at) order by c.asked_at) from public.studkab_clarifications c where c.request_id=request),'[]'::jsonb));
+end $$;
+revoke all on function public.studkab_get_workflow_snapshot(uuid,uuid,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.studkab_get_workflow_snapshot(uuid,uuid,uuid,jsonb) to service_role;
+
 commit;
