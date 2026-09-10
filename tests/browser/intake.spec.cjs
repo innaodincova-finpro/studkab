@@ -29,6 +29,8 @@ test('cabinet request roundtrip, hostile link rejection, repeat preserves work',
 test('registry document edited, saved, downloaded and status set',async({page})=>{
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>{const x=fromPayload({id:'rq-doc',t:'Проверка документа',n:'Тестовый студент',fm:{ml:30,mr:15,mt:20,mb:20,fn:'Times New Roman',sz:14,sp:1.5,ind:1.25}});D.items=[x];save();openDocBuilder(x.id);});
+ await page.getByText('Редактировать разделы',{exact:true}).click();
+ await page.locator('[data-sec] > summary').first().click();
  await page.locator('.secText').first().fill('Контрольный текст раздела. Проверка сохранения.');
  await page.locator('[data-docsave]').click();
  await page.reload();
