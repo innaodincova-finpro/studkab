@@ -13,6 +13,7 @@ const ACTIONS={
  approve_document:{role:'executor',rpc:'studkab_approve_document'},
  deliver_document:{role:'executor',rpc:'studkab_deliver_document'},
  download_document:{role:'student',rpc:'studkab_get_delivered_document'}
+ ,get_snapshot:{role:'user',rpc:'studkab_get_workflow_snapshot'}
 };
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
@@ -56,4 +57,3 @@ export function handler({auth,isExecutor,execute,serviceKey}){
   }
  };
 }
-
