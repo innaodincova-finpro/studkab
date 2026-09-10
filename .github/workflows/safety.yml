@@ -61,3 +61,22 @@ jobs:
           name: browser-checks
           path: test-results/
           retention-days: 7
+  supabase-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf
+        with:
+          version: 2.117.0
+      - name: Initialize isolated Supabase configuration
+        run: |
+          mv supabase/migrations supabase-test-migrations
+          supabase init --force
+      - name: Start isolated Supabase stack
+        run: supabase start -x studio,imgproxy,mailpit,realtime,logflare,vector,supavisor
+      - name: Test Auth, Edge, RLS and private Storage together
+        run: bash tests/supabase_integration.sh
+      - name: Stop isolated Supabase stack
+        if: always()
+        run: supabase stop --no-backup

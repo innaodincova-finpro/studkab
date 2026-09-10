@@ -141,3 +141,20 @@ try: sql(f"set role service_role; select studkab_transition_request('{request_id
 except subprocess.CalledProcessError: pass
 else: raise AssertionError('Disabled workflow must reject commands')
 print('PASS: quality workflow RLS, private uploads, state transitions, revisions and kill switch')
+
+# Uniform Edge RPC contracts are idempotent and remain owner-bound.
+sql("update studkab_workflow_config set enabled=true where id=true;")
+command='55555555-5555-4555-8555-555555555555'
+prepared=json.loads(sql(f"set role service_role; select studkab_prepare_upload('{request_id}','{command}','{uid}','{{\"purpose\":\"guidelines\",\"originalName\":\"rules.pdf\",\"declaredMime\":\"application/pdf\",\"sizeBytes\":2048}}');"))
+assert not prepared['duplicate'] and prepared['path'].startswith(request_id+'/')
+duplicate=json.loads(sql(f"set role service_role; select studkab_prepare_upload('{request_id}','{command}','{uid}','{{\"purpose\":\"guidelines\",\"originalName\":\"rules.pdf\",\"declaredMime\":\"application/pdf\",\"sizeBytes\":2048}}');"))
+assert duplicate['duplicate'] and duplicate['fileId']==prepared['fileId']
+assert sql(f"select count(*) from studkab_request_files where request_id='{request_id}' and purpose='guidelines'")=='1'
+try: sql(f"set role service_role; select studkab_prepare_upload('{request_id}','66666666-6666-4666-8666-666666666666','{other}','{{\"purpose\":\"other\",\"originalName\":\"foreign.txt\",\"declaredMime\":\"text/plain\",\"sizeBytes\":10}}')")
+except subprocess.CalledProcessError: pass
+else: raise AssertionError('Student cannot prepare upload for a foreign request')
+transition_command='77777777-7777-4777-8777-777777777777'
+first_transition=json.loads(sql(f"set role service_role; select studkab_transition_request('{request_id}','{transition_command}','{uid}','{{\"expectedRevision\":2,\"nextStatus\":\"needs_information\",\"reason\":\"missing_data\"}}');"))
+same_transition=json.loads(sql(f"set role service_role; select studkab_transition_request('{request_id}','{transition_command}','{uid}','{{\"expectedRevision\":2,\"nextStatus\":\"needs_information\",\"reason\":\"missing_data\"}}');"))
+assert not first_transition['duplicate'] and same_transition['duplicate'] and first_transition['revision']==same_transition['revision']==3
+print('PASS: uniform workflow RPC contracts enforce ownership and idempotent retries')
