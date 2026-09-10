@@ -1,4 +1,6 @@
 -- Isolated from the other applications in this shared project.
+-- Fresh Supabase projects do not expose the cron schema until pg_cron is enabled.
+create extension if not exists pg_cron;
 create table public.studkab_push_configuration (
  id integer primary key check(id=1), cron_token text not null default gen_random_uuid()::text,
  vapid jsonb, last_run_at timestamptz, last_result jsonb
