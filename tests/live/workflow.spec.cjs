@@ -23,7 +23,18 @@ async function screen(browser,file,auth){
  return page;
 }
 async function ready(page,text){await expect(page.locator('#workflowPanel')).toContainText(text);}
-async function click(page,name){await page.getByRole('button',{name,exact:true}).click();}
+async function click(page,name){
+ const button=page.getByRole('button',{name,exact:true}),handle=await button.elementHandle();
+ const action=await button.getAttribute('data-workflow-action');
+ if(action==='passport-open'){await button.click();return;}
+ if(action==='review-download'){
+  await button.click();await expect.poll(()=>handle.evaluate(el=>el.isConnected)).toBe(false);return;
+ }
+ const response=page.waitForResponse(r=>r.url().includes('/functions/v1/studkab-workflow')&&r.request().method()==='POST'&&r.request().postDataJSON()?.action!=='get_snapshot');
+ await button.click();const result=await response;
+ if(result.ok())await expect.poll(()=>handle.evaluate(el=>el.isConnected)).toBe(false);
+ else await expect(button).toBeEnabled();
+}
 test('real screens + Auth + Edge + RLS + Storage: materials, passport, rework, delivery',async({browser})=>{
  const studentAuth=await session('student.workflow@example.test'),executorAuth=await session('other.workflow@example.test');
  sql(`insert into studkab_requests(id,student_id,client_id,payload) values('${requestId}','${studentAuth.user.id}','live-screen-test','{"id":"live-screen-test","t":"Тестовый черновик","cn":"test"}')`);
