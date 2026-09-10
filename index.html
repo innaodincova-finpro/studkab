@@ -15,7 +15,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=15"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=5"></script><script src="workflow-ui.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=5"></script><script src="workflow-ui.js?v=4"></script>
 <script src="push.js?v=1"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -242,7 +242,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .fab{position:fixed;right:max(16px,calc(50% - 230px));bottom:calc(80px + env(safe-area-inset-bottom));min-height:56px;padding:0 18px;border:0;border-radius:99px;background:var(--fab);color:#fff;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 10px 26px var(--fab-sh);z-index:5}
 .fab i{font-style:normal;font-size:19px;line-height:1}
 .fab:active{transform:scale(.95)}
-.fab[hidden]{display:none}
+.fab[hidden]{display:none} #workflowPanel [hidden],#legacyDeliveryPanel[hidden]{display:none!important}
 
 .tabs{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;height:calc(66px + env(safe-area-inset-bottom));padding:0 4px env(safe-area-inset-bottom);display:flex;align-items:center;z-index:6;background:var(--tab-bg,rgba(255,255,255,.94));border-top:1px solid var(--tab-line);box-shadow:0 -10px 28px var(--card-sh);backdrop-filter:blur(18px)}
 @media (min-width:600px){.tabs{bottom:22px;border-radius:0 0 33px 33px}}
@@ -1739,7 +1739,7 @@ function viewWork(id){
       (w.deadline ? ' · срок ' + ruDate(w.deadline) : '') + ' · ' + pill(st) + '</div>';
 
   if(w.req && w.req.serverId){
-    h += card(lab("Черновик от исполнителя") + '<p class="hint">Откройте результат заявки, чтобы проверить готовность и скачать документ Word.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
+    h += '<div id="legacyDeliveryPanel">'+card(lab("Черновик от исполнителя") + '<p class="hint">Откройте результат заявки, чтобы проверить готовность и скачать документ Word.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>')+'</div>';
     h += '<div id="workflowPanel" data-role="student" data-request-id="'+esc(w.req.serverId)+'"></div>';
     h += '<details class="fold"><summary>Мои разделы и доработка</summary><div class="in"><p class="hint">Здесь текст, который вы редактируете в кабинете. Процент ниже относится только к этим разделам. Документ исполнителя доступен отдельно, в результате заявки.</p>';
   }

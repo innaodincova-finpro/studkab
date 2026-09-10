@@ -68,6 +68,9 @@ test('real screens + Auth + Edge + RLS + Storage: materials, passport, rework, d
  for(const select of await executor.locator('[data-workflow-check]').all())await select.selectOption('pass');
  for(const input of await executor.locator('[data-workflow-comment]').all())await input.fill('Синтетическая отметка теста; не подтверждает содержательную или ручную приёмку Word.');
  await click(executor,'Сохранить ручную проверку');await click(executor,'Подтвердить готовность');await ready(executor,'Готов к передаче');
+ await expect(executor.getByRole('button',{name:'Запустить автопроверку',exact:true})).toBeHidden();
+ await expect(executor.getByRole('button',{name:'Сохранить ручную проверку',exact:true})).toBeHidden();
+ await expect(executor.locator('[data-workflow-check]').first()).toBeDisabled();
  await student.evaluate(()=>WorkflowUI.paint());await expect(student.getByRole('button',{name:'Скачать Word',exact:true})).toHaveCount(0);
  await executor.screenshot({path:'test-results/live-executor-approved.png',fullPage:true});
  await click(executor,'Передать студенту');await ready(executor,'Черновик передан');
@@ -78,5 +81,7 @@ test('real screens + Auth + Edge + RLS + Storage: materials, passport, rework, d
  expect(sql(`select count(*) from studkab_document_versions where request_id='${requestId}'`)).toBe('2');
  execFileSync('python3',['-c','import zipfile,xml.etree.ElementTree as E; z=zipfile.ZipFile("test-results/live-evidence/delivered.docx"); [E.fromstring(z.read(n)) for n in z.namelist() if n.endswith(".xml")]; assert "Исправленная версия два." in z.read("word/document.xml").decode()']);
  await student.setViewportSize({width:390,height:844});await student.screenshot({path:'test-results/live-student-delivered.png',fullPage:true});
+ await expect(student.getByRole('button',{name:'Открыть результат заявки',exact:true})).toBeHidden();
+ await expect(student.locator('#fab')).toBeHidden();
  await fs.writeFile('test-results/live-evidence/summary.json',JSON.stringify({requestId,versions:2,sha256:hash,api:'real isolated Supabase',manualWordAcceptance:false,scope:'Seeded request and draft; no AI calls or production data'},null,2));
 });

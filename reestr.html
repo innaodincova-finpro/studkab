@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=15"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=3"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=5"></script><script src="workflow-ui.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=3"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=5"></script><script src="workflow-ui.js?v=4"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -238,7 +238,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .fab{position:fixed;right:max(16px,calc(50% - 230px));bottom:calc(80px + env(safe-area-inset-bottom));min-height:56px;padding:0 18px;border:0;border-radius:99px;background:var(--fab);color:#fff;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 10px 26px var(--fab-sh);z-index:5}
 .fab i{font-style:normal;font-size:19px;line-height:1}
 .fab:active{transform:scale(.95)}
-.fab[hidden]{display:none}
+.fab[hidden]{display:none} #workflowPanel [hidden],#legacyDeliveryPanel[hidden]{display:none!important}
 
 .tabs{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;height:calc(66px + env(safe-area-inset-bottom));padding:0 4px env(safe-area-inset-bottom);display:flex;align-items:center;z-index:6;background:var(--tab-bg,rgba(255,255,255,.94));border-top:1px solid var(--tab-line);box-shadow:0 -10px 28px var(--card-sh);backdrop-filter:blur(18px)}
 @media (min-width:600px){.tabs{bottom:22px;border-radius:0 0 33px 33px}}
