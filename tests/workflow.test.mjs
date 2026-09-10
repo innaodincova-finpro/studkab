@@ -48,6 +48,31 @@ test('all declared workflow actions route to fixed RPC names',async()=>{
  const actions=['prepare_upload','answer_clarification','download_document','get_snapshot','transition_request','submit_passport','approve_passport','ask_clarification','create_document_version','record_checks','approve_document','deliver_document'];
  const seen=[];
  const app=handler({auth:async()=>executor,isExecutor:async()=>true,execute:async rpc=>{seen.push(rpc);return {};}});
- for(const action of actions)assert.equal((await app(req(action))).status,200);
+ for(const action of actions){
+  const payload=action==='record_checks'?{checks:[{evaluatorType:'human'}]}:action==='create_document_version'?{content:{},contentSha256:'44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a'}:{};
+  assert.equal((await app(req(action,payload))).status,200);
+ }
  assert.equal(new Set(seen).size,actions.length);
+});
+
+test('student file completion uses the verifier instead of a client-controlled acceptance RPC',async()=>{
+ let verified=false,executed=false;
+ const app=handler({auth:async()=>student,isExecutor:async()=>false,execute:async()=>{executed=true;},verifyUpload:async(input,user)=>{verified=input.action==='complete_upload'&&user.id==='student';return {state:'accepted'};}});
+ const response=await app(req('complete_upload',{fileId:'33333333-3333-4333-8333-333333333333'}));
+ assert.equal(response.status,200);assert.equal(verified,true);assert.equal(executed,false);
+});
+
+test('automatic document checks use the fixed server checker and executor role',async()=>{
+ let checked=false,executed=false;
+ const app=handler({auth:async()=>executor,isExecutor:async()=>true,execute:async()=>{executed=true;},runAutomaticChecks:async(input,user)=>{checked=input.action==='run_automatic_checks'&&user.id==='executor';return {recorded:5};}});
+ const response=await app(req('run_automatic_checks',{documentId:'33333333-3333-4333-8333-333333333333'}));
+ assert.equal(response.status,200);assert.equal(checked,true);assert.equal(executed,false);
+});
+
+test('executor cannot forge automatic results or a document content hash through the public command',async()=>{
+ let calls=0;
+ const app=handler({auth:async()=>executor,isExecutor:async()=>true,execute:async()=>{calls++;return {};}});
+ let response=await app(req('record_checks',{checks:[{evaluatorType:'automatic'}]}));assert.equal(response.status,400);
+ response=await app(req('create_document_version',{content:{structure:{}},contentSha256:'0'.repeat(64)}));assert.equal(response.status,400);
+ assert.equal(calls,0);
 });

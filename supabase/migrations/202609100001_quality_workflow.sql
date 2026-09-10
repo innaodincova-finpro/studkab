@@ -222,12 +222,19 @@ create policy student_upload_private_object on storage.objects for insert to aut
   select 1 from public.studkab_request_files f
   where f.storage_path=name and f.student_id=auth.uid() and f.state='uploading'
   and f.purpose<>'result_docx'));
+create policy executor_upload_result_object on storage.objects for insert to authenticated
+ with check (bucket_id='studkab-private' and exists (
+  select 1 from public.studkab_request_files f
+  where f.storage_path=name and f.purpose='result_docx' and f.state='uploading'
+  and exists(select 1 from public.studkab_executors e where e.user_id=auth.uid() and e.active)));
 create policy student_read_private_object on storage.objects for select to authenticated
  using (bucket_id='studkab-private' and exists (
   select 1 from public.studkab_request_files f
   where f.storage_path=name and f.student_id=auth.uid()
-  and (f.state in ('uploading','quarantined','accepted','rejected','superseded')
-       or (f.purpose='result_docx' and f.state='accepted'))));
+  and ((f.purpose<>'result_docx' and f.state in ('uploading','quarantined','accepted','superseded'))
+       or (f.purpose='result_docx' and f.state='accepted' and exists(
+        select 1 from public.studkab_document_versions d join public.studkab_request_process p on p.delivered_document_id=d.id
+        where d.docx_file_id=f.id and p.request_id=f.request_id)))));
 
 create function public.studkab_initialize_request(target uuid, actor uuid)
 returns public.studkab_request_process language plpgsql security invoker
@@ -343,7 +350,21 @@ begin
   where id=file_row.id returning * into file_row;
   result=jsonb_build_object('fileId',file_row.id,'state',file_row.state);
 
+ elsif command_name='prepare_result_upload' then
+  if not exists(select 1 from public.studkab_executors where user_id=actor and active) then raise exception 'not_executor'; end if;
+  if payload->>'declaredMime'<>'application/vnd.openxmlformats-officedocument.wordprocessingml.document' then raise exception 'invalid_mime'; end if;
+  if coalesce((payload->>'sizeBytes')::bigint,0) not between 1 and 15728640 then raise exception 'invalid_size'; end if;
+  select coalesce(max(version),0)+1 into next_version from public.studkab_request_files where request_id=studkab_run_command.request_id and purpose='result_docx';
+  file_row.id:=gen_random_uuid();
+  insert into public.studkab_request_files(id,request_id,student_id,purpose,version,storage_path,original_name,declared_mime,size_bytes)
+  values(file_row.id,request_id,owner_id,'result_docx',next_version,request_id::text||'/'||file_row.id::text||'/'||next_version,
+   payload->>'originalName',payload->>'declaredMime',(payload->>'sizeBytes')::bigint) returning * into file_row;
+  result=jsonb_build_object('fileId',file_row.id,'path',file_row.storage_path,'version',file_row.version);
+
  elsif command_name='submit_passport' then
+  select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
+  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status not in ('completeness_review','needs_information','passport_draft') then raise exception 'revision_conflict'; end if;
+  if coalesce(jsonb_typeof(payload->'items'),'null')<>'array' or coalesce(jsonb_array_length(payload->'items'),0) not between 1 and 100 then raise exception 'invalid_requirements'; end if;
   select coalesce(max(version),0)+1 into next_version from public.studkab_requirement_passports where request_id=studkab_run_command.request_id;
   insert into public.studkab_requirement_passports(request_id,version,profile_code,profile_version,source_set_hash,created_by)
   values(request_id,next_version,payload->>'profileCode',payload->>'profileVersion',payload->>'sourceSetHash',actor) returning * into passport_row;
@@ -366,6 +387,8 @@ begin
   result=jsonb_build_object('passportId',passport_row.id,'revision',process_row.revision);
 
  elsif command_name='ask_clarification' then
+  select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
+  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status not in ('completeness_review','passport_draft') then raise exception 'revision_conflict'; end if;
   insert into public.studkab_clarifications(request_id,requirement_id,question,asked_by)
   values(request_id,nullif(payload->>'requirementId','')::uuid,payload->>'question',actor) returning * into clarification_row;
   update public.studkab_request_process set status='needs_information',revision=revision+1,updated_at=clock_timestamp() where request_id=studkab_run_command.request_id returning * into process_row;
@@ -373,12 +396,18 @@ begin
 
  elsif command_name='answer_clarification' then
   if actor<>owner_id then raise exception 'not_owner'; end if;
+  select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
+  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'needs_information' then raise exception 'revision_conflict'; end if;
   update public.studkab_clarifications set answer=payload->>'answer',answered_by=actor,answered_at=clock_timestamp(),state='answered'
    where id=(payload->>'clarificationId')::uuid and request_id=studkab_run_command.request_id and state='open' returning * into clarification_row;
   if not found then raise exception 'clarification_not_found'; end if;
-  result=jsonb_build_object('clarificationId',clarification_row.id,'state',clarification_row.state);
+  update public.studkab_request_process set status='completeness_review',revision=revision+1,updated_at=clock_timestamp()
+   where request_id=studkab_run_command.request_id returning * into process_row;
+  result=jsonb_build_object('clarificationId',clarification_row.id,'state',clarification_row.state,'revision',process_row.revision);
 
  elsif command_name='create_document_version' then
+  select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
+  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'preparing' then raise exception 'revision_conflict'; end if;
   select coalesce(max(version),0)+1 into next_version from public.studkab_document_versions where request_id=studkab_run_command.request_id;
   insert into public.studkab_document_versions(request_id,passport_id,version,state,content,content_sha256,docx_file_id,docx_sha256,exporter_version,created_by)
   values(request_id,(payload->>'passportId')::uuid,next_version,'ready_for_review',payload->'content',payload->>'contentSha256',
@@ -405,8 +434,15 @@ begin
   select * into document_row from public.studkab_document_versions where id=(payload->>'documentId')::uuid and request_id=studkab_run_command.request_id for update;
   if not found or document_row.state<>'ready_for_review' or document_row.docx_file_id is null then raise exception 'document_not_ready'; end if;
   if not exists(select 1 from public.studkab_request_files where id=document_row.docx_file_id and request_id=studkab_run_command.request_id and purpose='result_docx' and state='accepted' and sha256=document_row.docx_sha256) then raise exception 'docx_not_verified'; end if;
-  if exists(select 1 from public.studkab_requirement_items i where i.passport_id=document_row.passport_id and i.applicability='applicable' and i.severity='critical'
-   and not exists(select 1 from public.studkab_criterion_results c where c.document_id=document_row.id and c.requirement_id=i.id and c.status in ('pass','not_applicable'))) then raise exception 'critical_checks_incomplete'; end if;
+  if exists(
+   select 1 from public.studkab_requirement_items i
+   where i.passport_id=document_row.passport_id and i.applicability='applicable' and i.severity='critical'
+   and (
+    (i.verification_method='automatic' and not exists(select 1 from public.studkab_criterion_results c where c.document_id=document_row.id and c.requirement_id=i.id and c.status='pass' and c.evaluator_type='automatic'))
+    or (i.verification_method='manual' and not exists(select 1 from public.studkab_criterion_results c where c.document_id=document_row.id and c.requirement_id=i.id and c.status='pass' and c.evaluator_type='human'))
+    or (i.verification_method='combined' and (not exists(select 1 from public.studkab_criterion_results c where c.document_id=document_row.id and c.requirement_id=i.id and c.status='pass' and c.evaluator_type='automatic')
+      or not exists(select 1 from public.studkab_criterion_results c where c.document_id=document_row.id and c.requirement_id=i.id and c.status='pass' and c.evaluator_type='human')))
+   )) then raise exception 'critical_checks_incomplete'; end if;
   update public.studkab_document_versions set state='approved',approved_by=actor,approved_at=clock_timestamp() where id=document_row.id returning * into document_row;
   update public.studkab_request_process set status='ready_to_deliver',revision=revision+1,updated_at=clock_timestamp() where request_id=studkab_run_command.request_id returning * into process_row;
   result=jsonb_build_object('documentId',document_row.id,'revision',process_row.revision);
@@ -436,7 +472,7 @@ grant usage on schema private to service_role;
 grant execute on function private.studkab_run_command(uuid,text,uuid,uuid,jsonb) to service_role;
 
 do $$ declare command_name text; begin
- foreach command_name in array array['prepare_upload','accept_upload','submit_passport','approve_passport','ask_clarification','answer_clarification','create_document_version','record_checks','approve_document','deliver_document','get_delivered_document'] loop
+ foreach command_name in array array['prepare_upload','accept_upload','prepare_result_upload','submit_passport','approve_passport','ask_clarification','answer_clarification','create_document_version','record_checks','approve_document','deliver_document','get_delivered_document'] loop
   execute format('create function public.studkab_%I(request uuid, command_id uuid, actor uuid, payload jsonb) returns jsonb language sql security invoker set search_path=pg_catalog,public,private as $f$ select private.studkab_run_command(command_id,%L,request,actor,payload) $f$',command_name,command_name);
   execute format('revoke all on function public.studkab_%I(uuid,uuid,uuid,jsonb) from public,anon,authenticated',command_name);
   execute format('grant execute on function public.studkab_%I(uuid,uuid,uuid,jsonb) to service_role',command_name);

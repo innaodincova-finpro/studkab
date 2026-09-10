@@ -35,6 +35,8 @@ export async function resultAction(input,user,{db,config}) {
   return {data:{result:result||null}};
  }
  if(!uuid.test(input.deliveryId||''))return {status:400,data:{error:'Неверный номер передачи'}};
+ const controlled=await db('studkab_request_process?select=request_id&limit=1&request_id=eq.'+input.id);
+ if(controlled.length)return {status:409,data:{error:'Эта заявка передаётся через контрольный лист качества'}};
  let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
  const result=await db('rpc/deliver_studkab_result','POST',{request:input.id,delivery:input.deliveryId,content:document});
  if(result.conflict)return {status:409,data:{error:'Этот номер передачи уже использован для другого документа. Откройте передачу заново.'}};

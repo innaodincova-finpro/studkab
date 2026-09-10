@@ -270,6 +270,15 @@
     return r.data;
   };
 
+  Oblako.workflowDownload = async function(path) {
+    if (!client || !userId) throw new Error("Сначала войдите в аккаунт");
+    var expected = userId, expectedEpoch = epoch;
+    var r = await client.storage.from("studkab-private").download(path);
+    if (epoch !== expectedEpoch || userId !== expected) throw new Error("Аккаунт изменился. Повторите действие");
+    if (r.error || !r.data) throw new Error("Не удалось скачать проверенный документ");
+    return r.data;
+  };
+
   Oblako.signOut = function () {
     if (!client) return Promise.resolve();
     if (inFlight) return Promise.reject(new Error("Дождитесь завершения сохранения"));

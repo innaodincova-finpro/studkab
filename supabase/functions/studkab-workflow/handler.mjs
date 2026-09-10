@@ -3,6 +3,7 @@ const ACTIONS={
  initialize_request:{role:'service',rpc:'studkab_initialize_request'},
  transition_request:{role:'executor',rpc:'studkab_transition_request'},
  prepare_upload:{role:'student',rpc:'studkab_prepare_upload'},
+ prepare_result_upload:{role:'executor',rpc:'studkab_prepare_result_upload'},
  accept_upload:{role:'service',rpc:'studkab_accept_upload'},
  submit_passport:{role:'executor',rpc:'studkab_submit_passport'},
  approve_passport:{role:'executor',rpc:'studkab_approve_passport'},
@@ -12,11 +13,15 @@ const ACTIONS={
  record_checks:{role:'executor',rpc:'studkab_record_checks'},
  approve_document:{role:'executor',rpc:'studkab_approve_document'},
  deliver_document:{role:'executor',rpc:'studkab_deliver_document'},
- download_document:{role:'student',rpc:'studkab_get_delivered_document'}
- ,get_snapshot:{role:'user',rpc:'studkab_get_workflow_snapshot'}
+ download_document:{role:'student',rpc:'studkab_get_delivered_document'},
+ get_snapshot:{role:'user',rpc:'studkab_get_workflow_snapshot'},
+ complete_upload:{role:'student'},
+ complete_result_upload:{role:'executor'},
+ run_automatic_checks:{role:'executor'}
 };
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
+async function sha256(value){const bytes=new TextEncoder().encode(JSON.stringify(value));return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');}
 export function validateCommand(value){
  if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Неверная команда');
  if(!ACTIONS[value.action])throw Error('Неизвестная команда');
@@ -28,7 +33,7 @@ export function validateCommand(value){
  if(encoded.length>4000000)throw Error('Команда слишком большая');
  return {action:value.action,requestId:value.requestId,commandId:value.commandId,payload};
 }
-export function handler({auth,isExecutor,execute,serviceKey}){
+export function handler({auth,isExecutor,execute,verifyUpload,runAutomaticChecks,serviceKey}){
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -46,7 +51,13 @@ export function handler({auth,isExecutor,execute,serviceKey}){
     if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
     if(rule.role==='executor'&&!(await isExecutor(user.id)))return json({error:'Команда доступна только исполнителю'},403);
    }
-   const result=await execute(rule.rpc,{request:input.requestId,command_id:input.commandId,actor:user?.id??null,payload:input.payload});
+   if(input.action==='record_checks'&&(!Array.isArray(input.payload.checks)||input.payload.checks.some(x=>x?.evaluatorType!=='human')))return json({error:'Ручной контроль принимает только отметки исполнителя'},400);
+   if(input.action==='create_document_version'&&await sha256(input.payload.content)!==input.payload.contentSha256)return json({error:'Контрольная сумма содержания не совпала'},400);
+   const result=input.action==='complete_upload'||input.action==='complete_result_upload'
+    ?await verifyUpload(input,user,input.action==='complete_result_upload')
+    :input.action==='run_automatic_checks'
+     ?await runAutomaticChecks(input,user)
+     :await execute(rule.rpc,{request:input.requestId,command_id:input.commandId,actor:user?.id??null,payload:input.payload});
    return json({ok:true,result});
   }catch(e){
    const code=String(e?.message||'');

@@ -1,4 +1,6 @@
 import {handler} from './handler.mjs';
+import {verifyUpload} from './upload-check.mjs';
+import {runAutomaticChecks} from './document-check.mjs';
 const base=Deno.env.get('SUPABASE_URL')!;
 const key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 async function request(path:string,method='GET',body?:unknown){
@@ -16,5 +18,5 @@ async function isExecutor(id:string){
  return Array.isArray(rows)?rows.length===1:!!rows;
 }
 async function execute(rpc:string,body:unknown){return request('/rest/v1/rpc/'+rpc,'POST',body);}
-Deno.serve(handler({auth,isExecutor,execute,serviceKey:Deno.env.get('STUDKAB_WORKFLOW_SERVICE_KEY')}));
-
+async function db(path:string,method='GET',body?:unknown){return request('/rest/v1/'+path,method,body);}
+Deno.serve(handler({auth,isExecutor,execute,verifyUpload:(input:any,user:any,executor=false)=>verifyUpload({base,key,input,user,db,executor}),runAutomaticChecks:(input:any,user:any)=>runAutomaticChecks({input,user,db}),serviceKey:Deno.env.get('STUDKAB_WORKFLOW_SERVICE_KEY')}));

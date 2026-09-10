@@ -57,5 +57,5 @@
    button.onclick=function(){if(!same(data,identity)){button.hidden=true;msg.textContent='Аккаунт изменился. Откройте результат заново.';return;}try{download(result.document);}catch(e){msg.textContent='Не удалось собрать файл. Откройте результат повторно.';}};
   }catch(e){msg.textContent=e.message||'Не удалось проверить результат. Откройте его повторно.';}
  }
- global.StudResults={deliver:deliver,receive:receive};
+ global.StudResults={deliver:deliver,receive:receive,snapshot:snapshot};
 })(window);

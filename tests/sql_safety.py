@@ -157,4 +157,10 @@ transition_command='77777777-7777-4777-8777-777777777777'
 first_transition=json.loads(sql(f"set role service_role; select studkab_transition_request('{request_id}','{transition_command}','{uid}','{{\"expectedRevision\":2,\"nextStatus\":\"needs_information\",\"reason\":\"missing_data\"}}');"))
 same_transition=json.loads(sql(f"set role service_role; select studkab_transition_request('{request_id}','{transition_command}','{uid}','{{\"expectedRevision\":2,\"nextStatus\":\"needs_information\",\"reason\":\"missing_data\"}}');"))
 assert not first_transition['duplicate'] and same_transition['duplicate'] and first_transition['revision']==same_transition['revision']==3
+try: sql(f"set role service_role; select studkab_submit_passport('{request_id}','88888888-8888-4888-8888-888888888888','{uid}','{{\"expectedRevision\":2,\"profileCode\":\"financial-course-v1\",\"profileVersion\":\"1.0\",\"sourceSetHash\":\"{'a'*64}\",\"items\":[]}}');")
+except subprocess.CalledProcessError: pass
+else: raise AssertionError('Passport must reject stale revisions and an empty checklist')
+passport_payload=json.dumps({'expectedRevision':3,'profileCode':'financial-course-v1','profileVersion':'1.0','sourceSetHash':'a'*64,'items':[{'code':'DOC-06','ruleText':'DOCX is structurally valid','sourceType':'profile','sourceLocation':'profile v1','severity':'critical','scope':'whole_document','verificationMethod':'automatic','applicability':'applicable'}]}).replace("'","''")
+passport=json.loads(sql(f"set role service_role; select studkab_submit_passport('{request_id}','99999999-9999-4999-8999-999999999999','{uid}','{passport_payload}');"))
+assert passport['revision']==4 and sql(f"select status from studkab_request_process where request_id='{request_id}'")=='passport_draft'
 print('PASS: uniform workflow RPC contracts enforce ownership and idempotent retries')
