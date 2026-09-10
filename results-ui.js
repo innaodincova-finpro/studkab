@@ -36,7 +36,7 @@
     var result=await Oblako.requestApi({action:'deliver',id:requestId,deliveryId:deliveryId,document:payload});
     if(!same(data,identity))throw Error('Аккаунт изменился. Проверьте результат после повторного входа.');
     if(!result.saved||result.deliveryId!==deliveryId)throw Error('Передача не подтверждена. Повторите попытку.');
-    msg.textContent='Черновик доступен студенту в его работе: «Результат от исполнителя». Уведомление в мессенджер не отправлялось.';
+    msg.textContent='Черновик доступен студенту в его работе: «Черновик от исполнителя». Уведомление в мессенджер не отправлялось.';
     this.textContent='Черновик передан';
    }catch(e){msg.textContent=e.message||'Передача не подтверждена. Повторите попытку.';this.disabled=false;}
    finally{busy=false;}
@@ -44,7 +44,7 @@
  }
  async function receive(w){
   var data=D,identity=Oblako.identity();
-  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Результат от исполнителя</h3><p role="status" data-result-status>Проверяем готовность…</p><button type="button" class="btn" data-download hidden>Скачать черновик Word</button><p class="hint">Прочитайте документ, проверьте факты, источники и требования преподавателя. При необходимости доработайте его перед сдачей.</p>');
+  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Черновик от исполнителя</h3><p role="status" data-result-status>Проверяем готовность…</p><button type="button" class="btn" data-download hidden>Скачать черновик Word</button><p class="hint">Прочитайте документ, проверьте факты, источники и требования преподавателя. При необходимости доработайте его перед сдачей.</p>');
   wrap.dataset.accountIdentity=String(identity);
   var msg=wrap.querySelector('[data-result-status]');
   try{

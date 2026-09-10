@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=13"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=3"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=3"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=4"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1387,7 +1387,7 @@ function viewList(){
     return [x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q) >= 0;
   });
   var chips = [{k:"all",t:"Все"}].concat(ORDER.map(function(s){ return {k:s,t:STATUS[s]} }));
-  var h = '<div class="chips"><button type="button" class="chip" data-act="receive-inbox">Получить заявки из кабинетов</button></div><p class="small">Для получения войдите в аккаунт исполнителя. Затем нажмите кнопку выше.</p>' + (filter !== "all" || query
+  var h = '<div class="chips"><button type="button" class="chip" data-act="receive-inbox">Получить заявки из кабинетов</button></div><p class="small">Нажмите «Получить заявки из кабинетов», чтобы обновить список. Если потребуется вход, приложение сообщит об этом.</p>' + (filter !== "all" || query
       ? '<div class="row" style="margin-bottom:10px"><span class="mut">Отбор: ' +
         (filter !== "all" ? STATUS[filter] : "поиск") + ' · ' + list0(filter, query).length + '</span>' +
         '<button type="button" class="mini" data-act="filter" data-k="all">показать все</button></div>'
