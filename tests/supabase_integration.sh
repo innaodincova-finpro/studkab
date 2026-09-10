@@ -141,3 +141,7 @@ AFTER_DELIVERY=$(curl --fail-with-body --silent --show-error "$API_URL/storage/v
 test "$AFTER_DELIVERY" = "$RESULT_SHA"
 
 echo "PASS: full student/executor workflow, Auth, Edge Function, PostgREST, RLS and private Storage"
+
+# Same running stack, now driven through real application screens (no API mocks).
+export API_URL DB_URL ANON_KEY
+npx playwright test --config tests/live.playwright.config.cjs

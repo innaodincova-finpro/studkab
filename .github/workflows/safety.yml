@@ -66,6 +66,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Install live acceptance browser and pinned real SDK
+        run: |
+          npx playwright install --with-deps chromium
+          curl --fail --silent --show-error --location https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js --output tests/live-sdk.js
       - uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf
         with:
           version: 2.117.0
@@ -80,3 +88,12 @@ jobs:
       - name: Stop isolated Supabase stack
         if: always()
         run: supabase stop --no-backup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-workflow-evidence
+          path: |
+            test-results/live/
+            test-results/live-evidence/
+            test-results/live-*.png
+          retention-days: 7
