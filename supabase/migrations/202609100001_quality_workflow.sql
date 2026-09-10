@@ -152,6 +152,14 @@ create table public.studkab_status_events (
 );
 create index studkab_status_events_request on public.studkab_status_events(request_id,id);
 
+create table public.studkab_command_receipts (
+ command_id uuid primary key,
+ request_id uuid not null references public.studkab_requests(id) on delete restrict,
+ command_name text not null check (command_name ~ '^[a-z_]{1,80}$'),
+ response jsonb not null,
+ created_at timestamptz not null default clock_timestamp()
+);
+
 alter table public.studkab_request_process
  add column active_passport_id uuid references public.studkab_requirement_passports(id),
  add column active_document_id uuid references public.studkab_document_versions(id),
@@ -176,16 +184,17 @@ alter table public.studkab_document_versions enable row level security;
 alter table public.studkab_criterion_results enable row level security;
 alter table public.studkab_clarifications enable row level security;
 alter table public.studkab_status_events enable row level security;
+alter table public.studkab_command_receipts enable row level security;
 
 revoke all on public.studkab_workflow_config,public.studkab_executors,public.studkab_request_process,
  public.studkab_request_files,public.studkab_requirement_passports,public.studkab_requirement_items,
  public.studkab_document_versions,public.studkab_criterion_results,public.studkab_clarifications,
- public.studkab_status_events from public,anon,authenticated;
+ public.studkab_status_events,public.studkab_command_receipts from public,anon,authenticated;
 revoke all on sequence public.studkab_status_events_id_seq from public,anon,authenticated;
 grant select,insert,update on public.studkab_workflow_config,public.studkab_executors,
  public.studkab_request_process,public.studkab_request_files,public.studkab_requirement_passports,
  public.studkab_requirement_items,public.studkab_document_versions,public.studkab_criterion_results,
- public.studkab_clarifications,public.studkab_status_events to service_role;
+ public.studkab_clarifications,public.studkab_status_events,public.studkab_command_receipts to service_role;
 grant usage,select on sequence public.studkab_status_events_id_seq to service_role;
 grant select on public.studkab_request_process,public.studkab_request_files,
  public.studkab_document_versions,public.studkab_clarifications to authenticated;
@@ -269,5 +278,177 @@ end $$;
 
 revoke all on function public.studkab_transition_request(uuid,bigint,text,uuid,text,text,text,uuid) from public,anon,authenticated;
 grant execute on function public.studkab_transition_request(uuid,bigint,text,uuid,text,text,text,uuid) to service_role;
+
+create function private.studkab_run_command(command_id uuid, command_name text, request_id uuid, actor uuid, payload jsonb)
+returns jsonb language plpgsql security invoker set search_path=pg_catalog,public,private as $$
+declare receipt public.studkab_command_receipts; result jsonb; file_row public.studkab_request_files;
+ passport_row public.studkab_requirement_passports; clarification_row public.studkab_clarifications;
+ document_row public.studkab_document_versions; process_row public.studkab_request_process;
+ item jsonb; next_version integer; owner_id uuid;
+begin
+ if not exists(select 1 from public.studkab_workflow_config where id and enabled) then raise exception 'workflow_disabled'; end if;
+ perform pg_advisory_xact_lock(hashtextextended(command_id::text,714));
+ select * into receipt from public.studkab_command_receipts where studkab_command_receipts.command_id=studkab_run_command.command_id;
+ if found then
+  if receipt.request_id<>studkab_run_command.request_id or receipt.command_name<>studkab_run_command.command_name then raise exception 'command_conflict'; end if;
+  return receipt.response || jsonb_build_object('duplicate',true);
+ end if;
+ select student_id into owner_id from public.studkab_requests where id=request_id;
+ if not found then raise exception 'request_not_found'; end if;
+
+ if command_name='prepare_upload' then
+  if actor is null or actor<>owner_id then raise exception 'not_owner'; end if;
+  if (payload->>'purpose') not in ('assignment','guidelines','financials','bibliography','sample','other') then raise exception 'invalid_purpose'; end if;
+  if coalesce((payload->>'sizeBytes')::bigint,0) not between 1 and 15728640 then raise exception 'invalid_size'; end if;
+  if (select count(*) from public.studkab_request_files where request_id=studkab_run_command.request_id and state not in ('deleted','superseded'))>=12 then raise exception 'file_count_limit'; end if;
+  if (select coalesce(sum(size_bytes),0) from public.studkab_request_files where request_id=studkab_run_command.request_id and state not in ('deleted','superseded'))+((payload->>'sizeBytes')::bigint)>62914560 then raise exception 'request_size_limit'; end if;
+  select coalesce(max(version),0)+1 into next_version from public.studkab_request_files where request_id=studkab_run_command.request_id and purpose=payload->>'purpose';
+  file_row.id:=gen_random_uuid();
+  insert into public.studkab_request_files(id,request_id,student_id,purpose,version,storage_path,original_name,declared_mime,size_bytes)
+  values(file_row.id,request_id,owner_id,payload->>'purpose',next_version,request_id::text||'/'||file_row.id::text||'/'||next_version,
+   payload->>'originalName',payload->>'declaredMime',(payload->>'sizeBytes')::bigint) returning * into file_row;
+  result=jsonb_build_object('fileId',file_row.id,'path',file_row.storage_path,'version',file_row.version);
+
+ elsif command_name='accept_upload' then
+  select * into file_row from public.studkab_request_files where id=(payload->>'fileId')::uuid and request_id=studkab_run_command.request_id for update;
+  if not found or file_row.state not in ('uploading','quarantined') then raise exception 'file_not_found'; end if;
+  update public.studkab_request_files set detected_mime=payload->>'detectedMime',sha256=payload->>'sha256',
+   page_count=nullif(payload->>'pageCount','')::integer,state=case when (payload->>'accepted')::boolean then 'accepted' else 'rejected' end,
+   accepted_at=case when (payload->>'accepted')::boolean then clock_timestamp() end,rejection_code=case when not (payload->>'accepted')::boolean then payload->>'rejectionCode' end
+  where id=file_row.id returning * into file_row;
+  result=jsonb_build_object('fileId',file_row.id,'state',file_row.state);
+
+ elsif command_name='submit_passport' then
+  select coalesce(max(version),0)+1 into next_version from public.studkab_requirement_passports where request_id=studkab_run_command.request_id;
+  insert into public.studkab_requirement_passports(request_id,version,profile_code,profile_version,source_set_hash,created_by)
+  values(request_id,next_version,payload->>'profileCode',payload->>'profileVersion',payload->>'sourceSetHash',actor) returning * into passport_row;
+  for item in select * from jsonb_array_elements(coalesce(payload->'items','[]')) loop
+   insert into public.studkab_requirement_items(passport_id,code,rule_text,source_type,source_file_id,source_location,source_excerpt,severity,scope,verification_method,applicability,resolution_note)
+   values(passport_row.id,item->>'code',item->>'ruleText',item->>'sourceType',nullif(item->>'sourceFileId','')::uuid,item->>'sourceLocation',item->>'sourceExcerpt',item->>'severity',item->>'scope',item->>'verificationMethod',coalesce(item->>'applicability','unresolved'),item->>'resolutionNote');
+  end loop;
+  update public.studkab_request_process set status='passport_draft',revision=revision+1,updated_at=clock_timestamp() where request_id=studkab_run_command.request_id returning * into process_row;
+  result=jsonb_build_object('passportId',passport_row.id,'version',passport_row.version,'revision',process_row.revision);
+
+ elsif command_name='approve_passport' then
+  select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
+  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'passport_draft' then raise exception 'revision_conflict'; end if;
+  update public.studkab_requirement_passports set state='superseded' where request_id=studkab_run_command.request_id and state='approved';
+  update public.studkab_requirement_passports set state='approved',approved_by=actor,approved_at=clock_timestamp()
+   where id=(payload->>'passportId')::uuid and request_id=studkab_run_command.request_id and state='draft' returning * into passport_row;
+  if not found or exists(select 1 from public.studkab_requirement_items where passport_id=passport_row.id and applicability='unresolved') then raise exception 'passport_not_ready'; end if;
+  update public.studkab_request_process set active_passport_id=passport_row.id,status='passport_approved',revision=revision+1,updated_at=clock_timestamp()
+   where request_id=studkab_run_command.request_id returning * into process_row;
+  result=jsonb_build_object('passportId',passport_row.id,'revision',process_row.revision);
+
+ elsif command_name='ask_clarification' then
+  insert into public.studkab_clarifications(request_id,requirement_id,question,asked_by)
+  values(request_id,nullif(payload->>'requirementId','')::uuid,payload->>'question',actor) returning * into clarification_row;
+  update public.studkab_request_process set status='needs_information',revision=revision+1,updated_at=clock_timestamp() where request_id=studkab_run_command.request_id returning * into process_row;
+  result=jsonb_build_object('clarificationId',clarification_row.id,'revision',process_row.revision);
+
+ elsif command_name='answer_clarification' then
+  if actor<>owner_id then raise exception 'not_owner'; end if;
+  update public.studkab_clarifications set answer=payload->>'answer',answered_by=actor,answered_at=clock_timestamp(),state='answered'
+   where id=(payload->>'clarificationId')::uuid and request_id=studkab_run_command.request_id and state='open' returning * into clarification_row;
+  if not found then raise exception 'clarification_not_found'; end if;
+  result=jsonb_build_object('clarificationId',clarification_row.id,'state',clarification_row.state);
+
+ elsif command_name='create_document_version' then
+  select coalesce(max(version),0)+1 into next_version from public.studkab_document_versions where request_id=studkab_run_command.request_id;
+  insert into public.studkab_document_versions(request_id,passport_id,version,state,content,content_sha256,docx_file_id,docx_sha256,exporter_version,created_by)
+  values(request_id,(payload->>'passportId')::uuid,next_version,'ready_for_review',payload->'content',payload->>'contentSha256',
+   nullif(payload->>'docxFileId','')::uuid,payload->>'docxSha256',payload->>'exporterVersion',actor) returning * into document_row;
+  update public.studkab_request_process set active_document_id=document_row.id,status='quality_review',revision=revision+1,updated_at=clock_timestamp()
+   where request_id=studkab_run_command.request_id and active_passport_id=document_row.passport_id returning * into process_row;
+  if not found then raise exception 'passport_mismatch'; end if;
+  result=jsonb_build_object('documentId',document_row.id,'version',document_row.version,'revision',process_row.revision);
+
+ elsif command_name='record_checks' then
+  select * into document_row from public.studkab_document_versions where id=(payload->>'documentId')::uuid and request_id=studkab_run_command.request_id;
+  if not found then raise exception 'document_not_found'; end if;
+  for item in select * from jsonb_array_elements(coalesce(payload->'checks','[]')) loop
+   if not exists(select 1 from public.studkab_requirement_items where id=(item->>'requirementId')::uuid and passport_id=document_row.passport_id) then raise exception 'requirement_mismatch'; end if;
+   insert into public.studkab_criterion_results(document_id,requirement_id,status,evaluator_type,evidence,comment,decided_by,checker_version)
+   values((payload->>'documentId')::uuid,(item->>'requirementId')::uuid,item->>'status',item->>'evaluatorType',coalesce(item->'evidence','{}'),item->>'comment',actor,item->>'checkerVersion')
+   on conflict(document_id,requirement_id,evaluator_type) do update set status=excluded.status,evidence=excluded.evidence,comment=excluded.comment,decided_by=excluded.decided_by,decided_at=clock_timestamp(),checker_version=excluded.checker_version;
+  end loop;
+  result=jsonb_build_object('documentId',payload->>'documentId','recorded',jsonb_array_length(coalesce(payload->'checks','[]')));
+
+ elsif command_name='approve_document' then
+  select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
+  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'quality_review' then raise exception 'revision_conflict'; end if;
+  select * into document_row from public.studkab_document_versions where id=(payload->>'documentId')::uuid and request_id=studkab_run_command.request_id for update;
+  if not found or document_row.state<>'ready_for_review' or document_row.docx_file_id is null then raise exception 'document_not_ready'; end if;
+  if not exists(select 1 from public.studkab_request_files where id=document_row.docx_file_id and request_id=studkab_run_command.request_id and purpose='result_docx' and state='accepted' and sha256=document_row.docx_sha256) then raise exception 'docx_not_verified'; end if;
+  if exists(select 1 from public.studkab_requirement_items i where i.passport_id=document_row.passport_id and i.applicability='applicable' and i.severity='critical'
+   and not exists(select 1 from public.studkab_criterion_results c where c.document_id=document_row.id and c.requirement_id=i.id and c.status in ('pass','not_applicable'))) then raise exception 'critical_checks_incomplete'; end if;
+  update public.studkab_document_versions set state='approved',approved_by=actor,approved_at=clock_timestamp() where id=document_row.id returning * into document_row;
+  update public.studkab_request_process set status='ready_to_deliver',revision=revision+1,updated_at=clock_timestamp() where request_id=studkab_run_command.request_id returning * into process_row;
+  result=jsonb_build_object('documentId',document_row.id,'revision',process_row.revision);
+
+ elsif command_name='deliver_document' then
+  select * into process_row from public.studkab_request_process where request_id=studkab_run_command.request_id for update;
+  if process_row.revision<>(payload->>'expectedRevision')::bigint or process_row.status<>'ready_to_deliver' then raise exception 'revision_conflict'; end if;
+  update public.studkab_document_versions set state='delivered' where id=(payload->>'documentId')::uuid and request_id=studkab_run_command.request_id and state='approved' returning * into document_row;
+  if not found then raise exception 'document_not_ready'; end if;
+  update public.studkab_request_process set delivered_document_id=document_row.id,status='delivered',revision=revision+1,updated_at=clock_timestamp()
+   where request_id=studkab_run_command.request_id and active_document_id=document_row.id returning * into process_row;
+  result=jsonb_build_object('documentId',document_row.id,'sha256',document_row.docx_sha256,'revision',process_row.revision);
+
+ elsif command_name='get_delivered_document' then
+  if actor<>owner_id then raise exception 'not_owner'; end if;
+  select d.* into document_row from public.studkab_request_process p join public.studkab_document_versions d on d.id=p.delivered_document_id where p.request_id=studkab_run_command.request_id and d.state='delivered';
+  if not found then raise exception 'document_not_found'; end if;
+  select * into file_row from public.studkab_request_files where id=document_row.docx_file_id and state='accepted';
+  result=jsonb_build_object('documentId',document_row.id,'path',file_row.storage_path,'name',file_row.original_name,'sha256',document_row.docx_sha256);
+ else raise exception 'unknown_command'; end if;
+
+ insert into public.studkab_command_receipts(command_id,request_id,command_name,response) values(command_id,request_id,command_name,result);
+ return result || jsonb_build_object('duplicate',false);
+end $$;
+
+do $$ declare command_name text; begin
+ foreach command_name in array array['prepare_upload','accept_upload','submit_passport','approve_passport','ask_clarification','answer_clarification','create_document_version','record_checks','approve_document','deliver_document','get_delivered_document'] loop
+  execute format('create function public.studkab_%I(request uuid, command_id uuid, actor uuid, payload jsonb) returns jsonb language sql security invoker set search_path=pg_catalog,public,private as $f$ select private.studkab_run_command(command_id,%L,request,actor,payload) $f$',command_name,command_name);
+  execute format('revoke all on function public.studkab_%I(uuid,uuid,uuid,jsonb) from public,anon,authenticated',command_name);
+  execute format('grant execute on function public.studkab_%I(uuid,uuid,uuid,jsonb) to service_role',command_name);
+ end loop;
+end $$;
+
+create function public.studkab_initialize_request(request uuid, command_id uuid, actor uuid, payload jsonb)
+returns jsonb language plpgsql security invoker set search_path=pg_catalog,public as $$
+declare row public.studkab_request_process; receipt public.studkab_command_receipts; result jsonb;
+begin
+ perform pg_advisory_xact_lock(hashtextextended(command_id::text,714));
+ select * into receipt from public.studkab_command_receipts where studkab_command_receipts.command_id=studkab_initialize_request.command_id;
+ if found then
+  if receipt.request_id<>request or receipt.command_name<>'initialize_request' then raise exception 'command_conflict'; end if;
+  return receipt.response || jsonb_build_object('duplicate',true);
+ end if;
+ select * into row from public.studkab_initialize_request(request,actor);
+ result=to_jsonb(row);
+ insert into public.studkab_command_receipts values(command_id,request,'initialize_request',result,clock_timestamp());
+ return result || jsonb_build_object('duplicate',false);
+end $$;
+revoke all on function public.studkab_initialize_request(uuid,uuid,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.studkab_initialize_request(uuid,uuid,uuid,jsonb) to service_role;
+
+create function public.studkab_transition_request(request uuid, command_id uuid, actor uuid, payload jsonb)
+returns jsonb language plpgsql security invoker set search_path=pg_catalog,public as $$
+declare row public.studkab_request_process; receipt public.studkab_command_receipts; result jsonb;
+begin
+ perform pg_advisory_xact_lock(hashtextextended(command_id::text,714));
+ select * into receipt from public.studkab_command_receipts where studkab_command_receipts.command_id=studkab_transition_request.command_id;
+ if found then
+  if receipt.request_id<>request or receipt.command_name<>'transition_request' then raise exception 'command_conflict'; end if;
+  return receipt.response || jsonb_build_object('duplicate',true);
+ end if;
+ select * into row from public.studkab_transition_request(request,(payload->>'expectedRevision')::bigint,payload->>'nextStatus',actor,'executor',payload->>'reason',payload->>'relatedType',nullif(payload->>'relatedId','')::uuid);
+ result=to_jsonb(row);
+ insert into public.studkab_command_receipts values(command_id,request,'transition_request',result,clock_timestamp());
+ return result || jsonb_build_object('duplicate',false);
+end $$;
+revoke all on function public.studkab_transition_request(uuid,uuid,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.studkab_transition_request(uuid,uuid,uuid,jsonb) to service_role;
 
 commit;
