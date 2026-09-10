@@ -39,6 +39,7 @@ test('database conflicts and kill switch become safe client errors',async()=>{
  const app=handler({auth:async()=>executor,isExecutor:async()=>true,execute:async()=>{throw Error(error);}});
  assert.equal((await app(req('transition_request'))).status,409);
  error='workflow_disabled';assert.equal((await app(req('transition_request'))).status,503);
+ error='not_owner';assert.equal((await app(req('get_snapshot'))).status,403);
  error='request_not_found';assert.equal((await app(req('transition_request'))).status,404);
  error='secret database detail';const response=await app(req('transition_request'));assert.equal(response.status,503);assert.doesNotMatch(await response.text(),/secret/);
 });
