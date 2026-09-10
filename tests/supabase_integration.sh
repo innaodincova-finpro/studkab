@@ -24,13 +24,12 @@ token(){
 
 STUDENT_JSON=$(create_user student.workflow@example.test)
 OTHER_JSON=$(create_user other.workflow@example.test)
-EXECUTOR_JSON=$(create_user executor.workflow@example.test)
 STUDENT_ID=$(jq -r .id <<<"$STUDENT_JSON")
 OTHER_ID=$(jq -r .id <<<"$OTHER_JSON")
-EXECUTOR_ID=$(jq -r .id <<<"$EXECUTOR_JSON")
+EXECUTOR_ID="$OTHER_ID"
 STUDENT_TOKEN=$(token student.workflow@example.test)
 OTHER_TOKEN=$(token other.workflow@example.test)
-EXECUTOR_TOKEN=$(token executor.workflow@example.test)
+EXECUTOR_TOKEN="$OTHER_TOKEN"
 REQUEST_ID='11111111-1111-4111-8111-111111111111'
 OTHER_REQUEST_ID='33333333-3333-4333-8333-333333333333'
 
