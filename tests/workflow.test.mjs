@@ -22,6 +22,7 @@ test('student, executor and service commands have separate authorization',async(
  assert.equal((await app(req('initialize_request',{}, {'x-studkab-service-key':'wrong'}))).status,403);
  assert.equal((await app(req('initialize_request',{}, {'x-studkab-service-key':'secret'}))).status,200);
  assert.equal(calls[2].body.actor,null);
+ who=student;assert.equal((await app(req('get_snapshot'))).status,200);assert.equal(calls[3].rpc,'studkab_get_workflow_snapshot');
 });
 
 test('anonymous and unconfirmed users cannot run user commands',async()=>{
@@ -43,7 +44,7 @@ test('database conflicts and kill switch become safe client errors',async()=>{
 });
 
 test('all declared workflow actions route to fixed RPC names',async()=>{
- const actions=['prepare_upload','answer_clarification','download_document','transition_request','submit_passport','approve_passport','ask_clarification','create_document_version','record_checks','approve_document','deliver_document'];
+ const actions=['prepare_upload','answer_clarification','download_document','get_snapshot','transition_request','submit_passport','approve_passport','ask_clarification','create_document_version','record_checks','approve_document','deliver_document'];
  const seen=[];
  const app=handler({auth:async()=>executor,isExecutor:async()=>true,execute:async rpc=>{seen.push(rpc);return {};}});
  for(const action of actions)assert.equal((await app(req(action))).status,200);
