@@ -1,6 +1,4 @@
 -- Isolated from the other applications in this shared project.
--- Fresh Supabase projects do not expose the cron schema until pg_cron is enabled.
-create extension if not exists pg_cron;
 create table public.studkab_push_configuration (
  id integer primary key check(id=1), cron_token text not null default gen_random_uuid()::text,
  vapid jsonb, last_run_at timestamptz, last_result jsonb
@@ -37,6 +35,8 @@ $$;
 revoke all on function public.claim_studkab_push_delivery(text,uuid) from public,anon,authenticated;
 grant execute on function public.claim_studkab_push_delivery(text,uuid) to service_role;
 -- Runs as the job owner. The secret never appears in the job text or browser.
+-- Fresh Supabase projects do not expose the cron schema until pg_cron is enabled.
+create extension if not exists pg_cron;
 select cron.schedule('studkab-deadline-push','* * * * *',$job$
  select net.http_post(
  url:='https://dcpthwmuiodrjepifzsd.supabase.co/functions/v1/studkab-push',
