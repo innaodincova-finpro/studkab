@@ -33,7 +33,10 @@ async function click(page,name,expectedStatus=200){
  const response=page.waitForResponse(r=>r.url().includes('/functions/v1/studkab-workflow')&&r.request().method()==='POST'&&r.request().postDataJSON()?.action!=='get_snapshot');
  await button.click();const result=await response;
  expect(result.status(),action+': '+await result.text()).toBe(expectedStatus);
- if(result.ok())await expect.poll(()=>handle.evaluate(el=>el.isConnected)).toBe(false);
+ if(result.ok()){
+  await expect.poll(()=>handle.evaluate(el=>el.isConnected)).toBe(false);
+  await expect(page.locator('#workflowPanel')).not.toContainText('Загружаем состояние заявки');
+ }
  else await expect(button).toBeEnabled();
 }
 test('real screens + Auth + Edge + RLS + Storage: materials, passport, rework, delivery',async({browser})=>{
@@ -61,6 +64,7 @@ test('real screens + Auth + Edge + RLS + Storage: materials, passport, rework, d
  const reviewDownload=executor.waitForEvent('download');await click(executor,'Скачать Word для проверки');
  const reviewed=await fs.readFile(await (await reviewDownload).path());
  await click(executor,'Запустить автопроверку');
+ await expect.poll(()=>executor.locator('[data-workflow-check]').count()).toBeGreaterThan(0);
  for(const select of await executor.locator('[data-workflow-check]').all())await select.selectOption('pass');
  for(const input of await executor.locator('[data-workflow-comment]').all())await input.fill('Синтетическая отметка теста; не подтверждает содержательную или ручную приёмку Word.');
  await click(executor,'Сохранить ручную проверку');await click(executor,'Подтвердить готовность');await ready(executor,'Готов к передаче');
