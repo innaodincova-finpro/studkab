@@ -775,7 +775,7 @@ function openDocBuilder(id){
   function current(){if(D!==expectedData||Oblako.identity()!==expectedIdentity||!wrap.isConnected)throw Error("Подготовка остановлена: окно закрыто или аккаунт изменился. Уже сохранённые разделы доступны в прежнем аккаунте.");}
   function sec(c, i){
     var t = (doc.structure[c.id]||{}).text || "";
-    return '<div class="card" data-sec="' + c.id + '" style="padding:12px">' +
+    return '<details class="card" data-sec="' + c.id + '" style="padding:12px"><summary>' + esc(c.name) + '</summary>' +
       '<div class="row" style="gap:6px;margin-bottom:6px">' +
         '<input type="text" class="secName" value="' + esc(c.name) + '" style="flex:1;padding:8px;font-size:14px;font-weight:500">' +
         '<input type="number" class="secPages" value="' + (c.pages||"") + '" min="0" style="width:64px;padding:8px;font-size:13px" title="Ориентир объёма текста" aria-label="страниц">' +
@@ -786,11 +786,14 @@ function openDocBuilder(id){
       '<div style="display:flex;gap:6px">' +
         '<button type="button" class="mini" data-seccopy="' + c.id + '">запрос</button>' +
         (aiReady() ? '<button type="button" class="mini" data-secgen="' + c.id + '">Переработать раздел</button>' : '') +
-      '</div></div></div>';
+      '</div></div></details>';
   }
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>' +
     '<h3>Документ</h3><div class="mut" style="margin-bottom:10px">' + esc(x.topic||"") + '</div>' +
+    '<button type="button" class="btn" data-docx="1">Скачать Word</button>' +
+    '<div id="docPreview" style="overflow-wrap:anywhere"></div>' +
+    '<details><summary>Настройки подготовки</summary>' +
     (aiReady()
       ? '<div class="fld"><label>Кем писать</label><select id="docProv">' +
           activeProviders().map(function(pv){
@@ -801,21 +804,44 @@ function openDocBuilder(id){
             ? 'Посредник не настроен — откройте «Ещё» → «Нейросети» и впишите адрес и пароль.'
             : 'Не отмечен ни один поставщик — откройте «Ещё» → «Нейросети».') +
           ' Пока разделы можно писать вручную или копировать запрос кнопкой «запрос» — сохранение и Word работают без нейросети.</div>') +
-    DraftEditor.form(x) +
+    '</details>' + DraftEditor.form(x) +
     (aiReady()?'<button type="button" class="btn" data-genall="1">Подготовить весь черновик</button><p class="hint">Один запуск для всех разделов. После сбоя продолжается с сохранённого места. Во время подготовки держите это окно открытым.</p>':'') +
     '<div id="docStatus" class="infobox" style="margin:0 0 10px;display:none"></div>' +
-    '<p class="hint">Число рядом с названием — ориентир объёма текста: 1 соответствует 1800 знакам с пробелами. Число страниц Word зависит от таблиц и оформления. Слишком длинный ответ сокращается автоматически одной дополнительной попыткой.</p><div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
+    '<details><summary>Редактировать разделы</summary><p class="hint">Число рядом с названием — ориентир объёма текста: 1 соответствует 1800 знакам с пробелами. Число страниц Word зависит от таблиц и оформления.</p><div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
     '<div class="chips" style="margin-top:4px">' +
       '<button type="button" class="chip" data-secadd="1">+ раздел</button>' +
       (aiReady()
         ? '<button type="button" class="chip" data-genover="1">Подготовить новую версию</button>'
         : '') +
-    '</div>' +
+    '</div></details>' +
     '<button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
-    '<div class="rowbtns"><button type="button" class="btn" data-docx="1" style="flex:1">Скачать Word</button>' +
+    '<div class="rowbtns">' +
     '<button type="button" class="btn ghost" data-docsave="1" style="flex:1">Сохранить</button></div>'
   );
   wrap.dataset.accountIdentity=String(expectedIdentity);
+  function preview(){
+    var target=wrap.querySelector('#docPreview');
+    target.replaceChildren();
+    doc.order.forEach(function(c){
+      var text=(doc.structure[c.id]||{}).text||'';if(!text.trim())return;
+      var section=document.createElement('section'),heading=document.createElement('h4');
+      heading.textContent=c.name;section.appendChild(heading);
+      var table=null;
+      text.split('\n').forEach(function(line){
+        if(/^\s*\|.*\|\s*$/.test(line)){
+          if(/^\s*\|[\s:|\-]+\|\s*$/.test(line))return;
+          if(!table){var scroll=document.createElement('div');scroll.style.overflowX='auto';table=document.createElement('table');table.style.cssText='width:100%;border-collapse:collapse;font-size:14px';scroll.appendChild(table);section.appendChild(scroll);}
+          var row=document.createElement('tr'),head=!table.rows.length;
+          line.trim().slice(1,-1).split('|').forEach(function(value){var cell=document.createElement(head?'th':'td');cell.style.cssText='border:1px solid #cbd5df;padding:8px;text-align:left';cell.textContent=value.trim();row.appendChild(cell);});table.appendChild(row);return;
+        }
+        table=null;if(!line.trim())return;
+        var p=document.createElement('p');p.textContent=line;section.appendChild(p);
+      });target.appendChild(section);
+    });
+    if(!target.children.length)target.textContent='Черновик пока не подготовлен. Добавьте материалы и нажмите «Подготовить весь черновик».';
+    wrap.querySelectorAll('[data-sec]').forEach(function(el){el.querySelector('summary').textContent=el.querySelector('.secName').value;});
+  }
+  preview();
   DraftEditor.bind(wrap,x,readBack);
   function readBack(){
     current();
@@ -827,7 +853,7 @@ function openDocBuilder(id){
       st[cid] = { text: el.querySelector(".secText").value, by: (doc.structure[cid]||{}).by || "" };
     });
     doc.order = order; doc.structure = st; doc.updated = today();
-    save();
+    save();preview();
   }
   function setStatus(msg, kind){
     var el = wrap.querySelector("#docStatus"); if (!msg){ el.style.display = "none"; return; }
