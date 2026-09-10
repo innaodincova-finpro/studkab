@@ -104,3 +104,40 @@ for role in ['anon','authenticated']:
   except subprocess.CalledProcessError:pass
   else:raise AssertionError('Result privileges leaked to '+role)
 print('PASS: immutable result versions, concurrent retries, denied direct access')
+
+# Supabase Storage compatibility surface for the disposable PostgreSQL test.
+sql("create schema storage; create table storage.buckets(id text primary key,name text not null,public boolean not null default false,file_size_limit bigint,allowed_mime_types text[]); create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null,name text not null); alter table storage.objects enable row level security; grant usage on schema storage to authenticated; grant select,insert on storage.objects to authenticated;")
+sql((root/'supabase/migrations/202609100001_quality_workflow.sql').read_text())
+sql("update studkab_workflow_config set enabled=true where id=true;")
+process=json.loads(sql(f"set role service_role; select row_to_json(x) from studkab_initialize_request('{request_id}','{uid}') x;"))
+assert process['status']=='submitted' and process['revision']==1
+again=json.loads(sql(f"set role service_role; select row_to_json(x) from studkab_initialize_request('{request_id}','{uid}') x;"))
+assert again['request_id']==process['request_id']
+assert sql(f"set role service_role; select status||'|'||revision from studkab_transition_request('{request_id}',1,'completeness_review','{uid}','executor','review_started')")=='completeness_review|2'
+try: sql(f"set role service_role; select studkab_transition_request('{request_id}',1,'passport_draft','{uid}','executor','stale')")
+except subprocess.CalledProcessError: pass
+else: raise AssertionError('Stale workflow revision must fail')
+try: sql(f"set role service_role; select studkab_transition_request('{request_id}',2,'delivered','{uid}','executor','skip_review')")
+except subprocess.CalledProcessError: pass
+else: raise AssertionError('Invalid workflow transition must fail')
+assert sql(f"select from_status||'|'||to_status from studkab_status_events where request_id='{request_id}' order by id desc limit 1")=='submitted|completeness_review'
+
+file_id='44444444-4444-4444-8444-444444444444'
+path=f'{request_id}/{file_id}/1'
+sql(f"insert into studkab_request_files(id,request_id,student_id,purpose,version,storage_path,original_name,declared_mime,size_bytes) values('{file_id}','{request_id}','{uid}','assignment',1,'{path}','task.pdf','application/pdf',1000)")
+assert sql(f"set role authenticated; set request.jwt.claim.sub='{uid}'; select count(*) from studkab_request_files")=='1'
+assert sql(f"set role authenticated; set request.jwt.claim.sub='{other}'; select count(*) from studkab_request_files")=='0'
+sql(f"set role authenticated; set request.jwt.claim.sub='{uid}'; insert into storage.objects(bucket_id,name) values('studkab-private','{path}')")
+try: sql(f"set role authenticated; set request.jwt.claim.sub='{other}'; insert into storage.objects(bucket_id,name) values('studkab-private','{request_id}/bad/1')")
+except subprocess.CalledProcessError: pass
+else: raise AssertionError('Foreign or unprepared upload must fail')
+for role in ['anon','authenticated']:
+ for query in ['select * from studkab_executors','select * from studkab_requirement_passports','select * from studkab_criterion_results',f"select studkab_initialize_request('{request_id}','{uid}')",f"select studkab_transition_request('{request_id}',2,'needs_information','{uid}','executor','test')"]:
+  try: sql(f'set role {role}; '+query)
+  except subprocess.CalledProcessError: pass
+  else: raise AssertionError('Workflow write or internal data leaked to '+role)
+sql("update studkab_workflow_config set enabled=false where id=true;")
+try: sql(f"set role service_role; select studkab_transition_request('{request_id}',2,'needs_information','{uid}','executor','disabled_test')")
+except subprocess.CalledProcessError: pass
+else: raise AssertionError('Disabled workflow must reject commands')
+print('PASS: quality workflow RLS, private uploads, state transitions, revisions and kill switch')
