@@ -52,6 +52,7 @@ export function handler({auth,isExecutor,execute,serviceKey}){
    const code=String(e?.message||'');
    if(code.includes('revision_conflict'))return json({error:'Документ изменился. Обновите данные и повторите действие.'},409);
    if(code.includes('workflow_disabled'))return json({error:'Новый процесс пока не включён'},503);
+   if(code.includes('not_owner'))return json({error:'Нет доступа к этой заявке'},403);
    if(code.includes('not_found'))return json({error:'Заявка не найдена'},404);
    return json({error:'Сервис временно недоступен'},503);
   }
