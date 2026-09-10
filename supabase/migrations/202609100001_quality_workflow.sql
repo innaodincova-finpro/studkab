@@ -406,6 +406,9 @@ begin
  insert into public.studkab_command_receipts(command_id,request_id,command_name,response) values(command_id,request_id,command_name,result);
  return result || jsonb_build_object('duplicate',false);
 end $$;
+revoke all on function private.studkab_run_command(uuid,text,uuid,uuid,jsonb) from public,anon,authenticated;
+grant usage on schema private to service_role;
+grant execute on function private.studkab_run_command(uuid,text,uuid,uuid,jsonb) to service_role;
 
 do $$ declare command_name text; begin
  foreach command_name in array array['prepare_upload','accept_upload','submit_passport','approve_passport','ask_clarification','answer_clarification','create_document_version','record_checks','approve_document','deliver_document','get_delivered_document'] loop
