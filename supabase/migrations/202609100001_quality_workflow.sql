@@ -212,6 +212,12 @@ returns boolean language sql stable security definer set search_path=pg_catalog,
 as $$ select exists(select 1 from public.studkab_executors e where e.user_id=actor and e.active) $$;
 revoke all on function private.studkab_is_active_executor(uuid) from public,anon;
 grant execute on function private.studkab_is_active_executor(uuid) to authenticated;
+create function private.studkab_executor_can_upload_result(path text, actor uuid)
+returns boolean language sql stable security definer set search_path=pg_catalog,public
+as $$ select private.studkab_is_active_executor(actor) and exists(
+ select 1 from public.studkab_request_files f where f.storage_path=path and f.purpose='result_docx' and f.state='uploading') $$;
+revoke all on function private.studkab_executor_can_upload_result(text,uuid) from public,anon;
+grant execute on function private.studkab_executor_can_upload_result(text,uuid) to authenticated;
 
 create policy student_read_process on public.studkab_request_process for select to authenticated
  using (private.studkab_student_owns_request(request_id));
@@ -228,10 +234,7 @@ create policy student_upload_private_object on storage.objects for insert to aut
   where f.storage_path=name and f.student_id=auth.uid() and f.state='uploading'
   and f.purpose<>'result_docx'));
 create policy executor_upload_result_object on storage.objects for insert to authenticated
- with check (bucket_id='studkab-private' and exists (
-  select 1 from public.studkab_request_files f
-  where f.storage_path=name and f.purpose='result_docx' and f.state='uploading'
-  and private.studkab_is_active_executor(auth.uid())));
+ with check (bucket_id='studkab-private' and private.studkab_executor_can_upload_result(name,auth.uid()));
 create policy student_read_private_object on storage.objects for select to authenticated
  using (bucket_id='studkab-private' and exists (
   select 1 from public.studkab_request_files f
