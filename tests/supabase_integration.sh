@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'echo "FAIL: integration script line $LINENO" >&2' ERR
 
 eval "$(supabase status -o env)"
 : "${API_URL:?}" "${DB_URL:?}" "${ANON_KEY:?}" "${SERVICE_ROLE_KEY:?}"
@@ -22,6 +23,7 @@ token(){
   --data "{\"email\":\"$1\",\"password\":\"Test-only-29!safe\"}" | jq -r .access_token
 }
 
+echo 'CHECK: create isolated users'
 STUDENT_JSON=$(create_user student.workflow@example.test)
 OTHER_JSON=$(create_user other.workflow@example.test)
 STUDENT_ID=$(jq -r .id <<<"$STUDENT_JSON")
@@ -41,6 +43,7 @@ values(:'request_id',:'student_id','integration-request','{"id":"integration-req
 insert into public.studkab_requests(id,student_id,client_id,payload)
 values(:'other_request_id',:'other_id','other-integration-request','{"id":"other-integration-request","t":"Test","cn":"test"}');
 SQL
+echo 'CHECK: workflow initialization and student upload'
 test "$(psql "$DB_URL" -X -qAt -v ON_ERROR_STOP=1 -c "select count(*) from public.studkab_request_process where request_id='$REQUEST_ID'")" = 1
 test "$(psql "$DB_URL" -X -qAt -v ON_ERROR_STOP=1 -c "select count(*) from public.studkab_request_process where request_id='$OTHER_REQUEST_ID'")" = 0
 
@@ -88,6 +91,7 @@ workflow(){
  curl --fail-with-body --silent --show-error "$API_URL/functions/v1/studkab-workflow" \
   -H "apikey: $ANON_KEY" -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' --data "$1"
 }
+echo 'CHECK: passport, checklist and verified delivery'
 TRANSITION=$(jq -nc --arg requestId "$REQUEST_ID" '{action:"transition_request",requestId:$requestId,commandId:"77777777-7777-4777-8777-777777777777",payload:{expectedRevision:1,nextStatus:"completeness_review",reason:"integration_review"}}')
 jq -e '.result.revision == 2' <<<"$(workflow "$TRANSITION")" >/dev/null
 ITEMS='[{"code":"DOC-01","ruleText":"Manual review","sourceType":"profile","sourceLocation":"integration","severity":"critical","scope":"whole_document","verificationMethod":"manual","applicability":"applicable"},{"code":"DOC-06","ruleText":"Valid DOCX","sourceType":"profile","sourceLocation":"integration","severity":"critical","scope":"whole_document","verificationMethod":"automatic","applicability":"applicable"},{"code":"DOC-07","ruleText":"Verified version","sourceType":"profile","sourceLocation":"integration","severity":"critical","scope":"whole_document","verificationMethod":"automatic","applicability":"applicable"},{"code":"DOC-08","ruleText":"Correct recipient","sourceType":"profile","sourceLocation":"integration","severity":"critical","scope":"whole_document","verificationMethod":"automatic","applicability":"applicable"}]'
