@@ -1536,11 +1536,13 @@ function viewMore(){
       '</select></div>' +
       '<div class="chips"><button type="button" class="chip ok" data-act="px-save">Сохранить</button></div>';
 
-  return '<details class="fold"' + (configured ? '' : ' open') + '><summary>Нейросети' + (configured ? ' <span class="pill p-ok">настройки сохранены</span>'
+  function moreFold(title, body){ return '<details class="fold"><summary>' + title + '</summary><div class="in">' + body + '</div></details>'; }
+
+  return '<details class="fold"><summary>Нейросети' + (configured ? ' <span class="pill p-ok">настройки сохранены</span>'
       : ' <span class="pill p-och">' + (st.proxyUrl && st.proxyToken ? 'нет поставщика' : 'не настроено') + '</span>') + '</summary><div class="in">' + nets + '</div></details>' +
-    card(lab("Хранение записей") + CloudUI.panel()) +
-    card(lab("Доступ студентов") + '<p class="hint">Для первого входа без Google создайте персональную ссылку и отправьте её только этому студенту. Пароль он задаст сам.</p><button class="chip" onclick="openInvitation()">Создать приглашение</button><button class="chip" onclick="openInvitation(true)">Восстановить доступ</button>') +
-    card(lab("Итоги") +
+    moreFold("Хранение записей", CloudUI.panel()) +
+    moreFold("Доступ студентов", '<p class="hint">Для первого входа без Google создайте персональную ссылку и отправьте её только этому студенту. Пароль он задаст сам.</p><button class="chip" onclick="openInvitation()">Создать приглашение</button><button class="chip" onclick="openInvitation(true)">Восстановить доступ</button>') +
+    moreFold("Итоги",
       [["all","Заявок",c.all],["new","Новых",c.new],["work","В работе",c.work],
        ["sent","Черновик отправлен",c.sent],["done","Готово",c.done],["off","Отменено",c.off]]
       .filter(function(q){ return q[0]==="all" || q[0]==="new" || q[2] > 0 })
@@ -1551,7 +1553,7 @@ function viewMore(){
       }).join("") +
       '<div class="stat' + ((D.refs||[]).length ? ' tapline' : '') + '"' + ((D.refs||[]).length ? ' data-act="go-refs" style="cursor:pointer"' : '') + '>' +
         '<span>Вузов в справочнике</span><b>' + (D.refs||[]).length + ((D.refs||[]).length ? ' <span class="mut">›</span>' : '') + '</b></div>') +
-    card(lab("Копия данных") +
+    moreFold("Копия данных",
       '<div class="chips" style="margin-top:0"><button type="button" class="chip" data-act="export">Сохранить копию</button>' +
       '<button type="button" class="chip" data-act="import">Загрузить копию</button><button type="button" class="chip" data-act="cloud-before-copy">Копии перед заменой</button></div>' +
       '<div class="hint">Без входа данные хранятся только в этом браузере. После входа доступно облачное сохранение. Копию можно скачать отдельно. Ключи и пароль посредника в копию не попадают — на новом устройстве впишите их заново.</div>') +

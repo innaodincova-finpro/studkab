@@ -3,7 +3,7 @@ for(const file of ['index.html','reestr.html']){
  test(file+': login form, autosave, reload offline edits and explicit conflict choice',async({page})=>{
   await page.goto('http://127.0.0.1:4173/'+file);
   await page.locator('[data-tab="more"]').click();
-  if(file==='index.html')await page.getByText('Хранение записей',{exact:true}).click();
+  await page.getByText('Хранение записей',{exact:true}).click();
   await expect(page.getByRole('button',{name:'Войти через Google',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Войти по почте и паролю',exact:true}).click();
   await page.getByLabel('Электронная почта',{exact:true}).fill('cloud-flow@example.test');
