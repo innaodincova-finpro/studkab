@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Макет пути заявки и контроля качества</title>
+<style>
+:root{--bg:#edf3f8;--paper:#fff;--ink:#22303f;--mut:#667b8e;--line:#d9e4ed;--blue:#4e7a9e;--navy:#28425c;--accent:#2f6091;--soft:#eaf2f8;--green:#4b7f62;--green-bg:#eaf4ee;--amber:#9a6b30;--amber-bg:#fff4df;--red:#a85147;--red-bg:#faece9;--shadow:0 20px 52px rgba(40,66,92,.12)}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(145deg,#f7fafc 0,#e8f0f6 65%,#dde8f0 100%);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh}button,input,select,textarea{font:inherit}button{cursor:pointer}.shell{max-width:1240px;margin:auto;padding:22px}.top{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}.brand b{display:block;font-family:Georgia,serif;font-size:25px;color:var(--navy)}.brand span,.mut{color:var(--mut)}.notice{padding:10px 14px;border:1px solid #c8d9e6;border-radius:12px;background:rgba(255,255,255,.75);font-size:14px;color:var(--navy)}.mode{display:flex;padding:4px;border:1px solid var(--line);background:#fff;border-radius:14px;box-shadow:0 8px 20px rgba(40,66,92,.06)}.mode button{border:0;background:transparent;color:var(--mut);padding:10px 16px;border-radius:10px;font-weight:700}.mode button.on{background:var(--navy);color:#fff}.workspace{display:grid;grid-template-columns:270px minmax(0,1fr);gap:18px}.rail,.screen{background:rgba(255,255,255,.94);border:1px solid rgba(200,214,226,.9);border-radius:24px;box-shadow:var(--shadow)}.rail{padding:18px;height:max-content;position:sticky;top:16px}.rail h2{font:600 20px Georgia,serif;margin:0 0 6px}.rail p{font-size:14px;margin:0 0 18px;color:var(--mut)}.steps{display:grid;gap:5px}.step{width:100%;border:0;background:transparent;text-align:left;display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center;padding:9px;border-radius:12px;color:var(--mut)}.step i{font-style:normal;width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:#eef3f7;color:var(--mut);font-size:13px;font-weight:800}.step b{font-size:14px}.step.on{background:var(--soft);color:var(--navy)}.step.on i{background:var(--blue);color:#fff}.screen{overflow:hidden;min-height:720px}.appbar{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}.appbar h1{font:600 23px Georgia,serif;margin:0}.appbar small{display:block;color:#dce8f1;margin-top:3px}.status-pill{padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.16);font-size:13px;font-weight:700;white-space:nowrap}.content{padding:24px;max-width:900px;margin:auto}.content h2{font:600 26px Georgia,serif;color:var(--navy);margin:0 0 6px}.lead{margin:0 0 20px;color:var(--mut)}.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;margin:0 0 14px;box-shadow:0 8px 22px rgba(40,66,92,.05)}.card h3{font-size:16px;margin:0 0 12px;color:var(--navy)}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field label{display:block;font-size:13px;font-weight:700;color:var(--navy);margin:0 0 6px}.input{min-height:44px;border:1px solid #cbd9e4;border-radius:11px;padding:11px 12px;background:#fbfdfe}.file{display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #edf1f4}.file:first-of-type{border-top:0}.file-icon{width:40px;height:40px;border-radius:11px;background:var(--soft);display:grid;place-items:center;color:var(--accent);font-weight:800;font-size:12px}.file b,.file small{display:block}.file small{color:var(--mut);font-size:13px}.tag{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}.ok{background:var(--green-bg);color:var(--green)}.warn{background:var(--amber-bg);color:var(--amber)}.bad{background:var(--red-bg);color:var(--red)}.neutral{background:#eef3f7;color:var(--mut)}.check{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:start;padding:11px 0;border-top:1px solid #edf1f4}.check:first-child{border-top:0}.dot{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:white;font-size:12px;font-weight:bold}.dot.wait{background:var(--amber)}.timeline{position:relative;padding-left:15px}.event{display:grid;grid-template-columns:18px 1fr;gap:12px;padding:0 0 20px;position:relative}.event:before{content:"";position:absolute;left:8px;top:18px;bottom:0;border-left:2px solid var(--line)}.event:last-child:before{display:none}.event i{width:18px;height:18px;border-radius:50%;background:#c8d6e1;border:4px solid #eef4f8;z-index:1}.event.done i{background:var(--green)}.event.now i{background:var(--blue);box-shadow:0 0 0 4px #dceaf4}.event b,.event span{display:block}.event span{font-size:13px;color:var(--mut);margin-top:2px}.tabs{display:flex;gap:4px;overflow:auto;border-bottom:1px solid var(--line);padding:0 24px;background:#fff}.tabs button{border:0;border-bottom:3px solid transparent;background:transparent;padding:14px 10px;color:var(--mut);white-space:nowrap;font-size:13px;font-weight:700}.tabs button.on{color:var(--accent);border-color:var(--accent)}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:#f6f9fb;border-radius:14px;padding:13px}.metric b{font:600 22px Georgia,serif;color:var(--navy);display:block}.metric span{font-size:12px;color:var(--mut)}table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;color:var(--mut);font-size:12px;padding:9px;border-bottom:1px solid var(--line)}td{padding:12px 9px;border-bottom:1px solid #edf1f4;vertical-align:top}.source{font-size:12px;color:var(--mut);margin-top:3px}.problem{border-left:4px solid var(--red);background:var(--red-bg);padding:13px 14px;border-radius:10px;margin:10px 0}.question{border-left:4px solid var(--amber);background:var(--amber-bg);padding:13px 14px;border-radius:10px;margin:10px 0}.btns{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}.btn{border:0;border-radius:11px;padding:11px 15px;background:var(--accent);color:#fff;font-weight:800}.btn.secondary{background:#edf3f7;color:var(--navy)}.btn.danger{background:var(--red)}.btn:disabled{background:#d9e1e7;color:#8394a2;cursor:not-allowed}.footer-nav{border-top:1px solid var(--line);background:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px}.counter{font-size:13px;color:var(--mut)}.mini-nav{display:flex;gap:8px}.flow-note{font-size:13px;padding:9px 12px;border-radius:10px;background:#f4f7fa;color:var(--mut);margin-top:12px}.empty{padding:28px;text-align:center;background:#f7fafc;border:1px dashed #c9d7e2;border-radius:14px;color:var(--mut)}
+@media(max-width:850px){.shell{padding:10px}.top{align-items:stretch;flex-direction:column}.workspace{grid-template-columns:1fr}.rail{position:static}.steps{display:flex;overflow:auto}.step{min-width:155px}.screen{min-height:680px}.summary{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.brand b{font-size:21px}.notice{font-size:13px}.mode{width:100%}.mode button{flex:1;padding:10px 7px;font-size:13px}.rail{padding:14px;border-radius:18px}.screen{border-radius:20px}.appbar{padding:17px}.appbar h1{font-size:20px}.status-pill{display:none}.content{padding:17px}.content h2{font-size:23px}.grid2{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}.tabs{padding:0 10px}.file{grid-template-columns:38px 1fr}.file .tag{grid-column:2}.check{grid-template-columns:22px 1fr}.check>.tag{grid-column:2}.footer-nav{padding:12px}.counter{display:none}table{font-size:13px}.wide-table{overflow:auto}.wide-table table{min-width:680px}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div class="brand"><b>Путь заявки и контроль качества</b><span>Интерактивный макет будущих экранов</span></div>
+    <div class="notice">Макет · данные не загружаются и не сохраняются</div>
+    <div class="mode" role="tablist" aria-label="Роль пользователя">
+      <button type="button" class="on" data-mode="student">Кабинет студента</button>
+      <button type="button" data-mode="executor">Реестр исполнителя</button>
+    </div>
+  </header>
+  <div class="workspace">
+    <aside class="rail">
+      <h2 id="rail-title"></h2>
+      <p id="rail-text"></p>
+      <nav class="steps" id="steps" aria-label="Этапы сценария"></nav>
+    </aside>
+    <section class="screen" aria-live="polite">
+      <header class="appbar"><div><h1 id="app-title"></h1><small id="app-sub"></small></div><span class="status-pill" id="top-status"></span></header>
+      <div class="tabs" id="tabs"></div>
+      <div class="content" id="view"></div>
+      <footer class="footer-nav"><button class="btn secondary" id="prev">Назад</button><span class="counter" id="counter"></span><div class="mini-nav"><button class="btn" id="next">Далее</button></div></footer>
+    </section>
+  </div>
+</main>
+<script>
+const student=[
+ {name:'Новая заявка',status:'Черновик заявки',tabs:['Работа','Документы','Проверка'],html:`
+  <h2>Новая заявка</h2><p class="lead">Сначала укажите основные сведения. Их можно изменить до отправки.</p>
+  <div class="card"><h3>Учебная работа</h3><div class="grid2">
+   <div class="field"><label>Вид работы</label><div class="input">Курсовая работа</div></div>
+   <div class="field"><label>Срок</label><div class="input">20 октября 2026</div></div>
+   <div class="field" style="grid-column:1/-1"><label>Тема</label><div class="input">Анализ финансового состояния ООО «Альфа»</div></div>
+   <div class="field"><label>Дисциплина</label><div class="input">Финансовый анализ</div></div>
+   <div class="field"><label>Период исследования</label><div class="input">2022–2024 годы</div></div>
+  </div></div>
+  <div class="card"><h3>Учебное заведение</h3><div class="grid2"><div class="field"><label>Вуз</label><div class="input">Экономический университет</div></div><div class="field"><label>Кафедра</label><div class="input">Финансы и кредит</div></div></div></div>
+  <div class="flow-note">Студент заполняет сведения, но не определяет критерии качества и не утверждает паспорт.</div>`},
+ {name:'Документы',status:'Комплект собирается',tabs:['Работа','Документы','Проверка'],html:`
+  <h2>Документы для подготовки</h2><p class="lead">Добавьте то, что выдал преподаватель, и исходные материалы.</p>
+  <div class="card"><h3>Обязательные документы</h3>
+   <div class="file"><span class="file-icon">PDF</span><div><b>Задание преподавателя</b><small>Задание_Иванов.pdf · 1,2 МБ</small></div><span class="tag ok">Загружено</span></div>
+   <div class="file"><span class="file-icon">DOCX</span><div><b>Методические указания</b><small>Методичка_кафедры.docx · 2,8 МБ</small></div><span class="tag ok">Загружено</span></div>
+   <div class="file"><span class="file-icon">XLSX</span><div><b>Финансовая отчётность</b><small>Отчётность_2022-2024.xlsx · 860 КБ</small></div><span class="tag warn">Проверяется</span></div>
+   <div class="file"><span class="file-icon">DOCX</span><div><b>Библиография</b><small>Файл не добавлен</small></div><button class="btn secondary">Добавить</button></div>
+  </div>
+  <div class="question"><b>Файлы хранятся закрыто</b><br>Их видят только владелец заявки и уполномоченный исполнитель.</div>`},
+ {name:'Проверка заявки',status:'Нужно дополнить',tabs:['Работа','Документы','Проверка'],html:`
+  <h2>Проверка комплектности</h2><p class="lead">До отправки программа проверяет только наличие сведений и файлов.</p>
+  <div class="card">
+   <div class="check"><span class="dot">✓</span><div><b>Тема и период указаны</b><div class="source">2022–2024 годы</div></div><span class="tag ok">Готово</span></div>
+   <div class="check"><span class="dot">✓</span><div><b>Задание и методичка приложены</b></div><span class="tag ok">Готово</span></div>
+   <div class="check"><span class="dot wait">!</span><div><b>Библиография не приложена</b><div class="source">Без источников нельзя готовить теоретическую часть</div></div><span class="tag bad">Добавить</span></div>
+   <div class="check"><span class="dot wait">…</span><div><b>Отчётность проверяется</b><div class="source">Ожидается проверка формата и безопасности</div></div><span class="tag warn">Ожидание</span></div>
+  </div><button class="btn" disabled>Отправить заявку</button>
+  <div class="flow-note">После добавления библиографии и проверки файлов кнопка станет доступна.</div>`},
+ {name:'Заявка отправлена',status:'Заявка №42',tabs:['Обзор','Файлы','Результат'],html:`
+  <h2>Заявка №42</h2><p class="lead">Анализ финансового состояния ООО «Альфа»</p>
+  <div class="card"><h3>Ход работы</h3><div class="timeline">
+   <div class="event done"><i></i><div><b>Заявка получена</b><span>12 сентября, 14:20</span></div></div>
+   <div class="event now"><i></i><div><b>Требования проверяются</b><span>Исполнитель изучает задание и методичку</span></div></div>
+   <div class="event"><i></i><div><b>Документ подготавливается</b><span>Ожидает</span></div></div>
+   <div class="event"><i></i><div><b>Документ проверяется</b><span>Ожидает</span></div></div>
+   <div class="event"><i></i><div><b>Результат готов</b><span>Ожидает</span></div></div>
+  </div></div>
+  <div class="flow-note">Студент видит простой статус. Внутренние критерии и рабочие заметки исполнителя здесь не показываются.</div>`},
+ {name:'Нужно уточнение',status:'Требуются данные',tabs:['Обзор','Уточнение','Результат'],html:`
+  <h2>Нужны дополнительные данные</h2><p class="lead">Без ответа подготовка связанного раздела остановлена.</p>
+  <div class="question"><b>Вопрос исполнителя</b><br>В задании требуется анализ за 2022–2024 годы, но в отчётности отсутствует баланс за 2022 год.</div>
+  <div class="card"><h3>Как ответить</h3><div class="field"><label>Добавьте файл или пояснение</label><textarea class="input" style="width:100%;min-height:90px">Баланс за 2022 год прикладываю отдельным файлом.</textarea></div><div class="file"><span class="file-icon">PDF</span><div><b>Баланс_2022.pdf</b><small>740 КБ · готов к отправке</small></div><span class="tag ok">Добавлен</span></div><div class="btns"><button class="btn">Отправить ответ</button></div></div>
+  <div class="flow-note">Ответ создаст новую версию материалов. Исполнитель повторно проверит требования.</div>`},
+ {name:'Результат',status:'Результат готов',tabs:['Обзор','Файлы','Результат'],html:`
+  <h2>Предварительная версия готова</h2><p class="lead">Версия 1 · передана 15 сентября 2026 в 18:30</p>
+  <div class="card"><h3>Документ</h3><div class="file"><span class="file-icon">DOCX</span><div><b>Черновик_Анализ_Альфа_v1.docx</b><small>Проверенная версия · 1,8 МБ</small></div><button class="btn">Скачать Word</button></div></div>
+  <div class="card"><h3>Что проверено</h3>
+   <div class="check"><span class="dot">✓</span><div><b>Структура и пункты задания</b><div class="source">По заданию и методичке из заявки</div></div></div>
+   <div class="check"><span class="dot">✓</span><div><b>Расчёты и согласованность таблиц</b><div class="source">Автоматически и исполнителем</div></div></div>
+   <div class="check"><span class="dot wait">!</span><div><b>Проверка на заимствования</b><div class="source">Не выполнялась</div></div></div>
+  </div>
+  <div class="question"><b>Перед использованием</b><br>Прочитайте документ и проверьте сведения, которые были предоставлены вами. Принятие работы преподавателем не гарантируется.</div>`}
+];
+
+const executor=[
+ {name:'Список заявок',status:'3 требуют внимания',tabs:['Заявки','Вузы','Ещё'],html:`
+  <h2>Заявки</h2><p class="lead">Сначала показаны заявки, где требуется действие исполнителя.</p>
+  <div class="summary"><div class="metric"><b>4</b><span>новые</span></div><div class="metric"><b>2</b><span>нужны данные</span></div><div class="metric"><b>3</b><span>на проверке</span></div><div class="metric"><b>1</b><span>готова</span></div></div>
+  <div class="card" style="margin-top:14px"><div class="file"><span class="file-icon">42</span><div><b>Анализ финансового состояния ООО «Альфа»</b><small>Иванов И.И. · срок 20 октября</small></div><span class="tag warn">Проверка требований</span></div><div class="file"><span class="file-icon">43</span><div><b>Оценка деловой активности организации</b><small>Петрова А.А. · срок 25 октября</small></div><span class="tag bad">Нужны данные</span></div><div class="file"><span class="file-icon">44</span><div><b>Анализ финансовой устойчивости</b><small>Сидоров П.П. · срок 27 октября</small></div><span class="tag ok">Готова к передаче</span></div></div>`},
+ {name:'Обзор заявки',status:'Заявка №42',tabs:['Обзор','Документы','Паспорт','Подготовка','Контроль','Передача'],html:`
+  <h2>Заявка №42</h2><p class="lead">Иванов И.И. · курсовая работа · срок 20 октября</p>
+  <div class="summary"><div class="metric"><b>4</b><span>файла</span></div><div class="metric"><b>24</b><span>требования</span></div><div class="metric"><b>2</b><span>нужно проверить</span></div><div class="metric"><b>v1</b><span>паспорт</span></div></div>
+  <div class="card" style="margin-top:14px"><h3>Текущее действие</h3><div class="question"><b>Проверить проект паспорта</b><br>Программа нашла два неясных требования и один конфликт.</div><div class="btns"><button class="btn">Открыть паспорт</button></div></div>
+  <div class="card"><h3>Работа</h3><table><tr><th>Параметр</th><th>Значение</th></tr><tr><td>Тема</td><td>Анализ финансового состояния ООО «Альфа»</td></tr><tr><td>Период</td><td>2022–2024 годы</td></tr><tr><td>Профиль</td><td>Курсовая по финансовому анализу v1.0</td></tr></table></div>`},
+ {name:'Документы',status:'1 файл требует внимания',tabs:['Обзор','Документы','Паспорт','Подготовка','Контроль','Передача'],html:`
+  <h2>Документы студента</h2><p class="lead">Доступ только в рамках этой заявки.</p>
+  <div class="card">
+   <div class="file"><span class="file-icon">PDF</span><div><b>Задание_Иванов.pdf</b><small>Задание · версия 1 · проверено</small></div><button class="btn secondary">Открыть</button></div>
+   <div class="file"><span class="file-icon">DOCX</span><div><b>Методичка_кафедры.docx</b><small>Методичка · версия 1 · обработано</small></div><button class="btn secondary">Открыть</button></div>
+   <div class="file"><span class="file-icon">XLSX</span><div><b>Отчётность_2022-2024.xlsx</b><small>Исходные данные · версия 1</small></div><span class="tag bad">Нет 2022 года</span></div>
+   <div class="file"><span class="file-icon">DOCX</span><div><b>Источники.docx</b><small>Библиография · версия 1</small></div><span class="tag ok">Принято</span></div>
+  </div><div class="btns"><button class="btn secondary">Запросить уточнение</button></div>
+  <div class="flow-note">Замена любого принятого файла создаёт новую версию и отменяет связанные проверки.</div>`},
+ {name:'Паспорт',status:'Проект · не утверждён',tabs:['Обзор','Документы','Паспорт','Подготовка','Контроль','Передача'],html:`
+  <h2>Паспорт работы</h2><p class="lead">24 требования · 21 подтверждено · 2 требуют решения · 1 конфликт</p>
+  <div class="wide-table"><table><tr><th>Требование</th><th>Источник</th><th>Состояние</th><th>Действие</th></tr>
+   <tr><td><b>Период 2022–2024</b><div class="source">IN-03 · критическое</div></td><td>Задание, стр. 2</td><td><span class="tag ok">Подтверждено</span></td><td><button class="btn secondary">Открыть</button></td></tr>
+   <tr><td><b>Объём работы</b><div class="source">IN-07 · существенное</div></td><td>Задание: 25 стр.<br>Методичка: 30–35 стр.</td><td><span class="tag bad">Конфликт</span></td><td><button class="btn secondary">Разрешить</button></td></tr>
+   <tr><td><b>Постраничные сноски</b><div class="source">DOC-05 · критическое</div></td><td>Методичка, стр. 18</td><td><span class="tag warn">Проверить</span></td><td><button class="btn secondary">Подтвердить</button></td></tr>
+   <tr><td><b>Ликвидность и устойчивость</b><div class="source">CALC-01 · критическое</div></td><td>Задание, стр. 2</td><td><span class="tag ok">Подтверждено</span></td><td><button class="btn secondary">Открыть</button></td></tr>
+  </table></div>
+  <div class="problem"><b>Утверждение заблокировано</b><br>Сначала разрешите конфликт объёма и подтвердите способ ссылок.</div><div class="btns"><button class="btn" disabled>Утвердить паспорт</button></div>`},
+ {name:'Подготовка',status:'Документ v2',tabs:['Обзор','Документы','Паспорт','Подготовка','Контроль','Передача'],html:`
+  <h2>Подготовка документа</h2><p class="lead">Паспорт v1 утверждён. Каждый раздел получает только относящиеся к нему требования и материалы.</p>
+  <div class="card">
+   <div class="check"><span class="dot">✓</span><div><b>Введение</b><div class="source">TXT-01 · цель и задачи · готово</div></div><span class="tag ok">Проверено</span></div>
+   <div class="check"><span class="dot">✓</span><div><b>Глава 1. Методика анализа</b><div class="source">SRC-01–07 · источники · готово</div></div><span class="tag ok">Проверено</span></div>
+   <div class="check"><span class="dot wait">!</span><div><b>Глава 2. Финансовый анализ</b><div class="source">CALC-01–08 · найдено расхождение в выводе</div></div><span class="tag bad">Исправить</span></div>
+   <div class="check"><span class="dot wait">…</span><div><b>Глава 3. Рекомендации</b><div class="source">Ожидает исправления главы 2</div></div><span class="tag neutral">Ожидает</span></div>
+  </div><div class="problem"><b>Передача недоступна</b><br>В тексте указано снижение ликвидности, а расчёт показывает рост с 1,50 до 1,75.</div><div class="btns"><button class="btn">Исправить главу 2</button></div>`},
+ {name:'Контроль',status:'2 замечания',tabs:['Обзор','Документы','Паспорт','Подготовка','Контроль','Передача'],html:`
+  <h2>Контроль качества</h2><p class="lead">Результаты относятся только к документу v3 и паспорту v1.</p>
+  <div class="summary"><div class="metric"><b>41</b><span>соответствует</span></div><div class="metric"><b>1</b><span>не соответствует</span></div><div class="metric"><b>1</b><span>не проверено</span></div><div class="metric"><b>16</b><span>не применимо</span></div></div>
+  <div class="card" style="margin-top:14px">
+   <div class="check"><span class="dot">✓</span><div><b>CALC-04 · Арифметика воспроизводится</b><div class="source">Автоматически · протокол расчёта</div></div><span class="tag ok">Соответствует</span></div>
+   <div class="check"><span class="dot wait">!</span><div><b>SRC-02 · Источник подтверждает утверждение</b><div class="source">Глава 1, абзац 6 · требуется страница источника</div></div><span class="tag bad">Не соответствует</span></div>
+   <div class="check"><span class="dot wait">?</span><div><b>DOC-05 · Постраничные сноски</b><div class="source">Итоговый Word ещё не открыт</div></div><span class="tag warn">Не проверено</span></div>
+  </div><div class="btns"><button class="btn secondary">Открыть Word</button><button class="btn" disabled>Разрешить передачу</button></div>`},
+ {name:'Передача',status:'Разрешено к передаче',tabs:['Обзор','Документы','Паспорт','Подготовка','Контроль','Передача'],html:`
+  <h2>Передать студенту</h2><p class="lead">Проверяется конкретная неизменяемая версия.</p>
+  <div class="card"><table><tr><th>Параметр</th><th>Значение</th></tr><tr><td>Получатель</td><td>Иванов И.И. · владелец заявки №42</td></tr><tr><td>Паспорт</td><td>Версия 1 · утверждён</td></tr><tr><td>Документ</td><td>Версия 3 · Word просмотрен</td></tr><tr><td>Критические дефекты</td><td><span class="tag ok">Нет</span></td></tr><tr><td>Существенные отклонения</td><td><span class="tag ok">Нет</span></td></tr></table></div>
+  <div class="card"><h3>Ограничения для студента</h3><p>Проверка на заимствования не выполнялась. Причины изменения показателей описаны только в пределах предоставленных материалов. Принятие преподавателем не гарантируется.</p></div>
+  <label class="check" style="border:0"><input type="checkbox" checked><span><b>Проверены документ, версия, ограничения и получатель</b></span></label>
+  <div class="btns"><button class="btn">Передать документ v3</button></div>
+  <div class="flow-note">Сервер сохранит файл и статус одной операцией. Ошибка уведомления не отменит уже переданный результат.</div>`}
+];
+
+const state={mode:'student',index:0};
+const cfg={student:{title:'Кабинет студента',text:'Что делает и видит студент',sub:'Работы · заявка №42'},executor:{title:'Реестр заявок',text:'Рабочие экраны исполнителя',sub:'Контроль требований и результата'}};
+function render(){const list=state.mode==='student'?student:executor,item=list[state.index],c=cfg[state.mode];document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on',b.dataset.mode===state.mode));document.getElementById('rail-title').textContent=c.title;document.getElementById('rail-text').textContent=c.text;document.getElementById('app-title').textContent=c.title;document.getElementById('app-sub').textContent=c.sub;document.getElementById('top-status').textContent=item.status;document.getElementById('steps').innerHTML=list.map((x,i)=>`<button type="button" class="step ${i===state.index?'on':''}" data-step="${i}"><i>${i+1}</i><b>${x.name}</b></button>`).join('');document.getElementById('tabs').innerHTML=item.tabs.map((x,i)=>`<button type="button" class="${i===Math.min(state.index,item.tabs.length-1)?'on':''}">${x}</button>`).join('');document.getElementById('view').innerHTML=item.html;document.getElementById('counter').textContent=`Экран ${state.index+1} из ${list.length}`;document.getElementById('prev').disabled=state.index===0;document.getElementById('next').textContent=state.index===list.length-1?'Сначала': 'Далее';document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{state.index=Number(b.dataset.step);render();});window.scrollTo({top:0,behavior:'smooth'});}
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{state.mode=b.dataset.mode;state.index=0;render();});document.getElementById('prev').onclick=()=>{if(state.index>0){state.index--;render();}};document.getElementById('next').onclick=()=>{const list=state.mode==='student'?student:executor;state.index=state.index===list.length-1?0:state.index+1;render();};render();
+</script>
+</body>
+</html>
