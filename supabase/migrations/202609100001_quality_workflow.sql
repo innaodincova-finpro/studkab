@@ -234,8 +234,11 @@ returns public.studkab_request_process language plpgsql security invoker
 set search_path=pg_catalog,public as $$
 declare current public.studkab_request_process;
 begin
- if not exists(select 1 from public.studkab_workflow_config where id and enabled) then raise exception 'workflow_disabled'; end if;
  if not exists(select 1 from public.studkab_requests where id=target) then raise exception 'request_not_found'; end if;
+ if not exists(
+  select 1 from public.studkab_workflow_config c join public.studkab_requests r on r.id=target
+  where c.id and c.enabled and (cardinality(c.pilot_student_ids)=0 or r.student_id=any(c.pilot_student_ids))
+ ) then raise exception 'workflow_disabled'; end if;
  insert into public.studkab_request_process(request_id) values(target)
  on conflict(request_id) do nothing returning * into current;
  if found then
@@ -249,6 +252,21 @@ end $$;
 revoke all on function public.studkab_initialize_request(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.studkab_initialize_request(uuid,uuid) to service_role;
 
+create function private.studkab_initialize_new_request()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+ if exists(
+  select 1 from public.studkab_workflow_config c
+  where c.id and c.enabled and (cardinality(c.pilot_student_ids)=0 or new.student_id=any(c.pilot_student_ids))
+ ) then
+  perform public.studkab_initialize_request(new.id,new.student_id);
+ end if;
+ return new;
+end $$;
+revoke all on function private.studkab_initialize_new_request() from public,anon,authenticated;
+create trigger studkab_initialize_quality_workflow
+after insert on public.studkab_requests for each row execute function private.studkab_initialize_new_request();
+
 create function public.studkab_transition_request(
  target uuid, expected_revision bigint, next_status text, actor uuid,
  actor_kind text, reason text, related_type text default null, related_id uuid default null)
@@ -256,7 +274,10 @@ returns public.studkab_request_process language plpgsql security invoker
 set search_path=pg_catalog,public as $$
 declare current public.studkab_request_process; previous_status text; allowed boolean;
 begin
- if not exists(select 1 from public.studkab_workflow_config where id and enabled) then raise exception 'workflow_disabled'; end if;
+ if not exists(
+  select 1 from public.studkab_workflow_config c join public.studkab_requests r on r.id=target
+  where c.id and c.enabled and (cardinality(c.pilot_student_ids)=0 or r.student_id=any(c.pilot_student_ids))
+ ) then raise exception 'workflow_disabled'; end if;
  select * into current from public.studkab_request_process where request_id=target for update;
  if not found then raise exception 'request_process_not_found'; end if;
  if current.revision<>expected_revision then raise exception 'revision_conflict'; end if;
@@ -287,7 +308,10 @@ declare receipt public.studkab_command_receipts; result jsonb; file_row public.s
  document_row public.studkab_document_versions; process_row public.studkab_request_process;
  item jsonb; next_version integer; owner_id uuid;
 begin
- if not exists(select 1 from public.studkab_workflow_config where id and enabled) then raise exception 'workflow_disabled'; end if;
+ if not exists(
+  select 1 from public.studkab_workflow_config c join public.studkab_requests r on r.id=studkab_run_command.request_id
+  where c.id and c.enabled and (cardinality(c.pilot_student_ids)=0 or r.student_id=any(c.pilot_student_ids))
+ ) then raise exception 'workflow_disabled'; end if;
  perform pg_advisory_xact_lock(hashtextextended(command_id::text,714));
  select * into receipt from public.studkab_command_receipts where studkab_command_receipts.command_id=studkab_run_command.command_id;
  if found then
