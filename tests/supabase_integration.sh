@@ -46,6 +46,11 @@ NON_PILOT_CODE=$(curl --silent --output /dev/null --write-out '%{http_code}' "$A
  -H "apikey: $ANON_KEY" -H "Authorization: Bearer $OTHER_TOKEN" -H 'Content-Type: application/json' --data "$NON_PILOT_BODY")
 test "$NON_PILOT_CODE" = 503
 
+SNAPSHOT_BODY=$(jq -nc --arg requestId "$REQUEST_ID" '{action:"get_snapshot",requestId:$requestId,commandId:"55555555-5555-4555-8555-555555555555",payload:{}}')
+SNAPSHOT=$(curl --fail-with-body --silent --show-error "$API_URL/functions/v1/studkab-workflow" \
+ -H "apikey: $ANON_KEY" -H "Authorization: Bearer $STUDENT_TOKEN" -H 'Content-Type: application/json' --data "$SNAPSHOT_BODY")
+jq -e '.ok == true and .result.role == "student" and .result.process.status == "submitted"' <<<"$SNAPSHOT" >/dev/null
+
 COMMAND_ID='22222222-2222-4222-8222-222222222222'
 BODY=$(jq -nc --arg requestId "$REQUEST_ID" --arg commandId "$COMMAND_ID" '{action:"prepare_upload",requestId:$requestId,commandId:$commandId,payload:{purpose:"assignment",originalName:"task.txt",declaredMime:"text/plain",sizeBytes:12}}')
 RESPONSE=$(curl --fail-with-body --silent --show-error "$API_URL/functions/v1/studkab-workflow" \
