@@ -322,7 +322,7 @@ grant execute on function public.studkab_transition_request(uuid,bigint,text,uui
 
 create function private.studkab_run_command(command_id uuid, command_name text, request_id uuid, actor uuid, payload jsonb)
 returns jsonb language plpgsql security invoker set search_path=pg_catalog,public,private as $$
-#variable_conflict use_variable
+#variable_conflict use_column
 declare receipt public.studkab_command_receipts; result jsonb; file_row public.studkab_request_files;
  passport_row public.studkab_requirement_passports; clarification_row public.studkab_clarifications;
  document_row public.studkab_document_versions; process_row public.studkab_request_process;

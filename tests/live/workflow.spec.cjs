@@ -23,7 +23,7 @@ async function screen(browser,file,auth){
  return page;
 }
 async function ready(page,text){await expect(page.locator('#workflowPanel')).toContainText(text);}
-async function click(page,name){
+async function click(page,name,expectedStatus=200){
  const button=page.getByRole('button',{name,exact:true}),handle=await button.elementHandle();
  const action=await button.getAttribute('data-workflow-action');
  if(action==='passport-open'){await button.click();return;}
@@ -32,6 +32,7 @@ async function click(page,name){
  }
  const response=page.waitForResponse(r=>r.url().includes('/functions/v1/studkab-workflow')&&r.request().method()==='POST'&&r.request().postDataJSON()?.action!=='get_snapshot');
  await button.click();const result=await response;
+ expect(result.status(),action+': '+await result.text()).toBe(expectedStatus);
  if(result.ok())await expect.poll(()=>handle.evaluate(el=>el.isConnected)).toBe(false);
  else await expect(button).toBeEnabled();
 }
@@ -53,7 +54,7 @@ test('real screens + Auth + Edge + RLS + Storage: materials, passport, rework, d
  await click(executor,'Создать паспорт');await executor.locator('[data-workflow-passport-confirm]').check();await click(executor,'Сохранить новую версию');
  await click(executor,'Утвердить паспорт');await ready(executor,'Требования утверждены');
  await click(executor,'Начать подготовку');await click(executor,'Зарегистрировать текущий Word для проверки');await ready(executor,'Проверяется документ');
- await click(executor,'Подтвердить готовность');await expect(executor.locator('#toast')).toContainText('Не завершены обязательные проверки');
+ await click(executor,'Подтвердить готовность',422);await expect(executor.locator('#toast')).toContainText('Не завершены обязательные проверки');
  await click(executor,'Вернуть на доработку');await click(executor,'Вернуть в подготовку');
  await executor.evaluate(id=>{const x=item(id);x.doc.structure.intro.text+=' Исправленная версия два.';x.doc.review=DraftQuality.stamp(x);},requestId);
  await click(executor,'Зарегистрировать исправленный Word для проверки');await ready(executor,'Проверяется документ');

@@ -165,6 +165,18 @@ passport=json.loads(sql(f"set role service_role; select studkab_submit_passport(
 assert passport['revision']==4 and sql(f"select status from studkab_request_process where request_id='{request_id}'")=='passport_draft'
 print('PASS: uniform workflow RPC contracts enforce ownership and idempotent retries')
 
+# Two live processes must never alias the function parameter request_id.
+foreign_request='abababab-abab-4bab-8bab-abababababab'
+sql(f"insert into studkab_requests(id,student_id,client_id,payload) values('{foreign_request}','{other}','parallel-request','{{}}'); select studkab_initialize_request('{foreign_request}','{other}');")
+sql(f"set role service_role; select studkab_transition_request('{foreign_request}',1,'completeness_review','{uid}','executor','test');")
+asked=json.loads(sql(f"set role service_role; select studkab_ask_clarification('{foreign_request}',gen_random_uuid(),'{uid}','{{\"expectedRevision\":2,\"question\":\"Which period?\"}}');"))
+assert asked['revision']==3
+assert sql(f"select status||'|'||revision from studkab_request_process where request_id='{request_id}'")=='passport_draft|4'
+answered=json.loads(sql(f"set role service_role; select studkab_answer_clarification('{foreign_request}',gen_random_uuid(),'{other}','{{\"expectedRevision\":3,\"clarificationId\":\"{asked['clarificationId']}\",\"answer\":\"2024-2025\"}}');"))
+assert answered['revision']==4
+assert sql(f"select status||'|'||revision from studkab_request_process where request_id='{request_id}'")=='passport_draft|4'
+print('PASS: clarification commands isolate two simultaneous request processes')
+
 # Regression: protected transitions, rework, immutable approval, mandatory Word review.
 import uuid
 def workflow(name, payload):
