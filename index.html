@@ -15,7 +15,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=13"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=4"></script>
 <script src="push.js?v=1"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1738,7 +1738,12 @@ function viewWork(id){
       (f.discipline ? ' · ' + esc(f.discipline) : '') +
       (w.deadline ? ' · срок ' + ruDate(w.deadline) : '') + ' · ' + pill(st) + '</div>';
 
-  h += card('<div class="row"><div>' + lab("Готовность") + '<div class="big">' + p + '%</div></div>' +
+  if(w.req && w.req.serverId){
+    h += card(lab("Черновик от исполнителя") + '<p class="hint">Откройте результат заявки, чтобы проверить готовность и скачать документ Word.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
+    h += '<details class="fold"><summary>Мои разделы и доработка</summary><div class="in"><p class="hint">Здесь текст, который вы редактируете в кабинете. Процент ниже относится только к этим разделам. Документ исполнителя доступен отдельно, в результате заявки.</p>';
+  }
+
+  h += card('<div class="row"><div>' + lab(w.req && w.req.serverId ? "Готовность моих разделов" : "Готовность") + '<div class="big">' + p + '%</div></div>' +
     '<div class="mut" style="text-align:right">примерно ' + workPages(w) + ' стр.<br>' + workChars(w) + ' знаков</div></div>' +
     '<div class="bar"><i style="width:' + p + '%"></i></div>' +
     (w.requirements ? '<div class="mut" style="margin-top:8px">Требования: ' + esc(w.requirements) + '</div>' : ''));
@@ -1777,15 +1782,16 @@ function viewWork(id){
       ((D.templates || []).length ? '<button type="button" class="chip" data-act="pick-template" data-id="' + w.id + '">Взять из шаблона</button>' : '') +
     '</div></div></details>';
 
+  if(w.req && w.req.serverId) h += '</div></details>';
+
   h += card(lab("Заявка на черновик") +
     (w.req && w.req.sent
       ? '<div class="mut">' +
         ({ direct:"Заявка передана исполнителю ", copy:"Текст скопирован ", wa:"Открыта для отправки в WhatsApp ", tg:"Открыта для отправки в Telegram " }[w.req.sentBy] || "Подготовлена ") +
         ruDate(w.req.sent) + '. Можно отправить снова — данные обновятся.</div>' 
-      : '<div class="mut">При отправке из кабинета черновик будет доступен здесь, в разделе «Результат от исполнителя».</div>') +
+      : '<div class="mut">При отправке из кабинета черновик будет доступен здесь, в разделе «Черновик от исполнителя».</div>') +
     '<div class="chips"><button type="button" class="chip warn" data-act="send-request" data-id="' + w.id + '">Отправить заявку</button></div>');
 
-  if(w.req && w.req.serverId) h += card(lab("Результат от исполнителя") + '<p class="hint">Здесь можно проверить готовность и скачать переданный черновик.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Проверить готовность черновика</button>');
 
   h += card(lab("Дела по работе") +
     ((w.tasks || []).length ? (w.tasks || []).map(function(x){
