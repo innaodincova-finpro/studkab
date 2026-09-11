@@ -80,11 +80,23 @@ test('result delivery is executor-only; a student cannot read another student re
  who=student;
  const result=await (await app(request({action:'result',id:requestId}))).json();assert.equal(result.result.document.topic,documentFixture.topic);
 });
+test('legacy delivery cannot bypass an active quality workflow',async()=>{
+ let delivered=false;
+ const app=handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async(path)=>{
+  if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:student.id}];
+  if(path.startsWith('studkab_request_process?'))return [{request_id:requestId}];
+  if(path==='rpc/deliver_studkab_result'){delivered=true;return {};}
+  return [];
+ }});
+ const response=await app(request({action:'deliver',id:requestId,deliveryId,document:documentFixture}));
+ assert.equal(response.status,409);assert.equal(delivered,false);assert.match(await response.text(),/контрольный лист/);
+});
 test('submitted request flows through inbox to immutable result and student retrieval',async()=>{
  let who=student,row,delivered;
  const app=handler({auth:async()=>who,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>{
   if(path==='rpc/submit_studkab_request'){row={id:requestId,number:1,payload:body.content,student_id:body.student};return{id:row.id,number:1};}
   if(path.startsWith('studkab_requests?'))return [row];
+  if(path.startsWith('studkab_request_process?'))return [];
   if(path==='rpc/deliver_studkab_result'){delivered={delivery_id:body.delivery,document:body.content,created_at:'2026-09-09T00:00:00Z'};return{deliveryId:body.delivery};}
   if(path.startsWith('studkab_results?'))return delivered?[delivered]:[];
   throw Error('Unexpected path');

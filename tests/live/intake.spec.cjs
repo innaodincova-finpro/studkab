@@ -1,0 +1,56 @@
+const {test,expect}=require('@playwright/test');
+const {execFileSync}=require('node:child_process');
+const {randomUUID}=require('node:crypto');
+const base='http://127.0.0.1:4174/';
+test('real password forms, new request, retry and executor inbox',async({browser})=>{
+ if(!/^postgres(?:ql)?:\/\/[^/]+@(localhost|127\.0\.0\.1):\d+\//.test(process.env.DB_URL||''))throw Error('Refusing non-local database');
+ // Isolated executor configuration only; no request or browser session fixtures.
+ execFileSync('psql',[process.env.DB_URL,'-X','-qAt','-v','ON_ERROR_STOP=1','-c',"update studkab_request_config set executor_email='other.workflow@example.test' where id=true"]);
+ async function login(file,email){
+  const context=await browser.newContext({serviceWorkers:'block'}),page=await context.newPage();
+  await page.goto(base+file);
+  await expect.poll(()=>page.evaluate(()=>Oblako.ready)).toBe(true);
+  await page.evaluate(()=>openCloud());
+  await page.locator('#clEmail').fill(email);
+  await page.locator('#clPassword').fill('incorrect-test-password');
+  await page.locator('#clForm button[type=submit]').click();
+  await expect(page.locator('#clMsg')).not.toHaveText('Входим…');
+  await expect(page.locator('#clForm')).toBeVisible();
+  expect(await page.evaluate(()=>Oblako.mode)).not.toBe('cloud');
+  await page.locator('#clPassword').fill('Test-only-29!safe');
+  await page.locator('#clForm button[type=submit]').click();
+  await expect(page.locator('#clForm')).toHaveCount(0);
+  await expect.poll(()=>page.evaluate(()=>Oblako.email)).toBe(email);
+  await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
+  await page.reload();
+  await expect.poll(()=>page.evaluate(()=>Oblako.email)).toBe(email);
+  expect(await page.evaluate(()=>typeof QA)).toBe('undefined');
+  return page;
+ }
+ const student=await login('index.html','student.workflow@example.test');
+ const topic='Приёмка новой заявки '+randomUUID();
+ await student.locator('[data-act="new-work"]').first().click();
+ await student.locator('#nTopic').fill(topic);
+ await student.getByRole('button',{name:'Создать',exact:true}).click();
+ await student.locator('[data-act="send-request"]').first().click();
+ await student.locator('#rqContact').fill('student.workflow@example.test');
+ const submit=student.waitForResponse(r=>r.url().includes('/functions/v1/studkab-requests')&&r.request().postDataJSON()?.action==='submit');
+ await student.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
+ const response=await submit;expect(response.status()).toBe(200);
+ const receipt=await response.json();expect(receipt.saved).toBe(true);
+ await expect.poll(()=>student.evaluate(t=>D.works.find(w=>w.topic===t)?.req.serverId,topic)).toBe(receipt.id);
+ await student.reload();
+ await expect.poll(()=>student.evaluate(t=>D.works.find(w=>w.topic===t)?.req.serverId,topic)).toBe(receipt.id);
+ const executor=await login('reestr.html','other.workflow@example.test');
+ await executor.locator('[data-tab="list"]').click();
+ await executor.getByRole('button',{name:'Получить заявки из кабинетов',exact:true}).click();
+ await expect.poll(()=>executor.evaluate(id=>D.items.filter(x=>x.id===id).length,receipt.id)).toBe(1);
+ expect(await executor.evaluate(id=>item(id).topic,receipt.id)).toBe(topic);
+ await executor.getByRole('button',{name:'Получить заявки из кабинетов',exact:true}).click();
+ await expect.poll(()=>executor.evaluate(()=>inboxBusy)).toBe(false);
+ expect(await executor.evaluate(id=>D.items.filter(x=>x.id===id).length,receipt.id)).toBe(1);
+ await executor.reload();
+ await expect.poll(()=>executor.evaluate(id=>D.items.some(x=>x.id===id),receipt.id)).toBe(true);
+ await executor.screenshot({path:'test-results/live-new-request-inbox.png',fullPage:true});
+ await student.context().close();await executor.context().close();
+});
