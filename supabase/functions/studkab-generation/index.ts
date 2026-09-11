@@ -1,0 +1,23 @@
+import {handler} from './handler.mjs';
+const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const token=Deno.env.get('STUDKAB_PROXY_TOKEN');
+async function db(path:string,body?:unknown){
+ const r=await fetch(base+'/rest/v1/'+path,{method:body===undefined?'GET':'POST',
+ headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},
+ body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(10000)});
+ if(!r.ok)throw Error('DATABASE_UNAVAILABLE');return await r.json();
+}
+async function provider(c:any,id:string){
+ // Fixed existing endpoint. Never accept provider URLs or secrets from task input.
+ const r=await fetch('https://calm-bird-dae8.bf6mhynzgm.workers.dev',{
+ method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Token':token!},
+ body:JSON.stringify({provider:'deepseek',model:'deepseek-chat',system:c.input.system,
+ user:c.spec.prompt,max_tokens:2500,temperature:0.4,client_request_id:id}),
+ signal:AbortSignal.timeout(90000)});
+ const value=await r.json();if(!r.ok)return null;return value;
+}
+Deno.serve(handler({
+ config:async()=>(await db('studkab_request_config?id=eq.true&select=cron_token'))[0],
+ rpc:(name:string,args:unknown)=>db('rpc/'+name,args),
+ provider,ready:()=>!!token
+}));
