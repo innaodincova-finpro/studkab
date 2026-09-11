@@ -73,18 +73,19 @@ function buildDocx(w, chapters){
     o = o || {};
     var pPr = '<w:pPr>'+
       (o.style ? '<w:pStyle w:val="'+o.style+'"/>' : '')+
-      '<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after||0)+'" w:line="'+line+'" w:lineRule="auto"/>'+
+      '<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after||0)+'" w:line="'+(o.line||line)+'" w:lineRule="auto"/>'+
       '<w:ind w:firstLine="'+(o.ind||0)+'"/>'+
       '<w:jc w:val="'+(o.jc || "both")+'"/>'+
       '</w:pPr>';
-    var rPr = '<w:rPr>'+(o.b?'<w:b/>':'')+'<w:sz w:val="'+half+'"/><w:szCs w:val="'+half+'"/></w:rPr>';
+    var rPr = '<w:rPr>'+(o.b?'<w:b/>':'')+'<w:sz w:val="'+(o.half||half)+'"/><w:szCs w:val="'+(o.half||half)+'"/></w:rPr>';
     var run = text === "" ? "" : '<w:r>'+rPr+'<w:t xml:space="preserve">'+xesc(text)+'</w:t></w:r>';
     return '<w:p>'+pPr+run+'</w:p>';
   }
   function pageBreak(){ return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'; }
 
   /* Титульный лист */
-  var body = "";
+  var missing=chapters.filter(function(c){return !(((w.structure||{})[c.id]||{}).text||'').trim();});
+  var body = missing.length?P('НЕПОЛНЫЙ ЧЕРНОВИК',{b:true,jc:'center'})+P('Отсутствуют разделы: '+missing.map(function(c){return c.name;}).join('; '))+pageBreak():"";
   if (f.org) body += P(f.org, { jc:"center" });
   if (f.univ) body += P(f.univ, { jc:"center", b:true });
   if (f.faculty) body += P(f.faculty, { jc:"center" });
@@ -113,7 +114,7 @@ function buildDocx(w, chapters){
     var entries=chapters.map(function(c,i){return {chapter:c,index:i};}).filter(function(e){return ((w.structure||{})[e.chapter.id]||{}).text;});
     entries.forEach(function(e,i){
       var anchor='section_'+e.index;
-      body+='<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="'+(11906-mm2tw(f.mLeft)-mm2tw(f.mRight))+'"/></w:tabs><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>';
+      body+='<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="'+(11906-mm2tw(f.mLeft)-mm2tw(f.mRight))+'"/></w:tabs><w:spacing w:line="'+(o.line||line)+'" w:lineRule="auto"/></w:pPr>';
       body+='<w:hyperlink w:anchor="'+anchor+'"><w:r><w:t>'+xesc(e.chapter.name)+'</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF '+anchor+' \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t> </w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink>';
       body+='</w:p>';
     });
@@ -135,7 +136,7 @@ function buildDocx(w, chapters){
     var normalizedTitle=function(v){return String(v).trim().replace(/^#{1,6}\s+/, '').replace(/^\*\*(.*)\*\*$/, '$1').trim().toLowerCase();};
     if(lines.length && normalizedTitle(lines[0])===normalizedTitle(c.name))row=1;
     while(row<lines.length){
-      var par=lines[row].trim();
+      var par=lines[row].trim().replace(/^#{1,6}\s+/, '');
       if(/^\|.*\|$/.test(par)){
         var grid=[];
         while(row<lines.length && /^\s*\|.*\|\s*$/.test(lines[row])){
@@ -146,7 +147,7 @@ function buildDocx(w, chapters){
         if(cols>8)throw Error('В таблице слишком много столбцов для страницы');
         var tableWidth=11906-mm2tw(f.mLeft)-mm2tw(f.mRight),cw=Math.floor(tableWidth/cols);
         body+='<w:tbl><w:tblPr><w:tblW w:w="'+tableWidth+'" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(k){return '<w:'+k+' w:val="single" w:sz="4" w:color="D9D9D9"/>';}).join('')+'</w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+Array(cols).fill('<w:gridCol w:w="'+cw+'"/>').join('')+'</w:tblGrid>';
-        grid.forEach(function(cells,ri){body+='<w:tr><w:trPr><w:cantSplit/>'+(ri===0?'<w:tblHeader/>':'')+'</w:trPr>';for(var ci=0;ci<cols;ci++)body+='<w:tc><w:tcPr><w:tcW w:w="'+cw+'" w:type="dxa"/>'+(ri===0?'<w:shd w:fill="E8EEF4"/>':'')+'</w:tcPr>'+P(cells[ci]||'',{jc:ci?'center':'left',b:ri===0})+'</w:tc>';body+='</w:tr>';});body+='</w:tbl>'+P('');
+        grid.forEach(function(cells,ri){body+='<w:tr><w:trPr><w:cantSplit/>'+(ri===0?'<w:tblHeader/>':'')+'</w:trPr>';for(var ci=0;ci<cols;ci++)body+='<w:tc><w:tcPr><w:tcW w:w="'+cw+'" w:type="dxa"/>'+(ri===0?'<w:shd w:fill="E8EEF4"/>':'')+'</w:tcPr>'+P(cells[ci]||'',{jc:ci?'center':'left',b:ri===0,line:240,half:24})+'</w:tc>';body+='</w:tr>';});body+='</w:tbl>'+P('');
       }else{
         if(par)body+=P(par,{ind:/^\d+\.\d+/.test(par)?0:ind,jc:/^\d+\.\d+/.test(par)?'left':'both',b:/^\d+\.\d+/.test(par),style:/^\d+\.\d+/.test(par)?'Heading2':undefined});
         row++;
@@ -172,15 +173,15 @@ function buildDocx(w, chapters){
     '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'+
     '<w:docDefaults><w:rPrDefault><w:rPr>'+
       '<w:rFonts w:ascii="'+fontName+'" w:hAnsi="'+fontName+'" w:cs="'+fontName+'" w:eastAsia="'+fontName+'"/>'+
-      '<w:sz w:val="'+half+'"/><w:szCs w:val="'+half+'"/><w:lang w:val="ru-RU"/>'+
+      '<w:sz w:val="'+(o.half||half)+'"/><w:szCs w:val="'+(o.half||half)+'"/><w:lang w:val="ru-RU"/>'+
     '</w:rPr></w:rPrDefault>'+
-    '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="'+line+'" w:lineRule="auto"/></w:pPr></w:pPrDefault>'+
+    '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="'+(o.line||line)+'" w:lineRule="auto"/></w:pPr></w:pPrDefault>'+
     '</w:docDefaults>'+
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>'+
     '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/>'+
       '<w:pPr><w:keepNext/><w:outlineLvl w:val="0"/><w:jc w:val="center"/>'+
-      '<w:spacing w:before="240" w:after="240" w:line="'+line+'" w:lineRule="auto"/></w:pPr>'+
-      '<w:rPr><w:b/><w:sz w:val="'+half+'"/></w:rPr></w:style>'+
+      '<w:spacing w:before="240" w:after="240" w:line="'+(o.line||line)+'" w:lineRule="auto"/></w:pPr>'+
+      '<w:rPr><w:b/><w:sz w:val="'+(o.half||half)+'"/></w:rPr></w:style>'+
     '</w:styles>';
 
   var footer_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
@@ -189,7 +190,7 @@ function buildDocx(w, chapters){
     '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'+
     '<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'+
     '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
-    '<w:r><w:rPr><w:sz w:val="'+half+'"/></w:rPr><w:t>2</w:t></w:r>'+
+    '<w:r><w:rPr><w:sz w:val="'+(o.half||half)+'"/></w:rPr><w:t>2</w:t></w:r>'+
     '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>';
 
   var content_types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
