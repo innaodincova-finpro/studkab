@@ -21,7 +21,11 @@ async function screen(browser,file,auth){
  await expect.poll(()=>page.evaluate(()=>Oblako.email)).toBe(auth.user.email);
  // A prior acceptance scenario may have saved real cloud records. Let the
  // application finish reconciling them before installing this test's draft.
- await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
+ await expect.poll(async()=>{
+  const remote=page.getByRole('button',{name:'Использовать записи из облака',exact:true});
+  if(await remote.isVisible())await remote.click();
+  return page.evaluate(()=>Oblako.canSync()&&!Oblako.busy);
+ },{timeout:15000}).toBe(true);
  expect(await page.evaluate(()=>typeof QA)).toBe('undefined');
  return page;
 }
