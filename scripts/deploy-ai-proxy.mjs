@@ -23,7 +23,7 @@ const after=await data('/settings');
 // No settings changes are expected from the content-only endpoint.
 const normalized=x=>JSON.stringify(Object.fromEntries(Object.entries(x).sort()));
 if(normalized(before)!==normalized(after))throw Error('Settings changed; review deployment before frontend release');
-const response=await api('/content');
+const response=await api('');
 let deployed;
 if((response.headers.get('content-type')||'').includes('multipart/form-data')){
  const parts=await response.formData();const module=parts.get('ai-proxy.mjs');if(!module)throw Error('Deployed module missing');deployed=await module.text();
