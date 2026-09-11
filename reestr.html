@@ -812,6 +812,7 @@ function openDocBuilder(id){
     '<button type="button" class="close" data-x="1">✕</button>' +
     '<h3>Документ</h3><div class="mut" style="margin-bottom:10px">' + esc(x.topic||"") + '</div>' +
     '<button type="button" class="btn" data-docx="1">Скачать Word</button>' +
+    '<p id="docCompleteness" role="status"></p>' +
     '<div id="docPreview" style="overflow-wrap:anywhere"></div>' +
     '<details><summary>Настройки подготовки</summary>' +
     (aiReady()
@@ -840,6 +841,9 @@ function openDocBuilder(id){
   );
   wrap.dataset.accountIdentity=String(expectedIdentity);
   function preview(){
+    var missingSections=doc.order.filter(function(c){return !((doc.structure[c.id]||{}).text||'').trim();});
+    wrap.querySelector('#docCompleteness').textContent='С текстом '+(doc.order.length-missingSections.length)+' из '+doc.order.length+' разделов. '+(missingSections.length?'Черновик неполный. Остались: '+missingSections.map(function(c){return c.name;}).join('; '):'Все разделы заполнены. Требуется проверка качества.');
+    wrap.querySelector('[data-docx]').textContent=missingSections.length?'Скачать неполный Word':'Скачать Word';
     var target=wrap.querySelector('#docPreview');
     target.replaceChildren();
     doc.order.forEach(function(c){
@@ -855,13 +859,14 @@ function openDocBuilder(id){
           line.trim().slice(1,-1).split('|').forEach(function(value){var cell=document.createElement(head?'th':'td');cell.style.cssText='border:1px solid #cbd5df;padding:8px;text-align:left';cell.textContent=value.trim();row.appendChild(cell);});table.appendChild(row);return;
         }
         table=null;if(!line.trim())return;
-        var p=document.createElement('p');p.textContent=line;section.appendChild(p);
+        var sub=/^\s*#{1,6}\s+/.test(line);var p=document.createElement(sub?'h5':'p');p.textContent=line.replace(/^\s*#{1,6}\s+/, '');section.appendChild(p);
       });target.appendChild(section);
     });
     if(!target.children.length)target.textContent='Черновик пока не подготовлен. Добавьте материалы и нажмите «Подготовить весь черновик».';
     wrap.querySelectorAll('[data-sec]').forEach(function(el){el.querySelector('summary').textContent=el.querySelector('.secName').value;});
   }
   preview();
+  if(doc.run && doc.run.state!=='complete')setStatus('Предыдущая подготовка '+(doc.run.state==='running'?'прервана':'остановлена')+' на «'+doc.run.section+'». '+(doc.run.message||'Нажмите «Подготовить весь черновик», чтобы продолжить с сохранённых разделов.'),'err');
   DraftEditor.bind(wrap,x,readBack);
   function readBack(){
     current();
@@ -992,10 +997,11 @@ function openDocBuilder(id){
       genBusy = true;DraftEditor.lock(wrap,true);
       var n = 0, total = queue.length;
       (function next(){
-        if (!queue.length){ genBusy = false;DraftEditor.lock(wrap,false);setStatus("Текст подготовлен. Теперь нажмите «Проверить готовность»: передача разрешается после проверки документа.", "ok"); return; }
+        if (!queue.length){ doc.run={state:'complete',at:new Date().toISOString()};save();genBusy = false;DraftEditor.lock(wrap,false);setStatus("Текст подготовлен. Теперь нажмите «Проверить готовность»: передача разрешается после проверки документа.", "ok"); return; }
         var c = queue.shift(); n++;
+        doc.run={state:'running',section:c.name,at:new Date().toISOString()};if(!save()){genBusy=false;DraftEditor.lock(wrap,false);setStatus('Не удалось сохранить ход подготовки. Запрос не отправлен.','err');return;}
         setStatus("Пишу " + n + " из " + total + ": " + c.name + "…");
-        Promise.resolve().then(function(){return genOne(c.id);}).then(next).catch(function(e){ genBusy = false;DraftEditor.lock(wrap,false);setStatus("Остановился на «" + c.name + "»: " + aiErrorText(e), "err"); });
+        Promise.resolve().then(function(){return genOne(c.id);}).then(next).catch(function(e){ if(D===expectedData&&Oblako.identity()===expectedIdentity){doc.run={state:"stopped",section:c.name,at:new Date().toISOString(),message:aiErrorText(e)};save();}genBusy = false;DraftEditor.lock(wrap,false);setStatus("Остановился на «" + c.name + "»: " + aiErrorText(e), "err"); });
       })();
       return;
     }

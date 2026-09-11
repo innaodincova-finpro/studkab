@@ -25,3 +25,14 @@ test('one automatic revision removes flagged recommendations without an extra us
  expect(await page.evaluate(()=>draftItem.doc.structure.ch3.text)).toContain('платёжный календарь');
  expect(await page.evaluate(()=>draftItem.doc.structure.ch3.text)).not.toContain('учётной политике');
 });
+
+test('stopped run remains visible after reopening and partial export is labelled',async({page})=>{
+ await setup(page);await fill(page);
+ await page.evaluate(()=>{askAI=async(p,s,u)=>{if(u.startsWith('Подготовь раздел «Глава 2'))throw Error('Тестовый сбой');return{text:'Сохранённая первая глава.',tokens:1};};});
+ await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();
+ await expect(page.locator('#docStatus')).toContainText('Остановился');
+ await page.evaluate(()=>{document.querySelector('#docStatus').closest('[data-account-identity]').remove();openDocBuilder(draftItem.id);});
+ await expect(page.locator('#docStatus')).toContainText('Тестовый сбой');
+ await expect(page.locator('#docCompleteness')).toContainText('Черновик неполный');
+ await expect(page.getByRole('button',{name:'Скачать неполный Word',exact:true})).toBeVisible();
+});

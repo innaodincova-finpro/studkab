@@ -73,18 +73,19 @@ function buildDocx(w, chapters){
     o = o || {};
     var pPr = '<w:pPr>'+
       (o.style ? '<w:pStyle w:val="'+o.style+'"/>' : '')+
-      '<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after||0)+'" w:line="'+line+'" w:lineRule="auto"/>'+
+      '<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after||0)+'" w:line="'+(o.line||line)+'" w:lineRule="auto"/>'+
       '<w:ind w:firstLine="'+(o.ind||0)+'"/>'+
       '<w:jc w:val="'+(o.jc || "both")+'"/>'+
       '</w:pPr>';
-    var rPr = '<w:rPr>'+(o.b?'<w:b/>':'')+'<w:sz w:val="'+half+'"/><w:szCs w:val="'+half+'"/></w:rPr>';
+    var rPr = '<w:rPr>'+(o.b?'<w:b/>':'')+'<w:sz w:val="'+(o.half||half)+'"/><w:szCs w:val="'+(o.half||half)+'"/></w:rPr>';
     var run = text === "" ? "" : '<w:r>'+rPr+'<w:t xml:space="preserve">'+xesc(text)+'</w:t></w:r>';
     return '<w:p>'+pPr+run+'</w:p>';
   }
   function pageBreak(){ return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'; }
 
   /* Титульный лист */
-  var body = "";
+  var missing=chapters.filter(function(c){return !(((w.structure||{})[c.id]||{}).text||'').trim();});
+  var body = missing.length?P('НЕПОЛНЫЙ ЧЕРНОВИК',{b:true,jc:'center'})+P('Отсутствуют разделы: '+missing.map(function(c){return c.name;}).join('; '))+pageBreak():"";
   if (f.org) body += P(f.org, { jc:"center" });
   if (f.univ) body += P(f.univ, { jc:"center", b:true });
   if (f.faculty) body += P(f.faculty, { jc:"center" });
@@ -135,7 +136,7 @@ function buildDocx(w, chapters){
     var normalizedTitle=function(v){return String(v).trim().replace(/^#{1,6}\s+/, '').replace(/^\*\*(.*)\*\*$/, '$1').trim().toLowerCase();};
     if(lines.length && normalizedTitle(lines[0])===normalizedTitle(c.name))row=1;
     while(row<lines.length){
-      var par=lines[row].trim();
+      var par=lines[row].trim().replace(/^#{1,6}\s+/, '');
       if(/^\|.*\|$/.test(par)){
         var grid=[];
         while(row<lines.length && /^\s*\|.*\|\s*$/.test(lines[row])){
@@ -146,7 +147,7 @@ function buildDocx(w, chapters){
         if(cols>8)throw Error('В таблице слишком много столбцов для страницы');
         var tableWidth=11906-mm2tw(f.mLeft)-mm2tw(f.mRight),cw=Math.floor(tableWidth/cols);
         body+='<w:tbl><w:tblPr><w:tblW w:w="'+tableWidth+'" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(k){return '<w:'+k+' w:val="single" w:sz="4" w:color="D9D9D9"/>';}).join('')+'</w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+Array(cols).fill('<w:gridCol w:w="'+cw+'"/>').join('')+'</w:tblGrid>';
-        grid.forEach(function(cells,ri){body+='<w:tr><w:trPr><w:cantSplit/>'+(ri===0?'<w:tblHeader/>':'')+'</w:trPr>';for(var ci=0;ci<cols;ci++)body+='<w:tc><w:tcPr><w:tcW w:w="'+cw+'" w:type="dxa"/>'+(ri===0?'<w:shd w:fill="E8EEF4"/>':'')+'</w:tcPr>'+P(cells[ci]||'',{jc:ci?'center':'left',b:ri===0})+'</w:tc>';body+='</w:tr>';});body+='</w:tbl>'+P('');
+        grid.forEach(function(cells,ri){body+='<w:tr><w:trPr><w:cantSplit/>'+(ri===0?'<w:tblHeader/>':'')+'</w:trPr>';for(var ci=0;ci<cols;ci++)body+='<w:tc><w:tcPr><w:tcW w:w="'+cw+'" w:type="dxa"/>'+(ri===0?'<w:shd w:fill="E8EEF4"/>':'')+'</w:tcPr>'+P(cells[ci]||'',{jc:ci?'center':'left',b:ri===0,line:240,half:24})+'</w:tc>';body+='</w:tr>';});body+='</w:tbl>'+P('');
       }else{
         if(par)body+=P(par,{ind:/^\d+\.\d+/.test(par)?0:ind,jc:/^\d+\.\d+/.test(par)?'left':'both',b:/^\d+\.\d+/.test(par),style:/^\d+\.\d+/.test(par)?'Heading2':undefined});
         row++;
