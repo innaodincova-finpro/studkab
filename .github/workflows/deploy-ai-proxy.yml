@@ -1,0 +1,31 @@
+name: Deploy existing AI proxy
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, fix/generation-connection-diagnostics]
+    paths:
+      - worker/ai-proxy.mjs
+      - scripts/deploy-ai-proxy.mjs
+      - .github/workflows/deploy-ai-proxy.yml
+permissions:
+  contents: read
+concurrency:
+  group: calm-bird-dae8-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'innaodincova-finpro/studkab'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check proxy and transport
+        run: node --test tests/ai-proxy.test.mjs tests/ai-transport.test.cjs
+      - name: Update existing Worker code and verify
+        run: node scripts/deploy-ai-proxy.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
