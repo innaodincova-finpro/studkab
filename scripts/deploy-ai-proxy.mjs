@@ -26,7 +26,7 @@ if(normalized(before)!==normalized(after))throw Error('Settings changed; review 
 const response=await api('');
 let deployed;
 if((response.headers.get('content-type')||'').includes('multipart/form-data')){
- const parts=await response.formData();const module=parts.get('ai-proxy.mjs');if(!module)throw Error('Deployed module missing');deployed=await module.text();
+ const parts=await response.formData();const module=parts.get('ai-proxy.mjs');if(!module)throw Error('Deployed module missing');deployed=typeof module==='string'?module:await module.text();
 }else deployed=await response.text();
 if(deployed!==source)throw Error('Deployed source differs');
 console.log('Worker code updated and verified; settings preserved. No paid AI request made.');
