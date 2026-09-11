@@ -43,6 +43,29 @@ async function readBody(request) {
     return raw + decoder.decode();
   } finally { reader.releaseLock(); }
 }
+// Opt-in whitespace keeps JSON compatible with response.json() in older clients.
+function heartbeatReply(run, cors) {
+  const encoder = new TextEncoder();
+  const abort = new AbortController();
+  let timer, closed = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode('\n'));
+      timer = setInterval(() => { if (!closed) controller.enqueue(encoder.encode('\n')); }, 10000);
+      Promise.resolve().then(() => run(abort.signal)).then(value => {
+        if (!closed) { controller.enqueue(encoder.encode(JSON.stringify(value))); controller.close(); }
+      }).catch(() => {
+        if (!closed) { controller.enqueue(encoder.encode('{"error":"UPSTREAM:proxy"}')); controller.close(); }
+      }).finally(() => { closed = true; clearInterval(timer); });
+    },
+    cancel() { closed = true; clearInterval(timer); abort.abort(); }
+  });
+  return new Response(body, {headers: {...cors, 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'X-Proxy-Version':'heartbeat-v1'}});
+}
+function safeError(e, provider) {
+  const message = String(e?.message || '');
+  return /^(NOKEY|AUTH|PAY|RATE|HTTP|EMPTY|INCOMPLETE|TIMEOUT|UPSTREAM):[a-z-]+(?::[0-9]{3})?$/.test(message) ? message : 'UPSTREAM:' + provider;
+}
 export default {
   async fetch(request, env) {
     const cors = {
@@ -75,6 +98,11 @@ export default {
       max_tokens: Number.isFinite(requestedTokens) && requestedTokens > 0 ? Math.min(Math.max(Math.floor(requestedTokens), 100), tokenLimit) : tokenLimit,
       temperature: typeof body.temperature === 'number' && Number.isFinite(body.temperature) ? Math.min(Math.max(body.temperature, 0), 1.5) : 0.7,
     };
+    if (body.keepalive === true) return heartbeatReply(async signal => {
+      q.signal = signal;
+      try { return await ask(q, env); }
+      catch (e) { return {error: safeError(e, provider)}; }
+    }, cors);
     try { return json(await ask(q, env), 200, cors); }
     catch (e) {
       // Не отправлять клиенту произвольные ответы поставщика, URL или секреты.
@@ -90,9 +118,12 @@ function statusError(r, who) {
   if (r.status === 429) return Error('RATE:' + who);
   return Error('HTTP:' + who + ':' + r.status);
 }
-async function post(url, headers, body, who) {
+async function post(url, headers, body, who, signal) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 180000);
+  const cancel = () => controller.abort();
+  if (signal?.aborted) cancel();
+  signal?.addEventListener('abort', cancel, {once:true});
+  const timer = setTimeout(cancel, 180000);
   try {
     const r = await fetch(url, {method: 'POST', headers, body, signal: controller.signal});
     if (!r.ok) throw statusError(r, who);
@@ -100,7 +131,7 @@ async function post(url, headers, body, who) {
   } catch (e) {
     if (controller.signal.aborted) throw Error('TIMEOUT:' + who);
     throw e;
-  } finally { clearTimeout(timer); }
+  } finally { clearTimeout(timer); signal?.removeEventListener('abort', cancel); }
 }
 function complete(reason, expected, who) {
   if (!expected.includes(reason)) throw Error('INCOMPLETE:' + who);
@@ -120,14 +151,14 @@ async function ask(q, env) {
 }
 async function openaiLike(url, key, model, q, who) {
   if (!key) throw Error('NOKEY:' + who);
-  const j = await post(url, {'Content-Type':'application/json', Authorization:'Bearer ' + key}, JSON.stringify({model, messages:[{role:'system', content:q.system},{role:'user', content:q.user}], temperature:q.temperature, max_tokens:q.max_tokens}), who);
+  const j = await post(url, {'Content-Type':'application/json', Authorization:'Bearer ' + key}, JSON.stringify({model, messages:[{role:'system', content:q.system},{role:'user', content:q.user}], temperature:q.temperature, max_tokens:q.max_tokens}), who, q.signal);
   complete(j?.choices?.[0]?.finish_reason, ['stop'], who);
   const u = j.usage || {};
   return result(j?.choices?.[0]?.message?.content, (u.prompt_tokens || 0) + (u.completion_tokens || 0), who, model);
 }
 async function anthropic(key, model, q) {
   if (!key) throw Error('NOKEY:anthropic');
-  const j = await post('https://api.anthropic.com/v1/messages', {'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'}, JSON.stringify({model, max_tokens:q.max_tokens, temperature:q.temperature, system:q.system, messages:[{role:'user',content:q.user}]}), 'anthropic');
+  const j = await post('https://api.anthropic.com/v1/messages', {'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'}, JSON.stringify({model, max_tokens:q.max_tokens, temperature:q.temperature, system:q.system, messages:[{role:'user',content:q.user}]}), 'anthropic', q.signal);
   complete(j.stop_reason, ['end_turn', 'stop_sequence'], 'anthropic');
   const text = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
   const u = j.usage || {};
@@ -136,7 +167,7 @@ async function anthropic(key, model, q) {
 async function yandex(key, folder, model, q) {
   if (!key || !folder) throw Error('NOKEY:yandex');
   const modelUri = model.startsWith('gpt://') ? model : 'gpt://' + folder + '/' + model;
-  const j = await post('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {'Content-Type':'application/json',Authorization:'Api-Key ' + key,'x-folder-id':folder}, JSON.stringify({modelUri,completionOptions:{stream:false,temperature:q.temperature,maxTokens:String(q.max_tokens)},messages:[{role:'system',text:q.system},{role:'user',text:q.user}]}), 'yandex');
+  const j = await post('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {'Content-Type':'application/json',Authorization:'Api-Key ' + key,'x-folder-id':folder}, JSON.stringify({modelUri,completionOptions:{stream:false,temperature:q.temperature,maxTokens:String(q.max_tokens)},messages:[{role:'system',text:q.system},{role:'user',text:q.user}]}), 'yandex', q.signal);
   complete(j?.result?.alternatives?.[0]?.status, ['ALTERNATIVE_STATUS_FINAL'], 'yandex');
   return result(j?.result?.alternatives?.[0]?.message?.text, j?.result?.usage?.totalTokens, 'yandex', modelUri);
 }
@@ -144,11 +175,11 @@ let gigaToken = null, gigaExpires = 0;
 async function gigachat(auth, model, q) {
   if (!auth) throw Error('NOKEY:gigachat');
   if (!gigaToken || Date.now() > gigaExpires - 60000) {
-    const tj = await post('https://ngw.devices.sberbank.ru:9443/api/v2/oauth', {Authorization:'Basic ' + auth, RqUID:crypto.randomUUID(), 'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'}, 'scope=GIGACHAT_API_PERS', 'gigachat-oauth');
+    const tj = await post('https://ngw.devices.sberbank.ru:9443/api/v2/oauth', {Authorization:'Basic ' + auth, RqUID:crypto.randomUUID(), 'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'}, 'scope=GIGACHAT_API_PERS', 'gigachat-oauth', q.signal);
     if (!tj.access_token) throw Error('AUTH:gigachat-oauth');
     gigaToken = tj.access_token; gigaExpires = Number(tj.expires_at) || (Date.now() + 25 * 60 * 1000);
   }
-  const j = await post('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {'Content-Type':'application/json',Authorization:'Bearer ' + gigaToken,Accept:'application/json'}, JSON.stringify({model,messages:[{role:'system',content:q.system},{role:'user',content:q.user}],temperature:q.temperature,max_tokens:q.max_tokens}), 'gigachat');
+  const j = await post('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {'Content-Type':'application/json',Authorization:'Bearer ' + gigaToken,Accept:'application/json'}, JSON.stringify({model,messages:[{role:'system',content:q.system},{role:'user',content:q.user}],temperature:q.temperature,max_tokens:q.max_tokens}), 'gigachat', q.signal);
   complete(j?.choices?.[0]?.finish_reason, ['stop'], 'gigachat');
   return result(j?.choices?.[0]?.message?.content, j.usage?.total_tokens, 'gigachat', model);
 }

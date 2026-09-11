@@ -688,12 +688,16 @@ function askAI(providerId, system, user){
   var st = D.settings, cfg = st.providers[providerId] || {};
   var url = (st.proxyUrl || "").trim();
   if (url){
-    return fetch(url, {
-      method:"POST",
+    var data = D, started = Date.now(), phase = 'connect', status = 0;
+    var controller = new AbortController();
+    var timer = setTimeout(function(){ controller.abort(); }, 195000);
+    return Promise.resolve().then(function(){return fetch(url, {
+      method:"POST", signal:controller.signal,
       headers:{ "Content-Type":"application/json", "X-Proxy-Token": st.proxyToken || "" },
-      body: JSON.stringify({ provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.2 })
-    }).then(function(r){
-      return r.json().catch(function(){ throw new Error("HTTP:proxy:" + r.status); }).then(function(j){
+      body: JSON.stringify({ provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.2, keepalive:true })
+    });}).then(function(r){
+      phase = 'body'; status = r.status;
+      return r.json().catch(function(e){ if(e.name === "AbortError" || /Failed to fetch|NetworkError|Load failed/i.test(e.message||""))throw e; throw new Error("HTTP:proxy:" + r.status); }).then(function(j){
         if (!r.ok) throw new Error(j && j.error || "HTTP:proxy:" + r.status);
         return j;
       });
@@ -702,13 +706,29 @@ function askAI(providerId, system, user){
       if (j.complete === false) throw new Error("INCOMPLETE:" + providerId);
       if (!j.text) throw new Error("EMPTY:" + providerId);
       return { text: j.text, tokens: j.tokens || 0, provider: j.provider || providerId };
-    });
+    }).catch(function(e){
+      var elapsed = Math.round((Date.now()-started)/1000);
+      var network = /Failed to fetch|NetworkError|Load failed/i.test(e.message||'');
+      var code = controller.signal.aborted ? 'CLIENT_TIMEOUT' : network ? 'NETWORK' : 'RESPONSE';
+      if (D === data) {
+        // Only technical metadata. Never retain prompts, URLs, passwords or provider bodies.
+        var log = Array.isArray(data.aiDiagnostics) ? data.aiDiagnostics : [];
+        data.aiDiagnostics = log.slice(-19).concat([{at:new Date().toISOString(),provider:providerId,phase:phase,status:status,seconds:elapsed,code:code}]);
+        save();
+      }
+      if(code === 'CLIENT_TIMEOUT' || code === 'NETWORK')throw Error(code+':'+phase+':'+elapsed);
+      throw e;
+    }).finally(function(){clearTimeout(timer);});
   }
   return Promise.reject(new Error("NOPROXY"));
 }
 function aiErrorText(e){
   var m = (e && e.message) || "", who = m.split(":")[1] || "";
   var nm = who ? providerName(who) : "";
+  if (/^(CLIENT_TIMEOUT|NETWORK):/.test(m)) {
+    var parts=m.split(':');
+    return (parts[0]==='CLIENT_TIMEOUT'?'Истекло время ожидания ответа':'Соединение прервалось')+' через '+parts[2]+' с. '+(parts[1]==='body'?'Посредник ответил, но полный результат не получен.':'Ответ посредника не получен.')+' Причина записана в копию данных. Автоматического повторного запроса не было.';
+  }
   if (m === "NOPROVIDER") return "Не выбран поставщик: «Ещё» → «Нейросети», отметьте хотя бы одного.";
   if (m === "NOPROXY") return "Посредник не настроен: Ещё → Нейросети.";
   if (m === "CONTEXT_TOO_BIG" || m === "TOO_BIG") return "Материалы и предыдущие разделы превышают допустимый объём запроса. Ничего не обрезано. Сократите материалы, сохранив нужные факты, и повторите подготовку.";
@@ -1924,3 +1944,4 @@ else if (got && got.rec){
 </script>
 </body>
 </html>
+

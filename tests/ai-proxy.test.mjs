@@ -51,3 +51,25 @@ test('provider errors do not expose credentials or arbitrary payloads',async t=>
   t.mock.method(globalThis,'fetch',async()=>{throw Error('private test-key details');});
   const r=await worker.fetch(request(basic),env);assert.deepEqual(await r.json(),{error:'UPSTREAM:deepseek'});
 });
+test('heartbeat responds before generation finishes and returns complete JSON',async t=>{
+  let finish;
+  t.mock.method(globalThis,'fetch',()=>new Promise(resolve=>{finish=resolve;}));
+  const r=await worker.fetch(request({...basic,keepalive:true}),env);
+  const reader=r.body.getReader();
+  assert.equal(new TextDecoder().decode((await reader.read()).value),'\n');
+  await Promise.resolve();finish(reply());
+  let raw='';for(;;){const x=await reader.read();if(x.done)break;raw+=new TextDecoder().decode(x.value);}
+  assert.equal(JSON.parse(raw).complete,true);
+});
+test('heartbeat never converts incomplete provider output into success',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>reply('length','partial'));
+  const r=await worker.fetch(request({...basic,keepalive:true}),env);
+  assert.deepEqual(await r.json(),{error:'INCOMPLETE:deepseek'});
+});
+test('client cancellation aborts upstream without retry',async t=>{
+  let signal;
+  const f=t.mock.method(globalThis,'fetch',async (url,opts)=>{signal=opts.signal;return new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(Error('cancelled')),{once:true}));});
+  const r=await worker.fetch(request({...basic,keepalive:true}),env);
+  const reader=r.body.getReader();await reader.read();await reader.cancel();
+  assert.equal(signal.aborted,true);assert.equal(f.mock.callCount(),1);
+});
