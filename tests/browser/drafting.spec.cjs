@@ -29,8 +29,8 @@ test('one automatic revision removes flagged recommendations without an extra us
 
 test('generation failure appears in journal and can be copied on mobile',async({page})=>{
  await setup(page);await fill(page);await page.setViewportSize({width:390,height:844});
- await page.route('https://diagnostic.example.test/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({error:'INCOMPLETE:deepseek',detail:{reason:'length',completion_tokens:8000,limit_tokens:8000,request_id:'test-provider-1'}})}));
- await page.evaluate(()=>{askAI=window.actualAskAI;D.settings.proxyUrl='https://diagnostic.example.test/generate';D.settings.proxyToken='test-only';D.settings.providers.deepseek={on:true,model:'deepseek-chat'};document.querySelector('#docProv').value='deepseek';});
+ await page.route('http://127.0.0.1:4173/diagnostic-mock',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({error:'INCOMPLETE:deepseek',detail:{reason:'length',completion_tokens:8000,limit_tokens:8000,request_id:'test-provider-1'}})}));
+ await page.evaluate(()=>{askAI=window.actualAskAI;D.settings.proxyUrl='http://127.0.0.1:4173/diagnostic-mock';D.settings.proxyToken='test-only';D.settings.providers.deepseek={on:true,model:'deepseek-chat'};document.querySelector('#docProv').value='deepseek';});
  await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();
  await expect(page.locator('#docStatus')).toContainText('Остановился');
  const record=await page.evaluate(()=>D.aiDiagnostics.at(-1));
