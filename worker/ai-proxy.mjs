@@ -66,6 +66,27 @@ function safeError(e, provider) {
   const message = String(e?.message || '');
   return /^(NOKEY|AUTH|PAY|RATE|HTTP|EMPTY|INCOMPLETE|TIMEOUT|UPSTREAM):[a-z-]+(?::[0-9]{3})?$/.test(message) ? message : 'UPSTREAM:' + provider;
 }
+// Технические подробности отказа. Только числа и короткие метки поставщика:
+// ни текста запроса, ни ответа модели, ни ключей здесь быть не может.
+const REASON = /^[a-zA-Z0-9_\-.]{1,40}$/;
+function safeDetail(e) {
+  const d = e && e.detail;
+  if (!d || typeof d !== 'object') return null;
+  const out = {};
+  if (typeof d.reason === 'string' && REASON.test(d.reason)) out.reason = d.reason;
+  if (typeof d.model === 'string' && REASON.test(d.model)) out.model = d.model;
+  if (typeof d.request_id === 'string' && REASON.test(d.request_id)) out.request_id = d.request_id;
+  for (const k of ['prompt_tokens', 'completion_tokens', 'limit_tokens']) {
+    if (Number.isFinite(d[k])) out[k] = Math.round(d[k]);
+  }
+  return Object.keys(out).length ? out : null;
+}
+function errorBody(e, provider) {
+  const body = {error: safeError(e, provider)};
+  const detail = safeDetail(e);
+  if (detail) body.detail = detail;
+  return body;
+}
 export default {
   async fetch(request, env) {
     const cors = {
@@ -98,17 +119,17 @@ export default {
       max_tokens: Number.isFinite(requestedTokens) && requestedTokens > 0 ? Math.min(Math.max(Math.floor(requestedTokens), 100), tokenLimit) : tokenLimit,
       temperature: typeof body.temperature === 'number' && Number.isFinite(body.temperature) ? Math.min(Math.max(body.temperature, 0), 1.5) : 0.7,
     };
+    const clientId = typeof body.client_request_id === 'string' && /^[a-f0-9-]{36}$/i.test(body.client_request_id) ? body.client_request_id : null;
+    const correlated = value => clientId ? {...value, client_request_id: clientId} : value;
     if (body.keepalive === true) return heartbeatReply(async signal => {
       q.signal = signal;
-      try { return await ask(q, env); }
-      catch (e) { return {error: safeError(e, provider)}; }
+      try { return correlated(await ask(q, env)); }
+      catch (e) { return correlated(errorBody(e, provider)); }
     }, cors);
-    try { return json(await ask(q, env), 200, cors); }
+    try { return json(correlated(await ask(q, env)), 200, cors); }
     catch (e) {
       // Не отправлять клиенту произвольные ответы поставщика, URL или секреты.
-      const message = String(e?.message || '');
-      const safe = /^(NOKEY|AUTH|PAY|RATE|HTTP|EMPTY|INCOMPLETE|TIMEOUT|UPSTREAM):[a-z-]+(?::[0-9]{3})?$/.test(message) ? message : 'UPSTREAM:' + provider;
-      return json({error: safe}, 502, cors);
+      return json(correlated(errorBody(e, provider)), 502, cors);
     }
   },
 };
@@ -133,12 +154,26 @@ async function post(url, headers, body, who, signal) {
     throw e;
   } finally { clearTimeout(timer); signal?.removeEventListener('abort', cancel); }
 }
-function complete(reason, expected, who) {
-  if (!expected.includes(reason)) throw Error('INCOMPLETE:' + who);
+function complete(reason, expected, who, detail) {
+  if (expected.includes(reason)) return;
+  const e = Error('INCOMPLETE:' + who);
+  // Ради этого всё и делается: «length» означает упёрлись в предел ответа,
+  // «insufficient_system_resource» — поставщик не смог, и это разные беды.
+  e.detail = Object.assign({reason: typeof reason === 'string' ? reason : 'unknown'}, detail || {});
+  throw e;
 }
-function result(text, tokens, provider, model) {
-  if (typeof text !== 'string' || !text.trim()) throw Error('EMPTY:' + provider);
-  return {text: text.trim(), tokens: Number(tokens) || 0, provider, model, complete: true};
+function result(text, tokens, provider, model, detail) {
+  if (typeof text !== 'string' || !text.trim()) {
+    const e = Error('EMPTY:' + provider);
+    if (detail) e.detail = detail;
+    throw e;
+  }
+  const out = {text: text.trim(), tokens: Number(tokens) || 0, provider, model, complete: true};
+  // Подробности удачного ответа тоже нужны: по ним видно, насколько близко
+  // подошли к пределу, и что менять до того, как оборвётся.
+  const safe = safeDetail({detail});
+  if (safe) out.detail = safe;
+  return out;
 }
 async function ask(q, env) {
   switch (q.provider) {
@@ -152,24 +187,28 @@ async function ask(q, env) {
 async function openaiLike(url, key, model, q, who) {
   if (!key) throw Error('NOKEY:' + who);
   const j = await post(url, {'Content-Type':'application/json', Authorization:'Bearer ' + key}, JSON.stringify({model, messages:[{role:'system', content:q.system},{role:'user', content:q.user}], temperature:q.temperature, max_tokens:q.max_tokens}), who, q.signal);
-  complete(j?.choices?.[0]?.finish_reason, ['stop'], who);
   const u = j.usage || {};
-  return result(j?.choices?.[0]?.message?.content, (u.prompt_tokens || 0) + (u.completion_tokens || 0), who, model);
+  const info = {model, request_id: j?.id, limit_tokens: q.max_tokens, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens};
+  complete(j?.choices?.[0]?.finish_reason, ['stop'], who, info);
+  return result(j?.choices?.[0]?.message?.content, (u.prompt_tokens || 0) + (u.completion_tokens || 0), who, model, Object.assign({reason: j?.choices?.[0]?.finish_reason}, info));
 }
 async function anthropic(key, model, q) {
   if (!key) throw Error('NOKEY:anthropic');
   const j = await post('https://api.anthropic.com/v1/messages', {'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'}, JSON.stringify({model, max_tokens:q.max_tokens, temperature:q.temperature, system:q.system, messages:[{role:'user',content:q.user}]}), 'anthropic', q.signal);
-  complete(j.stop_reason, ['end_turn', 'stop_sequence'], 'anthropic');
-  const text = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
   const u = j.usage || {};
-  return result(text, (u.input_tokens || 0) + (u.output_tokens || 0), 'anthropic', model);
+  const info = {model, request_id: j?.id, limit_tokens: q.max_tokens, prompt_tokens: u.input_tokens, completion_tokens: u.output_tokens};
+  complete(j.stop_reason, ['end_turn', 'stop_sequence'], 'anthropic', info);
+  const text = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+  return result(text, (u.input_tokens || 0) + (u.output_tokens || 0), 'anthropic', model, Object.assign({reason: j.stop_reason}, info));
 }
 async function yandex(key, folder, model, q) {
   if (!key || !folder) throw Error('NOKEY:yandex');
   const modelUri = model.startsWith('gpt://') ? model : 'gpt://' + folder + '/' + model;
   const j = await post('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {'Content-Type':'application/json',Authorization:'Api-Key ' + key,'x-folder-id':folder}, JSON.stringify({modelUri,completionOptions:{stream:false,temperature:q.temperature,maxTokens:String(q.max_tokens)},messages:[{role:'system',text:q.system},{role:'user',text:q.user}]}), 'yandex', q.signal);
-  complete(j?.result?.alternatives?.[0]?.status, ['ALTERNATIVE_STATUS_FINAL'], 'yandex');
-  return result(j?.result?.alternatives?.[0]?.message?.text, j?.result?.usage?.totalTokens, 'yandex', modelUri);
+  const yu = j?.result?.usage || {};
+  const yinfo = {limit_tokens: q.max_tokens, prompt_tokens: Number(yu.inputTextTokens), completion_tokens: Number(yu.completionTokens)};
+  complete(j?.result?.alternatives?.[0]?.status, ['ALTERNATIVE_STATUS_FINAL'], 'yandex', yinfo);
+  return result(j?.result?.alternatives?.[0]?.message?.text, yu.totalTokens, 'yandex', modelUri, Object.assign({reason: j?.result?.alternatives?.[0]?.status}, yinfo));
 }
 let gigaToken = null, gigaExpires = 0;
 async function gigachat(auth, model, q) {
@@ -180,6 +219,8 @@ async function gigachat(auth, model, q) {
     gigaToken = tj.access_token; gigaExpires = Number(tj.expires_at) || (Date.now() + 25 * 60 * 1000);
   }
   const j = await post('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {'Content-Type':'application/json',Authorization:'Bearer ' + gigaToken,Accept:'application/json'}, JSON.stringify({model,messages:[{role:'system',content:q.system},{role:'user',content:q.user}],temperature:q.temperature,max_tokens:q.max_tokens}), 'gigachat', q.signal);
-  complete(j?.choices?.[0]?.finish_reason, ['stop'], 'gigachat');
-  return result(j?.choices?.[0]?.message?.content, j.usage?.total_tokens, 'gigachat', model);
+  const gu = j.usage || {};
+  const ginfo = {model, limit_tokens: q.max_tokens, prompt_tokens: gu.prompt_tokens, completion_tokens: gu.completion_tokens};
+  complete(j?.choices?.[0]?.finish_reason, ['stop'], 'gigachat', ginfo);
+  return result(j?.choices?.[0]?.message?.content, gu.total_tokens, 'gigachat', model, Object.assign({reason: j?.choices?.[0]?.finish_reason}, ginfo));
 }

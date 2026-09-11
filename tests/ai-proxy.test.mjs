@@ -64,7 +64,27 @@ test('heartbeat responds before generation finishes and returns complete JSON',a
 test('heartbeat never converts incomplete provider output into success',async t=>{
   t.mock.method(globalThis,'fetch',async()=>reply('length','partial'));
   const r=await worker.fetch(request({...basic,keepalive:true}),env);
-  assert.deepEqual(await r.json(),{error:'INCOMPLETE:deepseek'});
+  const body=await r.json();
+  assert.equal(body.error,'INCOMPLETE:deepseek');
+  assert.equal(body.text,undefined);
+  // Причина обрыва обязана дойти до журнала: без неё расследовать нечего.
+  assert.equal(body.detail.reason,'length');
+  assert.equal(body.detail.limit_tokens,8000);
+  assert.equal(typeof body.detail.completion_tokens,'number');
+});
+test('failure detail never carries prompts, answers or secrets',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify({
+    id:'req-1',choices:[{finish_reason:'length',message:{content:'секретный текст ответа'}}],
+    usage:{prompt_tokens:5,completion_tokens:7},
+    api_key:'sk-should-never-leak',prompt:'system prompt text'
+  }),{status:200,headers:{'Content-Type':'application/json'}}));
+  const r=await worker.fetch(request({...basic,keepalive:true}),env);
+  const body=await r.json();
+  const text=JSON.stringify(body);
+  assert.equal(body.detail.request_id,'req-1');
+  for(const leak of ['sk-should-never-leak','system prompt text','секретный текст ответа']){
+    assert.equal(text.includes(leak),false,'в подробностях не должно быть: '+leak);
+  }
 });
 test('client cancellation aborts upstream without retry',async t=>{
   let signal;
