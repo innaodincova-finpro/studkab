@@ -114,7 +114,7 @@ function buildDocx(w, chapters){
     var entries=chapters.map(function(c,i){return {chapter:c,index:i};}).filter(function(e){return ((w.structure||{})[e.chapter.id]||{}).text;});
     entries.forEach(function(e,i){
       var anchor='section_'+e.index;
-      body+='<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="'+(11906-mm2tw(f.mLeft)-mm2tw(f.mRight))+'"/></w:tabs><w:spacing w:line="'+(o.line||line)+'" w:lineRule="auto"/></w:pPr>';
+      body+='<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="'+(11906-mm2tw(f.mLeft)-mm2tw(f.mRight))+'"/></w:tabs><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>';
       body+='<w:hyperlink w:anchor="'+anchor+'"><w:r><w:t>'+xesc(e.chapter.name)+'</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF '+anchor+' \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t> </w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink>';
       body+='</w:p>';
     });
@@ -173,15 +173,15 @@ function buildDocx(w, chapters){
     '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'+
     '<w:docDefaults><w:rPrDefault><w:rPr>'+
       '<w:rFonts w:ascii="'+fontName+'" w:hAnsi="'+fontName+'" w:cs="'+fontName+'" w:eastAsia="'+fontName+'"/>'+
-      '<w:sz w:val="'+(o.half||half)+'"/><w:szCs w:val="'+(o.half||half)+'"/><w:lang w:val="ru-RU"/>'+
+      '<w:sz w:val="'+half+'"/><w:szCs w:val="'+half+'"/><w:lang w:val="ru-RU"/>'+
     '</w:rPr></w:rPrDefault>'+
-    '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="'+(o.line||line)+'" w:lineRule="auto"/></w:pPr></w:pPrDefault>'+
+    '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="'+line+'" w:lineRule="auto"/></w:pPr></w:pPrDefault>'+
     '</w:docDefaults>'+
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>'+
     '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/>'+
       '<w:pPr><w:keepNext/><w:outlineLvl w:val="0"/><w:jc w:val="center"/>'+
-      '<w:spacing w:before="240" w:after="240" w:line="'+(o.line||line)+'" w:lineRule="auto"/></w:pPr>'+
-      '<w:rPr><w:b/><w:sz w:val="'+(o.half||half)+'"/></w:rPr></w:style>'+
+      '<w:spacing w:before="240" w:after="240" w:line="'+line+'" w:lineRule="auto"/></w:pPr>'+
+      '<w:rPr><w:b/><w:sz w:val="'+half+'"/></w:rPr></w:style>'+
     '</w:styles>';
 
   var footer_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
@@ -190,7 +190,7 @@ function buildDocx(w, chapters){
     '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'+
     '<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'+
     '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
-    '<w:r><w:rPr><w:sz w:val="'+(o.half||half)+'"/></w:rPr><w:t>2</w:t></w:r>'+
+    '<w:r><w:rPr><w:sz w:val="'+half+'"/></w:rPr><w:t>2</w:t></w:r>'+
     '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>';
 
   var content_types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
