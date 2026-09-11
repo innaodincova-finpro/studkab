@@ -19,6 +19,9 @@ async function screen(browser,file,auth){
  await page.addInitScript(({auth,key})=>{localStorage.setItem(key,JSON.stringify(auth));},{auth,key:'oblako-'+(file==='reestr.html'?'reestr':'kabinet')});
  await page.goto(base+file);
  await expect.poll(()=>page.evaluate(()=>Oblako.email)).toBe(auth.user.email);
+ // A prior acceptance scenario may have saved real cloud records. Let the
+ // application finish reconciling them before installing this test's draft.
+ await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
  expect(await page.evaluate(()=>typeof QA)).toBe('undefined');
  return page;
 }
