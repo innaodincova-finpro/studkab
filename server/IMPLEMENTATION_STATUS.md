@@ -57,3 +57,13 @@ the deployed application. Browser closure and production restart are not yet tes
 6. Full real-provider acceptance 1, full FIN-UAT-01 calculations/sources/Word acceptance 2.
 
 Historical failure cause remains unknown. No real paid AI calls were made for these tests.
+
+## Infrastructure discovery
+
+Read-only inspection confirmed reestr uses Supabase dcpthwmuiodrjepifzsd;
+pg_cron 1.6.4 and pg_net 0.20.4 are already installed. Production has no durable
+generation tables or generation Edge Function. The integration target is that
+existing Postgres/Edge runtime, not a newly purchased Node host. SQLite is currently
+a executable reference core for recovery tests; production requires a Postgres
+transactional adapter and the same failure tests against it. No database writes
+were performed during this inspection.
