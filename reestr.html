@@ -684,43 +684,99 @@ function aiReady(){
 function activeProviders(){
   return PROVIDERS.filter(function(pv){ return (D.settings.providers[pv.id] || {}).on; });
 }
-function askAI(providerId, system, user){
+/* meta: { section, stage, attempt } — какой раздел и на каком шаге.
+   В журнал попадают только метки и числа: ни текста запроса, ни ответа. */
+function askAI(providerId, system, user, meta){
+  var clientRequestId = crypto.randomUUID();
   var st = D.settings, cfg = st.providers[providerId] || {};
   var url = (st.proxyUrl || "").trim();
+  meta = Object.assign({}, meta || {}, {client_request_id: clientRequestId});
   if (url){
-    var data = D, started = Date.now(), phase = 'connect', status = 0;
+    var data = D, started = Date.now(), phase = 'connect', status = 0, detail = null;
     var controller = new AbortController();
     var timer = setTimeout(function(){ controller.abort(); }, 195000);
     return Promise.resolve().then(function(){return fetch(url, {
       method:"POST", signal:controller.signal,
       headers:{ "Content-Type":"application/json", "X-Proxy-Token": st.proxyToken || "" },
-      body: JSON.stringify({ provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.2, keepalive:true })
+      body: JSON.stringify({ client_request_id: clientRequestId, provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.2, keepalive:true })
     });}).then(function(r){
       phase = 'body'; status = r.status;
       return r.json().catch(function(e){ if(e.name === "AbortError" || /Failed to fetch|NetworkError|Load failed/i.test(e.message||""))throw e; throw new Error("HTTP:proxy:" + r.status); }).then(function(j){
+        if (j && j.detail) detail = j.detail;
         if (!r.ok) throw new Error(j && j.error || "HTTP:proxy:" + r.status);
         return j;
       });
     }).then(function(j){
+      if (j && j.detail) detail = j.detail;
       if (j.error) throw new Error(j.error);
       if (j.complete === false) throw new Error("INCOMPLETE:" + providerId);
       if (!j.text) throw new Error("EMPTY:" + providerId);
+      /* удачный ответ тоже запоминаем, если подошли близко к пределу:
+         по этому видно, что раздел вот-вот перестанет помещаться */
+      if (D === data) writeDiag(data, providerId, meta, 'body', status, Math.round((Date.now()-started)/1000), detail && Number(detail.limit_tokens)>0 && Number(detail.completion_tokens)>=Number(detail.limit_tokens)*0.9 ? 'NEAR_LIMIT' : 'SUCCESS', detail, system, user);
       return { text: j.text, tokens: j.tokens || 0, provider: j.provider || providerId };
     }).catch(function(e){
       var elapsed = Math.round((Date.now()-started)/1000);
       var network = /Failed to fetch|NetworkError|Load failed/i.test(e.message||'');
-      var code = controller.signal.aborted ? 'CLIENT_TIMEOUT' : network ? 'NETWORK' : 'RESPONSE';
-      if (D === data) {
-        // Only technical metadata. Never retain prompts, URLs, passwords or provider bodies.
-        var log = Array.isArray(data.aiDiagnostics) ? data.aiDiagnostics : [];
-        data.aiDiagnostics = log.slice(-19).concat([{at:new Date().toISOString(),provider:providerId,phase:phase,status:status,seconds:elapsed,code:code}]);
-        save();
-      }
+      /* раньше любая ошибка сводилась к «RESPONSE» и причина терялась;
+         теперь берём точный код посредника, когда он есть */
+      var upstream = safeCode(e && e.message);
+      var code = controller.signal.aborted ? 'CLIENT_TIMEOUT' : network ? 'NETWORK' : (upstream || 'RESPONSE');
+      if (D === data) writeDiag(data, providerId, meta, phase, status, elapsed, code, detail, system, user);
       if(code === 'CLIENT_TIMEOUT' || code === 'NETWORK')throw Error(code+':'+phase+':'+elapsed);
       throw e;
     }).finally(function(){clearTimeout(timer);});
   }
   return Promise.reject(new Error("NOPROXY"));
+}
+/* Код посредника вида INCOMPLETE:deepseek или HTTP:proxy:502 — только метки. */
+function safeCode(m){
+  m = String(m || "");
+  return /^(NOKEY|AUTH|PAY|RATE|HTTP|EMPTY|INCOMPLETE|TIMEOUT|UPSTREAM|CONTEXT_TOO_BIG|TOO_BIG|TOKEN|NOTOKEN_SERVER|BAD_JSON|BAD_REQUEST|UNKNOWN_PROVIDER|UNKNOWN_MODEL)(:[a-zA-Z0-9_-]+)*$/.test(m) ? m.slice(0, 60) : "";
+}
+/* Одна запись журнала. Только метки и числа: тексты сюда попасть не могут. */
+function writeDiag(data, providerId, meta, phase, status, seconds, code, detail, system, user){
+  var rec = {
+    at: new Date().toISOString(),
+    client_request_id: meta.client_request_id,
+    provider: providerId,
+    section: String((meta && meta.section) || "").slice(0, 24),
+    stage: String((meta && meta.stage) || "").slice(0, 16),
+    attempt: Number((meta && meta.attempt) || 1),
+    phase: phase, status: status, seconds: seconds, code: code,
+    chars: (String(system || "").length + String(user || "").length)
+  };
+  if (detail && typeof detail === "object"){
+    ["reason","model","request_id"].forEach(function(k){
+      if (typeof detail[k] === "string" && /^[A-Za-z0-9_\-.]{1,40}$/.test(detail[k])) rec[k] = detail[k];
+    });
+    ["prompt_tokens","completion_tokens","limit_tokens"].forEach(function(k){
+      if (Number.isFinite(Number(detail[k]))) rec[k] = Math.round(Number(detail[k]));
+    });
+  }
+  var log = Array.isArray(data.aiDiagnostics) ? data.aiDiagnostics : [];
+  data.aiDiagnostics = log.slice(-39).concat([rec]);
+  save();
+}
+/* Человеческая расшифровка записи журнала. */
+function diagLine(r){
+  var when = r.at ? new Date(r.at).toLocaleString("ru-RU") : "";
+  var what = { SUCCESS:"ответ получен", NEAR_LIMIT:"почти упёрлись в предел ответа", CLIENT_TIMEOUT:"истекло время ожидания",
+    NETWORK:"связь прервалась", RESPONSE:"ответ не разобран" }[r.code] || r.code || "";
+  if (String(r.code).indexOf("INCOMPLETE:") === 0)
+    what = r.reason === "length" ? "ответ обрезан по пределу длины"
+         : r.reason === "insufficient_system_resource" ? "у поставщика не хватило ресурсов"
+         : "ответ не завершён" + (r.reason ? " (" + r.reason + ")" : "");
+  if (String(r.code).indexOf("PAY:") === 0) what = "поставщик отклонил запрос по оплате";
+  if (String(r.code).indexOf("RATE:") === 0) what = "слишком часто, поставщик просит подождать";
+  if (String(r.code).indexOf("AUTH:") === 0) what = "поставщик не принял ключ";
+  var where = r.section ? "раздел " + r.section : "";
+  if (r.stage) where += (where ? ", " : "") + (r.stage === "revision" ? "редактура" : "черновик");
+  var nums = [];
+  if (r.seconds != null) nums.push(r.seconds + " с");
+  if (r.chars) nums.push(Math.round(r.chars/1000) + " тыс. знаков запроса");
+  if (r.completion_tokens != null) nums.push("ответ " + r.completion_tokens + (r.limit_tokens ? " из " + r.limit_tokens : "") + " токенов");
+  return [when, where, what, nums.join(" · ")].filter(Boolean).join(" — ");
 }
 function aiErrorText(e){
   var m = (e && e.message) || "", who = m.split(":")[1] || "";
@@ -895,14 +951,14 @@ function openDocBuilder(id){
     var prov = provSel.value;
     var el = wrap.querySelector('[data-sec="' + cid + '"]');
     el.querySelector(".secStat").textContent = "пишет " + providerName(prov) + "…";
-    return askAI(prov, pr.system, pr.user).then(function(res){
+    return askAI(prov, pr.system, pr.user, {section:cid,stage:'draft',attempt:1}).then(function(res){
       current();res.text=DraftQuality.cleanSection(res.text,c);
       var budget=DraftQuality.budget(c),editorial=DraftQuality.sectionNotes(x,c,res.text);
       if((res.text.length<=budget.max&&!editorial.length)||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))return res;
       el.querySelector('.secStat').textContent='Редактирую повторы и проверяю объём…';
       // One bounded revision; a failed revision must not discard the first answer.
       var edit=pr.user+'\n\nРедакторская проверка: '+editorial.join(' ')+'\nОтредактируй приведённый текст раздела «'+c.name+'» до '+budget.min+'–'+budget.max+' знаков с пробелами. '+DraftQuality.sectionRules(c)+' Удали повторы и вводные обороты. Сохрани все существенные результаты, числа, ссылки, оговорки и смысл. Не добавляй факты, не обрывай предложения. Верни только итоговый текст.\nТЕКСТ:\n'+res.text;
-      return askAI(prov,pr.system,edit).then(function(revised){current();revised.text=DraftQuality.cleanSection(revised.text,c);if(!revised.text||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(revised.text)||DraftQuality.issues({order:[c],structure:{[cid]:{text:revised.text}}}).some(function(e){return /пометок/.test(e);}))return res;var remaining=DraftQuality.sectionNotes(x,c,revised.text);return remaining.length<=editorial.length&&(remaining.length<editorial.length||revised.text.length<res.text.length)?revised:res;}).catch(function(){current();return res;});
+      return askAI(prov,pr.system,edit,{section:cid,stage:'revision',attempt:1}).then(function(revised){current();revised.text=DraftQuality.cleanSection(revised.text,c);if(!revised.text||/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(revised.text)||DraftQuality.issues({order:[c],structure:{[cid]:{text:revised.text}}}).some(function(e){return /пометок/.test(e);}))return res;var remaining=DraftQuality.sectionNotes(x,c,revised.text);return remaining.length<=editorial.length&&(remaining.length<editorial.length||revised.text.length<res.text.length)?revised:res;}).catch(function(){current();return res;});
     }).then(function(res){
       current();
       if(/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))throw Error(res.text.slice(0,2000));
@@ -1599,6 +1655,15 @@ function viewMore(){
       }).join("") +
       '<div class="stat' + ((D.refs||[]).length ? ' tapline' : '') + '"' + ((D.refs||[]).length ? ' data-act="go-refs" style="cursor:pointer"' : '') + '>' +
         '<span>Вузов в справочнике</span><b>' + (D.refs||[]).length + ((D.refs||[]).length ? ' <span class="mut">›</span>' : '') + '</b></div>') +
+    moreFold("Журнал подготовки" + ((D.aiDiagnostics||[]).length ? " (" + (D.aiDiagnostics||[]).length + ")" : ""),
+      ((D.aiDiagnostics||[]).length
+        ? (D.aiDiagnostics||[]).slice(-12).reverse().map(function(r){
+            return '<div class="stat" style="align-items:flex-start"><span style="flex:1">' + esc(diagLine(r)) + '</span></div>';
+          }).join("") +
+          '<div class="chips"><button type="button" class="chip" data-act="diag-copy">Скопировать журнал</button>' +
+          '<button type="button" class="chip" data-act="diag-clear">Очистить</button></div>'
+        : '<div class="mut">Записей нет. Сюда попадают остановки подготовки: какой раздел, на каком шаге и почему.</div>') +
+      '<div class="hint">Только технические метки и числа. Тексты работ, ключи и пароли сюда не попадают.</div>') +
     moreFold("Копия данных",
       '<div class="chips" style="margin-top:0"><button type="button" class="chip" data-act="export">Сохранить копию</button>' +
       '<button type="button" class="chip" data-act="import">Загрузить копию</button><button type="button" class="chip" data-act="cloud-before-copy">Копии перед заменой</button></div>' +
@@ -1804,6 +1869,16 @@ document.addEventListener("click", function(ev){
   var act = el.getAttribute("data-act"), id = el.getAttribute("data-id");
   if (act === "receive-inbox") return receiveInbox();
 
+  if (act === "diag-copy"){
+    var lg = (D.aiDiagnostics||[]);
+    if (!lg.length) return toast("Журнал пуст");
+    copyText(lg.map(function(r){ return diagLine(r) + "  |  " + JSON.stringify(r); }).join("\n"));
+    return;
+  }
+  if (act === "diag-clear"){
+    if (!confirm("Очистить журнал подготовки?")) return;
+    D.aiDiagnostics = []; save(); render(); toast("Журнал очищен"); return;
+  }
   if (act === "cloud") return openCloud();
   if (act === "go-filter"){ tab = "list"; openId = null; filter = el.getAttribute("data-k"); query = ""; return render(); }
   if (act === "go-refs"){ tab = "refs"; openRefId = null; return render(); }
@@ -1842,7 +1917,7 @@ document.addEventListener("click", function(ev){
     var b2 = el; b2.textContent = "…";
     readProviderForm();
     if (!save()) toast("Настройки не сохранены: браузер не разрешает хранение");
-    askAI(id, "Ты помощник.", "Ответь одним словом: работает").then(function(r){ toast(providerName(id) + " отвечает: " + r.text.slice(0,40)); })
+    askAI(id, "Ты помощник.", "Ответь одним словом: работает",{section:"connection",stage:"check",attempt:1}).then(function(r){ toast(providerName(id) + " отвечает: " + r.text.slice(0,40)); })
       .catch(function(e){ toast(aiErrorText(e)); }).then(function(){ b2.textContent = "проверить"; });
     return;
   }
