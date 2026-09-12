@@ -237,3 +237,11 @@ conservative reservations, NOT confirmed provider charges. No paid call, budget
 reset, new generation or data change performed. Full paid acceptance blocked pending
 verified provider spending/reconciliation or a new explicitly approved total cap.
 A1 forced-runner termination/network-loss and A2 full Word remain unproven.
+
+C021: administrator-only audited reconciliation implemented in budget-reconciliation.sql.
+Local isolated PGlite test passes unknown-hold, invalid/duplicate IDs, amount bounds,
+idempotence/conflict/overlap, cap and original-history preservation, immutable audit
+and service-role denial. No automatic price inference or production release performed.
+User screenshot shows rounded account-wide cost0.05/64 calls, balance1.94; account/key
+coverage of the five server attempts is not yet established. Do not treat rounded
+account total as per-request settlement. Deployment and verified reconciliation pending.
