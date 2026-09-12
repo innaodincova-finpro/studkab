@@ -1099,11 +1099,22 @@ function openDocBuilder(id){
       if(!targets.length){setStatus('Разделов сверх нормы нет. Сокращать нечего.','ok');return;}
       var provSel=wrap.querySelector('#docProv');
       if(!provSel){setStatus('Не выбран поставщик. Откройте «Настройки подготовки».','err');return;}
-      var prov=provSel.value,done=[],failed=[],MAXOUT=9000;
-      genBusy=true;DraftEditor.lock(wrap,false);
+      var prov=provSel.value,report=[],MAXOUT=9000,PASSES=5;
+      genBusy=true;DraftEditor.lock(wrap,true);
       var sysShrink='Ты редактор учебной работы. Ты только сокращаешь готовый текст и никогда не добавляешь новые сведения.';
-      // Строки таблиц нейросети не показываем: они переносятся без изменений.
       function isTable(p){return /^\s*\|/.test(p);}
+      function norm(p){return String(p).toLowerCase().replace(/\s+/g,' ').trim();}
+      // Повторяющиеся абзацы убираем сравнением, без нейросети и без расхода.
+      function dedupe(text){
+        var seen=[],out=[],removed=0;
+        String(text||'').split(/\n\s*\n/).forEach(function(p){
+          if(isTable(p)||norm(p).length<180){out.push(p);return;}
+          var n=norm(p),dup=seen.some(function(q){return q===n||q.indexOf(n)>=0||n.indexOf(q)>=0;});
+          if(dup){removed++;return;}
+          seen.push(n);out.push(p);
+        });
+        return {text:out.join('\n\n'),removed:removed};
+      }
       function blocks(text,maxIn){
         var out=[],buf='';
         String(text||'').split(/\n\s*\n/).forEach(function(p){
@@ -1114,61 +1125,65 @@ function openDocBuilder(id){
         if(buf)out.push({t:'text',v:buf});
         return out;
       }
-      function shrinkText(piece,wantWords,strict){
-        var user='Сократи этот фрагмент учебной работы примерно до '+wantWords+' слов. Сейчас '+DraftQuality.wordCount(piece)+'.\n'+
-          'Убирай: повторы одной мысли разными словами, пересказ уже сказанного, общие рассуждения без опоры на данные, повторные перечисления уже названных показателей.\n'+
-          'Сохрани дословно: все числа, расчёты, формулы, ссылки на источники вида [S1], обозначения таблиц и выводы. Ни одну цифру не пересчитывай и не округляй.\n'+
-          'Не добавляй новых фактов, источников, оценок и рекомендаций. Не пиши вступлений и пояснений о проделанной работе.\n'+
-          (strict?'Предыдущая попытка вышла длиннее нужного. Сокращай решительнее: удаляй целые повторяющиеся абзацы, а не отдельные слова.\n':'')+
-          'Верни только сокращённый текст фрагмента.\n\nФРАГМЕНТ:\n'+piece;
-        return askAI(prov,sysShrink,user,{section:'shrink',stage:'shrink',attempt:strict?2:1});
+      function shrinkText(piece,limitWords,hard){
+        var user='Сократи фрагмент учебной работы. Жёсткий предел: НЕ БОЛЕЕ '+limitWords+' слов. Сейчас '+DraftQuality.wordCount(piece)+'.\n'+
+          'Способ: удаляй целые абзацы, которые повторяют уже сказанное другими словами, пересказывают соседние разделы или рассуждают в общем виде без опоры на данные. Не вычёркивай по слову — убирай лишнее целиком.\n'+
+          'Сохрани дословно: все числа, расчёты, формулы, ссылки на источники вида [S1], обозначения таблиц и выводы. Ни одну цифру не пересчитывай.\n'+
+          'Не добавляй новых фактов, источников, оценок и рекомендаций. Не пиши пояснений о проделанной работе.\n'+
+          (hard?'Предыдущая попытка предела не выдержала. Сокращай решительнее: оставь только то, без чего вывод раздела перестанет быть обоснованным.\n':'')+
+          'Верни только сокращённый текст.\n\nФРАГМЕНТ:\n'+piece;
+        return askAI(prov,sysShrink,user,{section:'shrink',stage:'shrink',attempt:hard?2:1});
       }
-      function pass(g,el,passNo,cb){
+      function apply(el,g,text){
+        el.querySelector('.secText').value=text;
+        el.querySelector('.secStat').textContent=text.length+' знаков · сокращение';
+        doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by='сокращение';
+        readBack();
+      }
+      function pass(g,el,n,cb){
         var text=el.querySelector('.secText').value,words=DraftQuality.wordCount(text);
-        if(words<=g.max)return cb(true);
-        if(passNo>3)return cb(false,words);
-        var want=Math.round(g.min+(g.max-g.min)*0.45),ratio=want/words;
-        var parts=blocks(text,Math.max(4000,Math.round(MAXOUT/Math.max(ratio,0.2)))),result=[],i=0;
+        if(words<=g.max)return cb(words);
+        if(n>PASSES)return cb(words);
+        var want=Math.round(g.min+(g.max-g.min)*0.4),ratio=want/words;
+        var parts=blocks(text,Math.max(4000,Math.round(MAXOUT/Math.max(ratio,0.25)))),res=[],i=0;
         function step(){
           if(i>=parts.length){
-            var joined=result.join('\n\n').trim();
-            if(joined.length>=text.length*0.3){
-              el.querySelector('.secText').value=joined;
-              el.querySelector('.secStat').textContent=joined.length+' знаков · сокращение';
-              doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by='сокращение';
-              readBack();
-            }
-            return pass(g,el,passNo+1,cb);
+            var joined=res.join('\n\n').trim();
+            if(joined.length>=text.length*0.3&&joined.length<text.length)apply(el,g,joined);
+            var now=DraftQuality.wordCount(el.querySelector('.secText').value);
+            if(now>=words)return cb(now);
+            return pass(g,el,n+1,cb);
           }
           var p=parts[i];
-          if(p.t==='table'){result.push(p.v);i++;return step();}
-          setStatus('Сокращаю «'+g.name+'»: заход '+passNo+', фрагмент '+(i+1)+' из '+parts.length+'. Сейчас в разделе '+words+' слов, норма до '+g.max+'.','info');
-          shrinkText(p.v,Math.max(60,Math.round(DraftQuality.wordCount(p.v)*ratio)),passNo>1).then(function(res){
-            var got=String(res.text||'').trim();
-            result.push(got&&got.length<p.v.length?got:p.v);
-            i++;step();
+          if(p.t==='table'){res.push(p.v);i++;return step();}
+          setStatus('Сокращаю «'+g.name+'»: заход '+n+' из '+PASSES+', фрагмент '+(i+1)+' из '+parts.length+'. В разделе '+words+' слов, норма до '+g.max+'.','info');
+          shrinkText(p.v,Math.max(60,Math.round(DraftQuality.wordCount(p.v)*ratio)),n>1).then(function(r){
+            var got=String(r.text||'').trim();
+            res.push(got&&got.length<p.v.length?got:p.v);i++;step();
           }).catch(function(e){
-            result.push(p.v);i++;
-            if(/CLIENT_TIMEOUT|NETWORK|RATE/.test(e.message||''))return cb(false,words,e.message);
+            res.push(p.v);i++;
+            if(/CLIENT_TIMEOUT|NETWORK|RATE/.test(e.message||''))return cb(DraftQuality.wordCount(el.querySelector('.secText').value),e.message);
             step();
           });
         }
         step();
       }
-      function run(n){
-        if(n>=targets.length){
+      function run(k){
+        if(k>=targets.length){
           genBusy=false;DraftEditor.lock(wrap,false);
-          setStatus((done.length?'Сокращено: '+done.join('; ')+'. ':'Сокращено: ничего. ')+(failed.length?'Не уложились в норму: '+failed.join('; ')+'. ':'')+'Нажмите «Сохранить», затем «Проверить готовность».',failed.length?'err':'ok');
+          var bad=report.filter(function(r){return r.left>r.max;});
+          setStatus(report.map(function(r){return '«'+r.name+'» '+r.was+' → '+r.left+' слов'+(r.left>r.max?' (норма до '+r.max+', не дотянули)':' — в норме')+(r.cut?', убрано повторов: '+r.cut:'');}).join('; ')+'. Нажмите «Сохранить», затем «Проверить готовность».',bad.length?'err':'ok');
           return;
         }
-        var g=targets[n],el=wrap.querySelector('[data-sec="'+g.id+'"]');
-        if(!el){failed.push('«'+g.name+'» — раздела нет в документе');return run(n+1);}
+        var g=targets[k],el=wrap.querySelector('[data-sec="'+g.id+'"]');
+        if(!el){report.push({name:g.name,was:0,left:0,max:g.max,cut:0});return run(k+1);}
         var before=DraftQuality.wordCount(el.querySelector('.secText').value);
-        pass(g,el,1,function(ok,left,err){
-          var after=DraftQuality.wordCount(el.querySelector('.secText').value);
-          if(ok)done.push('«'+g.name+'» '+before+' → '+after+' слов');
-          else failed.push('«'+g.name+'» — осталось '+(left||after)+' при норме до '+g.max+(err?' ('+err+')':''));
-          run(n+1);
+        setStatus('Убираю повторяющиеся абзацы в «'+g.name+'»…','info');
+        var d=dedupe(el.querySelector('.secText').value);
+        if(d.removed)apply(el,g,d.text);
+        pass(g,el,1,function(left){
+          report.push({name:g.name,was:before,left:left,max:g.max,cut:d.removed});
+          run(k+1);
         });
       }
       run(0);
