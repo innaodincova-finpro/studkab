@@ -2,7 +2,7 @@
 (function(root){
  'use strict';
  var marker=/\[(?:ДАННЫЕ СТУДЕНТА|СФОРМУЛИРОВАТЬ САМОСТОЯТЕЛЬНО|ПРОВЕРИТЬ ИСТОЧНИК|выше\/ниже|соответствует\/не соответствует|больше\/меньше)[^\]]*\]/gi;
- function financial(x){return /финансов.{0,15}состояни/i.test(x.topic||'');}
+ function financial(x){return /финансов.{0,15}состояни/i.test(x.topic||'')||String(inputs(x).finance||'').trim().length>0;}
  function inputs(x){return Object.assign({organization:x.org||'',period:'',requirements:[x.requirements,x.methodNotes].filter(Boolean).join('\n'),materials:'',sources:'',finance:''},x.doc&&x.doc.inputs||{});}
  function number(s){var t=String(s).trim().replace(/\s/g,'').replace(',','.');if(!/^-?\d+(?:\.\d+)?$/.test(t))throw Error('В таблице есть пустое или нечисловое значение');var n=Number(t);if(!Number.isFinite(n)||Math.abs(n)>1e12)throw Error('Недопустимое число');return n;}
  var names=['Год','Активы','Оборотные активы','Капитал','Долгосрочные обязательства','Краткосрочные обязательства','Выручка','Чистая прибыль'];
@@ -23,7 +23,7 @@
   return {rows:rows,metrics:metrics,text:'Таблица 1 — Исходные показатели (тыс. руб.; балансовые показатели на конец года)\n'+table(names,rows)+'\n\nТаблица 2 — Расчётные показатели\n'+table(['Год','Текущая ликвидность','Автономия','Обязательства / капитал','Чистый оборотный капитал, тыс. руб.','Чистая рентабельность продаж, %'],metrics)+'\n\nФормулы: текущая ликвидность = оборотные активы / краткосрочные обязательства; автономия = капитал / активы; обязательства / капитал = (долгосрочные + краткосрочные обязательства) / капитал; чистый оборотный капитал = оборотные активы − краткосрочные обязательства; чистая рентабельность продаж = чистая прибыль / выручка × 100. При нулевом или отрицательном знаменателе отношение не рассчитывается. Универсальные нормативы не применялись. Перевод долга из краткосрочного в долгосрочный сам по себе не меняет автономию и отношение обязательств к капиталу.'};
  }
  function extended(x){return /FIN-UAT-01/.test(String(inputs(x).requirements||''));}
- function analysis(x){var engine=typeof module==='object'&&module.exports?require('./financial-analysis.js'):root.FinancialAnalysis;if(!engine)throw Error('Расчётный модуль не загружен. Обновите страницу.');var source=inputs(x),data=engine.parse(source.materials);if(String(source.finance||'').trim()){var simple=finance(source.finance).rows;simple.forEach(function(row,i){var expected=[2023+i,data.balance.assets?.[i+1],data.balance.current?.[i+1],data.balance.equity?.[i+1],data.balance.longLoan?.[i+1],data.balance.shortLiabilities?.[i+1],data.income.revenue?.[i],data.income.net?.[i]];if(row.some(function(v,j){return v!==expected[j];}))throw Error('Таблица из восьми столбцов не совпадает с материалами');});if(simple.length!==3)throw Error('Для FIN-UAT нужны три отчётных года');}return engine.fromMaterials(source.materials);}
+ function analysis(x){var engine=typeof module==='object'&&module.exports?require('./financial-analysis.js'):root.FinancialAnalysis;if(!engine)throw Error('Расчётный модуль не загружен. Обновите страницу.');var source=inputs(x),data=engine.parse(source.materials);if(String(source.finance||'').trim()){var simple=finance(source.finance).rows;simple.forEach(function(row,i){var expected=[simple[0][0]+i,data.balance.assets?.[i+1],data.balance.current?.[i+1],data.balance.equity?.[i+1],data.balance.longLoan?.[i+1],data.balance.shortLiabilities?.[i+1],data.income.revenue?.[i],data.income.net?.[i]];if(row.some(function(v,j){return v!==expected[j];}))throw Error('Таблица из восьми столбцов не совпадает с материалами');});}return engine.fromMaterials(source.materials);}
  function preflight(x){
   var p=inputs(x),errors=[];
   [['requirements','Добавьте задание и требования преподавателя'],['materials','Добавьте фактические материалы исследования'],['sources','Добавьте проверенные источники с библиографией, ссылкой или страницами и выдержками']].forEach(function(f){if(!String(p[f[0]]||'').trim())errors.push(f[1]);});
@@ -102,7 +102,19 @@
  }
  function finAcceptance(x){
   var req=String(inputs(x).requirements||'').replace(/\r\n/g,'\n').trim();
-  if(!/FIN-UAT-01/.test(req))return {applicable:false,errors:[],sections:[]};
+  if(!/FIN-UAT-01/.test(req)){
+   var d0=x.doc||{},st0=d0.structure||{},ord0=(d0.order||[]).filter(function(c){return Number(c.pages)>0;});
+   if(!ord0.length)return {applicable:false,errors:[],sections:[]};
+   var er0=[],sum0=0,lo0=0,hi0=0;
+   var sec0=ord0.map(function(c){
+    var b=budget(c),mn=Math.round(b.min/7),mx=Math.round(b.max/7),w=wordCount((st0[c.id]||{}).text);
+    sum0+=w;lo0+=mn;hi0+=mx;
+    if(w<mn||w>mx)er0.push(c.name+': '+w+' слов; требуется '+mn+'–'+mx+' по заданному объёму в страницах.');
+    return {id:c.id,name:c.name,words:w,min:mn,max:mx};
+   });
+   if(sum0<lo0||sum0>hi0)er0.push('Весь документ: '+sum0+' слов; требуется '+lo0+'–'+hi0+' по заданному объёму в страницах.');
+   return {applicable:true,errors:er0,sections:sec0,total:sum0};
+  }
   if(!req.includes('УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01')||!req.includes('Авторские критерии приёмки версии 1.0.'))return {applicable:true,errors:['Требования FIN-UAT-01 отличаются от контрольной версии 1.0. Нужна сверка критериев.'],sections:[]};
   var limits=[['intro','Введение',500,700],['ch1','Глава 1',1400,2000],['ch2','Глава 2',2800,3700],['ch3','Глава 3',900,1400],['concl','Заключение',400,700]],errors=[],total=0;
   var d=x.doc||{},structure=d.structure||{},order=d.order||[];
