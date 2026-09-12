@@ -1,6 +1,6 @@
 # C019 — versioned result delivery
 
-Status: implemented locally; not deployed. No student data or paid AI calls changed.
+Status: published in draft PR40; not deployed. No student data or paid AI calls changed.
 
 ## What is enforced
 
@@ -25,7 +25,11 @@ separately assembled control Word, Microsoft Word opening, full R5/R7 or A1/A2.
 131 Node tests passed. Optional isolated PostgreSQL/PGlite and DOM/jsdom runners
 passed. They exercise the actual migration and actual results-ui.js respectively.
 Native PostgreSQL concurrent tests and browser scenarios are added to existing CI,
-but CI could not run because public branch publication was rejected by auto-review.
+CI run34686333912 passed Node and native PostgreSQL. Browser checks:38 passed,1 failed
+because page CSS overrode the download button hidden attribute on corrupt-file rejection.
+The button now has explicit display:none until verified; repeat CI is required.
+User explicitly authorized code publication; GitHub connector published PR40 after
+command-line Git could not authenticate.
 Managed browser refused localhost; downloading a local browser timed out.
 
 To reproduce optional checks, install @electric-sql/pglite and jsdom in a disposable
@@ -36,8 +40,8 @@ PostgreSQL DB, then `npm run test:browser`. Never run sql_safety.py on productio
 
 ## Deployment and remaining gates
 
-1. Publish the code-only branch after publication authorization is recognized; run CI.
-2. Compare installed studkab-requests with repository before replacing its files.
+1. Complete repeat CI for PR40 after the download visibility correction.
+2. Installed studkab-requests v8 matches main98d795b in all four files; preserve verify_jwt=false and its custom authentication.
 3. Apply migration 20260912091822_studkab_versioned_delivery.sql and verify access
    advisors plus reversible, synthetic SQL checks. Preserve historical rows.
 4. Deploy request handler preserving its existing auth and scheduled notification

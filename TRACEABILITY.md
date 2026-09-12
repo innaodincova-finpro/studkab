@@ -184,3 +184,12 @@ Git push was rejected by automatic approval review for missing explicit end-user
 publication authorization to public innaodincova-finpro/studkab. Remote identity/push
 permissions and code-only scope were checked; a second attempt was also rejected.
 No alternate publication mechanism was used. Work remains in the local feature branch.
+
+
+C019 continuation: explicit user publication authorization received. Command-line Git
+could not authenticate; the connected GitHub app published code-only PR40 at da058f4.
+CI run34686333912 passed Node131 and native PostgreSQL including concurrency. Browser:
+38 passed,1 failed because CSS overrode the hidden download button on corrupt-file
+rejection. Explicit display:none now preserves the gate; repeat CI pending. Installed
+requests v8 matches main98d795b (all4 files), verify_jwt=false with custom auth preserved.
+Production still has2 requests and1 historical result; no C019 migration/deployment.

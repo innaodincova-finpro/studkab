@@ -60,7 +60,7 @@
  }
  async function receive(w){
   var data=D,identity=Oblako.identity();
-  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Черновик от исполнителя</h3><p role="status" data-result-status>Проверяем готовность…</p><button type="button" class="btn" data-download hidden>Скачать черновик Word</button><p class="hint">Прочитайте документ, проверьте факты, источники и требования преподавателя. При необходимости доработайте его перед сдачей.</p>');
+  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Черновик от исполнителя</h3><p role="status" data-result-status>Проверяем готовность…</p><button type="button" class="btn" data-download hidden style="display:none">Скачать черновик Word</button><p class="hint">Прочитайте документ, проверьте факты, источники и требования преподавателя. При необходимости доработайте его перед сдачей.</p>');
   wrap.dataset.accountIdentity=String(identity);
   var msg=wrap.querySelector('[data-result-status]');
   try{
@@ -76,8 +76,8 @@
    }
    if(!same(data,identity))throw Error('Аккаунт изменился. Откройте результат заново.');
    msg.textContent='Черновик готов. Передан '+new Date(result.created_at).toLocaleString('ru-RU')+'.';
-   var button=wrap.querySelector('[data-download]');button.hidden=false;
-   button.onclick=function(){if(!same(data,identity)){button.hidden=true;msg.textContent='Аккаунт изменился. Откройте результат заново.';return;}try{download(result.document,receivedBlob);}catch(e){msg.textContent='Не удалось собрать файл. Откройте результат повторно.';}};
+   var button=wrap.querySelector('[data-download]');button.hidden=false;button.style.removeProperty('display');
+   button.onclick=function(){if(!same(data,identity)){button.hidden=true;button.style.display='none';msg.textContent='Аккаунт изменился. Откройте результат заново.';return;}try{download(result.document,receivedBlob);}catch(e){msg.textContent='Не удалось собрать файл. Откройте результат повторно.';}};
   }catch(e){msg.textContent=e.message||'Не удалось проверить результат. Откройте его повторно.';}
  }
  global.StudResults={deliver:deliver,receive:receive};
