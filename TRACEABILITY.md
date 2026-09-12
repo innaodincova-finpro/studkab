@@ -217,3 +217,12 @@ Chromium/WebKit browser checks. Desktop1440 and mobile390 width, sidebar geometr
 request opening and wide document editor passed. Synthetic screenshots inspected;
 editor screenshot captured during entrance animation, so screenshots now finish
 animations before capture for meaningful visual inspection. Publication pending.
+
+C020 publication: final head b8277efe CI34689378465 SUCCESS; synthetic desktop,
+editor and mobile screenshots visually inspected. PR41 merged25402a2b; GitHub Pages
+build/deploy34689509773 SUCCESS. Live browser at1363px: registry width1348, sidebar224,
+all4 existing requests visible, FIN-UAT search returns1, detail uses2 columns, editor
+width1292. Cabinet width1363/sidebar224. No horizontal overflow on either page.
+Canonical URL initially served old cached markup; ?v=desktop-38 loads published UI.
+No records, auth settings or budget changed; no paid calls. R10 desktop layout delivered.
+A1/A2 full recovery and full FIN-UAT generation/Word acceptance remain open.
