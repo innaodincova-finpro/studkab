@@ -892,7 +892,7 @@ function openDocBuilder(id){
         ? '<button type="button" class="chip" data-genover="1">Подготовить новую версию</button>'
         : '') +
     '</div></details>' +
-    '<button type="button" class="chip" data-draft-rewrite>Переписать по норме</button><button type="button" class="chip" data-draft-extend>Дописать до нормы</button><button type="button" class="chip" data-draft-shrink>Сократить до нормы</button><button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
+    '<button type="button" class="chip ok" data-draft-norm>Довести до нормы</button><button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
     '<div class="rowbtns">' +
     '<button type="button" class="btn ghost" data-docsave="1" style="flex:1">Сохранить</button></div>'
   );
@@ -1084,33 +1084,64 @@ function openDocBuilder(id){
         openModal('<button type="button" class="close" data-x="1">✕</button><h3>Финансовые расчёты</h3><p>Арифметическая проверка пройдена. Условия FIN-UAT-01: 365 дней, все продажи с отсрочкой, сценарная ставка 12%. Выводы и полнота работы требуют отдельной проверки.</p><details open><summary>20 показателей за три года</summary>'+metrics+'</details><details><summary>Сценарии сокращения инкассации</summary><p>Расчётное высвобождение полностью направляется на погашение кредита. Экономия процентов — будущая оценка до налогов и затрат.</p>'+scenarios+'</details><details><summary>Формулы, динамика и подробные расчёты</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(calculated.text)+'</pre></details>');
       }catch(e){toast(e.message);}return;
     }
-    if(t.closest('[data-draft-shrink]')){
+    if(t.closest('[data-draft-norm]')){
       if(genBusy)return;
       readBack();
-      var acc=DraftQuality.finAcceptance(x),targets=[];
-      if(acc.applicable&&acc.sections.length){
-        acc.sections.forEach(function(sec){if(sec.words>sec.max)targets.push({id:sec.id,name:sec.name,min:sec.min,max:sec.max});});
-      }else{
-        (doc.order||[]).forEach(function(c){
-          var t0=((doc.structure[c.id]||{}).text||''),b=DraftQuality.budget(c);
-          if(DraftQuality.wordCount(t0)>Math.round(b.max/7))targets.push({id:c.id,name:c.name,min:Math.round(b.min/7),max:Math.round(b.max/7)});
-        });
-      }
-      if(!targets.length){setStatus('Разделов сверх нормы нет. Сокращать нечего.','ok');return;}
-      var provSel=wrap.querySelector('#docProv');
-      if(!provSel){setStatus('Не выбран поставщик. Откройте «Настройки подготовки».','err');return;}
-      var prov=provSel.value,report=[],MAXOUT=9000,PASSES=5;
-      genBusy=true;DraftEditor.lock(wrap,true);
-      var sysShrink='Ты редактор учебной работы. Ты только сокращаешь готовый текст и никогда не добавляешь новые сведения.';
+      var selN=wrap.querySelector('#docProv');
+      if(!selN){setStatus('Не выбран поставщик. Откройте «Настройки подготовки».','err');return;}
+      var provN=selN.value,itogo=[],MAXOUT=9000;
       function isTable(p){return /^\s*\|/.test(p);}
-      function norm(p){return String(p).toLowerCase().replace(/\s+/g,' ').trim();}
-      // Повторяющиеся абзацы убираем сравнением, без нейросети и без расхода.
+      function nrm(p){return String(p).toLowerCase().replace(/\s+/g,' ').trim();}
+      function sectionsOf(){
+        var a=DraftQuality.finAcceptance(x),list=[];
+        if(a.applicable&&a.sections.length){
+          a.sections.forEach(function(sec){if(sec.words)list.push({id:sec.id,name:sec.name,min:sec.min,max:sec.max,words:sec.words});});
+        }else{
+          (doc.order||[]).forEach(function(c){
+            var t0=((doc.structure[c.id]||{}).text||''),b=DraftQuality.budget(c);
+            if(t0.trim())list.push({id:c.id,name:c.name,min:Math.round(b.min/7),max:Math.round(b.max/7),words:DraftQuality.wordCount(t0)});
+          });
+        }
+        return list;
+      }
+      /* 1. Подписи таблиц. Без нейросети и без расхода. */
+      function captions(){
+        var order4=doc.order||[],all4='',refs=[],made=0;
+        order4.forEach(function(c){all4+='\n'+((doc.structure[c.id]||{}).text||'');});
+        (all4.match(/таблиц[аеуы]\s+(\d+)/gi)||[]).forEach(function(m){
+          var n=Number(String(m).replace(/\D+/g,''));if(n&&refs.indexOf(n)<0)refs.push(n);
+        });
+        refs.sort(function(a,b){return a-b;});
+        var missing=refs.filter(function(n){return !(new RegExp('Таблица\\s+'+n+'\\s*[—–-]','i')).test(all4);});
+        if(!missing.length)return 0;
+        var free=[];
+        order4.forEach(function(c){
+          var ps=((doc.structure[c.id]||{}).text||'').split(/\n\s*\n/);
+          ps.forEach(function(p,idx){
+            if(!isTable(p))return;
+            if(/^Таблица\s+\d+\s*[—–-]/i.test(String(ps[idx-1]||'').trim()))return;
+            free.push({sec:c.id,index:idx});
+          });
+        });
+        missing.forEach(function(n,i){
+          var spot=free[i];if(!spot)return;
+          var el=wrap.querySelector('[data-sec="'+spot.sec+'"]');if(!el)return;
+          var ps=el.querySelector('.secText').value.split(/\n\s*\n/),tb=ps[spot.index];
+          if(!tb||!isTable(tb))return;
+          var head=String(tb).split('\n')[0].split('|').map(function(v){return v.trim();}).filter(function(v){return v&&!/^-+$/.test(v);});
+          ps[spot.index]='Таблица '+n+' — '+(head.length>1?head[0]+' по годам: '+head.slice(1).join(', '):(head[0]||'Данные'))+'\n'+tb;
+          el.querySelector('.secText').value=ps.join('\n\n');made++;
+        });
+        if(made)readBack();
+        return made;
+      }
+      /* 2. Удаление повторяющихся абзацев. Без нейросети. */
       function dedupe(text){
         var seen=[],out=[],removed=0;
         String(text||'').split(/\n\s*\n/).forEach(function(p){
-          if(isTable(p)||norm(p).length<180){out.push(p);return;}
-          var n=norm(p),dup=seen.some(function(q){return q===n||q.indexOf(n)>=0||n.indexOf(q)>=0;});
-          if(dup){removed++;return;}
+          if(isTable(p)||nrm(p).length<180){out.push(p);return;}
+          var n=nrm(p);
+          if(seen.some(function(q){return q===n||q.indexOf(n)>=0||n.indexOf(q)>=0;})){removed++;return;}
           seen.push(n);out.push(p);
         });
         return {text:out.join('\n\n'),removed:removed};
@@ -1125,196 +1156,129 @@ function openDocBuilder(id){
         if(buf)out.push({t:'text',v:buf});
         return out;
       }
-      function shrinkText(piece,limitWords,hard){
-        var user='Сократи фрагмент учебной работы. Жёсткий предел: НЕ БОЛЕЕ '+limitWords+' слов. Сейчас '+DraftQuality.wordCount(piece)+'.\n'+
-          'Способ: удаляй целые абзацы, которые повторяют уже сказанное другими словами, пересказывают соседние разделы или рассуждают в общем виде без опоры на данные. Не вычёркивай по слову — убирай лишнее целиком.\n'+
-          'Сохрани дословно: все числа, расчёты, формулы, ссылки на источники вида [S1], обозначения таблиц и выводы. Ни одну цифру не пересчитывай.\n'+
-          'Не добавляй новых фактов, источников, оценок и рекомендаций. Не пиши пояснений о проделанной работе.\n'+
-          (hard?'Предыдущая попытка предела не выдержала. Сокращай решительнее: оставь только то, без чего вывод раздела перестанет быть обоснованным.\n':'')+
-          'Верни только сокращённый текст.\n\nФРАГМЕНТ:\n'+piece;
-        return askAI(prov,sysShrink,user,{section:'shrink',stage:'shrink',attempt:hard?2:1});
-      }
-      function apply(el,g,text){
+      function put(g,el,text,how){
         el.querySelector('.secText').value=text;
-        el.querySelector('.secStat').textContent=text.length+' знаков · сокращение';
-        doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by='сокращение';
+        el.querySelector('.secStat').textContent=text.length+' знаков · '+how;
+        doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by=how;
         readBack();
       }
-      function pass(g,el,n,cb){
+      var sys='Ты редактор учебной работы. Ты только сокращаешь готовый текст и никогда не добавляешь новые сведения.';
+      /* 3. Сокращение по фрагментам. */
+      function shrink(g,el,pass,done){
         var text=el.querySelector('.secText').value,words=DraftQuality.wordCount(text);
-        if(words<=g.max)return cb(words);
-        if(n>PASSES)return cb(words);
+        if(words<=g.max||pass>3)return done(words);
         var want=Math.round(g.min+(g.max-g.min)*0.4),ratio=want/words;
         var parts=blocks(text,Math.max(4000,Math.round(MAXOUT/Math.max(ratio,0.25)))),res=[],i=0;
         function step(){
           if(i>=parts.length){
             var joined=res.join('\n\n').trim();
-            if(joined.length>=text.length*0.3&&joined.length<text.length)apply(el,g,joined);
+            if(joined.length>=text.length*0.3&&joined.length<text.length)put(g,el,joined,'сокращение');
             var now=DraftQuality.wordCount(el.querySelector('.secText').value);
-            if(now>=words)return cb(now);
-            return pass(g,el,n+1,cb);
+            if(now>=words)return done(now);
+            return shrink(g,el,pass+1,done);
           }
           var p=parts[i];
           if(p.t==='table'){res.push(p.v);i++;return step();}
-          setStatus('Сокращаю «'+g.name+'»: заход '+n+' из '+PASSES+', фрагмент '+(i+1)+' из '+parts.length+'. В разделе '+words+' слов, норма до '+g.max+'.','info');
-          shrinkText(p.v,Math.max(60,Math.round(DraftQuality.wordCount(p.v)*ratio)),n>1).then(function(r){
-            var got=String(r.text||'').trim();
-            res.push(got&&got.length<p.v.length?got:p.v);i++;step();
-          }).catch(function(e){
-            res.push(p.v);i++;
-            if(/CLIENT_TIMEOUT|NETWORK|RATE/.test(e.message||''))return cb(DraftQuality.wordCount(el.querySelector('.secText').value),e.message);
-            step();
-          });
+          setStatus('«'+g.name+'»: сокращаю, заход '+pass+', фрагмент '+(i+1)+' из '+parts.length+'. Сейчас '+words+' слов, норма до '+g.max+'.','info');
+          askAI(provN,sys,'Сократи фрагмент учебной работы. Жёсткий предел: НЕ БОЛЕЕ '+Math.max(60,Math.round(DraftQuality.wordCount(p.v)*ratio))+' слов.\nУдаляй целые абзацы, которые повторяют уже сказанное, пересказывают соседние разделы или рассуждают в общем виде.\nСохрани дословно все числа, расчёты, формулы, ссылки вида [S1] и выводы.\nНе добавляй ничего нового. Верни только сокращённый текст.\n\nФРАГМЕНТ:\n'+p.v,{section:g.id,stage:'shrink',attempt:pass})
+          .then(function(r){var got=String(r.text||'').trim();res.push(got&&got.length<p.v.length?got:p.v);i++;step();})
+          .catch(function(e){res.push(p.v);i++;if(/CLIENT_TIMEOUT|NETWORK|RATE/.test(e.message||''))return done(DraftQuality.wordCount(el.querySelector('.secText').value),e.message);step();});
         }
         step();
       }
-      function run(k){
-        if(k>=targets.length){
-          genBusy=false;DraftEditor.lock(wrap,false);
-          var bad=report.filter(function(r){return r.left>r.max;});
-          setStatus(report.map(function(r){return '«'+r.name+'» '+r.was+' → '+r.left+' слов'+(r.left>r.max?' (норма до '+r.max+', не дотянули)':' — в норме')+(r.cut?', убрано повторов: '+r.cut:'');}).join('; ')+'. Нажмите «Сохранить», затем «Проверить готовность».',bad.length?'err':'ok');
-          return;
-        }
-        var g=targets[k],el=wrap.querySelector('[data-sec="'+g.id+'"]');
-        if(!el){report.push({name:g.name,was:0,left:0,max:g.max,cut:0});return run(k+1);}
-        var before=DraftQuality.wordCount(el.querySelector('.secText').value);
-        setStatus('Убираю повторяющиеся абзацы в «'+g.name+'»…','info');
-        var d=dedupe(el.querySelector('.secText').value);
-        if(d.removed)apply(el,g,d.text);
-        pass(g,el,1,function(left){
-          report.push({name:g.name,was:before,left:left,max:g.max,cut:d.removed});
-          run(k+1);
-        });
-      }
-      run(0);
-      return;
-    }
-    if(t.closest('[data-draft-rewrite]')){
-      if(genBusy)return;
-      readBack();
-      var acc2=DraftQuality.finAcceptance(x),over=[];
-      if(acc2.applicable&&acc2.sections.length){
-        acc2.sections.forEach(function(sec){if(sec.words>sec.max)over.push({id:sec.id,name:sec.name,min:sec.min,max:sec.max});});
-      }else{
-        (doc.order||[]).forEach(function(c){
-          var t1=((doc.structure[c.id]||{}).text||''),b=DraftQuality.budget(c);
-          if(DraftQuality.wordCount(t1)>Math.round(b.max/7))over.push({id:c.id,name:c.name,min:Math.round(b.min/7),max:Math.round(b.max/7)});
-        });
-      }
-      if(!over.length){setStatus('Разделов сверх нормы нет. Переписывать нечего.','ok');return;}
-      var sel2=wrap.querySelector('#docProv');
-      if(!sel2){setStatus('Не выбран поставщик. Откройте «Настройки подготовки».','err');return;}
-      if(!confirm('Переписать заново разделы: '+over.map(function(g){return g.name;}).join(', ')+'? Нынешний текст этих разделов будет заменён. Предыдущая версия сохранится, её можно вернуть кнопкой «Восстановить предыдущую версию».'))return;
-      if(!DraftEditor.backup(x))return;
-      var prov2=sel2.value,itog=[];
-      genBusy=true;DraftEditor.lock(wrap,true);
-      function one(k){
-        if(k>=over.length){
-          genBusy=false;DraftEditor.lock(wrap,false);
-          var bad=itog.filter(function(r){return r.left>r.max;});
-          setStatus(itog.map(function(r){return '«'+r.name+'» '+r.was+' → '+r.left+' слов'+(r.left>r.max?' (норма до '+r.max+', сверх нормы)':' — в норме');}).join('; ')+'. Нажмите «Сохранить», затем «Проверить готовность».',bad.length?'err':'ok');
-          return;
-        }
-        var g=over[k],c=(doc.order||[]).filter(function(q){return q.id===g.id;})[0],el=wrap.querySelector('[data-sec="'+g.id+'"]');
-        if(!c||!el){itog.push({name:g.name,was:0,left:0,max:g.max});return one(k+1);}
-        var was=DraftQuality.wordCount(el.querySelector('.secText').value);
-        var want=Math.round(g.min+(g.max-g.min)*0.45),n=Math.max(1,Math.ceil(want/1500)),perPart=Math.round(want/n);
-        var sys2;
-        try{sys2=sectionPrompt(x,c).system;}catch(e){itog.push({name:g.name,was:was,left:was,max:g.max});return one(k+1);}
+      /* 4. Переписывание, когда сокращение не берёт. */
+      function rewrite(g,el,done){
+        var c=(doc.order||[]).filter(function(q){return q.id===g.id;})[0];
+        if(!c)return done(DraftQuality.wordCount(el.querySelector('.secText').value));
+        var want=Math.round(g.min+(g.max-g.min)*0.45),n=Math.max(1,Math.ceil(want/1500)),per=Math.round(want/n),sysR;
+        try{sysR=sectionPrompt(x,c).system;}catch(e){return done(DraftQuality.wordCount(el.querySelector('.secText').value));}
         var written=[],i=0;
         function part(){
           if(i>=n){
             var full=written.join('\n\n').trim();
-            if(full){
-              el.querySelector('.secText').value=full;
-              el.querySelector('.secStat').textContent=full.length+' знаков · переписано';
-              doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by='переписано';
-              readBack();
-            }
-            itog.push({name:g.name,was:was,left:DraftQuality.wordCount(el.querySelector('.secText').value),max:g.max});
-            return one(k+1);
+            if(full)put(g,el,full,'переписано');
+            return done(DraftQuality.wordCount(el.querySelector('.secText').value));
           }
-          setStatus('Переписываю «'+g.name+'»: часть '+(i+1)+' из '+n+'. Норма раздела '+g.min+'–'+g.max+' слов.','info');
-          var user2='Напиши раздел «'+c.name+'» учебной работы. '+DraftQuality.sectionRules(c)+'\n'+
-            (n>1?'Сейчас пиши часть '+(i+1)+' из '+n+' этого раздела. ':'')+
-            'Жёсткий предел: НЕ БОЛЕЕ '+perPart+' слов'+(n>1?' в этой части':'')+'. Весь раздел целиком не должен превысить '+g.max+' слов.\n'+
-            'Пиши плотно: каждое утверждение опирается на данные из материалов. Без общих вступлений, без повторов одной мысли разными словами, без пересказа соседних разделов.\n'+
-            'Не выдумывай факты, числа, источники и нормативы. Ссылайся на источники в виде [S1]. Заголовок раздела не пиши.\n'+
-            (n>1&&i+1===n?'Это последняя часть: заверши раздел выводом.\n':'')+
-            (n>1&&i+1<n?'Не подводи итог всего раздела в этой части.\n':'')+
-            'Верни только текст'+(n>1?' этой части':'')+'.'+
-            (written.length?'\n\nУЖЕ НАПИСАННЫЕ ЧАСТИ ЭТОГО РАЗДЕЛА, НЕ ПОВТОРЯЙ ИХ:\n'+written.join('\n\n'):'');
-          askAI(prov2,sys2,user2,{section:g.id,stage:'rewrite',attempt:i+1}).then(function(r){
-            var got=DraftQuality.cleanSection(String(r.text||''),c).trim();
-            if(got)written.push(got);
-            i++;part();
-          }).catch(function(e){
-            setStatus('«'+g.name+'», часть '+(i+1)+': '+(e.message||'отказ')+'. Раздел оставлен без изменений.','err');
-            itog.push({name:g.name,was:was,left:was,max:g.max});
-            genBusy=false;DraftEditor.lock(wrap,false);
-          });
+          setStatus('«'+g.name+'»: пишу заново, часть '+(i+1)+' из '+n+'. Норма '+g.min+'–'+g.max+' слов.','info');
+          askAI(provN,sysR,'Напиши раздел «'+c.name+'» учебной работы. '+DraftQuality.sectionRules(c)+'\n'+
+            (n>1?'Сейчас пиши часть '+(i+1)+' из '+n+'. ':'')+'Жёсткий предел: НЕ БОЛЕЕ '+per+' слов'+(n>1?' в этой части':'')+'. Весь раздел не должен превысить '+g.max+' слов.\n'+
+            'Пиши плотно: каждое утверждение опирается на данные из материалов. Без общих вступлений и повторов.\n'+
+            'Не выдумывай факты, числа, источники и нормативы. Ссылайся на источники в виде [S1]. Заголовок не пиши.\n'+
+            (n>1&&i+1===n?'Это последняя часть: заверши раздел выводом.\n':'')+(n>1&&i+1<n?'Не подводи итог всего раздела в этой части.\n':'')+
+            'Верни только текст'+(n>1?' этой части':'')+'.'+(written.length?'\n\nУЖЕ НАПИСАННЫЕ ЧАСТИ, НЕ ПОВТОРЯЙ ИХ:\n'+written.join('\n\n'):''),
+            {section:g.id,stage:'rewrite',attempt:i+1})
+          .then(function(r){var got=DraftQuality.cleanSection(String(r.text||''),c).trim();if(got)written.push(got);i++;part();})
+          .catch(function(e){done(DraftQuality.wordCount(el.querySelector('.secText').value),e.message);});
         }
         part();
       }
-      one(0);
-      return;
-    }
-    if(t.closest('[data-draft-extend]')){
-      if(genBusy)return;
-      readBack();
-      var acc3=DraftQuality.finAcceptance(x),small=[];
-      if(acc3.applicable&&acc3.sections.length){
-        acc3.sections.forEach(function(sec){if(sec.words&&sec.words<sec.min)small.push({id:sec.id,name:sec.name,min:sec.min,max:sec.max});});
-      }
-      if(!small.length){setStatus('Разделов короче нормы нет. Дописывать нечего.','ok');return;}
-      var sel3=wrap.querySelector('#docProv');
-      if(!sel3){setStatus('Не выбран поставщик. Откройте «Настройки подготовки».','err');return;}
-      if(!confirm('Дописать до нормы разделы: '+small.map(function(g){return g.name;}).join(', ')+'? Текст этих разделов будет заменён дополненным. Предыдущая версия сохранится.'))return;
-      if(!DraftEditor.backup(x))return;
-      var prov3=sel3.value,res3=[];
-      genBusy=true;DraftEditor.lock(wrap,true);
-      function go(k,retry){
-        if(k>=small.length){
-          genBusy=false;DraftEditor.lock(wrap,false);
-          var bad=res3.filter(function(r){return r.left<r.min||r.left>r.max;});
-          setStatus(res3.map(function(r){return '«'+r.name+'» '+r.was+' → '+r.left+' слов'+(r.left<r.min?' (норма от '+r.min+', не дотянули)':r.left>r.max?' (норма до '+r.max+', перебор)':' — в норме');}).join('; ')+'. Нажмите «Сохранить», затем «Проверить готовность».',bad.length?'err':'ok');
-          return;
-        }
-        var g=small[k],c=(doc.order||[]).filter(function(q){return q.id===g.id;})[0],el=wrap.querySelector('[data-sec="'+g.id+'"]');
-        if(!c||!el){res3.push({name:g.name,was:0,left:0,min:g.min,max:g.max});return go(k+1);}
-        var text3=el.querySelector('.secText').value,was=DraftQuality.wordCount(text3);
-        var want=Math.round(g.min+(g.max-g.min)*(retry?0.45:0.28));
-        var notes=[];
-        try{notes=DraftQuality.sectionNotes(x,c,text3)||[];}catch(e){notes=[];}
-        var sys3;
-        try{sys3=sectionPrompt(x,c).system;}catch(e){res3.push({name:g.name,was:was,left:was,min:g.min,max:g.max});return go(k+1);}
-        setStatus('Дописываю «'+g.name+'»: сейчас '+was+' слов, норма '+g.min+'–'+g.max+'.'+(retry?' Повторная попытка.':''),'info');
-        var user3='Переработай раздел «'+c.name+'» учебной работы так, чтобы он содержал '+want+'–'+g.max+' слов. Сейчас '+was+' слов, это меньше нормы.\n'+
-          DraftQuality.sectionRules(c)+'\n'+
-          'Увеличивай объём только за счёт разбора того, что уже есть в материалах: раскрывай связь между наблюдением, действием и способом проверки результата. Ни одного нового факта, числа, источника или норматива не добавляй.\n'+
-          'Сохрани дословно все числа, расчёты, ссылки на источники вида [S1] и выводы, которые уже есть в тексте.\n'+
-          (notes.length?'Устрани замечания: '+notes.join(' ')+'\n':'')+
-          'Заголовок раздела не пиши. Верни только готовый текст раздела.\n\nТЕКУЩИЙ ТЕКСТ РАЗДЕЛА:\n'+text3;
-        askAI(prov3,sys3,user3,{section:g.id,stage:'extend',attempt:retry?2:1}).then(function(r){
+      /* 5. Дописывание, когда раздел короче нормы. */
+      function extend(g,el,retry,done){
+        var c=(doc.order||[]).filter(function(q){return q.id===g.id;})[0];
+        if(!c)return done(DraftQuality.wordCount(el.querySelector('.secText').value));
+        var text=el.querySelector('.secText').value,was=DraftQuality.wordCount(text);
+        var want=Math.round(g.min+(g.max-g.min)*(retry?0.45:0.28)),notes=[];
+        try{notes=DraftQuality.sectionNotes(x,c,text)||[];}catch(e){notes=[];}
+        var sysE;try{sysE=sectionPrompt(x,c).system;}catch(e){return done(was);}
+        setStatus('«'+g.name+'»: дописываю, сейчас '+was+' слов, норма от '+g.min+'.'+(retry?' Повторная попытка.':''),'info');
+        askAI(provN,sysE,'Переработай раздел «'+c.name+'» так, чтобы он содержал '+want+'–'+g.max+' слов. Сейчас '+was+'.\n'+DraftQuality.sectionRules(c)+'\n'+
+          'Объём увеличивай только разбором того, что уже есть в материалах: связь наблюдения, действия и способа проверки результата. Ни одного нового факта, числа, источника или норматива.\n'+
+          'Сохрани дословно все числа, расчёты, ссылки вида [S1] и выводы.\n'+(notes.length?'Устрани замечания: '+notes.join(' ')+'\n':'')+
+          'Заголовок не пиши. Верни только текст раздела.\n\nТЕКУЩИЙ ТЕКСТ:\n'+text,{section:g.id,stage:'extend',attempt:retry?2:1})
+        .then(function(r){
           var got=DraftQuality.cleanSection(String(r.text||''),c).trim(),now=DraftQuality.wordCount(got);
-          if(got&&now>=g.min&&now<=g.max){
-            el.querySelector('.secText').value=got;
-            el.querySelector('.secStat').textContent=got.length+' знаков · дописано';
-            doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by='дописано';
-            readBack();
-            res3.push({name:g.name,was:was,left:now,min:g.min,max:g.max});
-            return go(k+1);
-          }
-          if(!retry)return go(k,true);
-          res3.push({name:g.name,was:was,left:was,min:g.min,max:g.max});
-          go(k+1);
-        }).catch(function(e){
-          setStatus('«'+g.name+'»: '+(e.message||'отказ')+'. Раздел оставлен без изменений.','err');
-          res3.push({name:g.name,was:was,left:was,min:g.min,max:g.max});
-          genBusy=false;DraftEditor.lock(wrap,false);
+          if(got&&now>=g.min&&now<=g.max){put(g,el,got,'дописано');return done(now);}
+          if(!retry)return extend(g,el,true,done);
+          done(was);
+        }).catch(function(e){done(was,e.message);});
+      }
+      /* Порядок работ */
+      var list=sectionsOf(),over=list.filter(function(g){return g.words>g.max;}),under=list.filter(function(g){return g.words<g.min;});
+      var tables=0;
+      if(!over.length&&!under.length){
+        tables=captions();
+        setStatus(tables?'Подписано таблиц: '+tables+'. Объём всех разделов в норме. Нажмите «Сохранить», затем «Проверить готовность».':'Всё уже в норме: объём разделов и подписи таблиц. Правки не требуются.','ok');
+        return;
+      }
+      if(!confirm('Довести до нормы разделы: '+over.concat(under).map(function(g){return g.name;}).join(', ')+'? Текст этих разделов будет изменён. Предыдущая версия сохранится и её можно вернуть.'))return;
+      if(!DraftEditor.backup(x))return;
+      genBusy=true;DraftEditor.lock(wrap,true);
+      tables=captions();
+      function finish(){
+        genBusy=false;DraftEditor.lock(wrap,false);
+        var bad=itogo.filter(function(r){return r.left<r.min||r.left>r.max;});
+        setStatus((tables?'Подписано таблиц: '+tables+'. ':'')+itogo.map(function(r){
+          return '«'+r.name+'» '+r.was+' → '+r.left+' слов'+(r.left<r.min?' (норма от '+r.min+', не дотянули)':r.left>r.max?' (норма до '+r.max+', сверх нормы)':' — в норме');
+        }).join('; ')+'. Нажмите «Сохранить», затем «Проверить готовность».',bad.length?'err':'ok');
+      }
+      function longOnes(k){
+        if(k>=over.length)return shortOnes(0);
+        var g=over[k],el=wrap.querySelector('[data-sec="'+g.id+'"]');
+        if(!el){itogo.push({name:g.name,was:g.words,left:g.words,min:g.min,max:g.max});return longOnes(k+1);}
+        var was=DraftQuality.wordCount(el.querySelector('.secText').value);
+        setStatus('«'+g.name+'»: убираю повторяющиеся абзацы…','info');
+        var d=dedupe(el.querySelector('.secText').value);
+        if(d.removed)put(g,el,d.text,'без повторов');
+        shrink(g,el,1,function(left){
+          if(left<=g.max){itogo.push({name:g.name,was:was,left:left,min:g.min,max:g.max});return longOnes(k+1);}
+          setStatus('«'+g.name+'»: сокращение не уложилось в норму, пишу раздел заново.','info');
+          rewrite(g,el,function(after){
+            itogo.push({name:g.name,was:was,left:after,min:g.min,max:g.max});
+            longOnes(k+1);
+          });
         });
       }
-      go(0,false);
+      function shortOnes(k){
+        if(k>=under.length)return finish();
+        var g=under[k],el=wrap.querySelector('[data-sec="'+g.id+'"]');
+        if(!el){itogo.push({name:g.name,was:g.words,left:g.words,min:g.min,max:g.max});return shortOnes(k+1);}
+        var was=DraftQuality.wordCount(el.querySelector('.secText').value);
+        extend(g,el,false,function(left){
+          itogo.push({name:g.name,was:was,left:left,min:g.min,max:g.max});
+          shortOnes(k+1);
+        });
+      }
+      longOnes(0);
       return;
     }
     if(t.closest('[data-draft-check]')){readBack();DraftEditor.check(x);return;}
