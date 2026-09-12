@@ -46,7 +46,7 @@
    refs.forEach(function(n){
     if(inList.length&&inList.indexOf(n)<0)errors.push('Раздел «'+c.name+'»: ссылка [S'+n+'] ведёт к источнику, которого нет в списке.');
    });
-   if(wordCount(text)>=300&&!refs.length)errors.push('Раздел «'+c.name+'» не содержит ни одной ссылки на источник.');
+   if(wordCount(text)>=300&&!refs.length&&!/^(app|refs|prilozh)/i.test(c.id))errors.push('Раздел «'+c.name+'» не содержит ни одной ссылки на источник.');
   });
   if(!inList.length&&used.length)errors.push('В тексте есть ссылки на источники, но в материалах не указан список источников с обозначениями [S1], [S2].');
   inList.forEach(function(n){
@@ -80,11 +80,10 @@
    });
   });
   captions.sort(function(a,b){return a-b;});
-  captions.forEach(function(n,i){
-   if(n!==i+1&&errors.indexOf('Нумерация таблиц идёт с пропусками: после таблицы '+(i)+' идёт таблица '+n+'.')<0&&i>0)
-    errors.push('Нумерация таблиц идёт с пропусками: после таблицы '+captions[i-1]+' идёт таблица '+n+'.');
-  });
-  if(captions.length&&captions[0]!==1)errors.push('Нумерация таблиц начинается не с единицы, а с '+captions[0]+'.');
+  var gaps=[];
+  captions.forEach(function(n,i){if(i&&n!==captions[i-1]+1)gaps.push(captions[i-1]+' → '+n);});
+  if(captions.length&&captions[0]!==1)gaps.unshift('начало с '+captions[0]+' вместо 1');
+  if(gaps.length)errors.push('Нумерация таблиц нарушена ('+gaps.join('; ')+'). Подписи должны идти подряд с единицы.');
   return {errors:Array.from(new Set(errors)),captions:captions};
  }
  function preflight(x){
