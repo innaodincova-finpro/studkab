@@ -95,3 +95,13 @@ R2/R3/R4. Крупный раздел раскладывается в устой
 Все записи остаются в существующих таблицах, схемы/права не меняются. 107 Node-тестов
 пройдены. Реальная платная генерация и A1/FIN-UAT-01 не заявляются. Откат: прежние
 версии функций при выключенном расписании, сохранённые результаты не удалять.
+
+## C-010 — current DeepSeek names, 2026-09-12
+R1/R2/R4/R9. Uploaded live worker equals repository source after newline normalization.
+Add explicit deepseek-flash and deepseek-v4-pro support; legacy names remain unchanged,
+no silent remapping or change of default. For explicit Flash requests disable thinking
+per official https://api-docs.deepseek.com/guides/thinking_mode/ to retain bounded text mode.
+Other providers, auth, limits and secrets unchanged. USD1 cumulative test cap exists;
+this change does not enable the runner or create paid requests. Validate payload routing,
+unknown-model rejection and existing worker tests. Rollback: previous worker version.
+Manual Cloudflare deployment required because connector has no Worker deployment tool.

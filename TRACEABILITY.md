@@ -71,3 +71,10 @@ API 8a0113a7 установлен как studkab-generation-api v1 с verify_jwt
 Рабочая проверка JWT без cron_token отклонена 401. Итог: 9 проходов расписания,
 budget/reserved/jobs/attempts = 0. Ключ посредника не настроен; значения секретов
 не извлекались. Полный реальный запуск, приёмка A1 и FIN-UAT-01 не выполнены.
+
+## 2026-09-12 — uploaded live Worker verified
+R1/R2/R4/R9 C010: uploaded ai-proxy equals tracked worker after newline normalization.
+Added modern DeepSeek allowlist entries and explicit Flash non-thinking mode; no legacy
+remapping. node --test tests/ai-proxy.test.mjs: 14/14 with mocked provider, no paid calls.
+Manual deployment pending; runner still uses legacy name and remains disabled.
+USD1 cap previously verified, reserved0/jobs0/attempts0. A1 and FIN-UAT-01 open.

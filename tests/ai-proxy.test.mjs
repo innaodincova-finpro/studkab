@@ -93,3 +93,18 @@ test('client cancellation aborts upstream without retry',async t=>{
   const reader=r.body.getReader();await reader.read();await reader.cancel();
   assert.equal(signal.aborted,true);assert.equal(f.mock.callCount(),1);
 });
+test('explicit modern DeepSeek models route without silently changing legacy models',async t=>{
+  let sent;
+  t.mock.method(globalThis,'fetch',async(url,opts)=>{assert.equal(url,'https://api.deepseek.com/chat/completions');sent=JSON.parse(opts.body);return reply();});
+  for(const model of ['deepseek-chat','deepseek-reasoner','deepseek-flash','deepseek-v4-pro']){
+    const r=await worker.fetch(request({...basic,model,max_tokens:2500}),env);
+    assert.equal(r.status,200);assert.equal(sent.model,model);assert.equal(sent.max_tokens,2500);
+    assert.deepEqual(sent.thinking,model==='deepseek-flash'?{type:'disabled'}:undefined);
+    assert.equal((await r.json()).model,model);
+  }
+});
+test('unknown DeepSeek model blocked before paid dispatch',async t=>{
+  const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});
+  assert.equal((await worker.fetch(request({...basic,model:'deepseek-unapproved'}),env)).status,400);
+  assert.equal(f.mock.callCount(),0);
+});
