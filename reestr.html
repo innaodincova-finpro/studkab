@@ -1033,6 +1033,38 @@ function openDocBuilder(id){
           var exportInfo=JSON.parse(JSON.stringify(info));
           download.onclick=function(){try{current();var draft=DraftQuality.cloudDraft(exportInfo),blob=ResultDocx(draft,draft.chapters),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Неполный-черновик-'+exportInfo.job.id+'.docx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},4000);}catch(e){message.textContent=e.message;}};
           review.appendChild(download);
+          var swap=document.createElement('label');swap.style.display='block';swap.style.margin='10px 0 4px';
+          swap.innerHTML='<input type="checkbox" data-cloud-overwrite> Заменять разделы, в которых уже есть текст';
+          review.appendChild(swap);
+          var apply=document.createElement('button');apply.type='button';apply.className='chip ok';apply.textContent='Перенести в документ';apply.disabled=!report.saved;
+          // Переносим только полностью собранные разделы и только в существующие разделы документа.
+          apply.onclick=function(){
+            try{
+              current();
+              var rep=DraftQuality.cloudReport(exportInfo.parts),moved=[],skipped=[];
+              var overwrite=wrap.querySelector('[data-cloud-overwrite]').checked;
+              rep.sections.forEach(function(g){
+                var el=wrap.querySelector('[data-sec="'+g.id+'"]');
+                if(!el){skipped.push('«'+g.id+'» — такого раздела нет в документе');return;}
+                if(g.saved!==g.total){skipped.push('«'+g.id+'» — собраны не все части ('+g.saved+' из '+g.total+')');return;}
+                var chapter=(doc.order||[]).filter(function(q){return q.id===g.id;})[0]||{id:g.id,name:g.id};
+                var text=DraftQuality.cleanSection(g.text,chapter).trim();
+                if(!text){skipped.push('«'+g.id+'» — пустой текст');return;}
+                var box=el.querySelector('.secText');
+                if(box.value.trim()&&box.value.trim()!==text&&!overwrite){skipped.push('«'+chapter.name+'» — уже заполнен, замена не разрешена');return;}
+                box.value=text;box.style.minHeight='160px';
+                doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by='облако';
+                el.querySelector('.secStat').textContent=text.length+' знаков · облако';
+                moved.push(chapter.name||g.id);
+              });
+              if(!moved.length&&!skipped.length){message.textContent='Переносить нечего.';return;}
+              readBack();
+              message.textContent=(moved.length?'Перенесено в документ: '+moved.join(', ')+'. ':'Ничего не перенесено. ')+
+                (skipped.length?'Пропущено: '+skipped.join('; ')+'.':'')+
+                (moved.length?' Проверьте текст и нажмите «Сохранить».':'');
+            }catch(e){message.textContent=e.message||'Перенести не удалось.';}
+          };
+          review.appendChild(apply);
           target.appendChild(review);
           info.parts.filter(function(p){return p.state==='done';}).forEach(function(p){var details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent='Сохранённый раздел '+p.id;text.style.whiteSpace='pre-wrap';text.textContent=p.text;details.append(summary,text);target.appendChild(details);});
         });
