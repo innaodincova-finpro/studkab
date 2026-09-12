@@ -1,0 +1,1 @@
+Deno.serve(() => new Response('Check completed and disabled', {status:410}));
