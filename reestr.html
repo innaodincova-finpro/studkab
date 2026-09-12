@@ -892,7 +892,7 @@ function openDocBuilder(id){
         ? '<button type="button" class="chip" data-genover="1">Подготовить новую версию</button>'
         : '') +
     '</div></details>' +
-    '<button type="button" class="chip" data-draft-rewrite>Переписать по норме</button><button type="button" class="chip" data-draft-shrink>Сократить до нормы</button><button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
+    '<button type="button" class="chip" data-draft-rewrite>Переписать по норме</button><button type="button" class="chip" data-draft-extend>Дописать до нормы</button><button type="button" class="chip" data-draft-shrink>Сократить до нормы</button><button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
     '<div class="rowbtns">' +
     '<button type="button" class="btn ghost" data-docsave="1" style="flex:1">Сохранить</button></div>'
   );
@@ -1257,6 +1257,64 @@ function openDocBuilder(id){
         part();
       }
       one(0);
+      return;
+    }
+    if(t.closest('[data-draft-extend]')){
+      if(genBusy)return;
+      readBack();
+      var acc3=DraftQuality.finAcceptance(x),small=[];
+      if(acc3.applicable&&acc3.sections.length){
+        acc3.sections.forEach(function(sec){if(sec.words&&sec.words<sec.min)small.push({id:sec.id,name:sec.name,min:sec.min,max:sec.max});});
+      }
+      if(!small.length){setStatus('Разделов короче нормы нет. Дописывать нечего.','ok');return;}
+      var sel3=wrap.querySelector('#docProv');
+      if(!sel3){setStatus('Не выбран поставщик. Откройте «Настройки подготовки».','err');return;}
+      if(!confirm('Дописать до нормы разделы: '+small.map(function(g){return g.name;}).join(', ')+'? Текст этих разделов будет заменён дополненным. Предыдущая версия сохранится.'))return;
+      if(!DraftEditor.backup(x))return;
+      var prov3=sel3.value,res3=[];
+      genBusy=true;DraftEditor.lock(wrap,true);
+      function go(k,retry){
+        if(k>=small.length){
+          genBusy=false;DraftEditor.lock(wrap,false);
+          var bad=res3.filter(function(r){return r.left<r.min||r.left>r.max;});
+          setStatus(res3.map(function(r){return '«'+r.name+'» '+r.was+' → '+r.left+' слов'+(r.left<r.min?' (норма от '+r.min+', не дотянули)':r.left>r.max?' (норма до '+r.max+', перебор)':' — в норме');}).join('; ')+'. Нажмите «Сохранить», затем «Проверить готовность».',bad.length?'err':'ok');
+          return;
+        }
+        var g=small[k],c=(doc.order||[]).filter(function(q){return q.id===g.id;})[0],el=wrap.querySelector('[data-sec="'+g.id+'"]');
+        if(!c||!el){res3.push({name:g.name,was:0,left:0,min:g.min,max:g.max});return go(k+1);}
+        var text3=el.querySelector('.secText').value,was=DraftQuality.wordCount(text3);
+        var want=Math.round(g.min+(g.max-g.min)*(retry?0.45:0.28));
+        var notes=[];
+        try{notes=DraftQuality.sectionNotes(x,c,text3)||[];}catch(e){notes=[];}
+        var sys3;
+        try{sys3=sectionPrompt(x,c).system;}catch(e){res3.push({name:g.name,was:was,left:was,min:g.min,max:g.max});return go(k+1);}
+        setStatus('Дописываю «'+g.name+'»: сейчас '+was+' слов, норма '+g.min+'–'+g.max+'.'+(retry?' Повторная попытка.':''),'info');
+        var user3='Переработай раздел «'+c.name+'» учебной работы так, чтобы он содержал '+want+'–'+g.max+' слов. Сейчас '+was+' слов, это меньше нормы.\n'+
+          DraftQuality.sectionRules(c)+'\n'+
+          'Увеличивай объём только за счёт разбора того, что уже есть в материалах: раскрывай связь между наблюдением, действием и способом проверки результата. Ни одного нового факта, числа, источника или норматива не добавляй.\n'+
+          'Сохрани дословно все числа, расчёты, ссылки на источники вида [S1] и выводы, которые уже есть в тексте.\n'+
+          (notes.length?'Устрани замечания: '+notes.join(' ')+'\n':'')+
+          'Заголовок раздела не пиши. Верни только готовый текст раздела.\n\nТЕКУЩИЙ ТЕКСТ РАЗДЕЛА:\n'+text3;
+        askAI(prov3,sys3,user3,{section:g.id,stage:'extend',attempt:retry?2:1}).then(function(r){
+          var got=DraftQuality.cleanSection(String(r.text||''),c).trim(),now=DraftQuality.wordCount(got);
+          if(got&&now>=g.min&&now<=g.max){
+            el.querySelector('.secText').value=got;
+            el.querySelector('.secStat').textContent=got.length+' знаков · дописано';
+            doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by='дописано';
+            readBack();
+            res3.push({name:g.name,was:was,left:now,min:g.min,max:g.max});
+            return go(k+1);
+          }
+          if(!retry)return go(k,true);
+          res3.push({name:g.name,was:was,left:was,min:g.min,max:g.max});
+          go(k+1);
+        }).catch(function(e){
+          setStatus('«'+g.name+'»: '+(e.message||'отказ')+'. Раздел оставлен без изменений.','err');
+          res3.push({name:g.name,was:was,left:was,min:g.min,max:g.max});
+          genBusy=false;DraftEditor.lock(wrap,false);
+        });
+      }
+      go(0,false);
       return;
     }
     if(t.closest('[data-draft-check]')){readBack();DraftEditor.check(x);return;}
