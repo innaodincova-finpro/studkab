@@ -245,3 +245,13 @@ and service-role denial. No automatic price inference or production release perf
 User screenshot shows rounded account-wide cost0.05/64 calls, balance1.94; account/key
 coverage of the five server attempts is not yet established. Do not treat rounded
 account total as per-request settlement. Deployment and verified reconciliation pending.
+C021 schema installed successfully in production; readback confirms cap/reserve both
+1250000,5 original attempts,0 reconciliations, service_role cannot execute release.
+Native PostgreSQL rollback test rejects release of unknown attempt. Advisors show no
+warning for the new function/table; no client RLS policies is intentional admin-only.
+Full CI pending on PR42. Funds still held: provider-account coverage needs export.
+C021 CI34693992917 SUCCESS. Automatic approval rejected merging PR42 into main:
+implementation authorization was not accepted as explicit protected-branch merge
+permission. No alternate merge path attempted. Schema is already installed; actual
+reconciliation still not performed. Await explicit PR42 merge approval and provider
+export for account/request coverage before releasing reservations.
