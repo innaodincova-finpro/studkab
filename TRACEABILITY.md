@@ -66,3 +66,8 @@ API 8a0113a7 установлен как studkab-generation-api v1 с verify_jwt
 Подготовлены ограниченные части, контекст только своего job, остановка до dispatch
 при превышении контекста. 107/107 Node-тестов. Бюджет не повышен, платных вызовов нет.
 Протокол и ограничения: supabase/GENERATION_SCHEDULE_ACCEPTANCE.md.
+
+1ef690f2: GitHub Safety checks #105 (34673870947) success: Node, SQL, browser.
+Рабочая проверка JWT без cron_token отклонена 401. Итог: 9 проходов расписания,
+budget/reserved/jobs/attempts = 0. Ключ посредника не настроен; значения секретов
+не извлекались. Полный реальный запуск, приёмка A1 и FIN-UAT-01 не выполнены.

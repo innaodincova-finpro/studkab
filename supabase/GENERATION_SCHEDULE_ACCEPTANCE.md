@@ -34,3 +34,13 @@ verify_jwt=true on both. Runner hash 76e9ac642fc9a04e9cee7a81e1add023180b6ab46a8
 API hash 162090d44777f06007868cca58be9d36456f7814f7613c5e5db613007b89c141.
 Scheduler had 3 successful empty-queue ticks at verification. This is proof of the
 schedule itself, not proof of running a model or surviving a server interruption.
+
+Final code checkpoint 1ef690f2: GitHub Safety checks #105, run34673870947, SUCCESS
+(Node, SQL and browser suite). API v3 additionally refuses intake when proxy secret
+is absent. Negative live probe18845 with public JWT but no private cron token: HTTP401.
+Final database check: budget0, reserved0, jobs0, attempts0; 9 successful cron ticks.
+Remaining operator setup is documented, not bypassed: add STUDKAB_PROXY_TOKEN in
+Supabase Edge Function Secrets using the existing proxy password, and set
+STUDKAB_GENERATION_ENABLED=true only with all spend gates retained. Server part
+reservation and authorized numerical budget must be verified before paid dispatch.
+No secrets should be pasted in chat. Current main remains unchanged and PR35 draft.
