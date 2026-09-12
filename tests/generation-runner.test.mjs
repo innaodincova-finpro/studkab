@@ -89,3 +89,9 @@ test('oversized context stops before dispatch and provider',async()=>{
  const r=await h(new Request('https://internal',{method:'POST',headers:{'X-Studkab-Runner':'test'}}));
  assert.equal(r.status,409);assert.equal((await r.json()).code,'CONTEXT_TOO_BIG');assert.equal(sent,0);assert.equal(blocked,1);
 });
+
+test('test runner refuses underfunded immutable parts before dispatch',async()=>{
+ const {checkReserve}=await import('../supabase/functions/studkab-generation/reserve.mjs');
+ for(const value of [undefined,0,249999,'250000',NaN])assert.throws(()=>checkReserve({spec:{max_cost_microusd:value}}));
+ const c={spec:{max_cost_microusd:250000}};assert.equal(checkReserve(c),c);
+});

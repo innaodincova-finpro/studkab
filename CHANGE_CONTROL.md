@@ -105,3 +105,12 @@ Other providers, auth, limits and secrets unchanged. USD1 cumulative test cap ex
 this change does not enable the runner or create paid requests. Validate payload routing,
 unknown-model rejection and existing worker tests. Rollback: previous worker version.
 Manual Cloudflare deployment required because connector has no Worker deployment tool.
+
+## C-011 — bounded Flash test runner
+R2/R4: user reports Worker deployed. Pin runner to deepseek-flash, retain disabled
+by default and JWT/cron guards. Require per-part reservation >=250000 microUSD before
+dispatch, including direct database starts. Max180000 UTF16 units <=540000 UTF8 bytes;
+byte-level token upper bound plus framing and 2500 output at peak Flash rates
+($0.30/M input, $1.20/M output) fits USD0.25 conservative reservation.
+Official pricing checked 2026-09-12. No automatic replenishment: global cap USD1.
+Rollback previous runner while disabled. Live paid test remains pending enable flag.
