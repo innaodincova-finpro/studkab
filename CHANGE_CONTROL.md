@@ -222,3 +222,20 @@ Alternative reset rejected: destroys cost history and exposes unknown requests.
 Validate locally before installation. Installation itself releases no funds and sends
 no model request. Actual reconciliation needs account/request evidence. Rollback may
 remove the callable function but must preserve audit records and accounting balances.
+
+
+## C-024 — восстановление браузерного CI, 2026-09-12
+
+R5/R8/R9, блокер Этапов 1–2. Два независимых Safety workflow воспроизводимо
+завершились одинаково: Node и PostgreSQL прошли, а четыре browser-теста искали
+устаревшие подписи облачных разделов и общий флажок одобрения неполного документа.
+Текущий интерфейс показывает названия глав из документа и правильно не выводит
+флажок при блокирующих замечаниях. Выбран вариант обновить тестовый контракт,
+не ослабляя quality gate и не меняя runtime. Альтернатива вернуть общий флажок
+отклонена как нарушение R8.
+
+Изменяются только browser-тест и документы контроля в отдельном PR от main.
+Production, данные, права, бюджет и приложение не меняются. Проверка: полный
+Safety workflow; ожидается 41/41 browser, 132/132 Node и PostgreSQL. Локальный
+браузерный прогон заблокирован отсутствующим браузером и сетевым тайм-аутом его
+загрузки, поэтому результат не объявляется до CI. Откат — revert тестового commit.
