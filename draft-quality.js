@@ -76,14 +76,15 @@
    if(mentions&&!hasRows)errors.push('Раздел «'+c.name+'» ссылается на таблицу, но самой таблицы в нём нет: приведите данные таблицей.');
    // собираем номера подписей
    (text.match(/Таблица\s+(\d{1,3})\s*[—–-]/gi)||[]).forEach(function(m){
-    var n=Number(String(m).replace(/\D+/g,''));if(n&&captions.indexOf(n)<0)captions.push(n);
+    var n=Number(String(m).replace(/\D+/g,''));if(n)captions.push(n);
    });
   });
-  captions.sort(function(a,b){return a-b;});
-  var gaps=[];
-  captions.forEach(function(n,i){if(i&&n!==captions[i-1]+1)gaps.push(captions[i-1]+' → '+n);});
-  if(captions.length&&captions[0]!==1)gaps.unshift('начало с '+captions[0]+' вместо 1');
-  if(gaps.length)errors.push('Нумерация таблиц нарушена ('+gaps.join('; ')+'). Подписи должны идти подряд с единицы.');
+  var dupes=[],seenN={};
+  captions.forEach(function(n){if(seenN[n]&&dupes.indexOf(n)<0)dupes.push(n);seenN[n]=true;});
+  if(dupes.length)errors.push('Один и тот же номер таблицы стоит у разных таблиц: '+dupes.join(', ')+'. Ссылки в тексте указывают непонятно на какую из них.');
+  var wrong=captions.some(function(n,i){return n!==i+1;});
+  if(wrong&&!dupes.length)errors.push('Нумерация таблиц идёт не подряд: по порядку в документе стоят номера '+captions.join(', ')+'. Должно быть с единицы и без пропусков.');
+  if(wrong&&dupes.length)errors.push('Нумерация таблиц нарушена: по порядку в документе стоят номера '+captions.join(', ')+'.');
   return {errors:Array.from(new Set(errors)),captions:captions};
  }
  function preflight(x){
