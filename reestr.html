@@ -1264,7 +1264,7 @@ function openDocBuilder(id){
       var tables=0;
       if(!over.length&&!under.length&&!noCite.length){
         tables=captions();
-        setStatus(tables?'Подписано таблиц: '+tables+'. Объём всех разделов в норме. Нажмите «Сохранить», затем «Проверить готовность».':'Всё уже в норме: объём разделов и подписи таблиц. Правки не требуются.','ok');
+        setStatus((tables?'Подписано таблиц: '+tables+'. ':'')+'Правок не требуется. Насчитано: разделов сверх нормы '+over.length+', короче нормы '+under.length+', без ссылок на источники '+noCite.length+'. Всего разделов с текстом: '+list.length+'.','ok');
         return;
       }
       if(!confirm('Довести до нормы: '+(over.concat(under).map(function(g){return g.name;}).concat(noCite.map(function(id){var c=(doc.order||[]).filter(function(q){return q.id===id;})[0];return (c?c.name:id)+' (ссылки на источники)';})).join(', '))+'? Текст этих разделов будет изменён. Предыдущая версия сохранится и её можно вернуть.'))return;
