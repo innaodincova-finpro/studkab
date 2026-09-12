@@ -133,3 +133,10 @@ R9. Integration branch lacked main's mandatory reporting instructions and PR che
 Merge main a34efc6 into feature branch; preserve both independent change-control entries.
 No production main update, deployment, data mutation or budget change.
 Run combined Node suite and CI before publishing the experimental interface.
+
+## C-014 — recover lost browser job link
+R2/R3/R9. Browser can close after server Start before saving returned job id.
+Add executor-only request history (metadata only, max20 newest) and explicit selection
+in client when no job link exists. Recovered job has unknown basis, always warns old
+version; never overwrites document or starts generation. Test owner filter, metadata
+minimization, browser selection and preserved document. No new paid calls.

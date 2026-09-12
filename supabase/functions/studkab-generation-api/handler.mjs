@@ -55,6 +55,11 @@ export function handler({auth,config,db,settings}){
      p_input:prepared.snapshot,p_plan:prepared.plan});
     return reply({job,status:'queued'});
    }
+   if(input.action==='history'){
+    if(typeof input.request!=='string'||!idPattern.test(input.request))return reply({error:'INVALID_INPUT'},400);
+    const jobs=await db('studkab_gen_jobs?request_id=eq.'+encodeURIComponent(input.request)+'&owner_id=eq.'+encodeURIComponent(user.id)+'&select=id,request_id,version,status,created_at&order=created_at.desc&limit=20');
+    return reply({jobs});
+   }
    if(input.action==='status'){
     if(!uuid.test(input.job||''))return reply({error:'INVALID_JOB'},400);
     const [job]=await db('studkab_gen_jobs?id=eq.'+input.job+'&owner_id=eq.'+encodeURIComponent(user.id)+'&select=id,request_id,version,status,created_at');

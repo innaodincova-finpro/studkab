@@ -87,3 +87,10 @@ passed and transaction rolled back. No HTTP/model request. Script tests/manual/g
 This does not simulate process kill or network interruption at the Edge runtime.
 C012 aligns API capability with minimum250000 and whole-part remaining reserve;
 14 API tests pass. Browser live executor acceptance still blocked on unpublished UI.
+
+## 2026-09-12 — main compatibility and lost job link
+Merged main a34efc6 into feature; preserved reporting rules and both change records.
+C014 adds executor-scoped request history and explicit result selection when browser
+lost Start response. No automatic generation; basis unknown warns before use.
+113 Node tests pass. Added browser scenario with two history choices and no paid Start;
+CI verification pending. Main remains unpublished; real authenticated browser still pending.

@@ -44,3 +44,11 @@ test('reserve below runner minimum cannot advertise or start work',async()=>{
  assert.equal((await s.request(valid)).status,400);
  assert.ok(s.calls.every(c=>!c.path.startsWith('rpc/')));
 });
+
+test('lost job history filters by executor and request without selecting snapshots',async()=>{
+ const s=setup();assert.equal((await s.request({action:'history',request:'rq-test'})).status,200);
+ const path=s.calls[0].path;assert.ok(path.includes('owner_id=eq.'+uid));
+ assert.ok(path.includes('request_id=eq.rq-test'));assert.ok(path.includes('limit=20'));
+ assert.equal(path.includes('snapshot'),false);
+ const bad=setup();assert.equal((await bad.request({action:'history',request:'x&owner_id=neq.x'})).status,400);assert.equal(bad.calls.length,0);
+});

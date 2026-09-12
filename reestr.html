@@ -1001,12 +1001,20 @@ function openDocBuilder(id){
             message.textContent='Задание сохранено в облаке. Нажмите «Проверить результат», чтобы узнать состояние.';
           });
         }
-        if(!doc.serverJob||!doc.serverJob.id)throw Error('У этой заявки пока нет сохранённого облачного запуска.');
+        if(cloudStatus.dataset.recoverJob){
+          doc.serverJob={id:cloudStatus.dataset.recoverJob,basis:null};save();
+        }
+        if(!doc.serverJob||!doc.serverJob.id)return Oblako.generationApi({action:'history',request:String(x.id)}).then(function(info){
+          current();var target=wrap.querySelector('[data-cloud-result]');target.replaceChildren();
+          message.textContent=info.jobs.length?'Найдены сохранённые запуски. Выберите нужный (показаны последние 20). Материалы выбранного запуска потребуется сверить.':'У этой заявки пока нет сохранённых облачных запусков.';
+          info.jobs.forEach(function(job){var b=document.createElement('button');b.type='button';b.className='chip';b.dataset.cloudStatus='';b.dataset.recoverJob=job.id;b.textContent='Открыть запуск '+job.created_at;target.appendChild(b);});
+        });
         return Oblako.generationApi({action:'status',job:doc.serverJob.id}).then(function(info){
           current();
           var labels={queued:'Ожидает обработки',running:'Выполняется',unknown:'Результат последнего запроса неизвестен. Автоматический повтор заблокирован.',budget:'Остановлено по лимиту расходов',complete:'Части сохранены. Требуется проверка документа.'};
           message.textContent=(labels[info.job.status]||'Состояние уточняется')+' Сохранено частей: '+info.parts.filter(function(p){return p.state==='done';}).length+' из '+info.parts.length+'.';
-          if(doc.serverJob.basis!==DraftEditor.basis(x))message.textContent+=' Материалы изменены: это результат прежней версии.';
+          if(doc.serverJob.basis===null)message.textContent+=' Связь с текущими материалами не подтверждена: проверьте выбранную версию.';
+          else if(doc.serverJob.basis!==DraftEditor.basis(x))message.textContent+=' Материалы изменены: это результат прежней версии.';
           var target=wrap.querySelector('[data-cloud-result]');target.replaceChildren();
           info.parts.filter(function(p){return p.state==='done';}).forEach(function(p){var details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent='Сохранённый раздел '+p.id;text.style.whiteSpace='pre-wrap';text.textContent=p.text;details.append(summary,text);target.appendChild(details);});
         });

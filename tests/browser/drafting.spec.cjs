@@ -61,3 +61,27 @@ test('cloud preparation blocks zero budget and preserves edited document',async(
  await page.getByText('Сохранённый раздел ch1',{exact:true}).click();
  await expect(page.locator('[data-cloud-result]')).toContainText('Облачный текст');
 });
+
+test('lost cloud job link is recovered by selection without another paid start',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  draftItem.doc.structure.ch1.text='Мой текст';delete draftItem.doc.serverJob;
+  window.recoveryActions=[];
+  Oblako.generationApi=async body=>{
+   recoveryActions.push(body.action);
+   if(body.action==='history')return {jobs:[{id:'22222222-2222-4222-8222-222222222222',created_at:'2026-09-12T06:00:00Z'},{id:'33333333-3333-4333-8333-333333333333',created_at:'2026-09-12T05:00:00Z'}]};
+   if(body.action==='status')return {job:{status:'complete'},parts:[{id:'ch1',state:'done',text:'Сохранённый ответ'}]};
+   throw Error('Paid Start is forbidden in recovery');
+  };
+ });
+ await page.getByText('Подготовка в облаке',{exact:true}).click();
+ await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+ await expect(page.locator('[data-recover-job]')).toHaveCount(2);
+ await page.locator('[data-recover-job]').first().click();
+ await expect(page.locator('[data-cloud-message]')).toContainText('не подтверждена');
+ expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой текст');
+ expect(await page.evaluate(()=>recoveryActions)).toEqual(['history','status']);
+ await page.getByText('Сохранённый раздел ch1',{exact:true}).click();
+ await expect(page.locator('[data-cloud-result]')).toContainText('Сохранённый ответ');
+});
