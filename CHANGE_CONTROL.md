@@ -121,3 +121,15 @@ even below one part, and accepts a reserve the Flash runner refuses (<250000).
 Align API minimum reserve and availability with runner. Status reading stays available.
 Verify exact boundary, insufficient balance and invalid configuration before mutation.
 No budget increase, no student-data changes; rollback previous API.
+## C-003 — обязательный формат завершения этапа
+Основание: прямое поручение пользователя закрепить итог «Сделано / Следующий этап /
+Осталось / Ваше участие». Изменены AGENTS.md и шаблон PR. Это правило общения и
+контроля исполнения, не изменение архитектуры, данных или бюджета.
+Проверка: наличие четырёх пунктов и чтение сохранённых файлов из commit.
+Откат: отмена документального изменения. При объединении PR34 сохранить также его C-002.
+
+## C-013 — integrate current main without losing controls
+R9. Integration branch lacked main's mandatory reporting instructions and PR checklist.
+Merge main a34efc6 into feature branch; preserve both independent change-control entries.
+No production main update, deployment, data mutation or budget change.
+Run combined Node suite and CI before publishing the experimental interface.
