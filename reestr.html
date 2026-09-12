@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=5"></script><script src="draft-editor.js?v=3"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=5"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=6"></script><script src="draft-editor.js?v=4"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=5"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -965,7 +965,7 @@ function openDocBuilder(id){
       if(/^\s*НЕДОСТАТОЧНО ДАННЫХ:/i.test(res.text))throw Error(res.text.slice(0,2000));
       var errors=DraftQuality.issues({order:[c],structure:{[cid]:{text:res.text}}}).filter(function(e){return /пометок/.test(e);});
       if(errors.length)throw Error("Раздел содержит незаполненные пометки. Уточните материалы и продолжите подготовку.");
-      if(cid==='ch2' && DraftQuality.financial(x))res.text=DraftQuality.finance(DraftQuality.inputs(x).finance).text+"\n\n"+res.text;
+      if(cid==='ch2' && DraftQuality.financial(x) && !DraftQuality.extended(x))res.text=DraftQuality.finance(DraftQuality.inputs(x).finance).text+"\n\n"+res.text;
       el.querySelector(".secText").value = res.text;
       el.querySelector(".secText").style.minHeight = "160px";
       doc.structure[cid] = doc.structure[cid] || {}; doc.structure[cid].by = prov;
@@ -1040,6 +1040,16 @@ function openDocBuilder(id){
         message.textContent=labels[e.message]||e.message;
       }).finally(function(){button.disabled=!!cloudStart;});
       return;
+    }
+    if(t.closest('[data-fin-analysis]')){
+      readBack();try{
+        var calculated=DraftQuality.analysis(x);
+        function calcTable(headers,rows){return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:15px"><thead><tr>'+headers.map(function(h){return '<th style="padding:8px;border:1px solid #bfcbd5;text-align:left">'+esc(h)+'</th>';}).join('')+'</tr></thead><tbody>'+rows.map(function(row){return '<tr>'+row.map(function(cell){return '<td style="padding:8px;border:1px solid #bfcbd5">'+esc(String(cell))+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div>';}
+        var fmt=FinancialAnalysis.format;
+        var metrics=calcTable(['Показатель','Единицы'].concat(calculated.years),calculated.metrics.map(function(m){return [m.name,m.unit].concat(m.values.map(fmt));}));
+        var scenarios=calcTable(['Сокращение, дни','Высвобождение, тыс. руб.','Экономия процентов, тыс. руб.'],calculated.scenarios.map(function(s){return s.error?[s.days,s.error,'—']:[s.days,fmt(s.release),fmt(s.interestSaving)];}));
+        openModal('<button type="button" class="close" data-x="1">✕</button><h3>Финансовые расчёты</h3><p>Арифметическая проверка пройдена. Условия FIN-UAT-01: 365 дней, все продажи с отсрочкой, сценарная ставка 12%. Выводы и полнота работы требуют отдельной проверки.</p><details open><summary>20 показателей за три года</summary>'+metrics+'</details><details><summary>Сценарии сокращения инкассации</summary><p>Расчётное высвобождение полностью направляется на погашение кредита. Экономия процентов — будущая оценка до налогов и затрат.</p>'+scenarios+'</details><details><summary>Формулы, динамика и подробные расчёты</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(calculated.text)+'</pre></details>');
+      }catch(e){toast(e.message);}return;
     }
     if(t.closest('[data-draft-check]')){readBack();DraftEditor.check(x);return;}
     if(t.closest('[data-draft-restore]')){readBack();if(DraftEditor.restore(x)) {wrap.remove();openDocBuilder(id);}return;}

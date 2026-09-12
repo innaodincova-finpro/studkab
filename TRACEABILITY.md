@@ -143,3 +143,19 @@ Full FIN-UAT01, financial/source checks and A1 remain incomplete.
 Auto-review rejected original private-source fixture publication; those files and full
 requirements literal were removed from the upload scope. Only application code, synthetic
 test labels and this provenance summary are proposed. Local original files preserved.
+
+## 2026-09-12 — extended deterministic arithmetic (C018)
+financial-analysis.js parses monetary rows from current materials, validates balances,
+PNL, direct/indirect cash flow, equity/assets/loan movements and opening2022 data.
+Twenty metrics use end or average balances as specified, no intermediate rounding;
+zero denominators are null, not zero. Scenario guards prevent impossible repayments.
+Horizontal/vertical dynamics and profit bridge are computed from inputs, not reference.
+Local original examiner comparison:60/60 metric values within1e-9;21 scenario fields
+within0.005. Script tests/manual/verify-financial-reference.cjs takes private paths;
+no source/reference content published. Arithmetic tests include independent synthetic
+fixture, missing/blank/opening/conflicting data, zero revenue and insufficient loan.
+128 Node tests passed; browser calculation UI test added, CI pending.
+FIN-UAT preflight rejects conflicting8-column/materials values; deterministic result
+enters preparation context. Existing snapshots/results remain immutable and untouched.
+No paid calls. This does not certify generated prose, source claims, graphs, complete
+financial Word, server-side acceptance or full R6/A1/A2.

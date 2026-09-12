@@ -134,3 +134,15 @@ test('FIN-UAT original criteria prevent approval through the general checkbox',a
  await expect(page.getByText(/Общая галочка не разрешает передачу/)).toBeVisible();
  await expect(page.locator('[data-approve]')).toHaveCount(0);
 });
+
+test('extended financial calculation uses existing materials without AI calls',async({page})=>{
+ await setup(page);await page.keyboard.press('Escape');
+ const f=require('../fixtures/financial-synthetic.cjs'),materials=f.material(f.fixture());
+ await page.evaluate(text=>{draftItem.doc.inputs={requirements:'УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.',materials:text,finance:''};openDocBuilder(draftItem.id);},materials);
+ await page.getByText('Материалы для подготовки',{exact:true}).click();
+ await page.getByRole('button',{name:'Рассчитать 20 показателей',exact:true}).click();
+ await expect(page.getByText('Финансовые расчёты',{exact:true})).toBeVisible();
+ await expect(page.getByText('Арифметическая проверка пройдена.',{exact:false})).toBeVisible();
+ expect(await page.evaluate(()=>calls.length)).toBe(0);
+ await expect(page.getByRole('cell',{name:'25,00',exact:true})).toHaveCount(3);
+});
