@@ -1,4 +1,5 @@
 import {handler} from './handler.mjs';
+import {machineAuthorization} from './auth.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const token=Deno.env.get('STUDKAB_PROXY_TOKEN');
 const enabled=Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true';
@@ -22,8 +23,9 @@ async function provider(c:any,id:string){
 }
 Deno.serve(handler({
  // Gateway JWT verification remains enabled; a user JWT is insufficient here.
- authorize:async(req:Request)=>!!key && req.headers.get('Authorization')==='Bearer '+key,
+ authorize:async(req:Request)=>machineAuthorization(req,{serviceKey:key,anonKey:Deno.env.get('SUPABASE_ANON_KEY')}),
  config:async()=>(await db('studkab_request_config?id=eq.true&select=cron_token'))[0],
  rpc:(name:string,args:unknown)=>db('rpc/'+name,args),
- provider,ready:()=>enabled && !!token
+ provider,ready:()=>enabled && !!token,
+ readiness:()=>({enabled,providerConfigured:!!token})
 }));

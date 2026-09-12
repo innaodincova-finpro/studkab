@@ -1,6 +1,6 @@
 const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
-export function handler({config,rpc,provider,ready,authorize}) {
+export function handler({config,rpc,provider,ready,authorize,readiness}) {
  return async req=>{
   if(req.method!=='POST')return reply({error:'METHOD'},405);
   // Fail closed before reading configuration or claiming any work.
@@ -11,7 +11,11 @@ export function handler({config,rpc,provider,ready,authorize}) {
   try{cfg=await config();}catch{return reply({error:'CONFIG_UNAVAILABLE'},503);}
   const token=req.headers.get('X-Studkab-Runner');
   if(!cfg?.cron_token||!token||token!==cfg.cron_token)return reply({error:'UNAUTHORIZED'},401);
-  if(!ready())return reply({error:'PROVIDER_NOT_CONFIGURED'},503);
+  if(req.headers.get('X-Studkab-Probe')==='1') {
+   const state=readiness?readiness():{};
+   return reply({enabled:state.enabled===true,providerConfigured:state.providerConfigured===true});
+  }
+  if(!ready())return reply({status:'disabled',error:'PROVIDER_NOT_CONFIGURED'},503);
   let c;
   try{c=await rpc('studkab_gen_claim',{});}catch{return reply({error:'CLAIM_UNAVAILABLE'},503);}
   if(!c)return reply({status:'idle'});
