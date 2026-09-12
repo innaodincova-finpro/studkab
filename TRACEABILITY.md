@@ -208,3 +208,6 @@ custom auth preserved, live unauthenticated POST401. Final head4812ca2 CI3468663
 SUCCESS; PR40 merged98cca80f. No new advisor WARN; server-only RLS tables intentionally
 have no client policies. No paid calls. Authenticated full application acceptance and
 A1/A2 remain open; this installation does not prove complete FIN-UAT generation.
+
+C020/R10: responsive desktop workspace and semantic request table implemented.
+Verification and publication pending; mobile and desktop use the same persisted data.

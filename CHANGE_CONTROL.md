@@ -202,3 +202,11 @@ existing incompleteness gate remains. No AI calls/budget change or new infrastru
 Validate forged/stale versions, missing/failed criteria, concurrency, exact bytes and
 legacy retrieval with Node/Postgres/browser tests. Rollback keeps version history;
 never restore the bypassing legacy delivery function. Deploy backend before frontend.
+
+## C-020 — desktop workspace
+R10/R9, explicit user request. Current520px phone shell wastes desktop space.
+Add responsive CSS at960px and a single semantic request table (stacked on mobile).
+Keep existing handlers, storage, auth and API. Desktop navigation uses original buttons;
+document preview and controls use two columns. No paid calls or schema changes.
+Alternative of merely stretching the phone rejected. Verify desktop/mobile layout,
+request opening/filtering and existing CI. Rollback frontend commit/cache only.
