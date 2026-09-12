@@ -1258,13 +1258,16 @@ function openDocBuilder(id){
       }
       /* Порядок работ */
       var list=sectionsOf(),over=list.filter(function(g){return g.words>g.max;}),under=list.filter(function(g){return g.words<g.min;});
+      var noCite=DraftQuality.sourceCheck(x).errors.filter(function(e){return /не содержит ни одной ссылки/.test(e);})
+        .map(function(e){var nm=e.replace(/^Раздел «/,'').replace(/» не содержит.*$/,'');
+          var c=(doc.order||[]).filter(function(q){return q.name===nm;})[0];return c?c.id:null;}).filter(Boolean);
       var tables=0;
-      if(!over.length&&!under.length){
+      if(!over.length&&!under.length&&!noCite.length){
         tables=captions();
         setStatus(tables?'Подписано таблиц: '+tables+'. Объём всех разделов в норме. Нажмите «Сохранить», затем «Проверить готовность».':'Всё уже в норме: объём разделов и подписи таблиц. Правки не требуются.','ok');
         return;
       }
-      if(!confirm('Довести до нормы разделы: '+over.concat(under).map(function(g){return g.name;}).join(', ')+'? Текст этих разделов будет изменён. Предыдущая версия сохранится и её можно вернуть.'))return;
+      if(!confirm('Довести до нормы: '+(over.concat(under).map(function(g){return g.name;}).concat(noCite.map(function(id){var c=(doc.order||[]).filter(function(q){return q.id===id;})[0];return (c?c.name:id)+' (ссылки на источники)';})).join(', '))+'? Текст этих разделов будет изменён. Предыдущая версия сохранится и её можно вернуть.'))return;
       if(!DraftEditor.backup(x))return;
       genBusy=true;DraftEditor.lock(wrap,true);
       tables=captions();
@@ -1316,10 +1319,7 @@ function openDocBuilder(id){
       }
       function shortOnes(k){
         if(k>=under.length){
-          var need=DraftQuality.sourceCheck(x).errors.filter(function(e){return /не содержит ни одной ссылки/.test(e);})
-            .map(function(e){var nm=e.replace(/^Раздел «/,'').replace(/» не содержит.*$/,'');
-              var c=(doc.order||[]).filter(function(q){return q.name===nm;})[0];return c?c.id:null;}).filter(Boolean);
-          if(need.length)return citeOnes(0,need);
+          if(noCite.length)return citeOnes(0,noCite);
           return finish();
         }
         var g=under[k],el=wrap.querySelector('[data-sec="'+g.id+'"]');
@@ -1330,7 +1330,7 @@ function openDocBuilder(id){
           shortOnes(k+1);
         });
       }
-      longOnes(0);
+      if(over.length)longOnes(0);else shortOnes(0);
       return;
     }
     if(t.closest('[data-draft-check]')){readBack();DraftEditor.check(x);return;}
