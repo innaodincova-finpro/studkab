@@ -104,3 +104,5 @@ for role in ['anon','authenticated']:
   except subprocess.CalledProcessError:pass
   else:raise AssertionError('Result privileges leaked to '+role)
 print('PASS: immutable result versions, concurrent retries, denied direct access')
+
+exec(compile((root/'tests/result_review_sql.py').read_text(),'tests/result_review_sql.py','exec'))

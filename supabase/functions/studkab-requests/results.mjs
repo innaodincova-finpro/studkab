@@ -20,23 +20,52 @@ export function validateResult(value) {
  out.format.font=out.format.font||'Times New Roman';out.format.toc=f.toc!==false;
  return out;
 }
+export const reviewCodes=Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(2,'0')).concat(['S01','S02','S03']);
+export function validateReview(criteria){
+ if(!criteria||typeof criteria!=='object'||Array.isArray(criteria)||Object.keys(criteria).length!==16)throw Error('Заполните все пункты проверки');
+ for(const code of reviewCodes){const c=criteria[code];if(c?.status!=='pass'||typeof c.evidence!=='string'||c.evidence.trim().length<10||c.evidence.length>2000)throw Error('Не подтверждён пункт '+code+': укажите результат и место проверки');}
+ return Object.fromEntries(reviewCodes.map(code=>[code,{status:'pass',evidence:criteria[code].evidence.trim()}]));
+}
+const hash=/^[a-f0-9]{64}$/;
+const errors={recipient:'Получатель не совпадает с автором заявки',file:'Некорректный или слишком большой Word',conflict:'Номер операции уже использован. Откройте проверку заново.',stale:'Версия документа или получатель изменились. Повторите проверку.',criteria:'Не все пункты проверки подтверждены',review_required:'Требуется сохранённая проверка этой версии Word. Обновите приложение и повторите проверку.'};
 export async function resultAction(input,user,{db,config}) {
- if(input.action==='deliver'){
+ if(input.action!=='result'){
   const cfg=await config();
-  if(user.email.toLowerCase()!==cfg.executor_email.toLowerCase())return {status:403,data:{error:'Передача документа доступна только исполнителю'}};
+  if((user.email||'').toLowerCase()!==(cfg.executor_email||'').toLowerCase())return {status:403,data:{error:'Передача и проверка доступны только исполнителю'}};
  }
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный номер заявки'}};
- // Ownership is checked against the immutable server request, never browser metadata.
- const [request]=await db('studkab_requests?select=id,student_id&limit=1&id=eq.'+input.id);
+ const [request]=await db('studkab_requests?select=id,student_id,payload&limit=1&id=eq.'+input.id);
  if(!request)return {status:404,data:{error:'Заявка не найдена'}};
  if(input.action==='result'){
   if(request.student_id!==user.id)return {status:404,data:{error:'Заявка не найдена'}};
-  const [result]=await db('studkab_results?select=delivery_id,document,created_at&request_id=eq.'+input.id+'&order=created_at.desc,id.desc&limit=1');
+  const [result]=await db('studkab_results?select=delivery_id,document,created_at,version_id&request_id=eq.'+input.id+'&order=created_at.desc,id.desc&limit=1');
+  if(result?.version_id){
+   const [version]=await db('studkab_result_versions?select=docx_base64,file_hash,recipient_id&id=eq.'+result.version_id+'&request_id=eq.'+input.id+'&limit=1');
+   if(!version||version.recipient_id!==user.id)return {status:409,data:{error:'Версия результата не подтверждена'}};
+   result.docxBase64=version.docx_base64;result.fileHash=version.file_hash;
+  }
   return {data:{result:result||null}};
  }
- if(!uuid.test(input.deliveryId||''))return {status:400,data:{error:'Неверный номер передачи'}};
- let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
- const result=await db('rpc/deliver_studkab_result','POST',{request:input.id,delivery:input.deliveryId,content:document});
- if(result.conflict)return {status:409,data:{error:'Этот номер передачи уже использован для другого документа. Откройте передачу заново.'}};
+ if(!uuid.test(input.versionId||''))return {status:428,data:{error:errors.review_required}};
+ let result;
+ if(input.action==='prepare-result'){
+  let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
+  if(request.payload?.n&&document.student.trim()!==request.payload.n.trim())return {status:409,data:{error:errors.recipient}};
+  const file=input.docxBase64;
+  if(typeof file!=='string'||file.length>4194304||file.length<8||!/^UEsDB[A-Za-z0-9+/]*={0,2}$/.test(file))return {status:400,data:{error:errors.file}};
+  result=await db('rpc/prepare_studkab_result','POST',{request:input.id,version:input.versionId,recipient:request.student_id,content:document,file_base64:file});
+ }else{
+  if(!uuid.test(input.recipientId||'')||!hash.test(input.fileHash||'')||!hash.test(input.documentHash||'')||!uuid.test(input.reviewId||''))return {status:400,data:{error:'Не хватает данных сохранённой проверки'}};
+  if(input.recipientId!==request.student_id)return {status:409,data:{error:errors.recipient}};
+  const args={request:input.id,version:input.versionId,review:input.reviewId,recipient:request.student_id,file_hash:input.fileHash,document_hash:input.documentHash};
+  if(input.action==='review-result'){
+   let criteria;try{criteria=validateReview(input.criteria);}catch(e){return {status:400,data:{error:e.message}};}
+   result=await db('rpc/review_studkab_result','POST',{...args,reviewer:user.id,criteria});
+  }else{
+   if(!uuid.test(input.deliveryId||''))return {status:400,data:{error:'Неверный номер передачи'}};
+   result=await db('rpc/deliver_reviewed_studkab_result','POST',{...args,delivery:input.deliveryId});
+  }
+ }
+ if(result.error)return {status:result.error==='review_required'?428:409,data:{error:errors[result.error]||'Проверка не подтверждена'}};
  return {data:{saved:true,...result}};
 }

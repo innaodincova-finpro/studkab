@@ -159,3 +159,44 @@ FIN-UAT preflight rejects conflicting8-column/materials values; deterministic re
 enters preparation context. Existing snapshots/results remain immutable and untouched.
 No paid calls. This does not certify generated prose, source claims, graphs, complete
 financial Word, server-side acceptance or full R6/A1/A2.
+
+## 2026-09-12 — C019 versioned Word delivery (implementation)
+R3/R5/R8/R9: migration adds immutable Word bytes/version/review records; server hashes
+both the text snapshot and exact file, binds recipient to original request, and rejects
+stale/unreviewed delivery at RPC and table-trigger levels. Legacy results stay readable.
+Client previews one captured Blob, records 16 separate evidence items, and downloads
+stored bytes after SHA-256 comparison. FIN-UAT's existing incompleteness guard remains.
+131 Node tests passed. Added SQL concurrency/forgery/immutability tests and exact-byte
+browser tests; those checks and deployment are pending. Human evidence does not mean
+an automated academic examiner, full Word acceptance or A1/A2 completion. No paid calls.
+
+C019 local verification: all131 Node tests pass. Isolated PostgreSQL/PGlite migration
+checks pass for exact-byte SHA-256, absent/failed/stale review, recipient mismatch,
+idempotence, direct insert guard, immutable history, denied anon/authenticated access,
+and preservation of a historical result. DOM/jsdom checks pass for missing preview or
+evidence, preview/upload byte equality, retry identity, recipient/account changes,
+exact-byte student download and corrupt-hash rejection. Optional reproducible runners:
+tests/manual/result-review-pglite.mjs and tests/manual/result-ui-dom.mjs.
+These are not native concurrent PostgreSQL CI or real-browser acceptance. Native SQL
+and browser tests are prepared but pending: local browser download timed out; managed
+browser refused the local URL. No production migration or Edge/frontend deployment.
+Git push was rejected by automatic approval review for missing explicit end-user
+publication authorization to public innaodincova-finpro/studkab. Remote identity/push
+permissions and code-only scope were checked; a second attempt was also rejected.
+No alternate publication mechanism was used. Work remains in the local feature branch.
+
+
+C019 continuation: explicit user publication authorization received. Command-line Git
+could not authenticate; the connected GitHub app published code-only PR40 at da058f4.
+CI run34686333912 passed Node131 and native PostgreSQL including concurrency. Browser:
+38 passed,1 failed because CSS overrode the hidden download button on corrupt-file
+rejection. Explicit display:none now preserves the gate; repeat CI pending. Installed
+requests v8 matches main98d795b (all4 files), verify_jwt=false with custom auth preserved.
+Production still has2 requests and1 historical result; no C019 migration/deployment.
+
+C019 CI run34686491225/job103534257547 at4c48c626 completed SUCCESS: Node, native
+PostgreSQL and browser checks all passed after the hidden-button fix. The deployment
+attempt was rejected by automatic approval because code-publication consent was not
+accepted as authorization for persistent production DB changes. Migration was not
+applied; Edge and frontend remain unchanged. PR40 remains draft, awaiting explicit
+production update authorization. No alternate mutation path was attempted.

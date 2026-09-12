@@ -188,3 +188,17 @@ Original Library sources/reference values stay local; repository contains generi
 and independent synthetic fixtures only. Existing8-column calculator remains for other
 works. No paid request, budget/schema/auth change. Validate against local original
 examiner plus missing/zero/broken data and browser checks; do not mark full R6/A2 complete.
+
+## C-019 — bind review and delivery to immutable Word bytes
+R3/R5/R8/R9. Existing delivery accepts a JSON document without a server review and
+rebuilds Word in the student browser. Add immutable versions storing exact DOCX bytes,
+server-computed document/file SHA-256 and the request's server recipient. Per-criterion
+review is bound to that version; a newer version invalidates earlier delivery approval.
+Delivery atomically checks latest version, recipient, hashes and all review evidence.
+Old results remain readable; old unreviewed delivery calls fail closed. Frontend previews
+and receives the captured bytes, checks account/document changes, and collects separate
+criterion evidence. Human evidence is not automated academic verification; FIN-UAT's
+existing incompleteness gate remains. No AI calls/budget change or new infrastructure.
+Validate forged/stale versions, missing/failed criteria, concurrency, exact bytes and
+legacy retrieval with Node/Postgres/browser tests. Rollback keeps version history;
+never restore the bypassing legacy delivery function. Deploy backend before frontend.
