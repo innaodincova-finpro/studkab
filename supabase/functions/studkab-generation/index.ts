@@ -16,8 +16,8 @@ async function provider(c:any,id:string){
  const r=await fetch('https://calm-bird-dae8.bf6mhynzgm.workers.dev',{
  method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Token':token!},
  body:JSON.stringify({provider:'deepseek',model:'deepseek-flash',system:c.input.system,
- user:c.spec.prompt,max_tokens:2500,temperature:0.4,client_request_id:id}),
- signal:AbortSignal.timeout(90000)});
+ user:c.spec.prompt,max_tokens:8000,temperature:0.4,client_request_id:id}),
+ signal:AbortSignal.timeout(120000)});
  const value=await r.json();
  // Preserve safe provider diagnostics without treating an HTTP error as completion.
  if(!r.ok)return {complete:false,detail:value?.detail};
