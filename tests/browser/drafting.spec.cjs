@@ -58,6 +58,7 @@ test('cloud preparation blocks zero budget and preserves edited document',async(
  await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
  await expect(page.locator('[data-cloud-message]')).toContainText('прежней версии');
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой сохранённый текст');
+ await page.getByText('Собранный текст и объём',{exact:true}).click();
  await page.getByText(/^Глава 1.*— слов:/).click();
  await expect(page.locator('[data-cloud-result]')).toContainText('Облачный текст');
 });
@@ -82,6 +83,7 @@ test('lost cloud job link is recovered by selection without another paid start',
  expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой текст');
  expect(await page.evaluate(()=>recoveryActions)).toEqual(['history','status']);
+ await page.getByText('Собранный текст и объём',{exact:true}).click();
  await page.getByText(/^Глава 1.*— слов:/).click();
  await expect(page.locator('[data-cloud-result]')).toContainText('Сохранённый ответ');
 });
