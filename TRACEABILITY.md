@@ -226,3 +226,14 @@ width1292. Cabinet width1363/sidebar224. No horizontal overflow on either page.
 Canonical URL initially served old cached markup; ?v=desktop-38 loads published UI.
 No records, auth settings or budget changed; no paid calls. R10 desktop layout delivered.
 A1/A2 full recovery and full FIN-UAT generation/Word acceptance remain open.
+
+Post-C020 live acceptance continuation: read-only browser readiness check confirms
+FIN-UAT editor has1455 words,8 missing sections and transfer blocked. Cloud status
+for original job5230bfde reports0/17 saved, first response finish_reason=length;
+SQL confirms12253 prompt/2500 completion tokens. C015 smaller chunks already exist;
+job5e847793 finished stop with12286/337 tokens and1 saved part. Production budget
+limit=reserved=1250000 microUSD, available0; five reservations of250000. These are
+conservative reservations, NOT confirmed provider charges. No paid call, budget
+reset, new generation or data change performed. Full paid acceptance blocked pending
+verified provider spending/reconciliation or a new explicitly approved total cap.
+A1 forced-runner termination/network-loss and A2 full Word remain unproven.
