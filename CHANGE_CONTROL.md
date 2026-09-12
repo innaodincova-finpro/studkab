@@ -178,3 +178,13 @@ Safer scope: original requirements/acceptance texts remain outside the repositor
 Published code contains only test profile bounds and synthetic test labels, no copied
 source text. Profile detection is by label, not proof that requirements are unchanged;
 UI explicitly requires separate source comparison and never grants acceptance.
+
+## C-018 — deterministic extended financial analysis
+R6/R9. Add a pure calculator for the explicitly labelled FIN-UAT profile, parsing
+required monetary rows from existing materials. Validate balance, income, cash and
+opening/closing movements before calculating20 metric rows with formulas, scenarios,
+profit bridge and dynamics. Inputs are not inferred from generated text or examiner.
+Original Library sources/reference values stay local; repository contains generic code
+and independent synthetic fixtures only. Existing8-column calculator remains for other
+works. No paid request, budget/schema/auth change. Validate against local original
+examiner plus missing/zero/broken data and browser checks; do not mark full R6/A2 complete.

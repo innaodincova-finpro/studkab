@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "test": "node --test tests/offline.test.cjs tests/safety.test.cjs tests/push.test.cjs tests/telegram.test.mjs tests/requests.test.mjs tests/draft-quality.test.cjs tests/ai-proxy.test.mjs tests/ai-transport.test.cjs tests/generation-runner.test.mjs tests/generation-api.test.mjs",
+    "test": "node --test tests/financial-analysis.test.cjs tests/offline.test.cjs tests/safety.test.cjs tests/push.test.cjs tests/telegram.test.mjs tests/requests.test.mjs tests/draft-quality.test.cjs tests/ai-proxy.test.mjs tests/ai-transport.test.cjs tests/generation-runner.test.mjs tests/generation-api.test.mjs",
     "test:browser": "playwright test"
   },
   "devDependencies": {
