@@ -54,7 +54,7 @@ test('cloud preparation blocks zero budget and preserves edited document',async(
  await page.getByRole('button',{name:'Проверить доступность',exact:true}).click();
  await expect(page.locator('[data-cloud-message]')).toContainText('бюджет');
  await expect(page.locator('[data-cloud-start]')).toBeDisabled();
- await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:'older-version'};draftItem.doc.structure.ch1.text='Мой сохранённый текст';Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{id:'ch1',state:'done',text:'Облачный текст'}]});});
+ await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:'older-version'};draftItem.doc.structure.ch1.text='Мой сохранённый текст';Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Облачный текст'}]});});
  await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
  await expect(page.locator('[data-cloud-message]')).toContainText('прежней версии');
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой сохранённый текст');
@@ -70,7 +70,7 @@ test('lost cloud job link is recovered by selection without another paid start',
   Oblako.generationApi=async body=>{
    recoveryActions.push(body.action);
    if(body.action==='history')return {jobs:[{id:'22222222-2222-4222-8222-222222222222',created_at:'2026-09-12T06:00:00Z'},{id:'33333333-3333-4333-8333-333333333333',created_at:'2026-09-12T05:00:00Z'}]};
-   if(body.action==='status')return {job:{status:'complete'},parts:[{id:'ch1',state:'done',text:'Сохранённый ответ'}]};
+   if(body.action==='status')return {job:{status:'complete'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Сохранённый ответ'}]};
    throw Error('Paid Start is forbidden in recovery');
   };
  });
