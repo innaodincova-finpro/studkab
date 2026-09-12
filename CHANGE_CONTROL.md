@@ -114,3 +114,10 @@ byte-level token upper bound plus framing and 2500 output at peak Flash rates
 ($0.30/M input, $1.20/M output) fits USD0.25 conservative reservation.
 Official pricing checked 2026-09-12. No automatic replenishment: global cap USD1.
 Rollback previous runner while disabled. Live paid test remains pending enable flag.
+
+## C-012 — align intake availability with runner reserve
+R2/R4. Review found capabilities reports available for any positive remaining balance,
+even below one part, and accepts a reserve the Flash runner refuses (<250000).
+Align API minimum reserve and availability with runner. Status reading stays available.
+Verify exact boundary, insufficient balance and invalid configuration before mutation.
+No budget increase, no student-data changes; rollback previous API.

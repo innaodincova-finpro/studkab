@@ -10,7 +10,7 @@ export function prepare(input,cost){
  if(typeof input.request!=='string'||!idPattern.test(input.request) || typeof input.system!=='string' || !input.system.trim()
  || input.system.length>100000 || !Array.isArray(input.parts) || input.parts.length<1 || input.parts.length>100)
   throw Error('INVALID_INPUT');
- if(!Number.isSafeInteger(cost)||cost<1||cost>999999999999)throw Error('COST_NOT_CONFIGURED');
+ if(!Number.isSafeInteger(cost)||cost<250000||cost>999999999999)throw Error('COST_NOT_CONFIGURED');
  const ids=new Set();
  const validated=input.parts.map(p=>{
   if(!p || typeof p.id!=='string'||!idPattern.test(p.id)||ids.has(p.id)
@@ -42,8 +42,8 @@ export function handler({auth,config,db,settings}){
    if(input.action==='capabilities'){
     const [b]=await db('studkab_gen_budget?id=eq.true&select=limit_microusd,reserved_microusd');
     const s=settings();
-    return reply({enabled:s.enabled===true&&Number.isSafeInteger(s.cost)&&s.cost>0,
-     budgetAvailable:!!b&&Number(b.limit_microusd)>Number(b.reserved_microusd)});
+    return reply({enabled:s.enabled===true&&Number.isSafeInteger(s.cost)&&s.cost>=250000,
+     budgetAvailable:Number.isSafeInteger(s.cost)&&s.cost>=250000&&!!b&&Number(b.limit_microusd)-Number(b.reserved_microusd)>=s.cost});
    }
    if(input.action==='start'){
     const s=settings();

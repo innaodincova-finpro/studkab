@@ -78,3 +78,12 @@ Added modern DeepSeek allowlist entries and explicit Flash non-thinking mode; no
 remapping. node --test tests/ai-proxy.test.mjs: 14/14 with mocked provider, no paid calls.
 Manual deployment pending; runner still uses legacy name and remains disabled.
 USD1 cap previously verified, reserved0/jobs0/attempts0. A1 and FIN-UAT-01 open.
+
+## 2026-09-12 — recovery transaction and intake gate
+In production DB, exclusively locked generation tables, guarded no active jobs and
+reserved750000, exercised expired unsent claim/reclaim, stale dispatch rejection,
+expired sent attempt to unknown without retry, late result rejection. All assertions
+passed and transaction rolled back. No HTTP/model request. Script tests/manual/generation-recovery.sql.
+This does not simulate process kill or network interruption at the Edge runtime.
+C012 aligns API capability with minimum250000 and whole-part remaining reserve;
+14 API tests pass. Browser live executor acceptance still blocked on unpublished UI.
