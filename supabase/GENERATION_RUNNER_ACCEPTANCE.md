@@ -34,3 +34,18 @@ Actual local result: 90/90 Node tests, including 12 runner tests; git diff --che
 passed. Provider and RPC are mocked. No claim of real JWT gateway, concurrent
 Postgres sessions, full coursework, production installation or browser acceptance.
 The original external-transfer approval blocker and zero budget remain in force.
+
+## 2026-09-12 — authorized installation
+The user explicitly approved task material transfer via the existing Cloudflare
+proxy to DeepSeek, without raising the budget. Deployed PR35 commit 77e6c732 as
+studkab-generation v1 with verify_jwt=true. Deployment hash:
+764fdf8dac7695eaf669b3620898e5648f42f2fae71518524a51c84dd1961606.
+GitHub run 34662873990 (Safety checks #98) completed successfully.
+Live unauthenticated POST returned HTTP401. Database check returned budget limit=0,
+reserved=0, and jobs=0. No provider request or scheduler activation performed.
+No environment secret values were extracted or configured. The code requires both
+STUDKAB_GENERATION_ENABLED=true and STUDKAB_PROXY_TOKEN before claiming any task;
+actual environment readiness has not been verified with a privileged request.
+The previous deployment-blocked statement is historical and superseded for this
+JWT-protected version only. Start/status, scheduling, credentials, financial cap,
+real concurrency/recovery and FIN-UAT-01 remain outstanding.
