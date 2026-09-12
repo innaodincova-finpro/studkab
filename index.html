@@ -278,6 +278,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
   .tabs{position:relative;left:auto;bottom:auto;transform:none;flex-shrink:0;margin-top:auto}
 }
 </style>
+<link rel="stylesheet" href="desktop.css?v=1">
 </head>
 <body>
 <div class="phone">
@@ -2064,6 +2065,7 @@ function render(){
   var t0 = today();
   document.getElementById("today-date").textContent = weekdayRu(t0) + ", " + ruDate(t0);
   var p = document.getElementById("page");
+  p.dataset.view=tab; p.dataset.detail=String(!!openWorkId);
   if (tab === "today") p.innerHTML = viewToday();
   else if (tab === "cal") p.innerHTML = viewCal();
   else if (tab === "works") p.innerHTML = openWorkId ? viewWork(openWorkId) : viewWorks();
