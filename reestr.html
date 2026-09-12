@@ -892,7 +892,7 @@ function openDocBuilder(id){
         ? '<button type="button" class="chip" data-genover="1">Подготовить новую версию</button>'
         : '') +
     '</div></details>' +
-    '<button type="button" class="chip" data-draft-shrink>Сократить до нормы</button><button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
+    '<button type="button" class="chip" data-draft-rewrite>Переписать по норме</button><button type="button" class="chip" data-draft-shrink>Сократить до нормы</button><button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
     '<div class="rowbtns">' +
     '<button type="button" class="btn ghost" data-docsave="1" style="flex:1">Сохранить</button></div>'
   );
@@ -1187,6 +1187,76 @@ function openDocBuilder(id){
         });
       }
       run(0);
+      return;
+    }
+    if(t.closest('[data-draft-rewrite]')){
+      if(genBusy)return;
+      readBack();
+      var acc2=DraftQuality.finAcceptance(x),over=[];
+      if(acc2.applicable&&acc2.sections.length){
+        acc2.sections.forEach(function(sec){if(sec.words>sec.max)over.push({id:sec.id,name:sec.name,min:sec.min,max:sec.max});});
+      }else{
+        (doc.order||[]).forEach(function(c){
+          var t1=((doc.structure[c.id]||{}).text||''),b=DraftQuality.budget(c);
+          if(DraftQuality.wordCount(t1)>Math.round(b.max/7))over.push({id:c.id,name:c.name,min:Math.round(b.min/7),max:Math.round(b.max/7)});
+        });
+      }
+      if(!over.length){setStatus('Разделов сверх нормы нет. Переписывать нечего.','ok');return;}
+      var sel2=wrap.querySelector('#docProv');
+      if(!sel2){setStatus('Не выбран поставщик. Откройте «Настройки подготовки».','err');return;}
+      if(!confirm('Переписать заново разделы: '+over.map(function(g){return g.name;}).join(', ')+'? Нынешний текст этих разделов будет заменён. Предыдущая версия сохранится, её можно вернуть кнопкой «Восстановить предыдущую версию».'))return;
+      if(!DraftEditor.backup(x))return;
+      var prov2=sel2.value,itog=[];
+      genBusy=true;DraftEditor.lock(wrap,true);
+      function one(k){
+        if(k>=over.length){
+          genBusy=false;DraftEditor.lock(wrap,false);
+          var bad=itog.filter(function(r){return r.left>r.max;});
+          setStatus(itog.map(function(r){return '«'+r.name+'» '+r.was+' → '+r.left+' слов'+(r.left>r.max?' (норма до '+r.max+', сверх нормы)':' — в норме');}).join('; ')+'. Нажмите «Сохранить», затем «Проверить готовность».',bad.length?'err':'ok');
+          return;
+        }
+        var g=over[k],c=(doc.order||[]).filter(function(q){return q.id===g.id;})[0],el=wrap.querySelector('[data-sec="'+g.id+'"]');
+        if(!c||!el){itog.push({name:g.name,was:0,left:0,max:g.max});return one(k+1);}
+        var was=DraftQuality.wordCount(el.querySelector('.secText').value);
+        var want=Math.round(g.min+(g.max-g.min)*0.45),n=Math.max(1,Math.ceil(want/1500)),perPart=Math.round(want/n);
+        var sys2;
+        try{sys2=sectionPrompt(x,c).system;}catch(e){itog.push({name:g.name,was:was,left:was,max:g.max});return one(k+1);}
+        var written=[],i=0;
+        function part(){
+          if(i>=n){
+            var full=written.join('\n\n').trim();
+            if(full){
+              el.querySelector('.secText').value=full;
+              el.querySelector('.secStat').textContent=full.length+' знаков · переписано';
+              doc.structure[g.id]=doc.structure[g.id]||{};doc.structure[g.id].by='переписано';
+              readBack();
+            }
+            itog.push({name:g.name,was:was,left:DraftQuality.wordCount(el.querySelector('.secText').value),max:g.max});
+            return one(k+1);
+          }
+          setStatus('Переписываю «'+g.name+'»: часть '+(i+1)+' из '+n+'. Норма раздела '+g.min+'–'+g.max+' слов.','info');
+          var user2='Напиши раздел «'+c.name+'» учебной работы. '+DraftQuality.sectionRules(c)+'\n'+
+            (n>1?'Сейчас пиши часть '+(i+1)+' из '+n+' этого раздела. ':'')+
+            'Жёсткий предел: НЕ БОЛЕЕ '+perPart+' слов'+(n>1?' в этой части':'')+'. Весь раздел целиком не должен превысить '+g.max+' слов.\n'+
+            'Пиши плотно: каждое утверждение опирается на данные из материалов. Без общих вступлений, без повторов одной мысли разными словами, без пересказа соседних разделов.\n'+
+            'Не выдумывай факты, числа, источники и нормативы. Ссылайся на источники в виде [S1]. Заголовок раздела не пиши.\n'+
+            (n>1&&i+1===n?'Это последняя часть: заверши раздел выводом.\n':'')+
+            (n>1&&i+1<n?'Не подводи итог всего раздела в этой части.\n':'')+
+            'Верни только текст'+(n>1?' этой части':'')+'.'+
+            (written.length?'\n\nУЖЕ НАПИСАННЫЕ ЧАСТИ ЭТОГО РАЗДЕЛА, НЕ ПОВТОРЯЙ ИХ:\n'+written.join('\n\n'):'');
+          askAI(prov2,sys2,user2,{section:g.id,stage:'rewrite',attempt:i+1}).then(function(r){
+            var got=DraftQuality.cleanSection(String(r.text||''),c).trim();
+            if(got)written.push(got);
+            i++;part();
+          }).catch(function(e){
+            setStatus('«'+g.name+'», часть '+(i+1)+': '+(e.message||'отказ')+'. Раздел оставлен без изменений.','err');
+            itog.push({name:g.name,was:was,left:was,max:g.max});
+            genBusy=false;DraftEditor.lock(wrap,false);
+          });
+        }
+        part();
+      }
+      one(0);
       return;
     }
     if(t.closest('[data-draft-check]')){readBack();DraftEditor.check(x);return;}
