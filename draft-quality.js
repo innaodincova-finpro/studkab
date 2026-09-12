@@ -24,6 +24,36 @@
  }
  function extended(x){return /FIN-UAT-01/.test(String(inputs(x).requirements||''));}
  function analysis(x){var engine=typeof module==='object'&&module.exports?require('./financial-analysis.js'):root.FinancialAnalysis;if(!engine)throw Error('Расчётный модуль не загружен. Обновите страницу.');var source=inputs(x),data=engine.parse(source.materials);if(String(source.finance||'').trim()){var simple=finance(source.finance).rows;simple.forEach(function(row,i){var expected=[simple[0][0]+i,data.balance.assets?.[i+1],data.balance.current?.[i+1],data.balance.equity?.[i+1],data.balance.longLoan?.[i+1],data.balance.shortLiabilities?.[i+1],data.income.revenue?.[i],data.income.net?.[i]];if(row.some(function(v,j){return v!==expected[j];}))throw Error('Таблица из восьми столбцов не совпадает с материалами');});}return engine.fromMaterials(source.materials);}
+ // R7. Проверка источников: ссылка должна вести к источнику из списка,
+ // а источник из списка должен использоваться в тексте.
+ function sourceCheck(x){
+  var list=String(inputs(x).sources||''),errors=[],inList=[],used=[];
+  (list.match(/\[S\s*(\d{1,3})\]/gi)||[]).forEach(function(m){
+   var n=Number(String(m).replace(/\D+/g,''));if(n&&inList.indexOf(n)<0)inList.push(n);
+  });
+  if(!inList.length){
+   (list.split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean)).forEach(function(l,i){
+    var m=l.match(/^S\s*(\d{1,3})\b/i);if(m){var n=Number(m[1]);if(inList.indexOf(n)<0)inList.push(n);}
+   });
+  }
+  var d=x.doc||{},order=(d.order||[]).filter(function(c){return c.id!=='refs';}),structure=d.structure||{};
+  order.forEach(function(c){
+   var text=String((structure[c.id]||{}).text||''),refs=[];
+   (text.match(/\[S\s*(\d{1,3})\]/gi)||[]).forEach(function(m){
+    var n=Number(String(m).replace(/\D+/g,''));if(n&&refs.indexOf(n)<0)refs.push(n);
+    if(n&&used.indexOf(n)<0)used.push(n);
+   });
+   refs.forEach(function(n){
+    if(inList.length&&inList.indexOf(n)<0)errors.push('Раздел «'+c.name+'»: ссылка [S'+n+'] ведёт к источнику, которого нет в списке.');
+   });
+   if(wordCount(text)>=300&&!refs.length)errors.push('Раздел «'+c.name+'» не содержит ни одной ссылки на источник.');
+  });
+  if(!inList.length&&used.length)errors.push('В тексте есть ссылки на источники, но в материалах не указан список источников с обозначениями [S1], [S2].');
+  inList.forEach(function(n){
+   if(used.indexOf(n)<0)errors.push('Источник [S'+n+'] есть в списке, но ни разу не использован в тексте.');
+  });
+  return {inList:inList,used:used,errors:Array.from(new Set(errors))};
+ }
  function preflight(x){
   var p=inputs(x),errors=[];
   [['requirements','Добавьте задание и требования преподавателя'],['materials','Добавьте фактические материалы исследования'],['sources','Добавьте проверенные источники с библиографией, ссылкой или страницами и выдержками']].forEach(function(f){if(!String(p[f[0]]||'').trim())errors.push(f[1]);});
@@ -139,6 +169,6 @@
  }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={extended:extended,analysis:analysis,finAcceptance:finAcceptance,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={sourceCheck:sourceCheck,extended:extended,analysis:analysis,finAcceptance:finAcceptance,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);
