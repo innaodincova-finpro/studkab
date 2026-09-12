@@ -64,3 +64,14 @@ test('failure diagnostics expose only bounded safe fields',()=>{
  assert.deepEqual(failure({detail:{finish_reason:'<script>',prompt_tokens:-1,completion_tokens:'secret'}}),{code:'RESULT_UNKNOWN'});
  assert.deepEqual(failure({reason:'LEASE_EXPIRED_AFTER_DISPATCH'}),{code:'LEASE_EXPIRED_AFTER_DISPATCH'});
 });
+
+import {withContext} from '../supabase/functions/studkab-generation/context.mjs';
+import {expandParts} from '../supabase/functions/studkab-generation-api/plan.mjs';
+test('compact plans reconstruct exact original prompts',()=>{
+ const input={request:'compact',system:'system',parts:[{id:'chapter',prompt:'Материалы '.repeat(6000),target_chars:30000}]};
+ const original=expandParts(input.parts,250000);
+ const {snapshot,plan}=prepare(input,250000);
+ assert.ok(new TextEncoder().encode(JSON.stringify({input:snapshot,plan})).length<900000);
+ for(let i=0;i<plan.length;i++)assert.equal(withContext({input:snapshot,spec:plan[i],ordinal:i},[]).spec.prompt,original[i].prompt);
+ assert.throws(()=>withContext({input:{system:'s'},spec:plan[0],ordinal:0},[]),/CONTEXT_INVALID/);
+});

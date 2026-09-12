@@ -28,7 +28,14 @@ export function prepare(input,cost){
   return {id:p.id,prompt:p.prompt,target_chars:p.target_chars};
  });
  const plan=expandParts(validated,cost);
- const snapshot={system:input.system};
+ const snapshot={system:input.system,prompts:{}};
+ for(const part of validated)snapshot.prompts[part.id]=part.prompt;
+ for(const part of plan){
+  const original=snapshot.prompts[part.section_id];
+  if(!part.prompt.startsWith(original))throw Error('INVALID_PLAN');
+  part.prompt=part.prompt.slice(original.length);
+  part.prompt_ref=part.section_id;
+ }
  if(new TextEncoder().encode(JSON.stringify({input:snapshot,plan})).byteLength>900000)throw Error('INPUT_TOO_BIG');
  return {snapshot,plan};
 }
