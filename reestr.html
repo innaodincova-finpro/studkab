@@ -1292,8 +1292,36 @@ function openDocBuilder(id){
           });
         });
       }
+      /* 6. Разделы без ссылок на источники: проставить ссылки из списка. */
+      function citeOnes(k,ids){
+        if(k>=ids.length)return finish();
+        var id=ids[k],c=(doc.order||[]).filter(function(q){return q.id===id;})[0],el=wrap.querySelector('[data-sec="'+id+'"]');
+        if(!c||!el)return citeOnes(k+1,ids);
+        var text=el.querySelector('.secText').value,sysC;
+        try{sysC=sectionPrompt(x,c).system;}catch(e){return citeOnes(k+1,ids);}
+        setStatus('«'+c.name+'»: проставляю ссылки на источники…','info');
+        askAI(provN,sysC,'В разделе «'+c.name+'» нет ни одной ссылки на источник. Расставь ссылки на источники из приведённого списка в квадратных скобках вида [S1] там, где утверждение опирается на источник.\n'+
+          'Ничего не дописывай и не переписывай: объём и смысл остаются прежними, добавляются только обозначения ссылок.\n'+
+          'Ставь ссылку только если утверждение действительно опирается на этот источник. Не выдумывай источники, которых нет в списке.\n'+
+          'Верни только текст раздела.\n\nТЕКСТ РАЗДЕЛА:\n'+text,{section:id,stage:'cite',attempt:1})
+        .then(function(r){
+          var got=DraftQuality.cleanSection(String(r.text||''),c).trim();
+          var before=DraftQuality.wordCount(text),after=DraftQuality.wordCount(got);
+          if(got&&/\[S\s*\d/.test(got)&&after>=before*0.8&&after<=before*1.25){
+            put({id:id},el,got,'ссылки проставлены');
+            itogo.push({name:c.name,was:before,left:after,min:0,max:1e9});
+          }
+          citeOnes(k+1,ids);
+        }).catch(function(){citeOnes(k+1,ids);});
+      }
       function shortOnes(k){
-        if(k>=under.length)return finish();
+        if(k>=under.length){
+          var need=DraftQuality.sourceCheck(x).errors.filter(function(e){return /не содержит ни одной ссылки/.test(e);})
+            .map(function(e){var nm=e.replace(/^Раздел «/,'').replace(/» не содержит.*$/,'');
+              var c=(doc.order||[]).filter(function(q){return q.name===nm;})[0];return c?c.id:null;}).filter(Boolean);
+          if(need.length)return citeOnes(0,need);
+          return finish();
+        }
         var g=under[k],el=wrap.querySelector('[data-sec="'+g.id+'"]');
         if(!el){itogo.push({name:g.name,was:g.words,left:g.words,min:g.min,max:g.max});return shortOnes(k+1);}
         var was=DraftQuality.wordCount(el.querySelector('.secText').value);
