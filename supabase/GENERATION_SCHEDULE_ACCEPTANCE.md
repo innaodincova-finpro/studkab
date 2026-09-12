@@ -56,3 +56,17 @@ https://api-docs.deepseek.com/quick_start/pricing/ lists deepseek-flash and deep
 Live Worker model compatibility remains unverified. No Cloudflare management tool
 is exposed. Do not claim a successful paid test or change to a new model silently.
 Runner enable and trusted per-part reserve remain required before dispatch.
+
+## First live scheduled Flash smoke test — 2026-09-12 06:01 UTC
+Runner commit1fdc0e93 deployed v6, verify_jwt=true, hash3e81fee96235ea4ae5eb3fdb2b4d55fb0f0c096f8a424b3d28c14932966936c4.
+User configured enable/reserve secrets; protected probe19067 returned enabled=true,
+providerConfigured=true. Before test budget1000000/reserved0/jobs0/attempts0.
+Created synthetic executor-owned job9e75feb7-d00f-47b8-9656-5cd23228787e using
+service-only RPC, request smoke-flash-20260912-01; no student data in prompt.
+No manual runner POST was used: existing minute scheduler performed dispatch.
+Observed job complete, part done, stored result: Проверка сохранения завершена.
+Provider request2d51685b-7a51-49d9-b2c2-0aba02dd0f13, finish_reason stop,
+prompt_tokens47/completion_tokens10; reserved250000 microUSD, not actual invoice.
+Confirms live proxy authentication/model response/scheduled persistence for one part.
+Does NOT establish authenticated browser Start/status, multi-part recovery, A1 or FIN-UAT01.
+No automatic regeneration or reset of test reservation. Keep test evidence rows.
