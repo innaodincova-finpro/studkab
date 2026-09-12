@@ -24,8 +24,8 @@ test('plan rejects duplicates, invalid sizes and missing trusted costs',()=>{ass
 
 test('large section is split into deterministic separately saved parts',()=>{
  const p=prepare({...valid,parts:[{id:'ch2',prompt:'Практическая глава',target_chars:27000}]},250000);
- assert.equal(p.plan.length,14);assert.equal(p.plan[5].part_index,5);assert.equal(p.plan[0].section_id,'ch2');
- assert.ok(p.plan.every(x=>x.max_cost_microusd===250000));assert.equal(new Set(p.plan.map(x=>x.id)).size,14);
+ assert.equal(p.plan.length,5);assert.equal(p.plan[3].part_index,3);assert.equal(p.plan[0].section_id,'ch2');
+ assert.ok(p.plan.every(x=>x.max_cost_microusd===250000));assert.equal(new Set(p.plan.map(x=>x.id)).size,5);
 });
 test('total part count and target values are bounded',()=>{
  assert.throws(()=>prepare({...valid,parts:[{id:'one',prompt:'test',target_chars:-1}]},250000));
@@ -55,9 +55,9 @@ test('lost job history filters by executor and request without selecting snapsho
 
 test('new part target is bounded without reducing total requested volume',()=>{
  const p=prepare({...valid,parts:[{id:'ch2',prompt:'chapter',target_chars:27000}]},250000);
- assert.equal(p.plan.length,14);assert.ok(p.plan.every(x=>x.prompt.includes('1929 знаков')));
- assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:2000}]},250000).plan.length,1);
- assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:2001}]},250000).plan.length,2);
+ assert.equal(p.plan.length,5);assert.ok(p.plan.every(x=>x.prompt.includes('5400 знаков')));
+ assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:6000}]},250000).plan.length,1);
+ assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:6001}]},250000).plan.length,2);
 });
 test('failure diagnostics expose only bounded safe fields',()=>{
  assert.deepEqual(failure({detail:{finish_reason:'length',completion_tokens:2500,prompt_tokens:12253,secret:'key',text:'private'},reason:'RESULT_UNKNOWN'}),{code:'OUTPUT_LIMIT',prompt_tokens:12253,completion_tokens:2500});
