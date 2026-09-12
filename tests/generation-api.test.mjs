@@ -25,7 +25,7 @@ test('plan rejects duplicates, invalid sizes and missing trusted costs',()=>{ass
 test('large section is split into deterministic separately saved parts',()=>{
  const p=prepare({...valid,parts:[{id:'ch2',prompt:'Практическая глава',target_chars:27000}]},250000);
  assert.equal(p.plan.length,14);assert.equal(p.plan[3].part_index,3);assert.equal(p.plan[0].section_id,'ch2');
- assert.ok(p.plan.every(x=>x.max_cost_microusd===250000));assert.equal(new Set(p.plan.map(x=>x.id)).size,5);
+ assert.ok(p.plan.every(x=>x.max_cost_microusd===250000));assert.equal(new Set(p.plan.map(x=>x.id)).size,14);
 });
 test('total part count and target values are bounded',()=>{
  assert.throws(()=>prepare({...valid,parts:[{id:'one',prompt:'test',target_chars:-1}]},250000));
