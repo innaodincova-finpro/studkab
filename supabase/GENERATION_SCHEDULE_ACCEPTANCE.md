@@ -70,3 +70,19 @@ prompt_tokens47/completion_tokens10; reserved250000 microUSD, not actual invoice
 Confirms live proxy authentication/model response/scheduled persistence for one part.
 Does NOT establish authenticated browser Start/status, multi-part recovery, A1 or FIN-UAT01.
 No automatic regeneration or reset of test reservation. Keep test evidence rows.
+
+## Live multipart context and duplicate Start check — 2026-09-12
+Synthetic job4305014f-c6b1-4a62-ad78-21bfa1e6be61, request multipart-flash-20260912-01.
+Two short parts, each250000 microUSD reservation, within existing USD1 cap.
+Second service-only Start with identical owner/request/snapshot returned identical job UUID.
+Existing minute scheduler processed both parts; no manual runner invocation.
+Part0 done: Контрольное слово — БЕРЁЗА-731. (52 input/14 output tokens).
+Part1 done: БЕРЁЗА-731. Вторая часть сохранена. (131 input/15 output tokens).
+The second instruction did not include the marker; it was supplied through persisted
+preceding-part context. Both finish_reason stop; job complete. Not an academic quality test.
+CI code1fdc0e93: Safety checks109/run34676316920/job103506698538 success, including
+Node, SQL safety and full browser suite. Existing cloud UI test uses mocked API and
+checks result display and preservation of edited text; this is not live user acceptance.
+Local browser rerun could not launch because Chromium executable is absent.
+No main merge/publication. Real authenticated browser intake/readback, interruption,
+concurrent runners, unknown outcome recovery and FIN-UAT01 remain unaccepted.
