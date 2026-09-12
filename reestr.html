@@ -1116,7 +1116,6 @@ function openDocBuilder(id){
         });
         refs.sort(function(a,b){return a-b;});
         var missing=refs.filter(function(n){return !(new RegExp('Таблица\\s+'+n+'\\s*[—–-]','i')).test(all4);});
-        if(!missing.length)return 0;
         var free=[];
         order4.forEach(function(c){
           var ps=((doc.structure[c.id]||{}).text||'').split(/\n\s*\n/);
@@ -1126,7 +1125,7 @@ function openDocBuilder(id){
             free.push({sec:c.id,index:idx});
           });
         });
-        missing.forEach(function(n,i){
+        if(missing.length)missing.forEach(function(n,i){
           var spot=free[i];if(!spot)return;
           var el=wrap.querySelector('[data-sec="'+spot.sec+'"]');if(!el)return;
           var ps=el.querySelector('.secText').value.split(/\n\s*\n/),tb=ps[spot.index];
@@ -1268,7 +1267,7 @@ function openDocBuilder(id){
       var tables=0;
       if(!over.length&&!under.length&&!noCite.length){
         tables=captions();
-        setStatus((tables?'Подписано таблиц: '+tables+'. ':'')+'Правок не требуется. Насчитано: разделов сверх нормы '+over.length+', короче нормы '+under.length+', без ссылок на источники '+noCite.length+'. Всего разделов с текстом: '+list.length+'.','ok');
+        setStatus(tables?'Нумерация таблиц приведена в порядок: '+tables+'. Нажмите «Сохранить», затем «Проверить готовность».':'Правок не требуется: объём разделов, ссылки на источники и нумерация таблиц в норме.','ok');
         return;
       }
       if(!confirm('Довести до нормы: '+(over.concat(under).map(function(g){return g.name;}).concat(noCite.map(function(id){var c=(doc.order||[]).filter(function(q){return q.id===id;})[0];return (c?c.name:id)+' (ссылки на источники)';})).join(', '))+'? Текст этих разделов будет изменён. Предыдущая версия сохранится и её можно вернуть.'))return;
