@@ -222,3 +222,22 @@ Alternative reset rejected: destroys cost history and exposes unknown requests.
 Validate locally before installation. Installation itself releases no funds and sends
 no model request. Actual reconciliation needs account/request evidence. Rollback may
 remove the callable function but must preserve audit records and accounting balances.
+
+
+## C-022 — единая граница MVP и критерии выпуска, 2026-09-12
+
+Основание: пользователь утвердил последовательный план доведения STUDKAB до
+пользовательского выпуска и поручил завершить Этап 1. Наблюдаемый факт:
+`TASK.md` содержал технические R1–R10 и FIN-UAT-приёмку, но не фиксировал в
+одном месте роли, оба полных пользовательских маршрута, обязательные документы,
+границу MVP и общий выпускной gate. Вариант считать FIN-UAT общей нормой отклонён:
+он не применим к нефинансовым работам. Выбран отдельный
+`MVP_RELEASE_BASELINE.md`, сохраняющий действующие R1–R10 и связывающий их с
+M1–M13.
+
+Изменяемые компоненты: только документация в отдельной ветке и PR. Production,
+данные, доступ, Supabase, расписания и бюджет не изменяются; платных запросов нет.
+Проверка: наличие ролей, путей, документов, определений состояний, границы
+обязательного/перенесённого, матрицы «требование → экран → сервер → приёмка»,
+явного ограничения FIN-UAT и десяти критериев выпуска; Markdown и diff checks.
+Откат: отмена документационных commits без изменения пользовательских данных.
