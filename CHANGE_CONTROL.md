@@ -210,3 +210,15 @@ Keep existing handlers, storage, auth and API. Desktop navigation uses original 
 document preview and controls use two columns. No paid calls or schema changes.
 Alternative of merely stretching the phone rejected. Verify desktop/mobile layout,
 request opening/filtering and existing CI. Rollback frontend commit/cache only.
+
+## C-021 — audited reservation reconciliation
+R4/R9. Dispatch reserves funds but settle never releases a verified unused balance.
+Add administrator-only reconciliation of completed attempts with an immutable audit
+record, evidence reference and a conservative retained cost ceiling. Unknown/sent
+attempts remain fully reserved. Keep original attempts and cap unchanged. Serialize
+against dispatch on the budget row; reject duplicate IDs, overlapping batches and
+ledger mismatch. No automatic inference of actual charges from rounded account totals.
+Alternative reset rejected: destroys cost history and exposes unknown requests.
+Validate locally before installation. Installation itself releases no funds and sends
+no model request. Actual reconciliation needs account/request evidence. Rollback may
+remove the callable function but must preserve audit records and accounting balances.
