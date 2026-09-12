@@ -95,3 +95,22 @@ test('known output limit is shown instead of a generic unknown result',async({pa
  await expect(page.locator('[data-cloud-message]')).toContainText('Автоматический повтор заблокирован');
  await expect(page.locator('[data-cloud-message]')).not.toContainText('Результат последнего запроса неизвестен');
 });
+
+test('cloud review assembles one response with visible gaps and preserves local draft',async({page})=>{
+ await setup(page);await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>{draftItem.doc.structure.ch1.text='Мой исходный текст';draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};
+ window.cloudActions=[];Oblako.generationApi=async body=>{cloudActions.push(body.action);if(body.action!=='status')throw Error('Unexpected paid call');return {job:{status:'unknown'},parts:[
+ {ordinal:2,id:'ch2__part_3',section:'ch2',state:'done',text:'Третий абзац.'},
+ {ordinal:0,id:'ch2__part_1',section:'ch2',state:'done',text:'Первый абзац. <img src=x onerror="window.injected=true">'},
+ {ordinal:1,id:'ch2__part_2',section:'ch2',state:'unknown',text:null}]};};});
+ await page.getByText('Подготовка в облаке',{exact:true}).click();
+ await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+ await page.getByText('Собранный текст и объём',{exact:true}).click();
+ await expect(page.locator('[data-cloud-result]')).toContainText('2 из 3 частей');
+ await page.getByText(/^Раздел ch2 — слов:/).click();
+ await expect(page.locator('[data-cloud-result]')).toContainText('[Часть 2 не сохранена]');
+ expect(await page.locator('[data-cloud-result] img').count()).toBe(0);
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой исходный текст');
+ expect(await page.evaluate(()=>cloudActions)).toEqual(['status']);
+ expect(await page.evaluate(()=>window.injected)).toBeUndefined();
+});

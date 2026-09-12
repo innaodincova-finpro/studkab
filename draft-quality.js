@@ -68,8 +68,37 @@
    prose.split(/\n\s*\n/).forEach(function(p){var norm=p.toLowerCase().replace(/\s+/g,' ').trim();if(norm.length<180||/^\|/.test(norm))return;if(seen.has(norm)&&seen.get(norm)!==c.id)notes.push('«'+c.name+'»: есть абзац, полностью повторяющий другой раздел.');else seen.set(norm,c.id);});
   });return Array.from(new Set(notes));
  }
+ // A reproducible prose count, not the word processor's pagination or a quality verdict.
+ function wordCount(text){
+  var prose=String(text||'').replace(/```[\s\S]*?(?:```|$)/g,'').split('\n').filter(function(l){return !/^\s*(?:\||#{1,6}\s)/.test(l);}).join('\n')
+   .replace(/!?\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/https?:\/\/\S+/g,'').replace(/\[(?:S\d+|\d+(?:[,;–-]\s*\d+)*)\]/g,'');
+  return (prose.match(/[\p{L}\p{N}]+(?:[’'‐-][\p{L}\p{N}]+)*/gu)||[]).length;
+ }
+ function cloudReport(parts){
+  var notes=[],sections=[],groups=new Map(),seen=new Set(),paragraphs=new Map(),saved=0;
+  if(!Array.isArray(parts)||parts.length===0)return {sections:[],notes:['План частей отсутствует.'],words:0,saved:0,total:0};
+  if(parts.some(function(p){return !p||!Number.isSafeInteger(p.ordinal)||p.ordinal<0||seen.has(p.ordinal)||!seen.add(p.ordinal);}))
+   return {sections:[],notes:['Порядок частей повреждён: сборка заблокирована.'],words:0,saved:0,total:parts.length};
+  var sorted=parts.slice().sort(function(a,b){return a.ordinal-b.ordinal;});
+  sorted.forEach(function(p,i){
+   if(p.ordinal!==i&&notes.indexOf('В плане есть пропуски номеров частей.')<0)notes.push('В плане есть пропуски номеров частей.');
+   var key=String(p.section||p.id||'Без раздела'),g=groups.get(key);
+   if(!g){g={id:key,text:'',words:0,saved:0,total:0};groups.set(key,g);sections.push(g);}
+   g.total++;
+   var text=typeof p.text==='string'?p.text:'';
+   if(p.state!=='done'||!text.trim()){
+    g.text+=(g.text?'\n\n':'')+'[Часть '+(p.ordinal+1)+' не сохранена]';
+    notes.push('Часть '+(p.ordinal+1)+' не сохранена; раздел «'+key+'» неполный.');return;
+   }
+   saved++;g.saved++;g.words+=wordCount(text);g.text+=(g.text?'\n\n':'')+text;
+   text.split(/\n\s*\n/).forEach(function(paragraph){var norm=paragraph.toLowerCase().replace(/\s+/g,' ').trim();if(norm.length<180||/^\|/.test(norm))return;
+    if(paragraphs.has(norm))notes.push('В частях '+(paragraphs.get(norm)+1)+' и '+(p.ordinal+1)+' повторяется абзац.');else paragraphs.set(norm,p.ordinal);
+   });
+  });
+  return {sections:sections,notes:Array.from(new Set(notes)),words:sections.reduce(function(n,g){return n+g.words;},0),saved:saved,total:parts.length};
+ }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);

@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=3"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=4"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=4"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=4"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1021,6 +1021,13 @@ function openDocBuilder(id){
           if(doc.serverJob.basis===null)message.textContent+=' Связь с текущими материалами не подтверждена: проверьте выбранную версию.';
           else if(doc.serverJob.basis!==DraftEditor.basis(x))message.textContent+=' Материалы изменены: это результат прежней версии.';
           var target=wrap.querySelector('[data-cloud-result]');target.replaceChildren();
+          var report=DraftQuality.cloudReport(info.parts),review=document.createElement('details'),heading=document.createElement('summary'),explanation=document.createElement('p');
+          heading.textContent='Собранный текст и объём';review.appendChild(heading);
+          explanation.textContent='Сохранено в этом запуске: '+report.saved+' из '+report.total+' частей. Слов в тексте: '+report.words+'. Заголовки Markdown, строки таблиц, ссылки и блоки кода исключены; числа считаются словами. Это части одного запуска, а не полный документ. Полнота разделов, расчёты и источники требуют проверки.';
+          review.appendChild(explanation);
+          report.notes.forEach(function(note){var p=document.createElement('p');p.textContent=note;review.appendChild(p);});
+          report.sections.forEach(function(section){var block=document.createElement('details'),title=document.createElement('summary'),pre=document.createElement('pre');title.textContent='Раздел '+section.id+' — слов: '+section.words+'; частей: '+section.saved+' из '+section.total;pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';pre.textContent=section.text;block.append(title,pre);review.appendChild(block);});
+          target.appendChild(review);
           info.parts.filter(function(p){return p.state==='done';}).forEach(function(p){var details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent='Сохранённый раздел '+p.id;text.style.whiteSpace='pre-wrap';text.textContent=p.text;details.append(summary,text);target.appendChild(details);});
         });
       }).catch(function(e){

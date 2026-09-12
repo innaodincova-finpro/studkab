@@ -112,3 +112,14 @@ Existing immutable job remains unknown; no automatic retry/migration. Status rea
 sanitized attempt reason after owner authorization and renders OUTPUT_LIMIT clearly.
 17 API tests passed; browser regression added. Live diagnosis can be checked free;
 real generation with smaller chunks remains unverified until budget decision.
+
+## 2026-09-12 — read-only cloud assembly (C016)
+R3/R5/R8/R9: cloudReport groups only one returned job plan, preserves original text,
+marks missing parts, rejects duplicate/invalid ordinals and reports repeated prose.
+wordCount counts Unicode words/numbers, excludes Markdown headings/table rows/code,
+URLs and citation markers; it is not a Word count or an academic completeness gate.
+Frontend adds a collapsed read-only review; no local document/review/budget mutation.
+119 Node tests passed. Browser scenario covers gaps, narrow screen, text injection,
+no paid action and preservation of local text; CI pending. Full A1/FIN-UAT01 open.
+Live reduced-part test from prior stage: job5e847793 complete,969 chars,stop,
+12286 input/337 output tokens, one call; approved cap=reserved1250000 microUSD.
