@@ -5,7 +5,7 @@
 const MAX_CONTEXT = 180000;
 const MAX_BODY = 1200000; // UTF-8 bytes; includes JSON escaping and Cyrillic.
 const ALLOWED = {
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-flash', 'deepseek-v4-pro'],
   openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'gpt-4.1-mini'],
   anthropic: ['claude-sonnet-5', 'claude-haiku-4-5-20251001', 'claude-opus-5'],
   yandex: ['yandexgpt/latest', 'yandexgpt-lite/latest', 'yandexgpt/rc'],
@@ -186,7 +186,7 @@ async function ask(q, env) {
 }
 async function openaiLike(url, key, model, q, who) {
   if (!key) throw Error('NOKEY:' + who);
-  const j = await post(url, {'Content-Type':'application/json', Authorization:'Bearer ' + key}, JSON.stringify({model, messages:[{role:'system', content:q.system},{role:'user', content:q.user}], temperature:q.temperature, max_tokens:q.max_tokens}), who, q.signal);
+  const j = await post(url, {'Content-Type':'application/json', Authorization:'Bearer ' + key}, JSON.stringify({...(who === 'deepseek' && model === 'deepseek-flash' ? {thinking:{type:'disabled'}} : {}), model, messages:[{role:'system', content:q.system},{role:'user', content:q.user}], temperature:q.temperature, max_tokens:q.max_tokens}), who, q.signal);
   const u = j.usage || {};
   const info = {model, request_id: j?.id, limit_tokens: q.max_tokens, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens};
   complete(j?.choices?.[0]?.finish_reason, ['stop'], who, info);

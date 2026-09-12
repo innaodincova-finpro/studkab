@@ -19,3 +19,84 @@
 Результаты CI для новых изменений проверять отдельно; наличие workflow не означает успех.
 Следующая реализация должна закрывать интеграцию R2–R4 в действующей инфраструктуре,
 а не развивать отдельный Node/SQLite-сервис как замену согласованному приложению.
+
+## Обновление: PostgreSQL, 2026-09-11
+R2–R4/R9: в рабочую Supabase применена миграция 20260911195103_studkab_generation_storage_v1. Хранение заданий, неизменяемых материалов и частей, блокировки, неизвестный результат и общий бюджет реализованы на уровне базы. SQL-проверки и проверка service_role прошли с откатом тестовых данных. Подробности: supabase/GENERATION_STORAGE_ACCEPTANCE.md. Edge-обработчик, расписание и интерфейс ещё не подключены; приёмки 1 и 2 не пройдены. Прототип SQLite исключён из итогового дерева PR34.
+
+## Edge-обработчик — следующий шаг
+Написан studkab-generation; 6 локальных тестов с подставными зависимостями прошли. Публикация отклонена автоматической проверкой: verify_jwt=false и передача материалов внешнему посреднику требуют явного разрешения. Обход не выполнялся. Обработчик, расписание и frontend не опубликованы. См. supabase/GENERATION_RUNNER_ACCEPTANCE.md.
+
+## 2026-09-12 — защитная доработка обработчика
+R1/R2/R4/R9: отдельная ветка feat/generation-server-integration от PR34.
+Серверный Bearer до доступа к конфигурации плюс cron_token, verify_jwt=true,
+выключенная по умолчанию отправка, ограничение результата в UTF-8 байтах.
+90/90 локальных Node-тестов, включая 12 тестов обработчика; git diff --check пройден.
+Нет публикации, расписания, Start/status интеграции или новых платных вызовов.
+Приёмки A1 и FIN-UAT-01 не закрыты. Предыдущий отказ публикации не обойдён.
+
+## 2026-09-12 — установка после разрешения пользователя
+PR35 77e6c732: GitHub Safety checks #98 success. studkab-generation v1 установлен
+с verify_jwt=true. Живой неавторизованный запрос отклонён HTTP401. Бюджет 0/0,
+заданий 0; платных запросов нет. Расписание, Start/status и frontend остаются
+неподключёнными. Установка функции не равна серверной генерации и приёмке A1.
+Разрешение на существующий внешний маршрут получено; бюджет не повышен.
+
+## 2026-09-12 — API запуска/статуса и интерфейс (подготовлены)
+R2/R3/R4/R9: отдельная studkab-generation-api и свёрнутый блок реестра.
+Проверка исполнителя, владелец только из сессии, серверный резерв и запрет запуска
+при нулевом бюджете, чтение результатов без перезаписи документа. 100/100 Node-тестов.
+Сценарий браузерной приёмки добавлен; первоначальный запуск не состоялся из-за
+отсутствия Chromium. Публикация клиента и полная интеграция не подтверждены.
+Протокол: supabase/GENERATION_API_ACCEPTANCE.md. Расписание и секреты не настроены;
+деление больших глав, контекст частей и приёмки A1/FIN-UAT-01 остаются открытыми.
+
+API 8a0113a7 установлен как studkab-generation-api v1 с verify_jwt=true; живой
+запрос без входа: 401. В рабочей БД с ROLLBACK подтверждены одинаковое задание
+при повторном Start, блокировка dispatch нулевым бюджетом, отсутствие попытки.
+Клиент ещё не опубликован; настоящая конкуренция и приёмка A1 не заявляются.
+
+8a0113a7: GitHub Safety checks #100 (34663493812) success, включая Node, SQL и
+браузерную проверку нового блока: нулевой бюджет, прежняя версия, сохранность
+редактируемого документа. В браузерном тесте API подставной, это не рабочая A1.
+
+## 2026-09-12 — расписание и ограниченные части
+Установлен studkab-generation-v1, раз в минуту; подтверждены 3 успешных прохода
+на пустой очереди. probe18823: HTTP200, enabled=false, providerConfigured=false.
+Это подтверждает отсутствие настройки ключа посредника, не готовность генерации.
+Подготовлены ограниченные части, контекст только своего job, остановка до dispatch
+при превышении контекста. 107/107 Node-тестов. Бюджет не повышен, платных вызовов нет.
+Протокол и ограничения: supabase/GENERATION_SCHEDULE_ACCEPTANCE.md.
+
+1ef690f2: GitHub Safety checks #105 (34673870947) success: Node, SQL, browser.
+Рабочая проверка JWT без cron_token отклонена 401. Итог: 9 проходов расписания,
+budget/reserved/jobs/attempts = 0. Ключ посредника не настроен; значения секретов
+не извлекались. Полный реальный запуск, приёмка A1 и FIN-UAT-01 не выполнены.
+
+## 2026-09-12 — uploaded live Worker verified
+R1/R2/R4/R9 C010: uploaded ai-proxy equals tracked worker after newline normalization.
+Added modern DeepSeek allowlist entries and explicit Flash non-thinking mode; no legacy
+remapping. node --test tests/ai-proxy.test.mjs: 14/14 with mocked provider, no paid calls.
+Manual deployment pending; runner still uses legacy name and remains disabled.
+USD1 cap previously verified, reserved0/jobs0/attempts0. A1 and FIN-UAT-01 open.
+
+## 2026-09-12 — recovery transaction and intake gate
+In production DB, exclusively locked generation tables, guarded no active jobs and
+reserved750000, exercised expired unsent claim/reclaim, stale dispatch rejection,
+expired sent attempt to unknown without retry, late result rejection. All assertions
+passed and transaction rolled back. No HTTP/model request. Script tests/manual/generation-recovery.sql.
+This does not simulate process kill or network interruption at the Edge runtime.
+C012 aligns API capability with minimum250000 and whole-part remaining reserve;
+14 API tests pass. Browser live executor acceptance still blocked on unpublished UI.
+
+## 2026-09-12 — main compatibility and lost job link
+Merged main a34efc6 into feature; preserved reporting rules and both change records.
+C014 adds executor-scoped request history and explicit result selection when browser
+lost Start response. No automatic generation; basis unknown warns before use.
+113 Node tests pass. Added browser scenario with two history choices and no paid Start;
+CI verification pending. Main remains unpublished; real authenticated browser still pending.
+
+771976ce: GitHub Safety checks114/run34677768400/job103510601737 completed SUCCESS,
+including Node, SQL and full browser suite with lost-job selection scenario.
+API v8 deployed, hash8cb0cbfc430caa47f778baff50010fe28618caa5c8c2d46cb2c54f5d423941ee;
+live history request without authentication rejected401. Frontend remains unpublished;
+browser tests mock Auth/API and do not equal real executor acceptance. No paid calls.

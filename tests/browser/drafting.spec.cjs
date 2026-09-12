@@ -46,3 +46,42 @@ test('generation failure appears in journal and can be copied on mobile',async({
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Очистить',exact:true}).click();
  expect(await page.evaluate(()=>D.aiDiagnostics.length)).toBe(0);
 });
+
+test('cloud preparation blocks zero budget and preserves edited document',async({page})=>{
+ await setup(page);await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>{Oblako.generationApi=async body=>{if(body.action==='capabilities')return {enabled:true,budgetAvailable:false};throw Error('Unexpected mutation');};});
+ await page.getByText('Подготовка в облаке',{exact:true}).click();
+ await page.getByRole('button',{name:'Проверить доступность',exact:true}).click();
+ await expect(page.locator('[data-cloud-message]')).toContainText('бюджет');
+ await expect(page.locator('[data-cloud-start]')).toBeDisabled();
+ await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:'older-version'};draftItem.doc.structure.ch1.text='Мой сохранённый текст';Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{id:'ch1',state:'done',text:'Облачный текст'}]});});
+ await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+ await expect(page.locator('[data-cloud-message]')).toContainText('прежней версии');
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой сохранённый текст');
+ await page.getByText('Сохранённый раздел ch1',{exact:true}).click();
+ await expect(page.locator('[data-cloud-result]')).toContainText('Облачный текст');
+});
+
+test('lost cloud job link is recovered by selection without another paid start',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  draftItem.doc.structure.ch1.text='Мой текст';delete draftItem.doc.serverJob;
+  window.recoveryActions=[];
+  Oblako.generationApi=async body=>{
+   recoveryActions.push(body.action);
+   if(body.action==='history')return {jobs:[{id:'22222222-2222-4222-8222-222222222222',created_at:'2026-09-12T06:00:00Z'},{id:'33333333-3333-4333-8333-333333333333',created_at:'2026-09-12T05:00:00Z'}]};
+   if(body.action==='status')return {job:{status:'complete'},parts:[{id:'ch1',state:'done',text:'Сохранённый ответ'}]};
+   throw Error('Paid Start is forbidden in recovery');
+  };
+ });
+ await page.getByText('Подготовка в облаке',{exact:true}).click();
+ await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+ await expect(page.locator('[data-recover-job]')).toHaveCount(2);
+ await page.locator('[data-recover-job]').first().click();
+ await expect(page.locator('[data-cloud-message]')).toContainText('не подтверждена');
+ expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой текст');
+ expect(await page.evaluate(()=>recoveryActions)).toEqual(['history','status']);
+ await page.getByText('Сохранённый раздел ch1',{exact:true}).click();
+ await expect(page.locator('[data-cloud-result]')).toContainText('Сохранённый ответ');
+});

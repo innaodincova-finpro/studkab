@@ -246,6 +246,21 @@
     return data;
   };
 
+  Oblako.generationApi = async function(body) {
+    if (!client || !userId || Oblako.app !== "reestr") throw new Error("Сначала войдите в реестр");
+    var expected = userId, expectedEpoch = epoch;
+    var r = await client.auth.getSession(), session = r.data && r.data.session;
+    if (!session || session.user.id !== expected || epoch !== expectedEpoch) throw new Error("Войдите заново");
+    var res = await fetch(global.OBLAKO_CONFIG.url + "/functions/v1/studkab-generation-api", {
+      method:"POST", headers:{"Content-Type":"application/json",Authorization:"Bearer " + session.access_token},
+      body:JSON.stringify(body),signal:AbortSignal.timeout(20000)
+    });
+    var data = await res.json();
+    if (epoch !== expectedEpoch || userId !== expected) throw new Error("Аккаунт изменился. Повторите действие");
+    if (!res.ok) throw new Error(data.error || "SERVICE_UNAVAILABLE");
+    return data;
+  };
+
   Oblako.signOut = function () {
     if (!client) return Promise.resolve();
     if (inFlight) return Promise.reject(new Error("Дождитесь завершения сохранения"));
