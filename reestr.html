@@ -868,7 +868,6 @@ function openDocBuilder(id){
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>' +
     '<h3>Документ</h3><div class="mut" style="margin-bottom:10px">' + esc(x.topic||"") + '</div>' +
-    '<button type="button" class="btn" data-docx="1">Скачать Word</button>' +
     '<div id="docPreview" style="overflow-wrap:anywhere"></div>' +
     '<details><summary>Настройки подготовки</summary>' +
     (aiReady()
@@ -882,6 +881,7 @@ function openDocBuilder(id){
             : 'Не отмечен ни один поставщик — откройте «Ещё» → «Нейросети».') +
           ' Пока разделы можно писать вручную или копировать запрос кнопкой «запрос» — сохранение и Word работают без нейросети.</div>') +
     '</details>' + DraftEditor.form(x) +
+    '<p class="mut" style="margin:14px 0 6px;font-weight:600">Шаг 1. Подготовка текста</p>' +
     (aiReady()?'<button type="button" class="btn" data-genall="1">Подготовить весь черновик</button><p class="hint">Один запуск для всех разделов. После сбоя продолжается с сохранённого места. Во время подготовки держите это окно открытым.</p>':'') +
     '<details><summary>Подготовка в облаке</summary><p class="hint">Подключение проходит проверку. Сохранённый текст документа не заменяется автоматически.</p><button type="button" class="chip" data-cloud-check>Проверить доступность</button><button type="button" class="chip" data-cloud-start disabled>Запустить в облаке</button><button type="button" class="chip" data-cloud-status>Проверить результат</button><p data-cloud-message role="status"></p><div data-cloud-result></div></details>' +
     '<div id="docStatus" class="infobox" style="margin:0 0 10px;display:none"></div>' +
@@ -892,9 +892,12 @@ function openDocBuilder(id){
         ? '<button type="button" class="chip" data-genover="1">Подготовить новую версию</button>'
         : '') +
     '</div></details>' +
+    '<p class="mut" style="margin:14px 0 6px;font-weight:600">Шаг 2. Доводка и проверка</p>' +
     '<button type="button" class="chip ok" data-draft-norm>Довести до нормы</button><button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
+    '<p class="mut" style="margin:14px 0 6px;font-weight:600">Шаг 3. Сохранение и выдача</p>' +
     '<div class="rowbtns">' +
-    '<button type="button" class="btn ghost" data-docsave="1" style="flex:1">Сохранить</button></div>'
+    '<button type="button" class="btn" data-docsave="1" style="flex:1">Сохранить</button>' +
+    '<button type="button" class="btn ghost" data-docx="1" style="flex:1">Скачать Word</button></div>'
   );
   wrap.dataset.accountIdentity=String(expectedIdentity);
   function preview(){
@@ -1027,7 +1030,7 @@ function openDocBuilder(id){
           explanation.textContent='Сохранено в этом запуске: '+report.saved+' из '+report.total+' частей. Слов в тексте: '+report.words+'. Заголовки Markdown, строки таблиц, ссылки и блоки кода исключены; числа считаются словами. Это части одного запуска, а не полный документ. Полнота разделов, расчёты и источники требуют проверки.';
           review.appendChild(explanation);
           report.notes.forEach(function(note){var p=document.createElement('p');p.textContent=note;review.appendChild(p);});
-          report.sections.forEach(function(section){var block=document.createElement('details'),title=document.createElement('summary'),pre=document.createElement('pre');title.textContent='Раздел '+section.id+' — слов: '+section.words+'; частей: '+section.saved+' из '+section.total;pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';pre.textContent=section.text;block.append(title,pre);review.appendChild(block);});
+          report.sections.forEach(function(section){var block=document.createElement('details'),title=document.createElement('summary'),pre=document.createElement('pre');title.textContent=(((doc.order||[]).filter(function(q){return q.id===section.id;})[0]||{}).name||section.id)+' — слов: '+section.words+'; частей: '+section.saved+' из '+section.total;pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';pre.textContent=section.text;block.append(title,pre);review.appendChild(block);});
           var download=document.createElement('button');download.type='button';download.className='chip';download.textContent='Скачать неполный Word';download.disabled=!report.saved;
           // Bind an immutable response copy; never read local chapter text or another job.
           var exportInfo=JSON.parse(JSON.stringify(info));
@@ -1066,7 +1069,7 @@ function openDocBuilder(id){
           };
           review.appendChild(apply);
           target.appendChild(review);
-          info.parts.filter(function(p){return p.state==='done';}).forEach(function(p){var details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent='Сохранённый раздел '+p.id;text.style.whiteSpace='pre-wrap';text.textContent=p.text;details.append(summary,text);target.appendChild(details);});
+          info.parts.filter(function(p){return p.state==='done';}).forEach(function(p){var details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent=(((doc.order||[]).filter(function(q){return q.id===(p.section||p.id);})[0]||{}).name||p.section||p.id)+(/__part_(\d+)$/.test(p.id)?', часть '+p.id.replace(/^.*__part_/,''):'');text.style.whiteSpace='pre-wrap';text.textContent=p.text;details.append(summary,text);target.appendChild(details);});
         });
       }).catch(function(e){
         var labels={BUDGET_BLOCKED:'Запуск заблокирован: разрешённый бюджет не задан или исчерпан.',GENERATION_NOT_CONFIGURED:'Облачная подготовка ещё не настроена.',COST_NOT_CONFIGURED:'Не настроен расчёт предельной стоимости.',FORBIDDEN:'Доступно только исполнителю.',UNAUTHORIZED:'Войдите в аккаунт.',SERVICE_UNAVAILABLE:'Сервис недоступен. Повторите проверку статуса.',NOT_FOUND:'Задание не найдено в вашем аккаунте.',INPUT_TOO_BIG:'Материалы слишком велики для одного запуска. Они не были обрезаны.'};
