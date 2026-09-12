@@ -48,9 +48,9 @@ export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
    const bearer=req.headers.get('authorization');
    const user=bearer?.startsWith('Bearer ') ? await auth(bearer) : null;
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
-   const raw=await req.text();if(raw.length>4000000)return json({error:'Заявка слишком большая'},413);
+   const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
-   if(input.action==='deliver'||input.action==='result'){
+   if(['deliver','result','prepare-result','review-result'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(raw.length>16000)return json({error:'Заявка слишком большая'},413);

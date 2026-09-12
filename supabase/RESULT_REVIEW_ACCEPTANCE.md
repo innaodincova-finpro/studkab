@@ -1,0 +1,52 @@
+# C019 — versioned result delivery
+
+Status: implemented locally; not deployed. No student data or paid AI calls changed.
+
+## What is enforced
+
+- Immutable JSON snapshot and DOCX bytes (up to 3 MiB), SHA-256 computed by PostgreSQL.
+- Recipient comes from the original server request. Executor identity is checked by
+  the authenticated Edge handler, never by browser-supplied role/recipient metadata.
+- Separate evidence for C01–C13/S01–S03; every item must pass and contain an explanation.
+- Review is immutable and bound to a version. Creating a newer server version blocks
+  new delivery based on the old approval. A retry of an already delivered operation
+  returns its historical receipt without adding a delivery.
+- A table trigger blocks legacy or direct insert paths without the same valid review.
+- Students receive the captured bytes and check SHA-256 before download. Legacy
+  results remain readable via the original serializer; they are not retroactively
+  labelled as exact-file reviewed results.
+
+The review is a human attestation, not an automated financial/content examiner.
+The existing FIN-UAT incomplete-document gate remains. This does not certify the
+separately assembled control Word, Microsoft Word opening, full R5/R7 or A1/A2.
+
+## Verification performed
+
+131 Node tests passed. Optional isolated PostgreSQL/PGlite and DOM/jsdom runners
+passed. They exercise the actual migration and actual results-ui.js respectively.
+Native PostgreSQL concurrent tests and browser scenarios are added to existing CI,
+but CI could not run because public branch publication was rejected by auto-review.
+Managed browser refused localhost; downloading a local browser timed out.
+
+To reproduce optional checks, install @electric-sql/pglite and jsdom in a disposable
+npm directory and set STUDKAB_TEST_MODULE_ROOT to that directory. Run
+`node tests/manual/result-review-pglite.mjs` and `node tests/manual/result-ui-dom.mjs`.
+Normal CI runs `npm test`, `python3 tests/sql_safety.py` against an empty disposable
+PostgreSQL DB, then `npm run test:browser`. Never run sql_safety.py on production.
+
+## Deployment and remaining gates
+
+1. Publish the code-only branch after publication authorization is recognized; run CI.
+2. Compare installed studkab-requests with repository before replacing its files.
+3. Apply migration 20260912091822_studkab_versioned_delivery.sql and verify access
+   advisors plus reversible, synthetic SQL checks. Preserve historical rows.
+4. Deploy request handler preserving its existing auth and scheduled notification
+   configuration, then publish frontend. Old clients must receive review_required,
+   not silently bypass the gate.
+5. Perform real browser acceptance on a separate synthetic request: review, stale
+   version rejection, lost-response retry, exact-byte download and other-user denial.
+   Do not send real student documents or notifications as a test.
+
+Rollback: keep the additive tables/history. Revert the new UI if necessary but retain
+server fail-closed legacy delivery and the result-table review trigger. Do not restore
+the old unreviewed delivery RPC. Historical result retrieval stays available.

@@ -80,21 +80,6 @@ test('result delivery is executor-only; a student cannot read another student re
  who=student;
  const result=await (await app(request({action:'result',id:requestId}))).json();assert.equal(result.result.document.topic,documentFixture.topic);
 });
-test('submitted request flows through inbox to immutable result and student retrieval',async()=>{
- let who=student,row,delivered;
- const app=handler({auth:async()=>who,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>{
-  if(path==='rpc/submit_studkab_request'){row={id:requestId,number:1,payload:body.content,student_id:body.student};return{id:row.id,number:1};}
-  if(path.startsWith('studkab_requests?'))return [row];
-  if(path==='rpc/deliver_studkab_result'){delivered={delivery_id:body.delivery,document:body.content,created_at:'2026-09-09T00:00:00Z'};return{deliveryId:body.delivery};}
-  if(path.startsWith('studkab_results?'))return delivered?[delivered]:[];
-  throw Error('Unexpected path');
- }});
- assert.equal((await app(request({action:'submit',payload:p}))).status,200);
- assert.equal((await (await app(request({action:'result',id:requestId}))).json()).result,null);
- who=owner;assert.equal((await (await app(request({action:'inbox'}))).json()).rows[0].id,requestId);
- const ack=await (await app(request({action:'deliver',id:requestId,deliveryId,document:documentFixture}))).json();assert.equal(ack.saved,true);
- who=student;assert.equal((await (await app(request({action:'result',id:requestId}))).json()).result.document.structure.intro.text,documentFixture.structure.intro.text);
-});
 test('result validation rejects empty text, dangerous keys, oversized sections and invalid formatting',async()=>{
  const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
  for(const bad of [null,{}, {...documentFixture,chapters:[{id:'__proto__',name:'X'}]}, {...documentFixture,chapters:[{id:'intro',name:'A'},{id:'intro',name:'B'}]}, {...documentFixture,structure:{intro:{text:''}}},{...documentFixture,structure:{intro:{text:'x'.repeat(100001)}}},{...documentFixture,format:{size:999}}])assert.throws(()=>validateResult(bad));
@@ -129,4 +114,42 @@ test('Word export normalizes incomplete historical formatting without mutating i
   assert.doesNotMatch(xml,/NaN|Infinity/);assert.match(xml,/w:left="1701"/);assert.match(xml,/w:right="850"/);
   assert.equal(JSON.stringify(doc),before);
  }
+});
+
+const versionId='33333333-3333-4333-8333-333333333333',reviewId='44444444-4444-4444-8444-444444444444',recipientId='55555555-5555-4555-8555-555555555555';
+const binding={id:requestId,versionId,reviewId,recipientId,fileHash:'a'.repeat(64),documentHash:'b'.repeat(64)};
+const codes=Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(2,'0')).concat(['S01','S02','S03']);
+const criteria=Object.fromEntries(codes.map(c=>[c,{status:'pass',evidence:'Synthetic review evidence, page 1'}]));
+function resultApp(db){return handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>path.startsWith('studkab_requests?')?[{id:requestId,student_id:recipientId,payload:{n:documentFixture.student}}]:db(path,method,body)});}
+test('legacy delivery fails closed without invoking delivery RPC',async()=>{
+ const app=resultApp(()=>{throw Error('must not call');});
+ assert.equal((await app(request({action:'deliver',id:requestId,deliveryId,document:documentFixture}))).status,428);
+});
+test('prepare binds server recipient and rejects invalid file or changed recipient name',async()=>{
+ let body;
+ const app=resultApp(async(path,method,b)=>{assert.equal(path,'rpc/prepare_studkab_result');body=b;return{versionId};});
+ const input={action:'prepare-result',id:requestId,versionId,document:documentFixture,docxBase64:'UEsDBAAAAAA='};
+ assert.equal((await app(request({...input,docxBase64:'garbage'}))).status,400);
+ assert.equal((await app(request({...input,document:{...documentFixture,student:'Someone else'}}))).status,409);
+ assert.equal((await app(request(input))).status,200);assert.equal(body.recipient,recipientId);
+});
+test('per-criterion evidence is required; stale and recipient conflicts block delivery',async()=>{
+ let calls=0,error=null;
+ const app=resultApp(async()=>{calls++;return error?{error}:{reviewId,versionId};});
+ for(const bad of [null,{}, {...criteria,C11:{status:'not_checked',evidence:'Not opened in Word'}},{...criteria,C03:{status:'pass',evidence:''}}])assert.equal((await app(request({...binding,action:'review-result',criteria:bad}))).status,400);
+ assert.equal(calls,0);
+ assert.equal((await app(request({...binding,action:'review-result',criteria}))).status,200);
+ assert.equal((await app(request({...binding,action:'deliver',deliveryId,recipientId:requestId}))).status,409);
+ error='stale';assert.equal((await app(request({...binding,action:'deliver',deliveryId}))).status,409);
+ error='review_required';assert.equal((await app(request({...binding,action:'deliver',deliveryId}))).status,428);
+});
+test('student receives stored bytes only for the current server recipient',async()=>{
+ let allowed=true;
+ const app=handler({auth:async()=>({...student,id:recipientId}),db:async(path)=>{
+  if(path.startsWith('studkab_requests?'))return[{id:requestId,student_id:recipientId}];
+  if(path.startsWith('studkab_results?'))return[{version_id:versionId,document:documentFixture}];
+  return[{recipient_id:allowed?recipientId:requestId,docx_base64:'UEsDBAAAAAA=',file_hash:'a'.repeat(64)}];
+ }});
+ const res=await (await app(request({action:'result',id:requestId}))).json();assert.equal(res.result.docxBase64,'UEsDBAAAAAA=');
+ allowed=false;assert.equal((await app(request({action:'result',id:requestId}))).status,409);
 });
