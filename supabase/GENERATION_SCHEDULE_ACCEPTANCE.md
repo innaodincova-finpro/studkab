@@ -44,3 +44,15 @@ Supabase Edge Function Secrets using the existing proxy password, and set
 STUDKAB_GENERATION_ENABLED=true only with all spend gates retained. Server part
 reservation and authorized numerical budget must be verified before paid dispatch.
 No secrets should be pasted in chat. Current main remains unchanged and PR35 draft.
+
+## Authorized test budget and secret checkpoint — 2026-09-12
+User authorized a total USD 1 test cap after the explicit cost proposal.
+Protected live probe18909 returned HTTP200: enabled=false, providerConfigured=true.
+This proves secret presence only, not provider authentication or model availability.
+Conditional budget update (empty jobs, previous cap/reserved zero) returned
+limit_microusd=1000000, reserved_microusd=0. This is a cumulative cap, not a top-up.
+Worker source still allowlists deepseek-chat/deepseek-reasoner; current official
+https://api-docs.deepseek.com/quick_start/pricing/ lists deepseek-flash and deepseek-v4-pro.
+Live Worker model compatibility remains unverified. No Cloudflare management tool
+is exposed. Do not claim a successful paid test or change to a new model silently.
+Runner enable and trusted per-part reserve remain required before dispatch.
