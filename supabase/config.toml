@@ -1,0 +1,2 @@
+[functions.studkab-generation]
+verify_jwt = true

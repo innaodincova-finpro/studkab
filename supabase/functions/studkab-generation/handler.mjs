@@ -1,8 +1,12 @@
 const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
-export function handler({config,rpc,provider,ready}) {
+export function handler({config,rpc,provider,ready,authorize}) {
  return async req=>{
   if(req.method!=='POST')return reply({error:'METHOD'},405);
+  // Fail closed before reading configuration or claiming any work.
+  try {
+   if(!authorize || !await authorize(req))return reply({error:'UNAUTHORIZED'},401);
+  } catch { return reply({error:'AUTH_UNAVAILABLE'},503); }
   let cfg;
   try{cfg=await config();}catch{return reply({error:'CONFIG_UNAVAILABLE'},503);}
   const token=req.headers.get('X-Studkab-Runner');
@@ -18,7 +22,7 @@ export function handler({config,rpc,provider,ready}) {
   if(!id)return reply({status:'budget',job:c.job_id});
   let result;
   try{result=await provider(c,id);}catch{result=null;}
-  const valid=result?.complete===true && typeof result.text==='string' && result.text.trim() && result.text.length<=100000;
+  const valid=result?.complete===true && typeof result.text==='string' && result.text.trim() && new TextEncoder().encode(result.text).byteLength<=100000;
   const detail=result?.detail||{};
   try{
    const state=await rpc('studkab_gen_settle',{...args,p_request:id,p_text:valid?result.text:null,

@@ -1,6 +1,7 @@
 import {handler} from './handler.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const token=Deno.env.get('STUDKAB_PROXY_TOKEN');
+const enabled=Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true';
 async function db(path:string,body?:unknown){
  const r=await fetch(base+'/rest/v1/'+path,{method:body===undefined?'GET':'POST',
  headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},
@@ -14,10 +15,15 @@ async function provider(c:any,id:string){
  body:JSON.stringify({provider:'deepseek',model:'deepseek-chat',system:c.input.system,
  user:c.spec.prompt,max_tokens:2500,temperature:0.4,client_request_id:id}),
  signal:AbortSignal.timeout(90000)});
- const value=await r.json();if(!r.ok)return null;return value;
+ const value=await r.json();
+ // Preserve safe provider diagnostics without treating an HTTP error as completion.
+ if(!r.ok)return {complete:false,detail:value?.detail};
+ return value;
 }
 Deno.serve(handler({
+ // Gateway JWT verification remains enabled; a user JWT is insufficient here.
+ authorize:async(req:Request)=>!!key && req.headers.get('Authorization')==='Bearer '+key,
  config:async()=>(await db('studkab_request_config?id=eq.true&select=cron_token'))[0],
  rpc:(name:string,args:unknown)=>db('rpc/'+name,args),
- provider,ready:()=>!!token
+ provider,ready:()=>enabled && !!token
 }));
