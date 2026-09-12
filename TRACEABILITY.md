@@ -123,3 +123,23 @@ Frontend adds a collapsed read-only review; no local document/review/budget muta
 no paid action and preservation of local text; CI pending. Full A1/FIN-UAT01 open.
 Live reduced-part test from prior stage: job5e847793 complete,969 chars,stop,
 12286 input/337 output tokens, one call; approved cap=reserved1250000 microUSD.
+
+## 2026-09-12 — original criteria and incomplete Word (C017)
+Original control archive d5ba4cfe806dcb8f5460e657bd989cafcea4ad9076d360b263de239712db73b9;
+16 manifest entries verified. Original requirements and acceptance text retained outside the repository.
+Only labelled profile bounds are used in code; exact requirement identity is not verified.
+Examiner content is not added to provider prompts.
+FIN-UAT checks section words, total and missing required sections; C01–C13/S01–S03
+remain unaccepted, so frontend general approval/delivery cannot mark this case ready.
+This is a frontend gate, not a completed server delivery gate or full examiner.
+Cloud DOCX captures one status response, exports only its parts and gaps, marks incomplete
+on title and notes page, includes job/version. No local document mixing/paid calls.
+Serializer now emits native numbered subsection headings and12pt single-spaced table cells.
+122 Node tests passed. Four-page serializer fixture rendered and every PNG inspected:
+no clipping, editable OOXML table, visible missing-part marker, TOC pages3/4 and footer2–4.
+LibreOffice rendering does not establish Microsoft Word acceptance C11. Browser CI pending.
+Full FIN-UAT01, financial/source checks and A1 remain incomplete.
+
+Auto-review rejected original private-source fixture publication; those files and full
+requirements literal were removed from the upload scope. Only application code, synthetic
+test labels and this provenance summary are proposed. Local original files preserved.

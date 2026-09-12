@@ -18,7 +18,7 @@
  function deliver(x){
   if(!x.requestNumber)return toast('Эта запись получена вне кабинета. Передайте документ через согласованный мессенджер.');
   var payload;try{
-   var problems=DraftQuality.issues(x.doc||{});
+   var problems=DraftQuality.issues(x.doc||{}).concat(DraftQuality.finAcceptance(x).errors);
    if(problems.length)throw Error('Передача недоступна: '+problems.join('; '));
    if(!x.doc || x.doc.review!==DraftQuality.stamp(x))throw Error('Откройте документ и нажмите «Проверить готовность» перед передачей');
    payload=snapshot(x);}catch(e){return toast(e.message);}

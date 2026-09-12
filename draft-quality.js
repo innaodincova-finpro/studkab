@@ -97,8 +97,33 @@
   });
   return {sections:sections,notes:Array.from(new Set(notes)),words:sections.reduce(function(n,g){return n+g.words;},0),saved:saved,total:parts.length};
  }
+ function finAcceptance(x){
+  var req=String(inputs(x).requirements||'').replace(/\r\n/g,'\n').trim();
+  if(!/FIN-UAT-01/.test(req))return {applicable:false,errors:[],sections:[]};
+  if(!req.includes('УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01')||!req.includes('Авторские критерии приёмки версии 1.0.'))return {applicable:true,errors:['Требования FIN-UAT-01 отличаются от контрольной версии 1.0. Нужна сверка критериев.'],sections:[]};
+  var limits=[['intro','Введение',500,700],['ch1','Глава 1',1400,2000],['ch2','Глава 2',2800,3700],['ch3','Глава 3',900,1400],['concl','Заключение',400,700]],errors=[],total=0;
+  var d=x.doc||{},structure=d.structure||{},order=d.order||[];
+  var sections=limits.map(function(a){var included=order.some(function(c){return c.id===a[0];}),words=included?wordCount((structure[a[0]]||{}).text):0;total+=words;
+   if(words<a[2]||words>a[3])errors.push(a[1]+': '+words+' слов; требуется '+a[2]+'–'+a[3]+'.');
+   return {id:a[0],name:a[1],words:words,min:a[2],max:a[3]};
+  });
+  if(total<6000||total>8500)errors.push('Основной текст: '+total+' слов; требуется 6000–8500 без таблиц, библиографии и приложений.');
+  ['refs','app_a','app_b','app_c'].forEach(function(id){if(!order.some(function(c){return c.id===id;})||!String((structure[id]||{}).text||'').trim())errors.push('Отсутствует обязательный раздел '+id+'.');});
+  errors.push('Соответствие текущих требований исходному комплекту необходимо проверить отдельно.');
+  errors.push('Приёмка FIN-UAT-01 по критериям C01–C13 и S01–S03 не подтверждена. Общая галочка не разрешает передачу.');
+  return {applicable:true,errors:errors,sections:sections,total:total};
+ }
+ function cloudDraft(info){
+  if(!info||!info.job||!/^[-a-zA-Z0-9]{1,100}$/.test(info.job.id||'')||!/^[-a-zA-Z0-9]{1,100}$/.test(info.job.version||''))throw Error('Не подтверждена версия запуска');
+  var report=cloudReport(info.parts);if(!report.saved||!report.sections.length)throw Error('Нет сохранённого текста для Word');
+  var chapters=[{id:'notice',name:'Сведения о черновике'}],structure=Object.create(null);
+  structure.notice={text:'Неполный черновик. Содержит только сохранённые части одного облачного запуска. Требования, расчёты, источники и полнота не приняты.\nВерсия: '+info.job.version+'\nЗапуск: '+info.job.id+'\nСохранено частей: '+report.saved+' из '+report.total+'.\n'+report.notes.join('\n')};
+  var names={intro:'Введение',ch1:'Глава 1',ch2:'Глава 2',ch3:'Глава 3',concl:'Заключение',refs:'Источники',app_a:'Приложение А',app_b:'Приложение Б',app_c:'Приложение В'};
+  report.sections.forEach(function(g,i){var id='cloud_'+i;chapters.push({id:id,name:names[g.id]||g.id});structure[id]={text:g.text};});
+  return {topic:'Сохранённые части работы',draftNotice:'Неполный черновик',format:{workType:'Неполный черновик',toc:true},chapters:chapters,structure:structure};
+ }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={finAcceptance:finAcceptance,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);

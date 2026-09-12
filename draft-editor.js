@@ -29,7 +29,7 @@
  }
  function lock(w,on){w.querySelectorAll('button,input,textarea,select').forEach(function(el){el.disabled=on;});}
  function check(x){
-  var errors=DraftQuality.preflight(x).concat(DraftQuality.issues(x.doc));
+  var errors=DraftQuality.preflight(x).concat(DraftQuality.issues(x.doc),DraftQuality.finAcceptance(x).errors);
   var notes=DraftQuality.editorialNotes(x);
   var notesHtml=notes.length?'<p>Замечания к объёму и повторам:</p><ul>'+notes.map(function(n){return '<li>'+esc(n)+'</li>';}).join('')+'</ul>':'';
   if(x.doc.basis && x.doc.basis!==basis(x))errors.push('Материалы или структура изменились после подготовки');

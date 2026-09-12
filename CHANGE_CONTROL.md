@@ -160,3 +160,21 @@ other jobs/current document, write review approval or claim full chapter coverag
 No provider calls, budget/schema/auth changes. Validate gaps, shuffled order, duplicates,
 HTML text safety, original text preservation and browser narrow-screen rendering.
 Rollback frontend module/HTML/cache version; persisted results remain unchanged.
+
+## C-017 — incomplete cloud DOCX and FIN-UAT volume gate
+R3/R5/R8/R9. Original FIN-UAT01 v1 archive found and16 manifest hashes verified.
+Requirements/examiner demand per-criterion evidence; a single checkbox is insufficient.
+Add labelled FIN-UAT v1 profile with section word boundaries and missing-section notes;
+FIN-UAT delivery remains blocked until independent criteria are implemented/verified.
+Do not generalize this test profile to unrelated requests. Cloud DOCX exports a single
+status response only, with job/version and incomplete label, no local text mixing.
+Fix Markdown subsection headings and table typography in existing DOCX serializer.
+No generation, budget, schema or auth change. Node, browser and rendered DOCX checks;
+rollback frontend files, keep all persisted input/results. Server-side delivery gate
+remains a separate unmet R8 requirement; this frontend guard does not replace it.
+
+Publication review rejected uploading complete private Library source documents.
+Safer scope: original requirements/acceptance texts remain outside the repository.
+Published code contains only test profile bounds and synthetic test labels, no copied
+source text. Profile detection is by label, not proof that requirements are unchanged;
+UI explicitly requires separate source comparison and never grants acceptance.
