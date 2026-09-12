@@ -140,3 +140,13 @@ Add executor-only request history (metadata only, max20 newest) and explicit sel
 in client when no job link exists. Recovered job has unknown basis, always warns old
 version; never overwrites document or starts generation. Test owner filter, metadata
 minimization, browser selection and preserved document. No new paid calls.
+
+## C-015 — smaller parts and precise failure reason
+R1/R2/R4. Live FIN-UAT01 job5230bfde first part hit length at2500 output tokens.
+Reduce new plan chunk target4500 to2000 characters without changing overall requested
+section volume or raising provider output/budget limits. Original immutable plans remain.
+Add status-only sanitized attempt diagnostics after owner check; distinguish OUTPUT_LIMIT
+from genuinely unknown result. No retry, no schema/data change. Existing trial publication
+authorized by user. Test size boundaries, known/unknown failures, secret stripping and UI.
+Rollback previous API/frontend; keep failed job and budget reservation. This mitigates
+length risk, does not prove model compliance or completed academic document.

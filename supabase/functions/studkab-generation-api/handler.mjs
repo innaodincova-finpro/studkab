@@ -6,6 +6,13 @@ const headers={'Content-Type':'application/json','Cache-Control':'no-store',
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
 const idPattern=/^[a-zA-Z0-9_-]{1,100}$/;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
+export function failure(attempt){
+ if(!attempt)return null;
+ const code=attempt.detail?.finish_reason==='length'?'OUTPUT_LIMIT':attempt.reason==='LEASE_EXPIRED_AFTER_DISPATCH'?'LEASE_EXPIRED_AFTER_DISPATCH':'RESULT_UNKNOWN';
+ const out={code};
+ for(const key of ['prompt_tokens','completion_tokens'])if(Number.isSafeInteger(attempt.detail?.[key])&&attempt.detail[key]>=0&&attempt.detail[key]<=1000000000)out[key]=attempt.detail[key];
+ return out;
+}
 export function prepare(input,cost){
  if(typeof input.request!=='string'||!idPattern.test(input.request) || typeof input.system!=='string' || !input.system.trim()
  || input.system.length>100000 || !Array.isArray(input.parts) || input.parts.length<1 || input.parts.length>100)
@@ -65,8 +72,9 @@ export function handler({auth,config,db,settings}){
     const [job]=await db('studkab_gen_jobs?id=eq.'+input.job+'&owner_id=eq.'+encodeURIComponent(user.id)+'&select=id,request_id,version,status,created_at');
     if(!job)return reply({error:'NOT_FOUND'},404);
     const parts=await db('studkab_gen_parts?job_id=eq.'+job.id+'&select=ordinal,state,result,spec&order=ordinal.asc');
+    const attempts=await db('studkab_gen_attempts?job_id=eq.'+job.id+'&select=ordinal,reason,detail&order=started_at.desc');
     // Claim tokens, input prompts and service configuration never enter the response.
-    return reply({job,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null}))});
+    return reply({job,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,failure:p.state==='unknown'?failure(attempts.find(a=>a.ordinal===p.ordinal)):null}))});
    }
    return reply({error:'UNKNOWN_ACTION'},400);
   }catch{return reply({error:'SERVICE_UNAVAILABLE'},503);}

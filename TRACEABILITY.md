@@ -100,3 +100,15 @@ including Node, SQL and full browser suite with lost-job selection scenario.
 API v8 deployed, hash8cb0cbfc430caa47f778baff50010fe28618caa5c8c2d46cb2c54f5d423941ee;
 live history request without authentication rejected401. Frontend remains unpublished;
 browser tests mock Auth/API and do not equal real executor acceptance. No paid calls.
+
+## 2026-09-12 — trial publication and length correction
+User authorized pilot publication; PR35 merged2cea907. Real executor browser Start
+created FIN-UAT01 job5230bfde, 17 parts. First response hit length2500, no completed part.
+Status persisted across reopening. Existing document text was not replaced.
+Budget limit/reserved1000000; no further paid requests.
+C015: new plans target<=2000 characters per chunk rather than4500. Overall requested
+volume preserved; >100 parts or oversized snapshot still rejected, never silently cut.
+Existing immutable job remains unknown; no automatic retry/migration. Status reads
+sanitized attempt reason after owner authorization and renders OUTPUT_LIMIT clearly.
+17 API tests passed; browser regression added. Live diagnosis can be checked free;
+real generation with smaller chunks remains unverified until budget decision.

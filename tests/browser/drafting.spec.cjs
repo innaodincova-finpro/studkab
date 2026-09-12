@@ -85,3 +85,13 @@ test('lost cloud job link is recovered by selection without another paid start',
  await page.getByText('Сохранённый раздел ch1',{exact:true}).click();
  await expect(page.locator('[data-cloud-result]')).toContainText('Сохранённый ответ');
 });
+
+test('known output limit is shown instead of a generic unknown result',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{ordinal:0,id:'ch2__part_1',state:'unknown',text:null,failure:{code:'OUTPUT_LIMIT',completion_tokens:2500}}]});});
+ await page.getByText('Подготовка в облаке',{exact:true}).click();
+ await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+ await expect(page.locator('[data-cloud-message]')).toContainText('достигнут предел длины ответа');
+ await expect(page.locator('[data-cloud-message]')).toContainText('Автоматический повтор заблокирован');
+ await expect(page.locator('[data-cloud-message]')).not.toContainText('Результат последнего запроса неизвестен');
+});

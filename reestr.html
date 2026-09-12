@@ -1013,6 +1013,11 @@ function openDocBuilder(id){
           current();
           var labels={queued:'Ожидает обработки',running:'Выполняется',unknown:'Результат последнего запроса неизвестен. Автоматический повтор заблокирован.',budget:'Остановлено по лимиту расходов',complete:'Части сохранены. Требуется проверка документа.'};
           message.textContent=(labels[info.job.status]||'Состояние уточняется')+' Сохранено частей: '+info.parts.filter(function(p){return p.state==='done';}).length+' из '+info.parts.length+'.';
+          var failed=info.parts.filter(function(p){return p.failure;});
+          if(failed.length){
+            var reasons={OUTPUT_LIMIT:'Ответ оборвался: достигнут предел длины ответа нейросети.',LEASE_EXPIRED_AFTER_DISPATCH:'После отправки запроса подтверждение не получено вовремя.',RESULT_UNKNOWN:'Не удалось подтвердить полный ответ нейросети.'};
+            message.textContent='Подготовка остановлена. '+failed.map(function(p){return 'Часть '+(p.ordinal+1)+': '+(reasons[p.failure.code]||reasons.RESULT_UNKNOWN);}).join(' ')+' Автоматический повтор заблокирован. Сохранено частей: '+info.parts.filter(function(p){return p.state==='done';}).length+' из '+info.parts.length+'.';
+          }
           if(doc.serverJob.basis===null)message.textContent+=' Связь с текущими материалами не подтверждена: проверьте выбранную версию.';
           else if(doc.serverJob.basis!==DraftEditor.basis(x))message.textContent+=' Материалы изменены: это результат прежней версии.';
           var target=wrap.querySelector('[data-cloud-result]');target.replaceChildren();
