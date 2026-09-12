@@ -24,3 +24,29 @@ test('financial recommendations flag repeated metrics and unsupported policy pre
  assert.equal(q.sectionNotes(x,c,'За 2024 и 2025 годы уточнить состав оборотного капитала. Подобрать отраслевые ориентиры ликвидности, автономии и рентабельности.').length,0);
  assert.equal(q.sectionNotes(x,c,'Сопоставить сроки поступления платежей и погашения обязательств; проверить результат по платёжному календарю.').length,0);
 });
+
+test('prose word count excludes markdown tables headings code URLs and citations',()=>{
+ assert.equal(q.wordCount('# Заголовок\nАнализ — это 2025 год. [S1]\n| Таблица | 999 |\n```js\nне текст\n```\n[Источник](https://example.test) https://example.test'),5);
+ assert.equal(q.wordCount('из-за роста cash-flow'),3);
+});
+test('cloud assembly preserves exact text, orders parts and marks missing results',()=>{
+ const parts=[{ordinal:2,section:'ch2',state:'done',text:'Третий абзац.'},{ordinal:0,section:'ch2',state:'done',text:'Первый абзац.'},{ordinal:1,section:'ch2',state:'unknown',text:'Нельзя включать'}];
+ const before=JSON.stringify(parts),r=q.cloudReport(parts);
+ assert.equal(r.sections[0].text,'Первый абзац.\n\n[Часть 2 не сохранена]\n\nТретий абзац.');
+ assert.equal(r.words,4);assert.equal(r.saved,2);assert.equal(r.total,3);assert.equal(JSON.stringify(parts),before);
+ assert(!r.sections[0].text.includes('Нельзя включать'));assert.equal(r.notes.length,1);
+});
+test('cloud assembly rejects duplicate ordinals and identifies empty or gapped plans',()=>{
+ const part={ordinal:0,id:'ch1',state:'done',text:'Текст'};
+ assert.equal(q.cloudReport([part,part]).sections.length,0);
+ assert.equal(q.cloudReport([{...part,ordinal:-1}]).sections.length,0);
+ assert.equal(q.cloudReport([]).notes.length,1);
+ assert(q.cloudReport([{...part,ordinal:2}]).notes.some(n=>n.includes('пропуски')));
+ assert.equal(q.cloudReport([{...part,text:' '}]).saved,0);
+});
+test('cloud report counts sections separately and reports repeated prose without deletion',()=>{
+ const text='Содержательный абзац, который повторяется в разных частях. '.repeat(4);
+ const r=q.cloudReport([{ordinal:0,section:'ch1',state:'done',text},{ordinal:1,section:'ch2',state:'done',text}]);
+ assert.equal(r.sections.length,2);assert.equal(r.sections[1].text,text);assert(r.notes.some(n=>n.includes('повторяется')));
+ assert.equal(r.words,2*q.wordCount(text));
+});

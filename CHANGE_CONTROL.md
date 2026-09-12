@@ -150,3 +150,13 @@ from genuinely unknown result. No retry, no schema/data change. Existing trial p
 authorized by user. Test size boundaries, known/unknown failures, secret stripping and UI.
 Rollback previous API/frontend; keep failed job and budget reservation. This mitigates
 length risk, does not prove model compliance or completed academic document.
+
+## C-016 — read-only assembly and word counts
+R3/R5/R8/R9. The one-part real test completed but returned969 chars for target1929;
+completion is not academic completeness. Existing cloud UI lists isolated parts.
+Add deterministic read-only grouping for one status response, ordinal validation,
+visible missing-part markers, word counts and repeated-paragraph notes. Never join
+other jobs/current document, write review approval or claim full chapter coverage.
+No provider calls, budget/schema/auth changes. Validate gaps, shuffled order, duplicates,
+HTML text safety, original text preservation and browser narrow-screen rendering.
+Rollback frontend module/HTML/cache version; persisted results remain unchanged.
