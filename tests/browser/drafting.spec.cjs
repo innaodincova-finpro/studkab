@@ -46,3 +46,18 @@ test('generation failure appears in journal and can be copied on mobile',async({
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Очистить',exact:true}).click();
  expect(await page.evaluate(()=>D.aiDiagnostics.length)).toBe(0);
 });
+
+test('cloud preparation blocks zero budget and preserves edited document',async({page})=>{
+ await setup(page);await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>{Oblako.generationApi=async body=>{if(body.action==='capabilities')return {enabled:true,budgetAvailable:false};throw Error('Unexpected mutation');};});
+ await page.getByText('Подготовка в облаке',{exact:true}).click();
+ await page.getByRole('button',{name:'Проверить доступность',exact:true}).click();
+ await expect(page.locator('[data-cloud-message]')).toContainText('бюджет');
+ await expect(page.locator('[data-cloud-start]')).toBeDisabled();
+ await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:'older-version'};draftItem.doc.structure.ch1.text='Мой сохранённый текст';Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{id:'ch1',state:'done',text:'Облачный текст'}]});});
+ await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+ await expect(page.locator('[data-cloud-message]')).toContainText('прежней версии');
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой сохранённый текст');
+ await page.getByText('Сохранённый раздел ch1',{exact:true}).click();
+ await expect(page.locator('[data-cloud-result]')).toContainText('Облачный текст');
+});
