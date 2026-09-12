@@ -23,7 +23,7 @@ async function provider(c:any,id:string){
 }
 Deno.serve(handler({
  // Gateway JWT verification remains enabled; a user JWT is insufficient here.
- authorize:async(req:Request)=>machineAuthorization(req,{serviceKey:key,anonKey:Deno.env.get('SUPABASE_ANON_KEY')}),
+ authorize:async(req:Request)=>machineAuthorization(req,{serviceKey:key,anonKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjcHRod211aW9kcmplcGlmenNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1NDQzMTQsImV4cCI6MjEwNDEyMDMxNH0.m2q95-t6bM36I_uhJE3HYOABfdhbYoCPF0U_OsWAprY'}),
  config:async()=>(await db('studkab_request_config?id=eq.true&select=cron_token'))[0],
  rpc:(name:string,args:unknown)=>db('rpc/'+name,args),
  provider,ready:()=>enabled && !!token,
