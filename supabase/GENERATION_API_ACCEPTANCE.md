@@ -28,3 +28,20 @@ The API queues the supplied sections; it does not yet split large chapters. Do n
 paid operation or describe this as reliable complete-document generation.
 No student materials or credentials were used in tests. Vault metadata check showed
 no stored entries; no credential values were read. No automated schedule was installed.
+
+## Installed API and database check
+Installed studkab-generation-api v1 from 8a0113a7 on 2026-09-12, verify_jwt=true.
+Deployment SHA256: 900e2715174fd6bb5082c630f2b0a075eb639bbd97ea5fd651d396656004af90.
+Live unauthenticated POST returned 401. In the existing database, a synthetic
+transaction with table locks and an empty-queue guard verified duplicate Start
+returns the same job, zero budget prevents dispatch, status becomes budget and
+no attempt is created. Transaction rolled back all fixtures. No user materials
+or provider calls involved. These are sequential DB checks, not two-session A1.3.
+Registry changes remain in PR35, not published to main.
+
+## GitHub acceptance result
+Safety checks #100, run 34663493812, commit 8a0113a7: SUCCESS.
+Node tests, SQL safety and the entire browser suite passed, including the new
+zero-budget/old-version/result-preservation scenario. Local browser installation
+failed due to download timeout; GitHub supplied the successful browser evidence.
+This uses mocked Auth/API for the UI scenario, not a live executor session.
