@@ -200,3 +200,11 @@ attempt was rejected by automatic approval because code-publication consent was 
 accepted as authorization for persistent production DB changes. Migration was not
 applied; Edge and frontend remain unchanged. PR40 remains draft, awaiting explicit
 production update authorization. No alternate mutation path was attempted.
+
+C019 production installation after explicit user approval: migration applied; synthetic
+transactional checks passed and rolled back (2 original requests,1 result preserved).
+requests v9 ACTIVE/hash d142b47875be9ca4c6201a76e8516f53e6ac20c59382e615828f074152f103b8;
+custom auth preserved, live unauthenticated POST401. Final head4812ca2 CI34686638421
+SUCCESS; PR40 merged98cca80f. No new advisor WARN; server-only RLS tables intentionally
+have no client policies. No paid calls. Authenticated full application acceptance and
+A1/A2 remain open; this installation does not prove complete FIN-UAT generation.

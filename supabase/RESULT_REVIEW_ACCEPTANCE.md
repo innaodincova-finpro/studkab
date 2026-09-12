@@ -1,6 +1,6 @@
 # C019 — versioned result delivery
 
-Status: published in draft PR40; not deployed. No student data or paid AI calls changed.
+Status: production database and requests v9 installed; PR40 merged98cca80f. Frontend publication verification follows below. No student data or paid AI calls changed.
 
 ## What is enforced
 
@@ -66,3 +66,20 @@ but blocks old unreviewed delivery, so coordinated backend/frontend installation
 required. Authorize migration, studkab-requests replacement and PR40 merge together.
 Code tree tested: f5215599e6d52ac0b0cba884254f4e875956c577; GitHub head4c48c626.
 No paid calls. Full authenticated application acceptance and A1/A2 remain open.
+
+## Authorized production installation — 2026-09-12
+
+Explicit user approval received for database, Edge and frontend installation.
+Migration applied successfully. Transactional synthetic production assertions passed:
+exact-byte hash, missing review rejected, wrong recipient rejected, duplicate receipt,
+stale version rejected, anon/authenticated access denied and service_role allowed.
+All synthetic records rolled back: original2 requests and1 result remain. No HTTP
+notifications or provider calls were made by the SQL check.
+studkab-requests v9 ACTIVE, existing custom auth/verify_jwt=false preserved.
+Unauthenticated live POST returned401. Deployment hash:
+d142b47875be9ca4c6201a76e8516f53e6ac20c59382e615828f074152f103b8.
+Final PR head4812ca2 passed CI run34686638421; merged as98cca80f.
+Security advisors show no new warning-level finding; two new server-only tables
+have expected RLS/no-policy INFO, with direct client access revoked. Existing
+project warnings (tochka functions and password protection) are unchanged.
+Real authenticated end-to-end acceptance, A1 and full FIN-UAT-01 remain open.
