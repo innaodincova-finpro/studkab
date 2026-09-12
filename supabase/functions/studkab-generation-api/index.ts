@@ -12,6 +12,6 @@ Deno.serve(handler({db,
   return r.ok?r.json():null;
  },
  config:async()=>(await db('studkab_request_config?id=eq.true&select=executor_email'))[0],
- settings:()=>({enabled:Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true',
+ settings:()=>({enabled:Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true'&&!!Deno.env.get('STUDKAB_PROXY_TOKEN'),
   cost:Number(Deno.env.get('STUDKAB_GENERATION_PART_RESERVE_MICROUSD')||0)})
 }));

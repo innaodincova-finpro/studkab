@@ -28,3 +28,9 @@ in the handler response, not a durable per-job diagnostic column. This remains a
 Local npm test: 107/107. Full real recovery/concurrency/FIN-UAT-01 outstanding.
 Rollback only this scheduler: select cron.unschedule('studkab-generation-v1');
 Keep job/result rows. No paid requests, no budget increase, no changes to other jobs.
+
+Code 87b32fcf installed: studkab-generation v4 and studkab-generation-api v2,
+verify_jwt=true on both. Runner hash 76e9ac642fc9a04e9cee7a81e1add023180b6ab46a89ecc3b6f9f78d506acc39;
+API hash 162090d44777f06007868cca58be9d36456f7814f7613c5e5db613007b89c141.
+Scheduler had 3 successful empty-queue ticks at verification. This is proof of the
+schedule itself, not proof of running a model or surviving a server interruption.
