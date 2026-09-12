@@ -193,3 +193,10 @@ CI run34686333912 passed Node131 and native PostgreSQL including concurrency. Br
 rejection. Explicit display:none now preserves the gate; repeat CI pending. Installed
 requests v8 matches main98d795b (all4 files), verify_jwt=false with custom auth preserved.
 Production still has2 requests and1 historical result; no C019 migration/deployment.
+
+C019 CI run34686491225/job103534257547 at4c48c626 completed SUCCESS: Node, native
+PostgreSQL and browser checks all passed after the hidden-button fix. The deployment
+attempt was rejected by automatic approval because code-publication consent was not
+accepted as authorization for persistent production DB changes. Migration was not
+applied; Edge and frontend remain unchanged. PR40 remains draft, awaiting explicit
+production update authorization. No alternate mutation path was attempted.

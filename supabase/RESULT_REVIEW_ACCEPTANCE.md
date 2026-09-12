@@ -27,7 +27,7 @@ passed. They exercise the actual migration and actual results-ui.js respectively
 Native PostgreSQL concurrent tests and browser scenarios are added to existing CI,
 CI run34686333912 passed Node and native PostgreSQL. Browser checks:38 passed,1 failed
 because page CSS overrode the download button hidden attribute on corrupt-file rejection.
-The button now has explicit display:none until verified; repeat CI is required.
+The button now has explicit display:none until verified; repeat CI run34686491225 at4c48c626 passed all checks (Node, native SQL and browser).
 User explicitly authorized code publication; GitHub connector published PR40 after
 command-line Git could not authenticate.
 Managed browser refused localhost; downloading a local browser timed out.
@@ -40,7 +40,10 @@ PostgreSQL DB, then `npm run test:browser`. Never run sql_safety.py on productio
 
 ## Deployment and remaining gates
 
-1. Complete repeat CI for PR40 after the download visibility correction.
+1. CI passed at4c48c626. Production migration was rejected by automatic approval:
+   code publication consent was not accepted as consent for production DB mutation.
+   Migration, Edge replacement and frontend publication require explicit production
+   update authorization. No workaround or production mutation was performed.
 2. Installed studkab-requests v8 matches main98d795b in all four files; preserve verify_jwt=false and its custom authentication.
 3. Apply migration 20260912091822_studkab_versioned_delivery.sql and verify access
    advisors plus reversible, synthetic SQL checks. Preserve historical rows.
@@ -54,3 +57,12 @@ PostgreSQL DB, then `npm run test:browser`. Never run sql_safety.py on productio
 Rollback: keep the additive tables/history. Revert the new UI if necessary but retain
 server fail-closed legacy delivery and the result-table review trigger. Do not restore
 the old unreviewed delivery RPC. Historical result retrieval stays available.
+
+## Verified installation boundary
+
+2026-09-12: production remains unchanged. The proposed additive migration creates
+version/review history and guards existing delivery. It preserves historical results
+but blocks old unreviewed delivery, so coordinated backend/frontend installation is
+required. Authorize migration, studkab-requests replacement and PR40 merge together.
+Code tree tested: f5215599e6d52ac0b0cba884254f4e875956c577; GitHub head4c48c626.
+No paid calls. Full authenticated application acceptance and A1/A2 remain open.
