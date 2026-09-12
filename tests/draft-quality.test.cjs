@@ -50,3 +50,25 @@ test('cloud report counts sections separately and reports repeated prose without
  assert.equal(r.sections.length,2);assert.equal(r.sections[1].text,text);assert(r.notes.some(n=>n.includes('повторяется')));
  assert.equal(r.words,2*q.wordCount(text));
 });
+
+test('FIN-UAT labelled profile measures body only and never grants blanket acceptance',()=>{
+ const req='УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.';
+ const counts={intro:500,ch1:1400,ch2:2800,ch3:900,concl:400,refs:12000,app_a:100,app_b:100,app_c:100};
+ const x={doc:{inputs:{requirements:req},order:Object.keys(counts).map(id=>({id})),structure:Object.fromEntries(Object.entries(counts).map(([id,n])=>[id,{text:'слово '.repeat(n)}]))}};
+ const r=q.finAcceptance(x);assert.equal(r.total,6000);assert.equal(r.errors.length,2);assert.match(r.errors[1],/не подтверждена/);
+ x.doc.structure.ch2.text='Коротко.';assert(q.finAcceptance(x).errors.some(e=>e.startsWith('Глава 2: 1 слов')));
+ x.doc.inputs.requirements=req.replace('версии 1.0.','версии 2.0.');assert.match(q.finAcceptance(x).errors[0],/отличаются/);
+ assert.equal(q.finAcceptance({doc:{inputs:{requirements:'Иное задание'}}}).applicable,false);
+});
+test('cloud Word captures only one job, preserves gaps and carries version and incomplete notice',()=>{
+ const info={job:{id:'test-job',version:'abc123'},parts:[{ordinal:0,section:'ch2',state:'done',text:'Облачный текст.'},{ordinal:1,section:'ch2',state:'unknown',text:null}]};
+ const before=JSON.stringify(info),d=q.cloudDraft(info);assert.equal(d.draftNotice,'Неполный черновик');assert.match(d.structure.notice.text,/abc123/);assert.match(d.structure.cloud_0.text,/Часть 2 не сохранена/);
+ info.parts[0].text='Другая версия';assert.match(d.structure.cloud_0.text,/Облачный текст/);assert.notEqual(JSON.stringify(info),before);
+ assert.throws(()=>q.cloudDraft({job:{id:'a',version:'b'},parts:[]}));assert.throws(()=>q.cloudDraft({...info,job:{id:'a'}}));
+});
+test('Word preserves editable tables with 12pt single spacing and native subsection heading',async()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),ctx={window:{},TextEncoder,Blob};vm.runInNewContext(fs.readFileSync('result-docx.js','utf8'),ctx);
+ const blob=ctx.window.ResultDocx({topic:'Тест',draftNotice:'Неполный черновик',structure:{ch2:{text:'### 2.1 Анализ\nТекст.\n| Показатель | 2025 |\n| --- | --- |\n| Активы | 12800 |'}}},[{id:'ch2',name:'Глава 2'}]);
+ const zip=Buffer.from(await blob.arrayBuffer()).toString('utf8');assert(zip.includes('Неполный черновик'));assert(!zip.includes('### 2.1'));assert(zip.includes('<w:pStyle w:val="Heading2"/>'));
+ const table=zip.slice(zip.indexOf('<w:tbl>'),zip.indexOf('</w:tbl>'));assert(table.includes('<w:tblHeader/>'));assert(table.includes('w:sz w:val="24"'));assert(table.includes('w:line="240"'));assert(!table.includes('w:sz w:val="28"'));
+});

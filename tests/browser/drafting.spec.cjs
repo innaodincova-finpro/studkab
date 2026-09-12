@@ -114,3 +114,23 @@ test('cloud review assembles one response with visible gaps and preserves local 
  expect(await page.evaluate(()=>cloudActions)).toEqual(['status']);
  expect(await page.evaluate(()=>window.injected)).toBeUndefined();
 });
+
+test('download incomplete cloud Word uses captured version without changing local text',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{draftItem.doc.structure.ch1.text='Локальный текст не для экспорта';draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};
+ window.exportCalls=[];Oblako.generationApi=async b=>{exportCalls.push(b.action);return {job:{id:'22222222-2222-4222-8222-222222222222',version:'version1',status:'unknown'},parts:[{ordinal:0,id:'ch2',section:'ch2',state:'done',text:'Облачный текст для проверки.'},{ordinal:1,id:'ch2b',section:'ch2',state:'unknown',text:null}]};};});
+ await page.getByText('Подготовка в облаке',{exact:true}).click();await page.getByRole('button',{name:'Проверить результат',exact:true}).click();await page.getByText('Собранный текст и объём',{exact:true}).click();
+ const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать неполный Word',exact:true}).click();const file=await pending;await file.saveAs('test-results/cloud-incomplete.docx');
+ const zip=require('node:fs').readFileSync('test-results/cloud-incomplete.docx').toString('utf8');expect(zip).toContain('Неполный черновик');expect(zip).toContain('version1');expect(zip).toContain('Часть 2 не сохранена');expect(zip).not.toContain('Локальный текст не для экспорта');
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Локальный текст не для экспорта');expect(await page.evaluate(()=>exportCalls)).toEqual(['status']);
+});
+
+
+test('FIN-UAT original criteria prevent approval through the general checkbox',async({page})=>{
+ await setup(page);await fill(page);
+ await page.locator('#draft-requirements').fill('УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.');
+ await page.getByRole('button',{name:'Проверить готовность',exact:true}).click();
+ await expect(page.getByText(/Основной текст: 0 слов/)).toBeVisible();
+ await expect(page.getByText(/Общая галочка не разрешает передачу/)).toBeVisible();
+ await expect(page.locator('[data-approve]')).toHaveCount(0);
+});

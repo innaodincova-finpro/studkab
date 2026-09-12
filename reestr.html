@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=4"></script><script src="draft-editor.js?v=2"></script><script src="result-docx.js?v=5"></script><script src="results-ui.js?v=4"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="draft-quality.js?v=5"></script><script src="draft-editor.js?v=3"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=5"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1027,6 +1027,11 @@ function openDocBuilder(id){
           review.appendChild(explanation);
           report.notes.forEach(function(note){var p=document.createElement('p');p.textContent=note;review.appendChild(p);});
           report.sections.forEach(function(section){var block=document.createElement('details'),title=document.createElement('summary'),pre=document.createElement('pre');title.textContent='Раздел '+section.id+' — слов: '+section.words+'; частей: '+section.saved+' из '+section.total;pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';pre.textContent=section.text;block.append(title,pre);review.appendChild(block);});
+          var download=document.createElement('button');download.type='button';download.className='chip';download.textContent='Скачать неполный Word';download.disabled=!report.saved;
+          // Bind an immutable response copy; never read local chapter text or another job.
+          var exportInfo=JSON.parse(JSON.stringify(info));
+          download.onclick=function(){try{current();var draft=DraftQuality.cloudDraft(exportInfo),blob=ResultDocx(draft,draft.chapters),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Неполный-черновик-'+exportInfo.job.id+'.docx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},4000);}catch(e){message.textContent=e.message;}};
+          review.appendChild(download);
           target.appendChild(review);
           info.parts.filter(function(p){return p.state==='done';}).forEach(function(p){var details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent='Сохранённый раздел '+p.id;text.style.whiteSpace='pre-wrap';text.textContent=p.text;details.append(summary,text);target.appendChild(details);});
         });
