@@ -1,6 +1,6 @@
 const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
-export function handler({config,rpc,provider,ready,authorize,readiness}) {
+export function handler({config,rpc,provider,ready,authorize,readiness,prepare,failClaim}) {
  return async req=>{
   if(req.method!=='POST')return reply({error:'METHOD'},405);
   // Fail closed before reading configuration or claiming any work.
@@ -19,6 +19,13 @@ export function handler({config,rpc,provider,ready,authorize,readiness}) {
   let c;
   try{c=await rpc('studkab_gen_claim',{});}catch{return reply({error:'CLAIM_UNAVAILABLE'},503);}
   if(!c)return reply({status:'idle'});
+  if(prepare){
+   try{c=await prepare(c);}catch(e){
+    const code=e.message==='CONTEXT_TOO_BIG'?'CONTEXT_TOO_BIG':'PREPARATION_UNAVAILABLE';
+    try{if(failClaim)await failClaim(c);}catch{return reply({status:'block_unconfirmed',code},503);}
+    return reply({status:'blocked',code,job:c.job_id},409);
+   }
+  }
   const args={p_job:c.job_id,p_ordinal:c.ordinal,p_claim:c.claim};
   let id;
   // Never retry this call: commit may have happened even when its response is lost.

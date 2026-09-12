@@ -17,7 +17,17 @@ test('zero budget blocks start before database mutation',async()=>{const s=setup
 test('disabled integration does not read budget or create job',async()=>{const s=setup({enabled:false});assert.equal((await s.request(valid)).status,503);assert.equal(s.calls.length,0);});
 test('server owner and reserve override client fields',async()=>{const s=setup();const body={...valid,owner:'other',parts:[{...valid.parts[0],max_cost_microusd:1}]};assert.equal((await s.request(body)).status,200);const args=s.calls.at(-1).args;assert.equal(args.p_owner,uid);assert.equal(args.p_plan[0].max_cost_microusd,100);});
 test('same request produces identical immutable RPC input',async()=>{const s=setup();await s.request(valid);await s.request(valid);const starts=s.calls.filter(c=>c.path.startsWith('rpc/'));assert.deepEqual(starts[0].args,starts[1].args);});
-test('status always filters by authenticated owner and omits secrets',async()=>{const s=setup();const r=await s.request({action:'status',job,owner:'other'});const value=await r.json();assert.ok(s.calls[0].path.includes('owner_id=eq.'+uid));assert.deepEqual(value.parts,[{ordinal:0,id:'intro',state:'done',text:'Сохранено'}]);});
+test('status always filters by authenticated owner and omits secrets',async()=>{const s=setup();const r=await s.request({action:'status',job,owner:'other'});const value=await r.json();assert.ok(s.calls[0].path.includes('owner_id=eq.'+uid));assert.deepEqual(value.parts,[{ordinal:0,id:'intro',section:'intro',state:'done',text:'Сохранено'}]);});
 test('missing or foreign job returns no part data',async()=>{const s=setup({missing:true});assert.equal((await s.request({action:'status',job})).status,404);assert.equal(s.calls.length,1);});
 test('query injection cannot reach database',async()=>{const s=setup();assert.equal((await s.request({action:'status',job:'x&owner_id=neq.x'})).status,400);assert.equal(s.calls.length,0);});
 test('plan rejects duplicates, invalid sizes and missing trusted costs',()=>{assert.throws(()=>prepare({...valid,parts:[valid.parts[0],valid.parts[0]]},100));assert.throws(()=>prepare(valid,0));assert.throws(()=>prepare({...valid,system:'x'.repeat(100001)},100));});
+
+test('large section is split into deterministic separately saved parts',()=>{
+ const p=prepare({...valid,parts:[{id:'ch2',prompt:'Практическая глава',target_chars:27000}]},100);
+ assert.equal(p.plan.length,6);assert.equal(p.plan[5].part_index,5);assert.equal(p.plan[0].section_id,'ch2');
+ assert.ok(p.plan.every(x=>x.max_cost_microusd===100));assert.equal(new Set(p.plan.map(x=>x.id)).size,6);
+});
+test('total part count and target values are bounded',()=>{
+ assert.throws(()=>prepare({...valid,parts:[{id:'one',prompt:'test',target_chars:-1}]},100));
+ assert.throws(()=>prepare({...valid,parts:Array.from({length:100},(_,i)=>({id:'p'+i,prompt:'test',target_chars:9000}))},100));
+});

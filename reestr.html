@@ -995,7 +995,7 @@ function openDocBuilder(id){
           readBack();var missing=DraftQuality.preflight(x);if(missing.length)throw Error(missing.join('; '));
           var queue=DraftQuality.sequence(doc).filter(function(c){return !((doc.structure[c.id]||{}).text||'').trim();});
           if(!queue.length)throw Error('Все разделы уже заполнены.');
-          var system='',parts=queue.map(function(c){var p=sectionPrompt(x,c);if(system&&system!==p.system)throw Error('Структура запроса изменилась.');system=p.system;return {id:c.id,prompt:p.user};});
+          var system='',parts=queue.map(function(c){var p=sectionPrompt(x,c);if(system&&system!==p.system)throw Error('Структура запроса изменилась.');system=p.system;return {id:c.id,prompt:p.user,target_chars:DraftQuality.budget(c).target};});
           return Oblako.generationApi({action:'start',request:String(x.id),system:system,parts:parts}).then(function(info){
             current();doc.serverJob={id:info.job,basis:DraftEditor.basis(x)};save();
             message.textContent='Задание сохранено в облаке. Нажмите «Проверить результат», чтобы узнать состояние.';

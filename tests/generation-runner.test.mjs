@@ -72,3 +72,20 @@ test('authorized readiness probe reports booleans without claiming or sending',a
  const r=await h(new Request('https://internal',{method:'POST',headers:{'X-Studkab-Runner':'secret-test','X-Studkab-Probe':'1'}}));
  assert.deepEqual(await r.json(),{enabled:false,providerConfigured:false});assert.equal(touched,false);
 });
+
+import {withContext} from '../supabase/functions/studkab-generation/context.mjs';
+test('part context includes only preceding completed results without truncation',()=>{
+ const c={ordinal:2,input:{system:'facts'},spec:{prompt:'continue'}};
+ const result=withContext(c,[{ordinal:1,state:'done',result:'second'},{ordinal:0,state:'done',result:'first'},{ordinal:3,state:'done',result:'future'},{ordinal:1,state:'unknown',result:'uncertain'}]);
+ assert.ok(result.spec.prompt.indexOf('first')<result.spec.prompt.indexOf('second'));
+ assert.ok(!result.spec.prompt.includes('future'));assert.ok(!result.spec.prompt.includes('uncertain'));
+ assert.equal(c.spec.prompt,'continue');
+});
+test('oversized context stops before dispatch and provider',async()=>{
+ let sent=0,blocked=0;
+ const h=handler({authorize:async()=>true,config:async()=>({cron_token:'test'}),ready:()=>true,
+ rpc:async name=>{if(name!=='studkab_gen_claim')throw Error('MUST_NOT_DISPATCH');return claim;},
+ prepare:async()=>{throw Error('CONTEXT_TOO_BIG');},failClaim:async()=>{blocked++;},provider:async()=>{sent++;}});
+ const r=await h(new Request('https://internal',{method:'POST',headers:{'X-Studkab-Runner':'test'}}));
+ assert.equal(r.status,409);assert.equal((await r.json()).code,'CONTEXT_TOO_BIG');assert.equal(sent,0);assert.equal(blocked,1);
+});

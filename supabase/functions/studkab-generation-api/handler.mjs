@@ -1,3 +1,4 @@
+import {expandParts} from './plan.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store',
  'Access-Control-Allow-Origin':'https://innaodincova-finpro.github.io',
  'Access-Control-Allow-Headers':'authorization,content-type,apikey',
@@ -11,14 +12,15 @@ export function prepare(input,cost){
   throw Error('INVALID_INPUT');
  if(!Number.isSafeInteger(cost)||cost<1||cost>999999999999)throw Error('COST_NOT_CONFIGURED');
  const ids=new Set();
- const plan=input.parts.map(p=>{
+ const validated=input.parts.map(p=>{
   if(!p || typeof p.id!=='string'||!idPattern.test(p.id)||ids.has(p.id)
    ||typeof p.prompt!=='string'||!p.prompt.trim()||p.prompt.length>80000
    ||input.system.length+p.prompt.length>180000)throw Error('INVALID_PART');
   ids.add(p.id);
   // Ignore all client price, owner, model and URL fields.
-  return {id:p.id,prompt:p.prompt,max_cost_microusd:cost};
+  return {id:p.id,prompt:p.prompt,target_chars:p.target_chars};
  });
+ const plan=expandParts(validated,cost);
  const snapshot={system:input.system};
  if(new TextEncoder().encode(JSON.stringify({input:snapshot,plan})).byteLength>900000)throw Error('INPUT_TOO_BIG');
  return {snapshot,plan};
@@ -59,7 +61,7 @@ export function handler({auth,config,db,settings}){
     if(!job)return reply({error:'NOT_FOUND'},404);
     const parts=await db('studkab_gen_parts?job_id=eq.'+job.id+'&select=ordinal,state,result,spec&order=ordinal.asc');
     // Claim tokens, input prompts and service configuration never enter the response.
-    return reply({job,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,state:p.state,text:p.state==='done'?p.result:null}))});
+    return reply({job,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null}))});
    }
    return reply({error:'UNKNOWN_ACTION'},400);
   }catch{return reply({error:'SERVICE_UNAVAILABLE'},503);}
