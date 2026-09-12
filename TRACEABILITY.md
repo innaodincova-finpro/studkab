@@ -94,3 +94,9 @@ C014 adds executor-scoped request history and explicit result selection when bro
 lost Start response. No automatic generation; basis unknown warns before use.
 113 Node tests pass. Added browser scenario with two history choices and no paid Start;
 CI verification pending. Main remains unpublished; real authenticated browser still pending.
+
+771976ce: GitHub Safety checks114/run34677768400/job103510601737 completed SUCCESS,
+including Node, SQL and full browser suite with lost-job selection scenario.
+API v8 deployed, hash8cb0cbfc430caa47f778baff50010fe28618caa5c8c2d46cb2c54f5d423941ee;
+live history request without authentication rejected401. Frontend remains unpublished;
+browser tests mock Auth/API and do not equal real executor acceptance. No paid calls.
