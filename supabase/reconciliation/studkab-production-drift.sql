@@ -163,10 +163,52 @@ begin
 end
 $$;
 
+create or replace function public.studkab_gen_resume_budget()
+returns integer language plpgsql security invoker set search_path='' as $
+declare n integer=0; free bigint;
+begin
+ select limit_microusd-reserved_microusd into free
+ from public.studkab_gen_budget where id=true;
+ if free is null then return 0; end if;
+ with ready as (
+  select j.id from public.studkab_gen_jobs j
+  where j.status='budget'
+  and exists(select 1 from public.studkab_gen_parts x
+   where x.job_id=j.id and x.state='queued'
+   and (x.spec->>'max_cost_microusd')::bigint<=free)
+ )
+ update public.studkab_gen_jobs j set status='queued'
+ from ready where j.id=ready.id;
+ get diagnostics n=row_count;
+ return n;
+end
+$;
+
+create or replace function public.studkab_gen_maintenance()
+returns jsonb language plpgsql security invoker set search_path='' as $
+declare released bigint; written bigint; recovered integer; resumed integer;
+begin
+ if not pg_try_advisory_xact_lock(hashtextextended('studkab_gen_maintenance',0))
+ then return jsonb_build_object('skipped',true); end if;
+ released=public.studkab_gen_settle_costs();
+ written=public.studkab_gen_writeoff_unknown();
+ recovered=public.studkab_gen_recover_unknown();
+ resumed=public.studkab_gen_resume_budget();
+ return jsonb_build_object(
+  'vozvrashcheno',released,
+  'spisano_po_neizvestnym',written,
+  'vozobnovleno_chastey',recovered,
+  'razblokirovano_rabot',resumed
+ );
+end
+$;
+
 revoke all on function
   public.studkab_gen_recover_unknown(),
   public.studkab_gen_settle_costs(),
-  public.studkab_gen_writeoff_unknown()
+  public.studkab_gen_writeoff_unknown(),
+  public.studkab_gen_resume_budget(),
+  public.studkab_gen_maintenance()
 from public, anon, authenticated, service_role;
 
 commit;
