@@ -9,7 +9,20 @@ export function validateResult(value) {
   if(!c || typeof c.id!=='string'|| !/^[a-zA-Z0-9_-]{1,100}$/.test(c.id)||['__proto__','constructor','prototype'].includes(c.id)||ids.has(c.id))throw Error('Проверьте разделы документа');
   ids.add(c.id);const body=text(value.structure?.[c.id]?.text,100000);total+=body.length;
   if(!body.trim()||/\[(?:ДАННЫЕ СТУДЕНТА|СФОРМУЛИРОВАТЬ САМОСТОЯТЕЛЬНО|ПРОВЕРИТЬ ИСТОЧНИК|выше\/ниже|соответствует\/не соответствует|больше\/меньше)[^\]]*\]/i.test(body))throw Error('Документ не готов к передаче: есть пустые разделы или незаполненные пометки');
+  const figures=value.structure?.[c.id]?.figures;
+  const cleanFigures=[];
+  if(figures!==undefined){
+   if(!Array.isArray(figures)||figures.length>20)throw Error('Проверьте изображения документа');
+   for(const figure of figures){
+    const mime=text(figure?.mimeType||'',20),data=text(figure?.dataBase64||'',1400000),caption=text(figure?.caption||'',300);
+    if(!['image/png','image/jpeg'].includes(mime)||!data||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))throw Error('Проверьте изображения документа');
+    const widthMm=Number(figure.widthMm)||150,heightMm=Number(figure.heightMm)||90;
+    if(!Number.isFinite(widthMm)||widthMm<30||widthMm>160||!Number.isFinite(heightMm)||heightMm<20||heightMm>220)throw Error('Проверьте размеры изображений документа');
+    cleanFigures.push({mimeType:mime,dataBase64:data,caption,widthMm,heightMm});
+   }
+  }
   out.chapters.push({id:c.id,name:text(c.name,300)});out.structure[c.id]={text:body};
+  if(cleanFigures.length)out.structure[c.id].figures=cleanFigures;
  }
  if(total>500000 || !out.chapters.some(c=>out.structure[c.id].text.trim()))throw Error('Документ пустой или слишком большой');
  const f=value.format||{};

@@ -17,7 +17,7 @@ function crc32(bytes){
 function makeZip(files){
   var enc = new TextEncoder(), parts = [], central = [], offset = 0;
   files.forEach(function(f){
-    var name = enc.encode(f.name), data = enc.encode(f.text);
+    var name = enc.encode(f.name), data = f.bytes instanceof Uint8Array ? f.bytes : enc.encode(f.text);
     var crc = crc32(data), len = data.length;
     var lh = new Uint8Array(30 + name.length), dv = new DataView(lh.buffer);
     dv.setUint32(0, 0x04034b50, true);
@@ -56,6 +56,14 @@ function xesc(s){
 }
 function mm2tw(mm){ return Math.round(mm * 56.6929); }
 function cm2tw(cm){ return Math.round(cm * 566.929); }
+function base64Bytes(value){
+  var raw=String(value||'').replace(/^data:[^,]+,/,'').replace(/\s+/g,''),bin;
+  if(!raw||!/^[A-Za-z0-9+/]+={0,2}$/.test(raw))throw Error('Повреждено изображение в документе');
+  if(typeof atob==='function')bin=atob(raw);
+  else if(typeof Buffer==='function')return new Uint8Array(Buffer.from(raw,'base64'));
+  else throw Error('Не удалось прочитать изображение');
+  var out=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;
+}
 
 function buildDocx(w, chapters){
   var f = Object.assign({font:"Times New Roman",size:14,spacing:1.5,indent:1.25,mTop:20,mBottom:20,mLeft:30,mRight:15},w.format||{});
@@ -68,6 +76,7 @@ function buildDocx(w, chapters){
   var author = (w.student || "").trim();
   var group = (w.group || "").trim();
   var year = f.year || String(new Date().getFullYear());
+  var media=[],imageRels=[],imageId=0,tableNumber=0;
 
   function P(text, o){
     o = o || {};
@@ -82,6 +91,18 @@ function buildDocx(w, chapters){
     return '<w:p>'+pPr+run+'</w:p>';
   }
   function pageBreak(){ return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'; }
+  function image(figure){
+    var mime=String(figure.mimeType||'').toLowerCase(),ext=mime==='image/jpeg'?'jpg':mime==='image/png'?'png':'';
+    if(!ext)throw Error('Word поддерживает изображения PNG и JPEG');
+    var bytes=base64Bytes(figure.dataBase64||figure.data||'');
+    if(bytes.length>1048576)throw Error('Одно изображение не должно превышать 1 МБ');
+    imageId++;var rid='rIdImage'+imageId,name='image'+imageId+'.'+ext;
+    media.push({name:'word/media/'+name,bytes:bytes});
+    imageRels.push('<Relationship Id="'+rid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/'+name+'"/>');
+    var width=Math.max(30,Math.min(160,Number(figure.widthMm)||150)),height=Math.max(20,Math.min(220,Number(figure.heightMm)||90));
+    var cx=Math.round(width*36000),cy=Math.round(height*36000),caption=String(figure.caption||('Рисунок '+imageId)).trim();
+    return '<w:p><w:pPr><w:jc w:val="center"/><w:keepNext/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0"><wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="'+imageId+'" name="'+xesc(caption)+'"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="'+imageId+'" name="'+xesc(name)+'"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="'+rid+'"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>'+P(caption,{jc:'center',ind:0,after:240});
+  }
 
   /* Титульный лист */
   var body = "";
@@ -111,7 +132,7 @@ function buildDocx(w, chapters){
      An outer cached TOC field prevents LibreOffice from refreshing these references. */
   if (f.toc){
     body += P("СОДЕРЖАНИЕ", { jc:"center", b:true, after:240 });
-    var entries=chapters.map(function(c,i){return {chapter:c,index:i};}).filter(function(e){return ((w.structure||{})[e.chapter.id]||{}).text;});
+    var entries=chapters.map(function(c,i){return {chapter:c,index:i};}).filter(function(e){var ch=((w.structure||{})[e.chapter.id]||{});return ch.text||(Array.isArray(ch.figures)&&ch.figures.length);});
     entries.forEach(function(e,i){
       var anchor='section_'+e.index;
       body+='<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="'+(11906-mm2tw(f.mLeft)-mm2tw(f.mRight))+'"/></w:tabs><w:spacing w:line="'+line+'" w:lineRule="auto"/></w:pPr>';
@@ -126,8 +147,9 @@ function buildDocx(w, chapters){
   chapters.forEach(function(c, i){
     var ch = (w.structure || {})[c.id] || { text:"" };
     var text = (ch.text || "").trim();
-    if (!text) return;
-    if (written > 0) body += pageBreak();
+    var figures=Array.isArray(ch.figures)?ch.figures:[];
+    if (!text && !figures.length) return;
+    if (written > 0 && f.sectionPageBreaks===true) body += pageBreak();
     written++;
     body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 }).replace('</w:pPr>','</w:pPr><w:bookmarkStart w:id="'+i+'" w:name="section_'+i+'"/>').replace('</w:p>','<w:bookmarkEnd w:id="'+i+'"/></w:p>');
     var lines=text.split(/\n+/),row=0;
@@ -138,6 +160,11 @@ function buildDocx(w, chapters){
     while(row<lines.length){
       var par=lines[row].trim();
       if(/^#{1,6}\s+/.test(par))par=par.replace(/^#{1,6}\s+/,'');
+      if(/^Таблица\s+\d{1,3}\s*[—–-]/i.test(par)){
+        tableNumber++;
+        par=par.replace(/^(Таблица\s+)\d{1,3}/i,'$1'+tableNumber);
+        body+=P(par,{ind:0,jc:'left',b:true,after:120});row++;continue;
+      }
       if(/^\|.*\|$/.test(par)){
         var grid=[];
         while(row<lines.length && /^\s*\|.*\|\s*$/.test(lines[row])){
@@ -154,6 +181,7 @@ function buildDocx(w, chapters){
         row++;
       }
     }
+    figures.forEach(function(figure){body+=image(figure);});
   });
   if (!written) body += P("Разделы пока не написаны.", { ind:ind });
 
@@ -199,6 +227,8 @@ function buildDocx(w, chapters){
     '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
     '<Default Extension="xml" ContentType="application/xml"/>'+
+    '<Default Extension="png" ContentType="image/png"/>'+
+    '<Default Extension="jpg" ContentType="image/jpeg"/>'+
     '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'+
     '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'+
     '<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>'+
@@ -215,6 +245,7 @@ function buildDocx(w, chapters){
     '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
     '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'+
     '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>'+
+    imageRels.join('')+
     '</Relationships>';
 
   return makeZip([
@@ -225,7 +256,7 @@ function buildDocx(w, chapters){
     { name:"word/styles.xml", text:styles_xml },
     { name:"word/settings.xml", text:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:updateFields w:val="true"/></w:settings>' },
     { name:"word/footer1.xml", text:footer_xml }
-  ]);
+  ].concat(media));
 }
 
 
