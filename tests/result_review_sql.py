@@ -1,6 +1,6 @@
 """Run after legacy fixtures in disposable tests/sql_safety.py only."""
 import base64,hashlib
-migration=root/'supabase/migrations/20260912091822_studkab_versioned_delivery.sql'
+migration=root/'supabase/migrations/20260912094701_studkab_versioned_delivery.sql'
 sql(migration.read_text())
 version_id='77777777-7777-4777-8777-777777777777'
 review_id='88888888-8888-4888-8888-888888888888'
