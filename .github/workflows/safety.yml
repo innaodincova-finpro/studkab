@@ -93,9 +93,19 @@ jobs:
 
           cron_template = Path('supabase/reconciliation/studkab-cron.sql.tmpl')
           cron_source = cron_template.read_text()
-          cron_safe, cron_count = pattern.subn(
-              lambda match: (
-                  match.group(0).split('          PY
+
+          def disable_command(match):
+              tag = match.group(1)
+              delimiter = chr(36) + tag + chr(36)
+              prefix = match.group(0).split(delimiter, 1)[0]
+              return prefix + delimiter + 'select 1;' + delimiter + ');'
+
+          cron_safe, cron_count = pattern.subn(disable_command, cron_source)
+          if cron_count != 4:
+              raise SystemExit(f'Expected to isolate 4 final cron jobs, isolated {cron_count}')
+          Path('supabase/reconciliation/studkab-cron.safe.sql').write_text(cron_safe)
+          print('Isolated exactly 4 final cron jobs')
+          PY
 
           for baseline in baza.sql request-delivery.sql telegram-setup.sql; do
             psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
