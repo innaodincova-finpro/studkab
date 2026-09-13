@@ -92,6 +92,7 @@ jobs:
           print('Isolated exactly 3 historical cron schedules')
           PY
 
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f baza.sql
           supabase migration up --local
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
       - run: npm ci
