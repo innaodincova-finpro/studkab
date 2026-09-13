@@ -19,14 +19,14 @@ test('one preparation control starts a saved server job',async({page})=>{
  await expect(page.getByRole('button',{name:'Начать подготовку',exact:true})).toHaveCount(1);
  await expect(page.getByText('Подготовка в облаке',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
- await expect(page.locator('[data-prepare-message]')).toContainText('окно можно закрыть');
+ await expect(page.locator('[data-prepare-message]')).toContainText('Окно можно закрыть');
  await expect(page.getByRole('button',{name:'Продолжить подготовку',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>preparationActions)).toEqual(['history','capabilities','start']);
  expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
 });
 
 test('server preparation continues after reopening the document',async({page})=>{
- await setup(page);await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};Oblako.generationApi=async body=>{if(body.action==='status')return {job:{status:'running'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Сохранённая часть'}]};throw Error('Unexpected paid action');};openDocBuilder(draftItem.id);});
+ await setup(page);await page.keyboard.press('Escape');await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};Oblako.generationApi=async body=>{if(body.action==='status')return {job:{status:'running'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Сохранённая часть'}]};throw Error('Unexpected paid action');};openDocBuilder(draftItem.id);});
  await page.getByRole('button',{name:'Продолжить подготовку',exact:true}).click();
  await expect(page.locator('[data-prepare-message]')).toContainText('Выполняется');
  await expect(page.locator('[data-prepare-result]')).toContainText('Сохранённая часть');
@@ -59,7 +59,7 @@ test('generation failure appears in journal and can be copied on mobile',async({
  await page.route('http://127.0.0.1:4173/diagnostic-mock',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({error:'INCOMPLETE:deepseek',detail:{reason:'length',completion_tokens:8000,limit_tokens:8000,request_id:'test-provider-1'}})}));
  await page.evaluate(()=>{askAI=window.actualAskAI;D.settings.proxyUrl='http://127.0.0.1:4173/diagnostic-mock';D.settings.proxyToken='test-only';D.settings.providers.deepseek={on:true,model:'deepseek-chat'};document.querySelector('#docProv').value='deepseek';});
  await page.getByText('Редактировать разделы',{exact:true}).click();await page.locator('[data-sec="ch1"] > summary').click();await page.locator('[data-sec="ch1"] [data-secgen]').click();
- await expect(page.locator('#docStatus')).toContainText('ответ обрезан');
+ await expect(page.locator('#docStatus')).toContainText('Нейросеть не завершила раздел');
  const record=await page.evaluate(()=>D.aiDiagnostics.at(-1));
  expect(record.section).toBe('ch1');expect(record.stage).toBe('draft');expect(record.reason).toBe('length');expect(record.client_request_id).toBeTruthy();
  await page.keyboard.press('Escape');await page.locator('[data-tab="more"]').click();
