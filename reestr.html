@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=3"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=6"></script><script src="draft-editor.js?v=4"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=6"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=6"></script><script src="draft-editor.js?v=4"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=6"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -900,6 +900,9 @@ function openDocBuilder(id){
     '<button type="button" class="btn" data-docsave="1" style="flex:1">Сохранить</button>' +
     '<button type="button" class="btn ghost" data-docx="1" style="flex:1">Скачать Word</button></div>'
   );
+  function refreshCardAfterClose(){setTimeout(function(){if(!wrap.isConnected)render();},0);}
+  wrap.addEventListener("click", function(ev){if(ev.target===wrap||ev.target.closest("[data-x]"))refreshCardAfterClose();});
+  wrap.addEventListener("keydown", function(ev){if(ev.key==="Escape")refreshCardAfterClose();});
   wrap.dataset.accountIdentity=String(expectedIdentity);
   function preview(){
     var target=wrap.querySelector('#docPreview');
@@ -1853,6 +1856,10 @@ function viewItem(id){
   var r = x.refId ? refById(x.refId) : findRef(x);
   var diff = r ? fmtDiff(x.format, r.format) : [];
   var dp = x.doc ? docCharacters(x) : 0;
+  var hasDoc = !!(x.doc && (x.doc.updated || (x.doc.order||[]).some(function(c){
+    var part=(x.doc.structure||{})[c.id]||{};
+    return !!String(part.text||"").trim() || (Array.isArray(part.figures) && part.figures.length>0);
+  })));
 
   var h = '<button type="button" class="mini" data-act="back" style="margin:0 0 10px">← Заявки</button>' +
     '<div class="title" style="font-size:21px">' + esc(x.student || "Без имени") + '</div>' +
@@ -1863,10 +1870,10 @@ function viewItem(id){
     '</div>';
 
   h += card(lab("Документ") +
-    (x.doc && x.doc.updated
-      ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков · правка ' + ruDate(x.doc.updated) + '</div>'
+    (hasDoc
+      ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков' + (x.doc.updated ? ' · правка ' + ruDate(x.doc.updated) : '') + '</div>'
       : '<div class="mut">Черновик ещё не собирался.</div>') +
-    '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (x.doc && x.doc.updated ? "Открыть документ" : "Собрать документ") + '</button></div>', "now");
+    '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (hasDoc ? "Открыть документ" : "Собрать документ") + '</button></div>', "now");
 
   if(x.requestNumber) h += card(lab("Передача студенту") + '<p class="hint">Передайте проверенный документ прямо в кабинет автора заявки.</p><button type="button" class="btn" data-act="deliver-result" data-id="'+esc(x.id)+'">Передать черновик студенту</button>');
 

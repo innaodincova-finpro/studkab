@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v38-desktop";
+const CACHE = "studkab-v39-desktop";
 const SHELL = [
   "./desktop.css?v=1",
   "./",
@@ -13,7 +13,7 @@ const SHELL = [
   "./manifest-kabinet.webmanifest",
   "./manifest-reestr.webmanifest",
   "./oblako.js?v=14",
-  "./cloud-ui.js?v=3",
+  "./cloud-ui.js?v=4",
   "./financial-analysis.js?v=1",
   "./draft-quality.js?v=6",
   "./draft-editor.js?v=4",
@@ -35,7 +35,7 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => /^studkab-v[0-9]+$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => /^studkab-v[0-9]+(?:-desktop)?$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())     // берём управление без перезагрузки
   );
 });
@@ -120,4 +120,3 @@ self.addEventListener('notificationclick', event => {
   return self.clients.openWindow(url);
  })());
 });
-
