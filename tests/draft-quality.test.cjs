@@ -80,6 +80,16 @@ test('document acceptance uses saved section passport and never invents missing 
  const result=q.documentAcceptance(x);assert.equal(result.profile.sections.length,2);assert(result.errors.some(e=>e.includes('Раздел Б')));
  const absent=q.documentAcceptance({doc:{order:[],structure:{},inputs:{requirements:''}}});assert(absent.errors.some(e=>e.includes('не зафиксированы')));
 });
+test('ordinary volume gate measures body but not bibliography or appendices',()=>{
+ const body='слово '.repeat(220),short='служебный материал';
+ const x={doc:{inputs:{requirements:'Нефинансовая методичка'},order:[
+  {id:'intro',name:'Введение',pages:1},{id:'refs',name:'Список использованных источников',pages:1},
+  {id:'sec-app',name:'Приложение А',pages:1}
+ ],structure:{intro:{text:body},refs:{text:short},'sec-app':{text:short}}}};
+ const result=q.finAcceptance(x);
+ assert.equal(result.applicable,true);assert.equal(result.total,220);assert.equal(result.sections.length,1);
+ assert.equal(result.sections[0].id,'intro');assert.equal(result.errors.length,0);
+});
 test('maximum and ambiguous ranges are not misread as minimum requirements',()=>{
  const x={methodNotes:'Не более 5 таблиц; от 2 до 4 рисунков; минимум 1 приложение',doc:{inputs:{requirements:'Требования приложены'},order:[],structure:{}}};
  assert.deepEqual(q.requirementProfile(x).minimum,{tables:null,figures:null,appendices:1});

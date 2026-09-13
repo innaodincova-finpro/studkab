@@ -201,7 +201,10 @@
  function finAcceptance(x){
   var req=String(inputs(x).requirements||'').replace(/\r\n/g,'\n').trim();
   if(!/FIN-UAT-01/.test(req)){
-   var d0=x.doc||{},st0=d0.structure||{},ord0=(d0.order||[]).filter(function(c){return Number(c.pages)>0;});
+   var d0=x.doc||{},st0=d0.structure||{},ord0=(d0.order||[]).filter(function(c){
+    var label=String(c.id||'')+' '+String(c.name||'');
+    return Number(c.pages)>0&&!/(?:^|\s)(?:refs?|app(?:endix)?)(?:[_\s-]|$)|список.{0,25}(?:источник|литератур)|библиограф|приложени/i.test(label);
+   });
    if(!ord0.length)return {applicable:false,errors:[],sections:[]};
    var er0=[],sum0=0,lo0=0,hi0=0;
    var sec0=ord0.map(function(c){
