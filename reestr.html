@@ -852,6 +852,7 @@ function openDocBuilder(id){
   function current(){if(D!==expectedData||Oblako.identity()!==expectedIdentity||!wrap.isConnected)throw Error("Подготовка остановлена: окно закрыто или аккаунт изменился. Уже сохранённые разделы доступны в прежнем аккаунте.");}
   function sec(c, i){
     var t = (doc.structure[c.id]||{}).text || "";
+    var figures=Array.isArray((doc.structure[c.id]||{}).figures)?doc.structure[c.id].figures:[];
     return '<details class="card" data-sec="' + c.id + '" style="padding:12px"><summary>' + esc(c.name) + '</summary>' +
       '<div class="row" style="gap:6px;margin-bottom:6px">' +
         '<input type="text" class="secName" value="' + esc(c.name) + '" style="flex:1;padding:8px;font-size:14px;font-weight:500">' +
@@ -859,6 +860,8 @@ function openDocBuilder(id){
         '<button type="button" class="del" data-secdel="' + c.id + '" title="Убрать раздел">✕</button>' +
       '</div>' +
       '<textarea class="secText" style="min-height:' + (t ? 160 : 70) + 'px;font-size:14px" placeholder="Текст появится после общей подготовки">' + esc(t) + '</textarea>' +
+      '<div class="secFigures">'+figures.map(function(fig,n){return '<div class="row" style="margin-top:6px"><span class="mut">'+esc(fig.caption||('Изображение '+(n+1)))+'</span><button type="button" class="mini" data-figdel="'+n+'">убрать</button></div>';}).join('')+'</div>'+
+      '<label class="mini" style="display:inline-block;margin-top:6px;cursor:pointer">+ график или изображение<input type="file" data-figfile="1" accept="image/png,image/jpeg" hidden></label>'+
       '<div class="row" style="margin-top:6px"><span class="mut secStat">' + (t ? t.length + ' знаков' + ((doc.structure[c.id]||{}).by ? ' · ' + esc(providerName(doc.structure[c.id].by)) : '') : 'пусто') + '</span>' +
       '<div style="display:flex;gap:6px">' +
         '<button type="button" class="mini" data-seccopy="' + c.id + '">запрос</button>' +
@@ -904,7 +907,7 @@ function openDocBuilder(id){
     var target=wrap.querySelector('#docPreview');
     target.replaceChildren();
     doc.order.forEach(function(c){
-      var text=(doc.structure[c.id]||{}).text||'';if(!text.trim())return;
+      var data=doc.structure[c.id]||{},text=data.text||'',figures=Array.isArray(data.figures)?data.figures:[];if(!text.trim()&&!figures.length)return;
       var section=document.createElement('section'),heading=document.createElement('h4');
       heading.textContent=c.name;section.appendChild(heading);
       var table=null;
@@ -917,6 +920,12 @@ function openDocBuilder(id){
         }
         table=null;if(!line.trim())return;
         var p=document.createElement('p');p.textContent=line;section.appendChild(p);
+      });
+      figures.forEach(function(fig,n){
+        var figure=document.createElement('figure'),img=document.createElement('img'),caption=document.createElement('figcaption');
+        img.src='data:'+fig.mimeType+';base64,'+fig.dataBase64;img.alt=fig.caption||('Изображение '+(n+1));img.style.cssText='display:block;max-width:100%;max-height:420px;margin:10px auto 4px';
+        caption.textContent=fig.caption||('Рисунок '+(n+1));caption.style.cssText='text-align:center;color:#52606d;font-size:14px';
+        figure.append(img,caption);section.appendChild(figure);
       });target.appendChild(section);
     });
     if(!target.children.length)target.textContent='Черновик пока не подготовлен. Добавьте материалы и нажмите «Подготовить весь черновик».';
@@ -932,6 +941,7 @@ function openDocBuilder(id){
       var cid = el.getAttribute("data-sec");
       order.push({ id:cid, name:el.querySelector(".secName").value.trim() || "Раздел", pages: parseFloat(el.querySelector(".secPages").value) || 0 });
       st[cid] = { text: el.querySelector(".secText").value, by: (doc.structure[cid]||{}).by || "" };
+      if(Array.isArray((doc.structure[cid]||{}).figures))st[cid].figures=JSON.parse(JSON.stringify(doc.structure[cid].figures));
     });
     doc.order = order; doc.structure = st; doc.updated = today();
     save();preview();
@@ -980,8 +990,31 @@ function openDocBuilder(id){
       throw e;
     });
   }
+  wrap.addEventListener("change",function(ev){
+    var input=ev.target.closest('[data-figfile]');if(!input||!input.files||!input.files[0])return;
+    var file=input.files[0],section=input.closest('[data-sec]'),cid=section&&section.getAttribute('data-sec');
+    if(!cid)return;
+    if(!/^image\/(png|jpeg)$/.test(file.type)){setStatus('Можно добавить только PNG или JPEG.','err');input.value='';return;}
+    if(file.size>1024*1024){setStatus('Изображение больше 1 МБ. Сожмите его и добавьте снова.','err');input.value='';return;}
+    var reader=new FileReader();
+    reader.onload=function(){
+      try{
+        current();var encoded=String(reader.result||'').split(',')[1];if(!encoded)throw Error('Не удалось прочитать изображение.');
+        var entry=doc.structure[cid]=doc.structure[cid]||{text:''},figures=entry.figures=Array.isArray(entry.figures)?entry.figures:[];
+        var base=String(file.name||'изображение').replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();
+        figures.push({mimeType:file.type,dataBase64:encoded,caption:'Рисунок '+(figures.length+1)+' — '+base,widthMm:150,heightMm:90});
+        readBack();wrap.remove();openDocBuilder(id);
+      }catch(e){setStatus(e.message||'Изображение не добавлено.','err');}
+    };
+    reader.onerror=function(){setStatus('Не удалось прочитать изображение.','err');};reader.readAsDataURL(file);
+  });
   wrap.addEventListener("click", function(ev){
     var t = ev.target;
+    var figdel=t.closest('[data-figdel]');
+    if(figdel){
+      var section=figdel.closest('[data-sec]'),cid=section&&section.getAttribute('data-sec'),entry=cid&&(doc.structure[cid]||{}),figures=entry&&entry.figures;
+      if(Array.isArray(figures)){figures.splice(Number(figdel.getAttribute('data-figdel')),1);readBack();wrap.remove();openDocBuilder(id);}return;
+    }
     if(genBusy){return;}
     var cloudCheck=t.closest('[data-cloud-check]'),cloudStart=t.closest('[data-cloud-start]'),cloudStatus=t.closest('[data-cloud-status]');
     if(cloudCheck||cloudStart||cloudStatus){
@@ -2372,4 +2405,3 @@ else if (got && got.rec){
 </script>
 </body>
 </html>
-
