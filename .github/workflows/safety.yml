@@ -10,7 +10,7 @@ permissions:
 jobs:
   safety:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -42,6 +42,40 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: test-only
           PGDATABASE: safety_test
+      - name: Install pinned Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.117.0
+      - name: Replay migrations in isolated Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          replay_dir="$RUNNER_TEMP/studkab-supabase-replay"
+          cp -a "$GITHUB_WORKSPACE" "$replay_dir"
+          mv "$replay_dir/supabase/migrations" "$replay_dir/supabase/migrations.hold"
+          mkdir "$replay_dir/supabase/migrations"
+          cd "$replay_dir"
+
+          cleanup() {
+            supabase stop --no-backup || true
+          }
+          trap cleanup EXIT
+
+          supabase --version
+          supabase start
+
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1 <<'SQL'
+          create extension if not exists pg_cron;
+          create or replace function cron.schedule(job_name text, schedule text, command text)
+          returns bigint
+          language sql
+          as 'select 1::bigint';
+          SQL
+
+          rmdir supabase/migrations
+          mv supabase/migrations.hold supabase/migrations
+          supabase migration up --local
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
       - run: npm ci
       - name: Exclude unused Google Chrome apt repository
         run: |
