@@ -101,15 +101,36 @@ begin
 end
 $$;
 
-do $$
+do $
 declare
   jobs integer;
+  invalid integer;
 begin
-  select count(*) into jobs from cron.job;
-  if jobs <> 0 then
-    raise exception 'Replay safety failure: % cron jobs became active', jobs;
+  select count(*) into jobs
+  from cron.job
+  where jobname in (
+    'studkab-deadline-push',
+    'studkab-request-telegram',
+    'studkab-generation-v1',
+    'studkab-maintenance'
+  );
+  if jobs <> 4 then
+    raise exception 'Expected 4 STUDKAB cron jobs, found %', jobs;
+  end if;
+
+  select count(*) into invalid
+  from cron.job
+  where jobname in (
+    'studkab-deadline-push',
+    'studkab-request-telegram',
+    'studkab-generation-v1',
+    'studkab-maintenance'
+  )
+  and (schedule <> '* * * * *' or command <> 'select 1;');
+  if invalid <> 0 then
+    raise exception '% cron jobs have unexpected schedule or unsafe CI command', invalid;
   end if;
 end
-$$;
+$;
 
 select 'PASS: clean migration replay, schema inventory, RLS and cron isolation verified' as result;
