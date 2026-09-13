@@ -60,6 +60,14 @@ test('FIN-UAT labelled profile measures body only and never grants blanket accep
  x.doc.inputs.requirements=req.replace('версии 1.0.','версии 2.0.');assert.match(q.finAcceptance(x).errors[0],/отличаются/);
  assert.equal(q.finAcceptance({doc:{inputs:{requirements:'Иное задание'}}}).applicable,false);
 });
+test('final review uses universal criteria outside the labelled financial profile',()=>{
+ const management=q.reviewCriteria({topic:'Управление проектной командой',doc:{inputs:{requirements:'Методические требования кафедры менеджмента'}}});
+ assert.equal(management.length,16);assert.deepEqual(management.map(x=>x.code),Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(2,'0')).concat(['S01','S02','S03']));
+ assert(management.some(x=>x.label.includes('методички')));assert(management.some(x=>x.label.includes('неприменимы')));
+ assert(!management.some(x=>/прибыль|денежные потоки|финансов/i.test(x.label)));
+ const finance=q.reviewCriteria({doc:{inputs:{requirements:'УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.'}}});
+ assert(finance.some(x=>x.label==='Прибыль и денежные потоки'));
+});
 test('cloud Word captures only one job, preserves gaps and carries version and incomplete notice',()=>{
  const info={job:{id:'test-job',version:'abc123'},parts:[{ordinal:0,section:'ch2',state:'done',text:'Облачный текст.'},{ordinal:1,section:'ch2',state:'unknown',text:null}]};
  const before=JSON.stringify(info),d=q.cloudDraft(info);assert.equal(d.draftNotice,'Неполный черновик');assert.match(d.structure.notice.text,/abc123/);assert.match(d.structure.cloud_0.text,/Часть 2 не сохранена/);
