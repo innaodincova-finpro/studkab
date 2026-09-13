@@ -98,6 +98,28 @@ test('delivered Word preserves custom sections and escapes markup',async()=>{
  assert.doesNotMatch(tocZip,/ TOC /);assert.match(tocZip,/PAGEREF section_0/);assert.match(tocZip,/w:name="section_0"/);assert.match(tocZip,/w:anchor="section_0"/);
 });
 
+test('Word renumbers table captions, avoids forced section breaks and embeds stored figures',async()=>{
+ const vm=await import('node:vm'),fs=await import('node:fs');
+ const c={window:{},TextEncoder,Blob,Uint8Array,DataView,Date,Buffer};vm.runInNewContext(fs.readFileSync(new URL('../result-docx.js',import.meta.url),'utf8'),c);
+ const pixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xee6WQAAAABJRU5ErkJggg==';
+ const doc={topic:'Универсальный документ',student:'Тест',group:'Т-1',format:{toc:false},chapters:[{id:'a',name:'Раздел 1'},{id:'b',name:'Раздел 2'}],structure:{
+  a:{text:'Таблица 7 — Первая\n| Показатель | Значение |\n| --- | --- |\n| А | 1 |'},
+  b:{text:'Таблица 7 — Вторая\n| Показатель | Значение |\n| --- | --- |\n| Б | 2 |',figures:[{mimeType:'image/png',dataBase64:pixel,caption:'Рисунок 1 — Схема'}]}
+ }};
+ const bytes=new Uint8Array(await c.window.ResultDocx(doc,doc.chapters).arrayBuffer()),zip=new TextDecoder().decode(bytes);
+ assert.match(zip,/Таблица 1 — Первая/);assert.match(zip,/Таблица 2 — Вторая/);assert.doesNotMatch(zip,/Таблица 7/);
+ assert.equal((zip.match(/w:type="page"/g)||[]).length,1);assert.match(zip,/word\/media\/image1.png/);assert.match(zip,/rIdImage1/);assert.match(zip,/Рисунок 1 — Схема/);
+});
+
+test('result validation preserves safe PNG and JPEG figures only',async()=>{
+ const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
+ const pixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xee6WQAAAABJRU5ErkJggg==';
+ const good={...documentFixture,structure:{intro:{text:'Текст',figures:[{mimeType:'image/png',dataBase64:pixel,caption:'Схема'}]}}};
+ assert.equal(validateResult(good).structure.intro.figures[0].caption,'Схема');
+ assert.throws(()=>validateResult({...good,structure:{intro:{text:'Текст',figures:[{mimeType:'image/svg+xml',dataBase64:pixel}]}}}),/изображения/);
+ assert.throws(()=>validateResult({...good,structure:{intro:{text:'Текст',figures:[{mimeType:'image/png',dataBase64:pixel,widthMm:500}]}}}),/размеры изображений/);
+});
+
 test('delivery rejects unfinished placeholders in otherwise nonempty documents',async()=>{
  const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
  const base={topic:'Тема',chapters:[{id:'a',name:'Глава'}],structure:{a:{text:'[ДАННЫЕ СТУДЕНТА: прибыль]'}}};
