@@ -15,6 +15,7 @@ test('section image survives editor refresh and can be removed',async({page})=>{
 });
 test('saved document is shown on the request card after closing the editor',async({page})=>{
  await setup(page);
+ await page.evaluate(()=>{openId=draftItem.id;render();});
  await page.getByText('Редактировать разделы',{exact:true}).click();
  await page.locator('[data-sec="ch1"] > summary').click();
  await page.locator('[data-sec="ch1"] .secText').fill('Сохранённый текст документа.');

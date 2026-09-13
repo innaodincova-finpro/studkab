@@ -112,9 +112,9 @@
   var bad=checkBackup(res.remote);if(bad){toast('Не удалось проверить облачные записи: '+bad);return;}
   var remote=api.snapshot(res.remote);
   if(local===remote){clearDeferred();api.accept(D);return;}
+  if(!interactive&&isDeferred(local,remote))return;
   if(cloudIsEmpty(D)||baseline===local||global.cloudInitialSnapshot===local){clearDeferred();cloudApply(res.remote);return;}
   if(baseline===remote){clearDeferred();api.accept();await cloudSave('Изменения сохранены в облаке');return;}
-  if(!interactive&&isDeferred(local,remote))return;
   var action=await choose('Записи на устройствах различаются',
    'На этом устройстве: '+summary(D)+'. В облаке: '+summary(res.remote)+'. Выберите, какие записи использовать. Перед заменой обе версии сохранятся в разделе «Копия данных».',
    [{label:'Использовать записи из облака',value:'remote'},{label:'Использовать записи этого устройства',value:'local'},{label:'Решить позже — ничего не заменять',value:'later'}]);

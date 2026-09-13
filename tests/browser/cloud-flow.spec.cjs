@@ -29,6 +29,8 @@ for(const file of ['index.html','reestr.html']){
   await page.reload();
   await page.evaluate(()=>CloudUI.sync());
   await expect(page.getByRole('heading',{name:'Записи на устройствах различаются'})).toHaveCount(0);
+  expect(await page.evaluate(()=>D.settings.name)).toBe('Местная версия');
+  expect(await page.evaluate(()=>QA.rows[QA.user+':'+CLOUD_APP].data.settings.name)).toBe('Другое устройство');
   await page.locator('[data-tab="more"]').click();
   await page.getByText('Хранение записей',{exact:true}).click();
   await page.getByRole('button',{name:'Проверить записи',exact:true}).click();
