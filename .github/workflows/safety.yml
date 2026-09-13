@@ -97,6 +97,7 @@ jobs:
               -v ON_ERROR_STOP=1 -f "$baseline"
           done
           supabase migration up --local
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-production-drift.sql
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
       - run: npm ci
       - name: Exclude unused Google Chrome apt repository
