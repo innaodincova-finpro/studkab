@@ -101,7 +101,7 @@ begin
 end
 $$;
 
-do $
+do $cron$
 declare
   jobs integer;
   invalid integer;
@@ -131,6 +131,6 @@ begin
     raise exception '% cron jobs have unexpected schedule or unsafe CI command', invalid;
   end if;
 end
-$;
+$cron$;
 
 select 'PASS: clean migration replay, schema inventory, RLS and cron isolation verified' as result;
