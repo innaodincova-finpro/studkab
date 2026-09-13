@@ -90,6 +90,173 @@ jobs:
           if replaced != 3:
               raise SystemExit(f'Expected to isolate 3 cron schedules, isolated {replaced}')
           print('Isolated exactly 3 historical cron schedules')
+
+          cron_template = Path('supabase/reconciliation/studkab-cron.sql.tmpl')
+          cron_source = cron_template.read_text()
+          cron_safe, cron_count = pattern.subn(
+              lambda match: (
+                  match.group(0).split('          PY
+
+          for baseline in baza.sql request-delivery.sql telegram-setup.sql; do
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+              -v ON_ERROR_STOP=1 -f "$baseline"
+          done
+          supabase migration up --local
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-production-drift.sql
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-cron.safe.sql
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
+      - run: npm ci
+      - name: Exclude unused Google Chrome apt repository
+        run: |
+          # Playwright downloads its own browsers. A broken third-party Chrome
+          # package index must not block Ubuntu system dependency installation.
+          # Package signature and checksum verification remain enabled.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          for path in Path('/etc/apt/sources.list.d').iterdir():
+              if path.suffix not in ('.list', '.sources'):
+                  continue
+              text = path.read_text()
+              if 'dl.google.com/linux/chrome' not in text:
+                  continue
+              if path.suffix == '.list':
+                  text = '\n'.join(line for line in text.splitlines() if 'dl.google.com/linux/chrome' not in line) + '\n'
+              else:
+                  text = '\n\n'.join(block for block in text.split('\n\n') if 'dl.google.com/linux/chrome' not in block) + '\n'
+              path.write_text(text)
+              print('Excluded Chrome source from', path.name)
+          PY
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-checks
+          path: test-results/
+          retention-days: 7
+ + match.group(1) + '          PY
+
+          for baseline in baza.sql request-delivery.sql telegram-setup.sql; do
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+              -v ON_ERROR_STOP=1 -f "$baseline"
+          done
+          supabase migration up --local
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-production-drift.sql
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
+      - run: npm ci
+      - name: Exclude unused Google Chrome apt repository
+        run: |
+          # Playwright downloads its own browsers. A broken third-party Chrome
+          # package index must not block Ubuntu system dependency installation.
+          # Package signature and checksum verification remain enabled.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          for path in Path('/etc/apt/sources.list.d').iterdir():
+              if path.suffix not in ('.list', '.sources'):
+                  continue
+              text = path.read_text()
+              if 'dl.google.com/linux/chrome' not in text:
+                  continue
+              if path.suffix == '.list':
+                  text = '\n'.join(line for line in text.splitlines() if 'dl.google.com/linux/chrome' not in line) + '\n'
+              else:
+                  text = '\n\n'.join(block for block in text.split('\n\n') if 'dl.google.com/linux/chrome' not in block) + '\n'
+              path.write_text(text)
+              print('Excluded Chrome source from', path.name)
+          PY
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-checks
+          path: test-results/
+          retention-days: 7
+, 1)[0]
+                  + '          PY
+
+          for baseline in baza.sql request-delivery.sql telegram-setup.sql; do
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+              -v ON_ERROR_STOP=1 -f "$baseline"
+          done
+          supabase migration up --local
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-production-drift.sql
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
+      - run: npm ci
+      - name: Exclude unused Google Chrome apt repository
+        run: |
+          # Playwright downloads its own browsers. A broken third-party Chrome
+          # package index must not block Ubuntu system dependency installation.
+          # Package signature and checksum verification remain enabled.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          for path in Path('/etc/apt/sources.list.d').iterdir():
+              if path.suffix not in ('.list', '.sources'):
+                  continue
+              text = path.read_text()
+              if 'dl.google.com/linux/chrome' not in text:
+                  continue
+              if path.suffix == '.list':
+                  text = '\n'.join(line for line in text.splitlines() if 'dl.google.com/linux/chrome' not in line) + '\n'
+              else:
+                  text = '\n\n'.join(block for block in text.split('\n\n') if 'dl.google.com/linux/chrome' not in block) + '\n'
+              path.write_text(text)
+              print('Excluded Chrome source from', path.name)
+          PY
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-checks
+          path: test-results/
+          retention-days: 7
+ + match.group(1) + '$select 1;          PY
+
+          for baseline in baza.sql request-delivery.sql telegram-setup.sql; do
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+              -v ON_ERROR_STOP=1 -f "$baseline"
+          done
+          supabase migration up --local
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-production-drift.sql
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
+      - run: npm ci
+      - name: Exclude unused Google Chrome apt repository
+        run: |
+          # Playwright downloads its own browsers. A broken third-party Chrome
+          # package index must not block Ubuntu system dependency installation.
+          # Package signature and checksum verification remain enabled.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          for path in Path('/etc/apt/sources.list.d').iterdir():
+              if path.suffix not in ('.list', '.sources'):
+                  continue
+              text = path.read_text()
+              if 'dl.google.com/linux/chrome' not in text:
+                  continue
+              if path.suffix == '.list':
+                  text = '\n'.join(line for line in text.splitlines() if 'dl.google.com/linux/chrome' not in line) + '\n'
+              else:
+                  text = '\n\n'.join(block for block in text.split('\n\n') if 'dl.google.com/linux/chrome' not in block) + '\n'
+              path.write_text(text)
+              print('Excluded Chrome source from', path.name)
+          PY
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-checks
+          path: test-results/
+          retention-days: 7
+ + match.group(1) + '$);'
+              ),
+              cron_source,
+          )
+          if cron_count != 4:
+              raise SystemExit(f'Expected to isolate 4 final cron jobs, isolated {cron_count}')
+          Path('supabase/reconciliation/studkab-cron.safe.sql').write_text(cron_safe)
+          print('Isolated exactly 4 final cron jobs')
           PY
 
           for baseline in baza.sql request-delivery.sql telegram-setup.sql; do
