@@ -1,3 +1,19 @@
+project_id = "studkab"
+
+# Edge Function authentication settings mirrored from production on 2026-09-13.
+# Public webhook/cron functions implement their own authentication in application code.
+[functions.studkab-push]
+verify_jwt = false
+
+[functions.studkab-telegram]
+verify_jwt = false
+
+[functions.studkab-requests]
+verify_jwt = false
+
+[functions.studkab-cloud-check]
+verify_jwt = true
+
 [functions.studkab-generation]
 verify_jwt = true
 

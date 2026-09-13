@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory() as tmp:
 print('PASS: captured schema upgrade and pg_dump restoration preserve all synthetic records')
 
 sql('create role service_role bypassrls;')
-migration=(root/'supabase/migrations/202609070001_studkab_push.sql').read_text().split('-- Runs as the job owner.')[0]
+migration=(root/'supabase/migrations/20260907113822_studkab_deadline_push.sql').read_text().split('-- Runs as the job owner.')[0]
 sql(migration)
 sub=sql(f"insert into studkab_push_subscriptions(user_id,endpoint,subscription,timezone) values('{uid}','https://fcm.googleapis.com/test','{{}}','UTC') returning id;")
 assert sql(f"set role service_role; select claim_studkab_push_delivery('test-key','{sub}');")=='t'
