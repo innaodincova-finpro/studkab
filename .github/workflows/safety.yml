@@ -42,6 +42,14 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: test-only
           PGDATABASE: safety_test
+      - name: Run isolated A1 fault injection
+        run: node tests/a1-fault-injection.mjs
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: test-only
+          PGDATABASE: safety_test
       - name: Install pinned Supabase CLI
         uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
         with:
