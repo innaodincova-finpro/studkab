@@ -164,7 +164,7 @@ end
 $$;
 
 create or replace function public.studkab_gen_resume_budget()
-returns integer language plpgsql security invoker set search_path='' as $
+returns integer language plpgsql security invoker set search_path='' as $resume$
 declare n integer=0; free bigint;
 begin
  select limit_microusd-reserved_microusd into free
@@ -182,10 +182,10 @@ begin
  get diagnostics n=row_count;
  return n;
 end
-$;
+$resume$;
 
 create or replace function public.studkab_gen_maintenance()
-returns jsonb language plpgsql security invoker set search_path='' as $
+returns jsonb language plpgsql security invoker set search_path='' as $maintenance$
 declare released bigint; written bigint; recovered integer; resumed integer;
 begin
  if not pg_try_advisory_xact_lock(hashtextextended('studkab_gen_maintenance',0))
@@ -201,7 +201,7 @@ begin
   'razblokirovano_rabot',resumed
  );
 end
-$;
+$maintenance$;
 
 revoke all on function
   public.studkab_gen_recover_unknown(),
