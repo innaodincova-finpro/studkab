@@ -191,6 +191,36 @@
   errors.push('Приёмка FIN-UAT-01 по критериям C01–C13 и S01–S03 не подтверждена. Общая галочка не разрешает передачу.');
   return {applicable:true,errors:errors,sections:sections,total:total};
  }
+ function reviewCriteria(x){
+  var generic=[
+   'Тема, получатель и задачи соответствуют заявке',
+   'Исходные материалы достаточны и использованы без подмены',
+   'Обязательные разделы присутствуют и идут в нужном порядке',
+   'Требования методички и правила оформления выполнены',
+   'Выводы отвечают поставленным задачам',
+   'Факты, названия, даты и числовые данные проверены',
+   'Обязательные таблицы, рисунки и приложения присутствуют',
+   'Расчёты проверены либо обоснованно неприменимы к этой работе',
+   'Рекомендации и итоговые утверждения обоснованы материалами',
+   'Источники существуют и подтверждают соседние утверждения',
+   'Файл открывается и редактируется в Microsoft Word',
+   'Объём и комплектность соответствуют требованиям',
+   'Проверенный файл относится к нужному получателю и версии',
+   'Недостающие данные и ограничения явно указаны',
+   'Оформление и расположение элементов проверены визуально',
+   'Текст понятен, согласован и не содержит лишних повторов'
+  ];
+  var finance=[
+   'Тема, получатель и задачи', 'Исходные данные', 'Расчёты и формулы',
+   'Методика расчёта', 'Выводы по показателям', 'Факторы изменения результата',
+   'Прибыль и денежные потоки', 'Сценарии и допущения', 'Рекомендации',
+   'Источники и ссылки', 'Открытие и редактирование в Microsoft Word',
+   'Объём и комплектность', 'Соответствие проверенного файла получателю',
+   'Ограничения данных', 'Оформление', 'Ясность и согласованность'
+  ];
+  var labels=extended(x)?finance:generic;
+  return labels.map(function(label,i){return {code:i<13?'C'+String(i+1).padStart(2,'0'):'S0'+(i-12),label:label};});
+ }
  function cloudDraft(info){
   if(!info||!info.job||!/^[-a-zA-Z0-9]{1,100}$/.test(info.job.id||'')||!/^[-a-zA-Z0-9]{1,100}$/.test(info.job.version||''))throw Error('Не подтверждена версия запуска');
   var report=cloudReport(info.parts);if(!report.saved||!report.sections.length)throw Error('Нет сохранённого текста для Word');
@@ -202,6 +232,6 @@
  }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={consistency:consistency,sourceCheck:sourceCheck,extended:extended,analysis:analysis,finAcceptance:finAcceptance,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={consistency:consistency,sourceCheck:sourceCheck,extended:extended,analysis:analysis,finAcceptance:finAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);
