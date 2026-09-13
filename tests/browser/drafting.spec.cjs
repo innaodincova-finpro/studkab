@@ -5,7 +5,7 @@ test('section image survives editor refresh and can be removed',async({page})=>{
  await setup(page);
  const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
  await page.locator('[data-sec="ch1"] [data-figfile]').setInputFiles({name:'test-chart.png',mimeType:'image/png',buffer:pixel});
- await expect(page.getByText('Рисунок 1 — test chart',{exact:true})).toBeVisible();
+ await expect(page.locator('#docSecs').getByText('Рисунок 1 — test chart',{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.figures.length)).toBe(1);
  await expect(page.locator('#docPreview img[alt="Рисунок 1 — test chart"]')).toBeVisible();
  await page.locator('[data-sec="ch1"] [data-figdel]').click();
