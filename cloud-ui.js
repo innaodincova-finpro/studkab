@@ -72,14 +72,20 @@
   var k=KEY+':before-cloud-choice';
   return {save:function(remote){localStorage.setItem(k,JSON.stringify({at:new Date().toISOString(),local:JSON.parse(o().snapshot(D)),remote:JSON.parse(o().snapshot(remote))}));}};
  }
+ function deferredKey(){return KEY+':cloud-choice-deferred';}
+ function deferredPair(){try{return JSON.parse(localStorage.getItem(deferredKey())||'null');}catch(e){return null;}}
+ function rememberDeferred(local,remote){try{localStorage.setItem(deferredKey(),JSON.stringify({local:local,remote:remote}));}catch(e){/* Records remain untouched if browser storage is unavailable. */}}
+ function clearDeferred(){try{localStorage.removeItem(deferredKey());}catch(e){/* No data mutation depends on this convenience marker. */}}
+ function isDeferred(local,remote){var pair=deferredPair();return !!pair&&pair.local===local&&pair.remote===remote;}
  function summary(data){return CLOUD_APP==='reestr'?(data.items||[]).length+' заявок':(data.works||[]).length+' работ, '+(data.tasks||[]).length+' задач';}
- async function sync(){
-  if(running){if(runningIdentity!==o().identity())return running.then(sync);return running;}
+ async function sync(interactive){
+  interactive=interactive===true;
+  if(running){if(runningIdentity!==o().identity()||interactive)return running.then(function(){return sync(interactive);});return running;}
   runningIdentity=o().identity();
-  running=reconcile().catch(function(e){toast(e.message||'Синхронизация не завершена. Записи на устройстве сохранены');}).finally(function(){running=null;paint();});
+  running=reconcile(interactive).catch(function(e){toast(e.message||'Синхронизация не завершена. Записи на устройстве сохранены');}).finally(function(){running=null;paint();});
   return running;
  }
- async function reconcile(){
+ async function reconcile(interactive){
   var api=o();if(!api || api.mode!=='cloud')return openCloud();
   if(api.busy){toast('Дождитесь завершения текущей операции');return;}
   var identity=api.identity();
@@ -101,17 +107,20 @@
   var local=api.snapshot(D);
   if(res.status==='empty'){
    // Account scope has already been selected; no existing cloud records to replace.
-   api.accept();await cloudSave('Записи сохранены в облаке');return;
+   clearDeferred();api.accept();await cloudSave('Записи сохранены в облаке');return;
   }
   var bad=checkBackup(res.remote);if(bad){toast('Не удалось проверить облачные записи: '+bad);return;}
   var remote=api.snapshot(res.remote);
-  if(local===remote){api.accept(D);return;}
-  if(cloudIsEmpty(D)||baseline===local||global.cloudInitialSnapshot===local){cloudApply(res.remote);return;}
-  if(baseline===remote){api.accept();await cloudSave('Изменения сохранены в облаке');return;}
+  if(local===remote){clearDeferred();api.accept(D);return;}
+  if(cloudIsEmpty(D)||baseline===local||global.cloudInitialSnapshot===local){clearDeferred();cloudApply(res.remote);return;}
+  if(baseline===remote){clearDeferred();api.accept();await cloudSave('Изменения сохранены в облаке');return;}
+  if(!interactive&&isDeferred(local,remote))return;
   var action=await choose('Записи на устройствах различаются',
    'На этом устройстве: '+summary(D)+'. В облаке: '+summary(res.remote)+'. Выберите, какие записи использовать. Перед заменой обе версии сохранятся в разделе «Копия данных».',
    [{label:'Использовать записи из облака',value:'remote'},{label:'Использовать записи этого устройства',value:'local'},{label:'Решить позже — ничего не заменять',value:'later'}]);
-  if(identity!==api.identity()||action==='later')return;
+  if(identity!==api.identity())return;
+  if(action==='later'){rememberDeferred(local,remote);return;}
+  clearDeferred();
   // An edit or another tab can change local data while the choice is open.
   if(api.snapshot(D)!==local){toast('Записи изменились во время выбора. Повторите синхронизацию');return;}
   if(action==='local'){
@@ -132,7 +141,7 @@
  document.addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;
   var act=b.getAttribute('data-act');
-  if(act==='cloud-sync'){e.preventDefault();sync();}
+  if(act==='cloud-sync'){e.preventDefault();sync(true);}
   if(act==='cloud-google'){e.preventDefault();o().signInGoogle().catch(function(e){toast(e.message);});}
   if(act==='cloud-before-copy'){e.preventDefault();downloadBackup();}
  });

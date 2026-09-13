@@ -13,6 +13,17 @@ test('section image survives editor refresh and can be removed',async({page})=>{
  await page.locator('[data-sec="ch1"] [data-figdel]').click();
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.figures.length)).toBe(0);
 });
+test('saved document is shown on the request card after closing the editor',async({page})=>{
+ await setup(page);
+ await page.getByText('Редактировать разделы',{exact:true}).click();
+ await page.locator('[data-sec="ch1"] > summary').click();
+ await page.locator('[data-sec="ch1"] .secText').fill('Сохранённый текст документа.');
+ await page.getByRole('button',{name:'Сохранить',exact:true}).click();
+ await page.locator('.sheet > .sheet-in > .close').click();
+ await expect(page.getByText('Черновик ещё не собирался.',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Открыть документ',exact:true})).toBeVisible();
+ await expect(page.getByText(/разделов · 28 знаков · правка/)).toBeVisible();
+});
 test('one preparation control starts a saved server job',async({page})=>{
  await setup(page);await fill(page);await page.setViewportSize({width:390,height:844});
  await page.evaluate(()=>{window.preparationActions=[];Oblako.generationApi=async body=>{preparationActions.push(body.action);if(body.action==='history')return {jobs:[]};if(body.action==='capabilities')return {enabled:true,budgetAvailable:true};if(body.action==='start')return {job:'22222222-2222-4222-8222-222222222222'};throw Error('Unexpected action');};});

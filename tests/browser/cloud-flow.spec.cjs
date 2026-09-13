@@ -26,7 +26,13 @@ for(const file of ['index.html','reestr.html']){
   await page.getByRole('button',{name:'Решить позже — ничего не заменять'}).click();
   expect(await page.evaluate(()=>D.settings.name)).toBe('Местная версия');
   expect(await page.evaluate(()=>QA.rows[QA.user+':'+CLOUD_APP].data.settings.name)).toBe('Другое устройство');
-  await page.evaluate(()=>{CloudUI.sync();});
+  await page.reload();
+  await page.evaluate(()=>CloudUI.sync());
+  await expect(page.getByRole('heading',{name:'Записи на устройствах различаются'})).toHaveCount(0);
+  await page.locator('[data-tab="more"]').click();
+  await page.getByText('Хранение записей',{exact:true}).click();
+  await page.getByRole('button',{name:'Проверить записи',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Записи на устройствах различаются'})).toBeVisible();
   await page.getByRole('button',{name:'Использовать записи из облака',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>D.settings.name)).toBe('Другое устройство');
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem(KEY+':before-cloud-choice')).local.settings.name)).toBe('Местная версия');
