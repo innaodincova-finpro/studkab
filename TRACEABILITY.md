@@ -460,3 +460,12 @@ R1/R9: Safety workflow расширен на Pull Request и push в `main`; che
 контрольной проверки и безопасного отката. Эти файлы не включают GitHub ruleset:
 до административного применения и отрицательных тестов прямой push технически
 остаётся возможным. Production, Supabase, данные и бюджет не изменяются.
+
+## 2026-09-13 — Этап 3 завершён
+
+R1/R9: GitHub ruleset №23135376 прочитан после создания. Enforcement `active`,
+цель `~DEFAULT_BRANCH` (`main`), deletion и non-fast-forward запрещены,
+Pull Request обязателен, required check `safety` (GitHub Actions), strict=true,
+bypass отсутствует и `current_user_can_bypass=never`. Контрольная фиксация
+проходит тем же защищённым PR-маршрутом. Production, Supabase, данные и бюджет
+не изменены.
