@@ -1,0 +1,53 @@
+-- Template for the four STUDKAB production cron jobs.
+-- Substitute SUPABASE_PROJECT_REF and STUDKAB_ANON_KEY from a protected
+-- deployment environment. Never commit the key produced by substitution.
+do $$
+declare job record;
+begin
+  for job in
+    select jobid from cron.job
+    where jobname in (
+      'studkab-deadline-push',
+      'studkab-request-telegram',
+      'studkab-generation-v1',
+      'studkab-maintenance'
+    )
+  loop
+    perform cron.unschedule(job.jobid);
+  end loop;
+end
+$$;
+
+select cron.schedule('studkab-deadline-push','* * * * *',$job$
+ select net.http_post(
+ url:='https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/studkab-push',
+ headers:=jsonb_build_object('Content-Type','application/json','x-job-key',(select cron_token from public.studkab_push_configuration where id=1)),
+ body:='{}'::jsonb,timeout_milliseconds:=50000);
+$job$);
+
+select cron.schedule('studkab-request-telegram','* * * * *',$job$
+ select net.http_post(
+ url:='https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/studkab-requests',
+ headers:=jsonb_build_object('Content-Type','application/json','x-job-key',(select cron_token from public.studkab_request_config where id=true)),
+ body:='{}'::jsonb,timeout_milliseconds:=55000);
+$job$);
+
+select cron.schedule('studkab-generation-v1','* * * * *',$job$
+ select net.http_post(
+ url:='https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/studkab-generation',
+ headers:=jsonb_build_object(
+  'Content-Type','application/json',
+  'Authorization','Bearer ${STUDKAB_ANON_KEY}',
+  'X-Studkab-Runner',(select cron_token from public.studkab_request_config where id=true)
+ ),
+ body:='{}'::jsonb,timeout_milliseconds:=120000)
+ where exists(select 1 from public.studkab_gen_jobs where status in ('queued','running'))
+ and (
+  exists(select 1 from public.studkab_gen_budget where id=true and limit_microusd>reserved_microusd)
+  or exists(select 1 from public.studkab_gen_jobs where status='running')
+ );
+$job$);
+
+select cron.schedule('studkab-maintenance','* * * * *',$job$
+ select public.studkab_gen_maintenance();
+$job$);
