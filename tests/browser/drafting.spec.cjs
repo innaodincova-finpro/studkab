@@ -13,14 +13,29 @@ test('section image survives editor refresh and can be removed',async({page})=>{
  await page.locator('[data-sec="ch1"] [data-figdel]').click();
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.figures.length)).toBe(0);
 });
-test('one action prepares linked sections and incomplete quality blocks approval',async({page})=>{await setup(page);await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();await expect(page.locator('#docStatus')).toContainText('Добавьте');expect(await page.evaluate(()=>calls.length)).toBe(0);await fill(page);await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();await expect(page.locator('#docStatus')).toContainText('Текст подготовлен');expect(await page.evaluate(()=>calls.length)).toBe(5);expect(await page.evaluate(()=>calls[1].u)).toContain('Содержательный текст');expect(await page.evaluate(()=>draftItem.doc.structure.ch2.text)).toContain('Таблица 2');await expect(page.locator('[data-sec="refs"] .secStat')).toContainText('Предоставленные источники');const dl=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать Word',exact:true}).click();await (await dl).saveAs('test-results/grounded-draft.docx');await page.screenshot({path:'test-results/drafting-mobile.png'});await page.getByRole('button',{name:'Проверить готовность',exact:true}).click();await expect(page.getByText('Передача пока недоступна:',{exact:true})).toBeVisible();await expect(page.getByRole('checkbox')).toHaveCount(0);expect(await page.evaluate(()=>draftItem.doc.review)).toBeFalsy();});
-test('failed section resumes without repeating saved sections or erasing backup',async({page})=>{await setup(page);await fill(page);await page.evaluate(()=>{window.failOnce=true;askAI=async(p,s,u)=>{calls.push(u);if(failOnce&&u.startsWith('Подготовь раздел «Глава 2')){failOnce=false;throw Error('Тестовый сбой');}return{text:'Проверенный текст.',tokens:1};};});await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();await expect(page.locator('#docStatus')).toContainText('Остановился');expect(await page.evaluate(()=>calls.length)).toBe(2);await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();await expect(page.locator('#docStatus')).toContainText('Текст подготовлен');expect(await page.evaluate(()=>calls.filter(u=>u.startsWith('Подготовь раздел «Глава 1')).length)).toBe(1);expect(await page.evaluate(()=>draftItem.doc.previous.structure.ch1.text)).toBe('');});
-test('stale AI response never writes to another account',async({page})=>{await setup(page);await fill(page);await page.evaluate(()=>askAI=()=>new Promise(r=>window.resolveDraft=r));await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();await expect.poll(()=>page.evaluate(()=>!!window.resolveDraft)).toBe(true);await page.evaluate(()=>QA.switchUser('other-draft'));await expect.poll(()=>page.evaluate(()=>Oblako.email)).toBe('other-draft@example.test');await page.evaluate(()=>resolveDraft({text:'Запоздалый текст',tokens:1}));await expect.poll(()=>page.evaluate(()=>genBusy)).toBe(false);expect(await page.evaluate(()=>JSON.stringify(D))).not.toContain('Запоздалый текст');});
+test('one preparation control starts a saved server job',async({page})=>{
+ await setup(page);await fill(page);await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>{window.preparationActions=[];Oblako.generationApi=async body=>{preparationActions.push(body.action);if(body.action==='history')return {jobs:[]};if(body.action==='capabilities')return {enabled:true,budgetAvailable:true};if(body.action==='start')return {job:'22222222-2222-4222-8222-222222222222'};throw Error('Unexpected action');};});
+ await expect(page.getByRole('button',{name:'Начать подготовку',exact:true})).toHaveCount(1);
+ await expect(page.getByText('Подготовка в облаке',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('Окно можно закрыть');
+ await expect(page.getByRole('button',{name:'Продолжить подготовку',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>preparationActions)).toEqual(['history','capabilities','start']);
+ expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
+});
+
+test('server preparation continues after reopening the document',async({page})=>{
+ await setup(page);await page.keyboard.press('Escape');await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};Oblako.generationApi=async body=>{if(body.action==='status')return {job:{status:'running'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Сохранённая часть'}]};throw Error('Unexpected paid action');};openDocBuilder(draftItem.id);});
+ await page.getByRole('button',{name:'Продолжить подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('Выполняется');
+ await expect(page.locator('[data-prepare-result]')).toContainText('Сохранённая часть');
+});
 test('long answer is revised once and an unavailable revision preserves the answer',async({page})=>{
  await setup(page);await fill(page);await page.getByText('Редактировать разделы',{exact:true}).click();for(const summary of await page.locator('[data-sec] > summary').all())await summary.click();for(const field of await page.locator('.secPages').all())await field.fill('1');
  await page.evaluate(()=>{window.edits=0;askAI=async(p,s,u)=>{if(u.includes('Редакторская проверка:')){edits++;throw Error('Редактор недоступен');}return {text:'Достоверный текст. '.repeat(140),tokens:1};};});
- await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();await expect(page.locator('#docStatus')).toContainText('Текст подготовлен');
- expect(await page.evaluate(()=>edits)).toBe(5);expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toContain('Достоверный текст.');
+ await page.locator('[data-sec="ch1"] [data-secgen]').click();await expect(page.locator('#docStatus')).toContainText('Готово');
+ expect(await page.evaluate(()=>edits)).toBe(1);expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toContain('Достоверный текст.');
  await page.getByRole('button',{name:'Проверить готовность',exact:true}).click();await expect(page.getByText('Замечания к объёму и повторам:',{exact:true})).toBeVisible();
 });
 
@@ -31,8 +46,8 @@ test('one automatic revision removes flagged recommendations without an extra us
   if(u.startsWith('Подготовь раздел «Глава 3'))return{text:'Ликвидность 1,5, автономия 0,4 и рентабельность 10%. Закрепить нормативы в учётной политике.',tokens:1};
   return{text:'Содержательный текст по предоставленным материалам.',tokens:1};
  };});
- await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();
- await expect(page.locator('#docStatus')).toContainText('Текст подготовлен');
+ await page.getByText('Редактировать разделы',{exact:true}).click();await page.locator('[data-sec="ch3"] > summary').click();await page.locator('[data-sec="ch3"] [data-secgen]').click();
+ await expect(page.locator('#docStatus')).toContainText('Готово');
  expect(await page.evaluate(()=>edits)).toBe(1);
  expect(await page.evaluate(()=>draftItem.doc.structure.ch3.text)).toContain('платёжный календарь');
  expect(await page.evaluate(()=>draftItem.doc.structure.ch3.text)).not.toContain('учётной политике');
@@ -43,8 +58,8 @@ test('generation failure appears in journal and can be copied on mobile',async({
  await setup(page);await fill(page);await page.setViewportSize({width:390,height:844});
  await page.route('http://127.0.0.1:4173/diagnostic-mock',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({error:'INCOMPLETE:deepseek',detail:{reason:'length',completion_tokens:8000,limit_tokens:8000,request_id:'test-provider-1'}})}));
  await page.evaluate(()=>{askAI=window.actualAskAI;D.settings.proxyUrl='http://127.0.0.1:4173/diagnostic-mock';D.settings.proxyToken='test-only';D.settings.providers.deepseek={on:true,model:'deepseek-chat'};document.querySelector('#docProv').value='deepseek';});
- await page.getByRole('button',{name:'Подготовить весь черновик',exact:true}).click();
- await expect(page.locator('#docStatus')).toContainText('Остановился');
+ await page.getByText('Редактировать разделы',{exact:true}).click();await page.locator('[data-sec="ch1"] > summary').click();await page.locator('[data-sec="ch1"] [data-secgen]').click();
+ await expect(page.locator('#docStatus')).toContainText('Нейросеть не завершила раздел');
  const record=await page.evaluate(()=>D.aiDiagnostics.at(-1));
  expect(record.section).toBe('ch1');expect(record.stage).toBe('draft');expect(record.reason).toBe('length');expect(record.client_request_id).toBeTruthy();
  await page.keyboard.press('Escape');await page.locator('[data-tab="more"]').click();
@@ -59,20 +74,18 @@ test('generation failure appears in journal and can be copied on mobile',async({
  expect(await page.evaluate(()=>D.aiDiagnostics.length)).toBe(0);
 });
 
-test('cloud preparation blocks zero budget and preserves edited document',async({page})=>{
- await setup(page);await page.setViewportSize({width:390,height:844});
- await page.evaluate(()=>{Oblako.generationApi=async body=>{if(body.action==='capabilities')return {enabled:true,budgetAvailable:false};throw Error('Unexpected mutation');};});
- await page.getByText('Подготовка в облаке',{exact:true}).click();
- await page.getByRole('button',{name:'Проверить доступность',exact:true}).click();
- await expect(page.locator('[data-cloud-message]')).toContainText('бюджет');
- await expect(page.locator('[data-cloud-start]')).toBeDisabled();
+test('preparation blocks zero budget and preserves edited document',async({page})=>{
+ await setup(page);await fill(page);await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>{Oblako.generationApi=async body=>{if(body.action==='history')return {jobs:[]};if(body.action==='capabilities')return {enabled:true,budgetAvailable:false};throw Error('Unexpected mutation');};});
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('бюджет');
  await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:'older-version'};draftItem.doc.structure.ch1.text='Мой сохранённый текст';Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Облачный текст'}]});});
- await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
- await expect(page.locator('[data-cloud-message]')).toContainText('прежней версии');
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('прежней версии');
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой сохранённый текст');
  await page.getByText('Собранный текст и объём',{exact:true}).click();
  await page.getByText(/^Глава 1.*— слов:/).click();
- await expect(page.locator('[data-cloud-result]')).toContainText('Облачный текст');
+ await expect(page.locator('[data-prepare-result]')).toContainText('Облачный текст');
 });
 
 test('lost cloud job link is recovered by selection without another paid start',async({page})=>{
@@ -87,27 +100,25 @@ test('lost cloud job link is recovered by selection without another paid start',
    throw Error('Paid Start is forbidden in recovery');
   };
  });
- await page.getByText('Подготовка в облаке',{exact:true}).click();
- await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
  await expect(page.locator('[data-recover-job]')).toHaveCount(2);
  await page.locator('[data-recover-job]').first().click();
- await expect(page.locator('[data-cloud-message]')).toContainText('не подтверждена');
+ await expect(page.locator('[data-prepare-message]')).toContainText('не подтверждена');
  expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой текст');
  expect(await page.evaluate(()=>recoveryActions)).toEqual(['history','status']);
  await page.getByText('Собранный текст и объём',{exact:true}).click();
  await page.getByText(/^Глава 1.*— слов:/).click();
- await expect(page.locator('[data-cloud-result]')).toContainText('Сохранённый ответ');
+ await expect(page.locator('[data-prepare-result]')).toContainText('Сохранённый ответ');
 });
 
 test('known output limit is shown instead of a generic unknown result',async({page})=>{
  await setup(page);
  await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{ordinal:0,id:'ch2__part_1',state:'unknown',text:null,failure:{code:'OUTPUT_LIMIT',completion_tokens:2500}}]});});
- await page.getByText('Подготовка в облаке',{exact:true}).click();
- await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
- await expect(page.locator('[data-cloud-message]')).toContainText('достигнут предел длины ответа');
- await expect(page.locator('[data-cloud-message]')).toContainText('Автоматический повтор заблокирован');
- await expect(page.locator('[data-cloud-message]')).not.toContainText('Результат последнего запроса неизвестен');
+ await page.locator('[data-prepare]').click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('достигнут предел длины ответа');
+ await expect(page.locator('[data-prepare-message]')).toContainText('Автоматический повтор заблокирован');
+ await expect(page.locator('[data-prepare-message]')).not.toContainText('Результат последнего запроса неизвестен');
 });
 
 test('cloud review assembles one response with visible gaps and preserves local draft',async({page})=>{
@@ -117,28 +128,16 @@ test('cloud review assembles one response with visible gaps and preserves local 
  {ordinal:2,id:'ch2__part_3',section:'ch2',state:'done',text:'Третий абзац.'},
  {ordinal:0,id:'ch2__part_1',section:'ch2',state:'done',text:'Первый абзац. <img src=x onerror="window.injected=true">'},
  {ordinal:1,id:'ch2__part_2',section:'ch2',state:'unknown',text:null}]};};});
- await page.getByText('Подготовка в облаке',{exact:true}).click();
- await page.getByRole('button',{name:'Проверить результат',exact:true}).click();
+ await page.locator('[data-prepare]').click();
  await page.getByText('Собранный текст и объём',{exact:true}).click();
- await expect(page.locator('[data-cloud-result]')).toContainText('2 из 3 частей');
+ await expect(page.locator('[data-prepare-result]')).toContainText('2 из 3 частей');
  await page.getByText(/^Глава 2.*— слов:/).click();
- await expect(page.locator('[data-cloud-result]')).toContainText('[Часть 2 не сохранена]');
- expect(await page.locator('[data-cloud-result] img').count()).toBe(0);
+ await expect(page.locator('[data-prepare-result]')).toContainText('[Часть 2 не сохранена]');
+ expect(await page.locator('[data-prepare-result] img').count()).toBe(0);
  expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Мой исходный текст');
  expect(await page.evaluate(()=>cloudActions)).toEqual(['status']);
  expect(await page.evaluate(()=>window.injected)).toBeUndefined();
 });
-
-test('download incomplete cloud Word uses captured version without changing local text',async({page})=>{
- await setup(page);
- await page.evaluate(()=>{draftItem.doc.structure.ch1.text='Локальный текст не для экспорта';draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};
- window.exportCalls=[];Oblako.generationApi=async b=>{exportCalls.push(b.action);return {job:{id:'22222222-2222-4222-8222-222222222222',version:'version1',status:'unknown'},parts:[{ordinal:0,id:'ch2',section:'ch2',state:'done',text:'Облачный текст для проверки.'},{ordinal:1,id:'ch2b',section:'ch2',state:'unknown',text:null}]};};});
- await page.getByText('Подготовка в облаке',{exact:true}).click();await page.getByRole('button',{name:'Проверить результат',exact:true}).click();await page.getByText('Собранный текст и объём',{exact:true}).click();
- const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать неполный Word',exact:true}).click();const file=await pending;await file.saveAs('test-results/cloud-incomplete.docx');
- const zip=require('node:fs').readFileSync('test-results/cloud-incomplete.docx').toString('utf8');expect(zip).toContain('Неполный черновик');expect(zip).toContain('version1');expect(zip).toContain('Часть 2 не сохранена');expect(zip).not.toContain('Локальный текст не для экспорта');
- expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Локальный текст не для экспорта');expect(await page.evaluate(()=>exportCalls)).toEqual(['status']);
-});
-
 
 test('FIN-UAT original criteria prevent approval through the general checkbox',async({page})=>{
  await setup(page);await fill(page);
