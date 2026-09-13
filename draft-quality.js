@@ -140,6 +140,41 @@
    .replace(/!?\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/https?:\/\/\S+/g,'').replace(/\[(?:S\d+|\d+(?:[,;–-]\s*\d+)*)\]/g,'');
   return (prose.match(/[\p{L}\p{N}]+(?:[’'‐-][\p{L}\p{N}]+)*/gu)||[]).length;
  }
+ function requirementNumber(text,words){
+  var source=String(text||''),re=new RegExp('(\\d{1,3})\\s+(?:'+words+')','ig'),m,values=[];
+  while((m=re.exec(source))){var before=source.slice(Math.max(0,m.index-24),m.index).toLowerCase();if(/(?:не\s+более|максимум|до)\s*$/.test(before)||/[\d–—-]\s*$/.test(before))continue;values.push(Number(m[1]));}
+  return values.length?Math.max.apply(null,values):null;
+ }
+ function requirementProfile(x){
+  var p=inputs(x),text=[p.requirements,x.methodNotes].filter(Boolean).join('\n').replace(/\r/g,''),d=x.doc||{},order=d.order||[];
+  var lines=Array.from(new Set(text.split('\n').map(function(line){return line.replace(/^\s*[-*•\d.)]+\s*/,'').trim();}).filter(Boolean))).slice(0,30);
+  return {
+   sourceText:text,
+   manual:lines,
+   sections:order.filter(function(c){return Number(c.pages)>0;}).map(function(c){return {id:c.id,name:c.name,pages:Number(c.pages)};}),
+   minimum:{
+    tables:requirementNumber(text,'таблиц(?:а|ы)?'),
+    figures:requirementNumber(text,'(?:рисун(?:ок|ка|ков)|график(?:а|ов)?|диаграмм(?:а|ы)?|иллюстраци(?:я|и|й))'),
+    appendices:requirementNumber(text,'приложени(?:е|я|й)')
+   }
+  };
+ }
+ function documentAcceptance(x){
+  var profile=requirementProfile(x),d=x.doc||{},structure=d.structure||{},errors=[],facts={tables:0,figures:0,appendices:0,sections:[]};
+  (d.order||[]).forEach(function(c){
+   var entry=structure[c.id]||{},text=String(entry.text||''),filled=!!text.trim()||(Array.isArray(entry.figures)&&entry.figures.length>0);
+   if(filled)facts.sections.push(c.id);
+   facts.tables+=(text.match(/^\s*\|.*\|\s*\n\s*\|(?:\s*:?-+:?\s*\|)+/gm)||[]).length;
+   facts.figures+=Array.isArray(entry.figures)?entry.figures.length:0;
+   if(filled&&(/прилож/i.test(String(c.name||''))||/^app(?:_|$)/i.test(String(c.id||''))))facts.appendices++;
+  });
+  profile.sections.forEach(function(section){if(facts.sections.indexOf(section.id)<0)errors.push('По паспорту требований отсутствует раздел «'+section.name+'».');});
+  [['tables','таблиц'],['figures','рисунков или диаграмм'],['appendices','приложений']].forEach(function(pair){
+   var expected=profile.minimum[pair[0]];if(expected!==null&&facts[pair[0]]<expected)errors.push('По требованиям нужно не менее '+expected+' '+pair[1]+', в документе найдено '+facts[pair[0]]+'.');
+  });
+  if(!profile.sourceText.trim())errors.push('Требования задания и методички не зафиксированы: автоматическая сверка с ними невозможна.');
+  return {profile:profile,facts:facts,errors:Array.from(new Set(errors))};
+ }
  function cloudReport(parts){
   var notes=[],sections=[],groups=new Map(),seen=new Set(),paragraphs=new Map(),saved=0;
   if(!Array.isArray(parts)||parts.length===0)return {sections:[],notes:['План частей отсутствует.'],words:0,saved:0,total:0};
@@ -232,6 +267,6 @@
  }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={consistency:consistency,sourceCheck:sourceCheck,extended:extended,analysis:analysis,finAcceptance:finAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={consistency:consistency,sourceCheck:sourceCheck,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);

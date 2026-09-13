@@ -18,14 +18,15 @@
  function deliver(x){
   if(!x.requestNumber)return toast('Эта запись получена вне кабинета. Передайте документ через согласованный мессенджер.');
   var payload;try{
-   var problems=DraftQuality.issues(x.doc||{}).concat(DraftQuality.finAcceptance(x).errors);
+   var problems=DraftQuality.issues(x.doc||{}).concat(DraftQuality.documentAcceptance(x).errors,DraftQuality.finAcceptance(x).errors);
    if(problems.length)throw Error('Передача недоступна: '+problems.join('; '));
    if(!x.doc || x.doc.review!==DraftQuality.stamp(x))throw Error('Откройте документ и нажмите «Проверить готовность» перед передачей');
    payload=snapshot(x);}catch(e){return toast(e.message);}
   var data=D,identity=Oblako.identity(),deliveryId=crypto.randomUUID(),versionId=crypto.randomUUID(),reviewId=crypto.randomUUID(),requestId=x.id,reviewStamp=x.doc.review,busy=false,receipt=null,reviewed=false,previewed=false,reviewEvidence=null;
   var captured;try{captured=ResultDocx(payload,payload.chapters);if(captured.size>3145728)throw Error('Word больше 3 МБ. Передача этой версии пока недоступна.');}catch(e){return toast(e.message);}
-  var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;});
-  var checklist='<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта укажите страницу, таблицу или результат проверки. Если пункт неприменим, объясните почему. Наличие протокола не заменяет проверку содержания.</p>'+codes.map(function(code,i){return '<label style="display:block;margin:12px 0">'+esc(labels[i])+'<textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Где и что проверено" style="width:100%;box-sizing:border-box"></textarea></label>';}).join('')+'</details>';
+  var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;}),profile=DraftQuality.requirementProfile(x);
+  var methodology='<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
+  var checklist=methodology+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта укажите страницу, таблицу или результат проверки. Если пункт неприменим, объясните почему. Наличие протокола не заменяет проверку содержания.</p>'+codes.map(function(code,i){return '<label style="display:block;margin:12px 0">'+esc(labels[i])+'<textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Где и что проверено" style="width:100%;box-sizing:border-box"></textarea></label>';}).join('')+'</details>';
   var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Передать черновик студенту</h3><p>'+esc(x.student||'Студент')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Будет передана сохранённая версия документа. Новая передача сохраняется отдельно от предыдущей.</p><button type="button" class="chip" data-preview>Проверить Word перед передачей</button>'+checklist+'<p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="btn" data-deliver>Передать в кабинет студента</button><p role="status" data-result-status></p>');
   wrap.dataset.accountIdentity=String(identity);
   var msg=wrap.querySelector('[data-result-status]');
