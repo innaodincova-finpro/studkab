@@ -18,6 +18,7 @@ for(const file of ['index.html','reestr.html']){
   await expect.poll(()=>page.evaluate(()=>QA.rows[QA.user+':'+CLOUD_APP]?.data.settings.name)).toBe('Без сети');
   await page.evaluate(()=>{
    const key=QA.user+':'+CLOUD_APP,row=QA.rows[key];row.data.settings.name='Другое устройство';row.rev++;
+   sessionStorage.setItem('qa-rows',JSON.stringify(QA.rows));
    D.settings.name='Местная версия';save();
   });
   await expect.poll(()=>page.evaluate(()=>Oblako.lastError)).toContain('другом устройстве');
