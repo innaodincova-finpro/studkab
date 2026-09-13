@@ -1,0 +1,1 @@
+create schema if not exists tochka_release_backups; revoke all on schema tochka_release_backups from public, anon, authenticated; create table tochka_release_backups.before_561_20260907 as select *, now() as backed_up_at from public.user_app_data; revoke all on table tochka_release_backups.before_561_20260907 from public, anon, authenticated;
