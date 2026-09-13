@@ -66,10 +66,12 @@ jobs:
 
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1 <<'SQL'
           create extension if not exists pg_cron;
+          set role supabase_admin;
           create or replace function cron.schedule(job_name text, schedule text, command text)
           returns bigint
           language sql
           as 'select 1::bigint';
+          reset role;
           SQL
 
           rmdir supabase/migrations
