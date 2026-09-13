@@ -7,7 +7,7 @@ w.TextEncoder=TextEncoder;w.Blob=Blob;w.Uint8Array=Uint8Array;w.DataView=DataVie
 let identity='test',calls=[],downloads=[],failure=true;w.D={};w.esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;');w.toast=s=>{w.document.body.dataset.toast=s;};
 w.openModal=html=>{const el=w.document.createElement('div');el.innerHTML=html;w.document.body.append(el);return el;};
 w.URL.createObjectURL=blob=>{downloads.push(blob);return 'blob:test';};w.URL.revokeObjectURL=()=>{};w.HTMLAnchorElement.prototype.click=function(){};
-w.eval(fs.readFileSync(new URL('result-docx.js',root),'utf8'));w.DraftQuality={issues:()=>[],finAcceptance:()=>({errors:[]}),reviewCriteria:()=>codes.map((code,i)=>({code,label:'Criterion '+(i+1)})),stamp:x=>JSON.stringify([x.id,x.student,x.doc.structure])};
+w.eval(fs.readFileSync(new URL('result-docx.js',root),'utf8'));w.DraftQuality={issues:()=>[],documentAcceptance:()=>({errors:[]}),requirementProfile:()=>({manual:['Методическое требование']}),finAcceptance:()=>({errors:[]}),reviewCriteria:()=>codes.map((code,i)=>({code,label:'Criterion '+(i+1)})),stamp:x=>JSON.stringify([x.id,x.student,x.doc.structure])};
 w.Oblako={identity:()=>identity,requestApi:async body=>{calls.push(body);
  if(body.action==='prepare-result'){const b=Buffer.from(body.docxBase64,'base64');return{versionId:body.versionId,recipientId:'55555555-5555-4555-8555-555555555555',fileHash:Buffer.from(await webcrypto.subtle.digest('SHA-256',b)).toString('hex'),documentHash:'b'.repeat(64)};}
  if(body.action==='review-result')return{reviewId:body.reviewId,versionId:body.versionId};

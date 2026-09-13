@@ -68,6 +68,22 @@ test('final review uses universal criteria outside the labelled financial profil
  const finance=q.reviewCriteria({doc:{inputs:{requirements:'УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.'}}});
  assert(finance.some(x=>x.label==='Прибыль и денежные потоки'));
 });
+test('document acceptance applies measurable requirements from this methodology',()=>{
+ const x={methodNotes:'Не менее 2 таблиц\n1 рисунок\n2 приложения',doc:{inputs:{requirements:'Работа должна содержать обязательные элементы.'},order:[{id:'intro',name:'Введение',pages:1},{id:'body',name:'Основная часть',pages:2},{id:'app_a',name:'Приложение А',pages:1}],structure:{intro:{text:'Текст'},body:{text:'| А | Б |\n| --- | --- |\n| 1 | 2 |',figures:[{mimeType:'image/png'}]},app_a:{text:'Материал'}}}};
+ const result=q.documentAcceptance(x);
+ assert.deepEqual(result.profile.minimum,{tables:2,figures:1,appendices:2});
+ assert.deepEqual(result.facts,{tables:1,figures:1,appendices:1,sections:['intro','body','app_a']});
+ assert(result.errors.some(e=>e.includes('не менее 2 таблиц')));assert(result.errors.some(e=>e.includes('не менее 2 приложений')));assert(!result.errors.some(e=>e.includes('рисунков')));
+});
+test('document acceptance uses saved section passport and never invents missing methodology',()=>{
+ const x={doc:{inputs:{requirements:'Методичка кафедры'},order:[{id:'a',name:'Раздел А',pages:1},{id:'b',name:'Раздел Б',pages:2}],structure:{a:{text:'Готово'},b:{text:''}}}};
+ const result=q.documentAcceptance(x);assert.equal(result.profile.sections.length,2);assert(result.errors.some(e=>e.includes('Раздел Б')));
+ const absent=q.documentAcceptance({doc:{order:[],structure:{},inputs:{requirements:''}}});assert(absent.errors.some(e=>e.includes('не зафиксированы')));
+});
+test('maximum and ambiguous ranges are not misread as minimum requirements',()=>{
+ const x={methodNotes:'Не более 5 таблиц; от 2 до 4 рисунков; минимум 1 приложение',doc:{inputs:{requirements:'Требования приложены'},order:[],structure:{}}};
+ assert.deepEqual(q.requirementProfile(x).minimum,{tables:null,figures:null,appendices:1});
+});
 test('cloud Word captures only one job, preserves gaps and carries version and incomplete notice',()=>{
  const info={job:{id:'test-job',version:'abc123'},parts:[{ordinal:0,section:'ch2',state:'done',text:'Облачный текст.'},{ordinal:1,section:'ch2',state:'unknown',text:null}]};
  const before=JSON.stringify(info),d=q.cloudDraft(info);assert.equal(d.draftNotice,'Неполный черновик');assert.match(d.structure.notice.text,/abc123/);assert.match(d.structure.cloud_0.text,/Часть 2 не сохранена/);
