@@ -64,18 +64,34 @@ jobs:
           supabase --version
           supabase start
 
-          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1 <<'SQL'
-          create extension if not exists pg_cron;
-          set role supabase_admin;
-          create or replace function cron.schedule(job_name text, schedule text, command text)
-          returns bigint
-          language sql
-          as 'select 1::bigint';
-          reset role;
-          SQL
-
           rmdir supabase/migrations
           mv supabase/migrations.hold supabase/migrations
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          migrations = Path('supabase/migrations')
+          pattern = re.compile(
+              r"select\s+cron\.schedule\(\s*'[^']+'\s*,\s*'[^']+'\s*,"
+              r"\s*\$([A-Za-z_][A-Za-z0-9_]*)\$.*?\$\1\$\s*\);",
+              re.IGNORECASE | re.DOTALL,
+          )
+          replaced = 0
+          for path in migrations.glob('*.sql'):
+              source = path.read_text()
+              safe, count = pattern.subn(
+                  "select 1; -- CI replay: external cron invocation disabled",
+                  source,
+              )
+              if count:
+                  path.write_text(safe)
+                  replaced += count
+          if replaced != 3:
+              raise SystemExit(f'Expected to isolate 3 cron schedules, isolated {replaced}')
+          print('Isolated exactly 3 historical cron schedules')
+          PY
+
           supabase migration up --local
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
       - run: npm ci
