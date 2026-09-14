@@ -51,3 +51,49 @@ test('three synthetic students remain isolated across submit, sign-in and Word r
  const repeat=await app(call({action:'result',id:ids[0]}));
  assert.equal(repeat.status,200);assert.equal((await repeat.json()).result.document.topic,'PILOT-STUDENT-A: синтетическая тема');
 });
+
+test('twenty concurrent synthetic students do not mix requests or results',async()=>{
+ const count=20;
+ const loadStudents=Array.from({length:count},(_,i)=>({
+  id:`40000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`,
+  email:`load-student-${i+1}@example.test`,email_confirmed_at:'yes'
+ }));
+ const rows=[],results=new Map();let resultReads=0;
+ const db=async(path,method,body)=>{
+  if(path==='rpc/submit_studkab_request'){
+   await Promise.resolve();
+   const number=rows.length+1,id=`50000000-0000-4000-8000-${String(number).padStart(12,'0')}`;
+   rows.push({id,number,student_id:body.student,payload:body.content,created_at:'2026-09-14T00:00:00Z'});
+   results.set(id,{delivery_id:`60000000-0000-4000-8000-${String(number).padStart(12,'0')}`,document:{topic:body.content.t},created_at:'2026-09-14T00:00:00Z',version_id:null});
+   return {id,number};
+  }
+  if(path.startsWith('studkab_requests?select=id,student_id,payload')){
+   const id=path.match(/&id=eq\.([^&]+)/)?.[1];
+   return rows.filter(row=>row.id===id).map(({id,student_id,payload})=>({id,student_id,payload}));
+  }
+  if(path.startsWith('studkab_results?')){
+   resultReads++;
+   const id=path.match(/request_id=eq\.([^&]+)/)?.[1];
+   return results.has(id)?[results.get(id)]:[];
+  }
+  if(path.startsWith('studkab_requests?select=id,number,payload,created_at'))return [...rows].sort((a,b)=>a.number-b.number);
+  throw Error(`Unexpected load path: ${path} ${method||''}`);
+ };
+ const apps=loadStudents.map(student=>handler({auth:async()=>student,config:async()=>({executor_email:executor.email}),db}));
+ const submitted=await Promise.all(apps.map((app,i)=>app(call({action:'submit',student_id:executor.id,payload:{id:`load-${i+1}`,t:`LOAD-STUDENT-${i+1}`,cn:'SYNTHETIC',fm:{sz:14}}}))));
+ assert.ok(submitted.every(response=>response.status===200));
+ assert.equal(rows.length,count);assert.equal(new Set(rows.map(row=>row.id)).size,count);assert.equal(new Set(rows.map(row=>row.student_id)).size,count);
+ for(let i=0;i<count;i++)assert.equal(rows.find(row=>row.payload.id===`load-${i+1}`)?.student_id,loadStudents[i].id);
+
+ const own=await Promise.all(apps.map((app,i)=>app(call({action:'result',id:rows.find(row=>row.student_id===loadStudents[i].id).id}))));
+ assert.ok(own.every(response=>response.status===200));
+ const foreignReadsBefore=resultReads;
+ const foreign=await Promise.all(apps.map((app,i)=>app(call({action:'result',id:rows.find(row=>row.student_id===loadStudents[(i+1)%count].id).id}))));
+ assert.ok(foreign.every(response=>response.status===404));assert.equal(resultReads,foreignReadsBefore);
+
+ const reopened=loadStudents.map(student=>handler({auth:async()=>student,config:async()=>({executor_email:executor.email}),db}));
+ const restored=await Promise.all(reopened.map((app,i)=>app(call({action:'result',id:rows.find(row=>row.student_id===loadStudents[i].id).id}))));
+ assert.ok(restored.every(response=>response.status===200));
+ const registry=handler({auth:async()=>executor,config:async()=>({executor_email:executor.email}),db});
+ const inbox=await registry(call({action:'inbox'}));assert.equal(inbox.status,200);assert.equal((await inbox.json()).rows.length,count);
+});
