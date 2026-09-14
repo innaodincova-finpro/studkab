@@ -270,7 +270,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 </style>
-<link rel="stylesheet" href="desktop.css?v=3">
+<link rel="stylesheet" href="desktop.css?v=4">
 </head>
 <body data-theme="blue">
 <div class="phone">
@@ -320,7 +320,7 @@ try {
   if (activeLocalUser && /^[a-zA-Z0-9_-]{1,128}$/.test(activeLocalUser)) KEY += ":user:" + activeLocalUser;
   else if (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped")) KEY += ":guest";
 } catch(e) {}
-var D = null, tab = "list", openId = null, openRefId = null, filter = "all", query = "";
+var D = null, tab = "list", openId = null, openRefId = null, filter = "all", query = "", refQuery = "", refNeedsReview = false;
 
 /* ---------- ХРАНЕНИЕ ---------- */
 function load(){
@@ -1755,6 +1755,7 @@ function counts(){
   ORDER.forEach(function(s){ c[s] = D.items.filter(function(x){ return x.status===s }).length });
   return c;
 }
+function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
 function render(){
   var c = counts();
@@ -1939,19 +1940,30 @@ function viewItem(id){
 
 function viewRefs(){
   var refs = (D.refs||[]).slice().sort(function(a,b){ return refKey(a) < refKey(b) ? -1 : 1 });
-  var h = '';
+  var h = '<div class="ref-tools"><div class="fld"><input type="search" id="refQ" value="'+esc(refQuery)+'" placeholder="Поиск по вузу, факультету, кафедре"></div>'+
+    '<button type="button" class="chip" aria-pressed="'+refNeedsReview+'" data-act="ref-review-filter">Требует уточнения</button></div>';
   if (!refs.length) return '<div class="empty">Справочник пуст. Первая заявка из вуза создаст карточку сама.</div>';
   var byUniv = {};
-  refs.forEach(function(r){ (byUniv[r.univ] = byUniv[r.univ] || []).push(r); });
-  Object.keys(byUniv).forEach(function(u){
-    h += card(lab(u) + byUniv[u].map(function(r){
+  refs.filter(function(r){
+    if(refNeedsReview && r.verified)return false;
+    var needle=refQuery.trim().toLowerCase();
+    return !needle || [r.univ,r.faculty,r.kafedra].join(' ').toLowerCase().indexOf(needle)>=0;
+  }).forEach(function(r){ (byUniv[r.univ] = byUniv[r.univ] || []).push(r); });
+  var universities=Object.keys(byUniv).sort(function(a,b){
+    var ad=/демонстрацион/i.test(a),bd=/демонстрацион/i.test(b);
+    return ad===bd?a.localeCompare(b,'ru'):ad?-1:1;
+  });
+  if(!universities.length)return h+'<div class="empty">По этому отбору вузов нет.</div>';
+  universities.forEach(function(u){
+    var entries=byUniv[u],requestCount=entries.reduce(function(n,r){return n+Number(r.requests||0);},0),needs=entries.filter(function(r){return !r.verified;}).length;
+    h += '<details class="fold ref-group'+(/демонстрацион/i.test(u)?' ref-demo':'')+'" data-ref-group="'+esc(u)+'"><summary><span class="ref-summary"><b>'+esc(u)+'</b><small>'+entries.length+' '+plural(entries.length,'направление','направления','направлений')+' · '+requestCount+' '+plural(requestCount,'заявка','заявки','заявок')+'</small></span><span class="pill '+(needs?'p-och':'p-ok')+'">'+(needs?'уточнить · '+needs:'проверено')+'</span></summary><div class="in">' + entries.map(function(r){
       return '<div class="item tapline" data-act="ref-open" data-id="' + r.id + '">' +
         '<div class="ic">' + (r.verified ? "✓" : "?") + '</div>' +
         '<div class="txt"><b>' + esc([r.faculty, r.kafedra].filter(Boolean).join(" · ") || "общие требования") + '</b>' +
         '<small>' + esc(fmtShort(r.format)) + (r.refStyle === "footnotes" ? ' · сноски' : r.refStyle === "brackets" ? ' · [скобки]' : '') + '</small>' +
         (r.requests ? '<small>заявок: ' + r.requests + '</small>' : '') + '</div>' +
         '<span class="pill ' + (r.verified ? "p-ok" : "p-och") + '">' + (r.verified ? "проверено" : "уточнить") + '</span></div>';
-    }).join(""));
+    }).join("")+'</div></details>';
   });
   return h;
 }
@@ -2243,6 +2255,11 @@ document.addEventListener("input", function(ev){
     var el = document.getElementById("q");
     if (el){ el.focus(); el.value = v; try{ el.setSelectionRange(p,p) }catch(e){} }
   }
+  if (ev.target.id === "refQ"){
+    refQuery = ev.target.value; var rp = ev.target.selectionStart, rv = ev.target.value; render();
+    var rel = document.getElementById("refQ");
+    if (rel){ rel.focus(); rel.value = rv; try{ rel.setSelectionRange(rp,rp) }catch(e){} }
+  }
 });
 document.addEventListener("change", function(ev){
   var el = ev.target;
@@ -2253,9 +2270,14 @@ document.addEventListener("change", function(ev){
 });
 document.addEventListener("toggle", function(ev){
   var opened=ev.target;
-  if(!opened.matches || !opened.matches("details.fold-group") || !opened.open)return;
-  document.querySelectorAll("details.fold-group[open]").forEach(function(other){if(other!==opened)other.open=false;});
-  try{localStorage.setItem("studkab-open-group:"+opened.dataset.request,opened.dataset.group);}catch(e){}
+  if(!opened.matches || !opened.open)return;
+  if(opened.matches("details.fold-group")){
+    document.querySelectorAll("details.fold-group[open]").forEach(function(other){if(other!==opened)other.open=false;});
+    try{localStorage.setItem("studkab-open-group:"+opened.dataset.request,opened.dataset.group);}catch(e){}
+  }
+  if(opened.matches("details.ref-group")){
+    document.querySelectorAll("details.ref-group[open]").forEach(function(other){if(other!==opened)other.open=false;});
+  }
 },true);
 document.addEventListener("keydown", function(ev){
   if (ev.key === "Escape"){ var m = document.querySelector(".sheet"); if (m) m.remove(); }
@@ -2286,6 +2308,7 @@ document.addEventListener("click", function(ev){
   if (act === "ref-open"){ tab = "refs"; openRefId = id; openId = null; return render(); }
   if (act === "open-from-ref"){ tab = "list"; openId = id; openRefId = null; return render(); }
   if (act === "ref-new") return newRef();
+  if (act === "ref-review-filter"){ refNeedsReview=!refNeedsReview; return render(); }
   if (act === "ref-save"){ var rr = refById(id); if (!rr) return; readRefForm(rr); var ok4 = save(); render(); toast(ok4 ? "Сохранено" : "Не сохранено: браузер не разрешает хранение"); return; }
   if (act === "ref-delete"){
     if (!confirm("Удалить карточку вуза? Заявки останутся.")) return;

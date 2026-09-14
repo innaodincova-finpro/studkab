@@ -14,5 +14,16 @@ test('desktop request detail uses a bounded grouped workflow',()=>{
  assert.match(ui,/Выполнение и проверка/);
  assert.match(ui,/Готовый результат/);
  assert.match(ui,/details\.fold-group\[open\]/);
- assert.match(ui,/desktop\.css\?v=3/);
+ assert.match(ui,/desktop\.css\?v=4/);
+});
+
+test('university registry uses compact semantic disclosure',()=>{
+ assert.match(css,/\.screen\[data-view=refs\]\{max-width:1100px\}/);
+ assert.match(css,/\.ref-tools\{display:flex/);
+ assert.match(ui,/class="fold ref-group/);
+ assert.match(ui,/data-ref-group=/);
+ assert.match(ui,/Поиск по вузу, факультету, кафедре/);
+ assert.match(ui,/Требует уточнения/);
+ assert.match(ui,/details\.ref-group\[open\]/);
+ assert.match(ui,/entries\.length\+' '\+plural\(entries\.length,'направление','направления','направлений'\)/);
 });

@@ -25,3 +25,23 @@ for(const file of ['reestr.html','index.html'])test('desktop workspace and mobil
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({animations:'disabled',path:'test-results/mobile-'+file+'.png'});
 });
+
+test('university registry stays compact and opens one university at a time',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{QA.switchUser('refs-desktop-test');D.refs=[
+  {id:'ref-a1',univ:'Первый университет',faculty:'Факультет экономики',kafedra:'Кафедра финансов',format:{},verified:false,requests:2},
+  {id:'ref-a2',univ:'Первый университет',faculty:'Факультет управления',kafedra:'',format:{},verified:true,requests:1},
+  {id:'ref-b1',univ:'Второй университет',faculty:'Институт права',kafedra:'',format:{},verified:true,requests:4}
+ ];tab='refs';openRefId=null;render();});
+ await expect(page.locator('.ref-group')).toHaveCount(2);
+ await expect(page.getByText('Факультет экономики',{exact:true})).toBeHidden();
+ await page.locator('.ref-group').first().locator('summary').click();
+ await expect(page.getByText('Факультет экономики',{exact:true})).toBeVisible();
+ await page.locator('.ref-group').last().locator('summary').click();
+ await expect(page.getByText('Факультет экономики',{exact:true})).toBeHidden();
+ await expect(page.getByText('Институт права',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Требует уточнения',exact:true}).click();
+ await expect(page.locator('.ref-group')).toHaveCount(1);
+ await page.getByPlaceholder('Поиск по вузу, факультету, кафедре').fill('управления');
+ await expect(page.locator('.ref-group')).toHaveCount(0);
+});

@@ -3,6 +3,19 @@
 .registry-table .open-request{font:inherit;color:var(--ink);font-weight:600;border:0;background:none;padding:0;text-align:left;cursor:pointer}
 .registry-table small{display:block;color:var(--mut);margin-top:4px}
 .registry-table td{overflow-wrap:anywhere}
+.ref-tools{display:flex;align-items:flex-start;gap:10px;margin-bottom:14px}
+.ref-tools .fld{flex:1;margin:0}
+.ref-tools .chip{min-height:44px;white-space:nowrap}
+.ref-group{padding:0 18px}
+.ref-group summary{gap:16px;min-height:64px}
+.ref-group summary:after{order:3;flex:0 0 auto}
+.ref-summary{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+.ref-summary b{font-size:15px;overflow-wrap:anywhere}
+.ref-summary small{font-size:12px;font-weight:400;color:var(--mut)}
+.ref-group>.in>.item{padding:14px 0}
+.ref-group>.in>.item:first-child{padding-top:4px}
+.ref-group>.in>.item:last-child{padding-bottom:4px}
+.ref-demo{border-style:dashed}
 @media(max-width:959px){
  .registry-table thead{display:none}
  .registry-table,.registry-table tbody{display:block}
@@ -11,6 +24,8 @@
  .registry-table td{display:block;padding:2px 0;font-size:12px;color:var(--mut)}
  .registry-table td:first-child{padding-right:85px;font-size:14px;color:var(--ink)}
  .registry-table td:last-child{position:absolute;right:0;top:14px}
+ .ref-tools{display:block}.ref-tools .fld{margin-bottom:8px}.ref-tools .chip{width:100%}
+ .ref-group summary{align-items:flex-start}.ref-group summary>.pill{font-size:10px}
 }
 @media(min-width:960px){
  body{background:var(--ground);font-size:15px}
@@ -26,6 +41,7 @@
  .screen{width:100%;max-width:1560px;margin:0 auto;padding:28px 36px 110px;overflow:visible;flex:1}
  .card{padding:22px;border-radius:16px;box-shadow:0 4px 18px var(--card-sh)}
  .screen>.fld:has(input[type=search]){max-width:620px}
+ .screen[data-view=refs]{max-width:1100px}
  .registry-table thead{background:var(--ground);color:var(--mut);font-size:12px}
  .registry-table th{padding:14px 16px;font-weight:600}
  .registry-table td{padding:20px 16px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px;line-height:1.5}
