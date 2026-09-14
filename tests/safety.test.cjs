@@ -85,3 +85,25 @@ test('student access screens do not mention another product',()=>{
  const forbidden=/(?:парол[^<\n]{0,160}|пользуетесь[^<\n]{0,160}|восстановлен[^<\n]{0,160})Точк(?:а|и|ой|у) дня/i;
  for(const file of ['activate.html','index.html','reestr.html','cloud-ui.js','onboarding.js'])assert.doesNotMatch(read(file),forbidden,file);
 });
+
+test('profile fills only blank shared fields in existing works',()=>{
+ const html=read('index.html');
+ const src=html.slice(html.indexOf('var PROFILE_FORMAT_FIELDS'),html.indexOf('function emptyStructure'));
+ const c={JSON,defaultFormat:()=>({univ:'',faculty:'',kafedra:'',program:'',form:'',course:'',city:'',discipline:'',supervisor:''}),uid:()=> 'request-test'};
+ vm.createContext(c);vm.runInContext(src,c);
+ const data={settings:{name:'Студент',group:'Т-1',contact:'@test',univ:'Вуз',kafedra:'Кафедра',city:'Москва'},works:[{student:'',group:'',format:{univ:'Особый вуз',kafedra:'',discipline:'Предмет',supervisor:'Руководитель'},req:{contact:'',org:'',notes:''}}]};
+ assert.equal(c.applyProfileToBlankWorks(data),1);
+ assert.equal(data.works[0].format.univ,'Особый вуз');
+ assert.equal(data.works[0].format.kafedra,'Кафедра');
+ assert.equal(data.works[0].format.discipline,'Предмет');
+ assert.equal(data.works[0].format.supervisor,'Руководитель');
+ assert.equal(data.works[0].student,'Студент');assert.equal(data.works[0].group,'Т-1');assert.equal(data.works[0].req.contact,'@test');
+});
+
+test('new-work and request guidance are universal and point to the actual sections',()=>{
+ const html=read('index.html');
+ assert.match(html,/Например: Организация работы проектной команды/);
+ assert.doesNotMatch(html,/Например: Анализ финансового состояния предприятия/);
+ assert.match(html,/Профиль → Данные студента/);
+ assert.match(html,/Оформление документа → Изменить/);
+});
