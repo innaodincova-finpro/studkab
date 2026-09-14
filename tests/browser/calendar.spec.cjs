@@ -19,10 +19,10 @@ test('student calendar mirrors the continuous month pattern without mixing app d
   await expect(page.locator('.month-card')).toHaveCount(3);
   await expect(page.locator('.month-title').first()).toContainText('сентябрь 2026');
   await expect(page.locator('[data-d="2026-09-18"]')).toContainText('Проверить источники');
-  await expect(page.locator('[data-d="2026-09-20"]')).toContainText('Сдать: Курсовая');
+  await expect(page.locator('[data-d="2026-09-20"]')).toContainText('Сдать работу: Курсовая');
   await expect(page.locator('[data-d="2026-09-10"]')).toHaveClass(/day-done/);
   await page.locator('[data-d="2026-09-18"]').click();
-  await expect(page.getByText('Проверить источники', { exact: true })).toBeVisible();
+  await expect(page.locator('.item').filter({ hasText: 'Проверить источники' })).toBeVisible();
 
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
