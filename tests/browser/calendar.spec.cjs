@@ -2,8 +2,9 @@ const { test, expect } = require('@playwright/test');
 
 test('student calendar mirrors the continuous month pattern without mixing app data', async ({ page }) => {
   await page.goto('http://127.0.0.1:4173/index.html');
+  await page.evaluate(() => QA.switchUser('calendar-synthetic'));
+  await expect.poll(() => page.evaluate(() => Oblako.canSync() && !Oblako.busy)).toBe(true);
   await page.evaluate(() => {
-    QA.switchUser('calendar-synthetic');
     D.works = [{
       id: 'study-1', topic: 'Курсовая по менеджменту', status: 'draft',
       deadline: '2026-09-20', tasks: [
