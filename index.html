@@ -293,6 +293,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 /* Mobile shell: navigation occupies layout space, never overlays the scroll pane. */
 @media (max-width:599px){
+  input,textarea,select{padding:9px 10px}
   html,body{height:100%;overflow:hidden}
   .phone{height:100vh;height:100dvh;min-height:0;overflow:hidden}
   .appbar{position:relative;top:auto;flex-shrink:0}
@@ -383,6 +384,28 @@ function defaultFormat(){
     font:"Times New Roman", size:14, spacing:1.5, indent:1.25,
     titlePageNum:false, toc:true
   };
+}
+
+/* Общие сведения вводятся один раз в профиле. В работе заполняем ими только
+   пустые поля: специальные требования конкретной работы никогда не затираются. */
+var PROFILE_FORMAT_FIELDS = ["univ","faculty","kafedra","program","form","course","city"];
+function applyProfileDefaults(format, settings){
+  format = format || defaultFormat(); settings = settings || {};
+  PROFILE_FORMAT_FIELDS.forEach(function(k){ if (!format[k] && settings[k]) format[k] = settings[k]; });
+  return format;
+}
+function applyProfileToBlankWorks(data){
+  var settings = data.settings || {}, changed = 0;
+  (data.works || []).forEach(function(w){
+    var before = JSON.stringify(w);
+    w.format = applyProfileDefaults(w.format, settings);
+    if (!w.student && settings.name) w.student = settings.name;
+    if (!w.group && settings.group) w.group = settings.group;
+    w.req = w.req || { id:uid("rq"), contact:"", org:"", notes:"", sent:"" };
+    if (!w.req.contact && settings.contact) w.req.contact = settings.contact;
+    if (JSON.stringify(w) !== before) changed++;
+  });
+  return changed;
 }
 
 function emptyStructure(){
@@ -936,7 +959,7 @@ function openRequest(workId){
       '<textarea id="rqOrg" style="min-height:90px" placeholder="Название, сфера деятельности, что известно">'+esc(r.org||"")+'</textarea></div>'+
     '<div class="field"><label>Особенности методички</label>'+
       '<textarea id="rqNotes" style="min-height:90px" placeholder="Чем требования кафедры отличаются от обычных">'+esc(r.notes||"")+'</textarea></div>'+
-    '<div class="infobox">Проверьте, что заполнены вуз, кафедра и руководитель — это раздел «Оформление». Без них черновик собрать не получится.</div>'+
+    '<div class="infobox">Вуз и кафедра берутся из «Профиль → Данные студента». Дисциплина и руководитель указываются внутри работы: «Оформление документа → Изменить».</div>'+
     '<div class="hint">Заявка сохранится в реестре исполнителя. Уведомление поступит ему через Telegram. Почтовые уведомления пока не подключены.</div>'+
     '<div class="rowbtns">'+
       '<button type="button" class="b b-main" data-send="direct">Отправить заявку исполнителю</button>'+
@@ -1320,7 +1343,7 @@ function openNewWork(){
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>'+
     '<h2>Новая работа</h2>'+
-    '<div class="field" style="margin-top:14px"><label>Тема</label><input type="text" id="nTopic" placeholder="Например: Анализ финансового состояния предприятия"></div>'+
+    '<div class="field" style="margin-top:14px"><label>Тема</label><input type="text" id="nTopic" placeholder="Например: Организация работы проектной команды"></div>'+
     '<div class="field"><label>Вид работы</label>'+
       '<select id="nType"><option>Курсовая работа</option><option>Выпускная квалификационная работа</option>'+
       '<option>Реферат</option><option>Контрольная работа</option><option>Эссе</option><option>Отчёт по практике</option></select></div>'+
@@ -1344,12 +1367,9 @@ function openNewWork(){
     var tpl = (D.templates||[]).filter(function(t){ return t.id === tplId })[0];
     var newId = uid("w");
     change(function(){
-      var f = tpl ? JSON.parse(JSON.stringify(tpl.format)) : defaultFormat();
+      var f = applyProfileDefaults(tpl ? JSON.parse(JSON.stringify(tpl.format)) : defaultFormat(), st);
       f.workType = type;
       if (!f.year) f.year = String(new Date().getFullYear());
-      ["univ","faculty","kafedra","program","form","course","city"].forEach(function(k){
-        if (!f[k] && st[k]) f[k] = st[k];
-      });
       D.works.push({
         id:newId, topic:topic,
         student: st.name || "", group: st.group || "",
@@ -2479,6 +2499,7 @@ document.addEventListener("click", function(ev){
                 registryUrl:"stReg" };
       for (var k in m){ var v = gv(m[k]); if (v !== null) D.settings[k] = v; }
       D.settings.warnDays = wd;
+      applyProfileToBlankWorks(D);
     });
     render(); toast("Сохранено"); return;
   }

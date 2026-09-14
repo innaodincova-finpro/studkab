@@ -46,3 +46,25 @@ test('profile sections collapse without losing unsaved input',async({page})=>{
  await page.getByText('Данные студента',{exact:true}).click();
  await expect(page.locator('#stName')).toHaveValue('Проверка профиля');
 });
+
+test('saving profile fills only blank shared fields of an existing work',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+   D=emptyData();
+   const format=defaultFormat();format.univ='Особый вуз';format.discipline='Управление проектами';format.supervisor='Иванов И. И.';
+   D.works.push({id:'w-test',topic:'Организация работы проектной команды',student:'',group:'',created:today(),deadline:addDays(today(),30),requirements:'',status:'draft',format,structure:emptyStructure(),tasks:[],req:{id:'rq-test',contact:'',org:'',notes:'',sent:''}});
+   save();render();
+ });
+ await page.locator('[data-tab="more"]').click();
+ await page.getByText('Данные студента',{exact:true}).click();
+ await page.locator('#stName').fill('Тестовый студент');
+ await page.locator('#stUniv').fill('Общий вуз');
+ await page.locator('#stKaf').fill('Кафедра управления');
+ await page.locator('#stGroup').fill('Т-1');
+ await page.locator('#stContact').fill('@test');
+ await page.locator('.profile-fold').filter({has:page.locator('#stName')}).getByRole('button',{name:'Сохранить',exact:true}).click();
+ const work=await page.evaluate(()=>D.works[0]);
+ expect(work.student).toBe('Тестовый студент');expect(work.group).toBe('Т-1');expect(work.req.contact).toBe('@test');
+ expect(work.format.univ).toBe('Особый вуз');expect(work.format.kafedra).toBe('Кафедра управления');
+ expect(work.format.discipline).toBe('Управление проектами');expect(work.format.supervisor).toBe('Иванов И. И.');
+});
