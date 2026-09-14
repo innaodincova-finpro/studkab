@@ -45,7 +45,7 @@ for(const file of ['index.html','reestr.html'])test(file+': account opens passwo
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('first-entry mismatch never consumes invitation; both passwords can be viewed',async({page})=>{
- await page.route('https://cdn.jsdelivr.net/**',route=>route.fulfill({contentType:'application/javascript',body:`window.verifyCount=0;window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}}),verifyOtp:async()=>{verifyCount++;return {error:{message:'expired'}}}}})};`}));
+ await page.route('**/vendor/supabase-2.57.4.js',route=>route.fulfill({contentType:'application/javascript',body:`window.verifyCount=0;window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}}),verifyOtp:async()=>{verifyCount++;return {error:{message:'expired'}}}}})};`}));
  await page.goto(base+'activate.html#token=fixture&email=student%40example.test');await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:'test-results/activation-mobile.png'});
  await page.getByLabel('Придумайте пароль',{exact:true}).fill('password123');await page.getByLabel('Повторите пароль',{exact:true}).fill('password124');
