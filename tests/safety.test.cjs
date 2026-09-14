@@ -80,3 +80,8 @@ test('password update rejects missing acknowledgement and a session from another
  await assert.rejects(c.Oblako.setPassword('test-only-password'),/Сеанс/);
  assert.equal(c.passwordUpdate,null);assert.equal(c.Oblako.busy,false);
 });
+
+test('student access screens do not mention another product',()=>{
+ const forbidden=/(?:парол[^<\n]{0,160}|пользуетесь[^<\n]{0,160}|восстановлен[^<\n]{0,160})Точк(?:а|и|ой|у) дня/i;
+ for(const file of ['activate.html','index.html','reestr.html','cloud-ui.js','onboarding.js'])assert.doesNotMatch(read(file),forbidden,file);
+});
