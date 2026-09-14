@@ -74,6 +74,7 @@ jobs:
 
           rmdir supabase/migrations
           mv supabase/migrations.hold supabase/migrations
+          cp supabase/requirement-passports.sql.tmpl supabase/migrations/99999999999999_ci_requirement_passports.sql
 
           python3 - <<'PY'
           from pathlib import Path
