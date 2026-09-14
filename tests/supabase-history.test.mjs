@@ -11,7 +11,7 @@ test("migration files exactly match the production history snapshot", async () =
   const files = (await readdir(migrationsDir)).filter((name) => name.endsWith(".sql")).sort();
   const expected = manifest.migrations.map((item) => item.file).sort();
   assert.deepEqual(files, expected);
-  assert.equal(manifest.migrations.length, 13);
+  assert.equal(manifest.migrations.length, 14);
 
   for (const item of manifest.migrations) {
     const sql = await readFile(new URL(item.file, migrationsDir));
