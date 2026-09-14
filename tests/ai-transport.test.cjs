@@ -39,7 +39,7 @@ test('real worker late failure reaches client journal through heartbeat',async()
  const worker=(await import('../worker/ai-proxy.mjs')).default;const old=globalThis.fetch;
  globalThis.fetch=async()=>Response.json({id:'req-123',choices:[{finish_reason:'length',message:{content:'private'}}],usage:{prompt_tokens:20,completion_tokens:8000}});
  try{
- const c=app(async(url,o)=>worker.fetch(new Request(url,o),{PROXY_TOKEN:'secret-password',DEEPSEEK_KEY:'private',RATE_MAX:1000}));
+ const c=app(async(url,o)=>worker.fetch(new Request(url,o),{PROXY_TOKEN:'secret-password',DEEPSEEK_KEY:'private',RATE_MAX:1000,ALLOWED_ORIGIN:'https://example.test'}));
  await assert.rejects(c.askAI('deepseek','private','private',{section:'ch2',stage:'draft',attempt:1}),/INCOMPLETE/);
  const r=c.D.aiDiagnostics[0];assert.equal(r.status,200);assert.equal(r.reason,'length');assert.equal(r.section,'ch2');assert.equal(r.request_id,'req-123');assert.doesNotMatch(JSON.stringify(r),/private|secret-password/);
  }finally{globalThis.fetch=old;}

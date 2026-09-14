@@ -51,21 +51,26 @@
 
 /* A request is one linear workflow, not a dashboard of unrelated tiles. */
 @media(min-width:960px){
- .screen[data-detail=true]{display:block;max-width:1080px;padding-top:34px}
+ .screen[data-detail=true]{display:block;max-width:900px;padding-top:28px}
  .screen[data-detail=true]>.card,
  .screen[data-detail=true]>.fold{margin-bottom:18px}
  .screen[data-detail=true]>.title{font-size:30px!important;line-height:1.18;margin-top:18px}
  .screen[data-detail=true]>.mut{font-size:15px;margin-top:9px!important}
  .screen[data-detail=true]>.row{font-size:15px;margin-top:12px!important;margin-bottom:24px!important}
- .screen[data-detail=true]>.card{padding:26px 28px}
+ .screen[data-detail=true]>.card{padding:20px 22px}
  .screen[data-detail=true]>.card.now{border-width:2px}
  .screen[data-detail=true] .lab{font-size:12px;margin-bottom:12px}
  .screen[data-detail=true] .mut,
  .screen[data-detail=true] .hint{font-size:14px;line-height:1.5}
  .screen[data-detail=true] .chip{min-height:42px;padding:10px 16px;font-size:14px}
- .screen[data-detail=true] .btn{min-height:52px;font-size:16px}
- .screen[data-detail=true] .fold{padding:0 24px}
- .screen[data-detail=true] .fold summary{min-height:58px;padding:16px 0;font-size:16px}
- .screen[data-detail=true] .stat{padding:12px 0;font-size:15px}
+ .screen[data-detail=true] .btn{min-height:46px;font-size:15px}
+ .screen[data-detail=true] .compact-action{width:auto;min-width:260px;padding-left:24px;padding-right:24px}
+ .screen[data-detail=true] .fold{padding:0 22px}
+ .screen[data-detail=true] .fold summary{min-height:52px;padding:13px 0;font-size:16px}
+ .screen[data-detail=true] .fold .in{padding:14px 0 18px}
+ .screen[data-detail=true] .stat{padding:9px 0;font-size:14px;gap:18px}
+ .screen[data-detail=true] .stat span{flex:0 0 34%;max-width:220px}
+ .screen[data-detail=true] .stat b{flex:1;text-align:left;font-family:'Golos Text',system-ui,-apple-system,sans-serif}
+ .screen[data-detail=true] .section-separator{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
  body:has(.screen[data-detail=true]) .fab{display:none}
 }
