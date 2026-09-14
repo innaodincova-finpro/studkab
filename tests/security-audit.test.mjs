@@ -28,6 +28,12 @@ test('GitHub Actions are pinned to immutable commits', () => {
   }
 });
 
+test('browser acceptance replaces the vendored SDK with its isolated cloud double', () => {
+  const preview = read('vite.config.mjs');
+  assert.match(preview, /vendor\/supabase-2\.57\.4\.js/);
+  assert.match(preview, /tests\/qa-cloud\.js/);
+});
+
 test('production proxy deploys automatically only from main', () => {
   const workflow = read('.github/workflows/deploy-ai-proxy.yml');
   assert.match(workflow, /branches:\s*\[main\]/);
