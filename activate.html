@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Доступ — Кабинет студента</title>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://dcpthwmuiodrjepifzsd.supabase.co wss://dcpthwmuiodrjepifzsd.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'"><title>Доступ — Кабинет студента</title>
 <style>*{box-sizing:border-box}body{margin:0;padding:24px 16px;background:#edf3f8;color:#19344c;font:17px/1.5 system-ui,sans-serif}main{max-width:480px;margin:5vh auto;background:white;border-radius:24px;padding:28px}h1{font-size:27px}label{display:block;margin:18px 0 6px}input,button{width:100%;font:inherit;padding:13px;border-radius:12px;border:1px solid #c7d8e7}button{margin-top:24px;background:#4e7a9e;color:white;border:0;cursor:pointer}button:disabled{opacity:.6}.chip{background:#eaf2f8;color:#315e84;padding:10px;font-size:15px}label{font-size:16px}#status{overflow-wrap:anywhere}a{color:#315e84}.mut{font-size:14px;color:#597086}</style>
 </head><body><main><h1>Добро пожаловать в «Кабинет студента»</h1><p id="account"></p><p>Придумайте пароль для приложения — не менее 8 символов. Пароль от вашего почтового ящика здесь не нужен.</p>
 <form id="activate"><button id="submit">Сохранить пароль и открыть приложение</button></form><p id="status" role="status" aria-live="polite"></p><p class="mut">Это пароль для входа в «Кабинет студента». В разделе «Профиль» проверьте надпись «Сохранено в облаке».</p><a href="./">Открыть приложение</a></main>
-<script src="onboarding.js?v=2"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script>
+<script src="onboarding.js?v=2"></script><script src="vendor/supabase-2.57.4.js"></script><script>
 document.getElementById('activate').insertAdjacentHTML('afterbegin',Onboarding.passwordField('password','Придумайте пароль','new-password')+Onboarding.passwordField('repeat','Повторите пароль','new-password'));
 const params=new URLSearchParams(location.hash.slice(1));
 const invitationToken=params.get('token'), invitationEmail=params.get('email');
@@ -35,4 +35,3 @@ document.getElementById('activate').addEventListener('submit',async event=>{
  finally{busy=false;button.disabled=false;}
 });
 </script></body></html>
-

@@ -3,11 +3,14 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "test": "node --test tests/financial-analysis.test.cjs tests/calendar.test.cjs tests/offline.test.cjs tests/safety.test.cjs tests/push.test.cjs tests/telegram.test.mjs tests/requests.test.mjs tests/requirement-passports.test.mjs tests/desktop-layout.test.mjs tests/pilot-isolation.test.mjs tests/draft-quality.test.cjs tests/ai-proxy.test.mjs tests/ai-transport.test.cjs tests/generation-runner.test.mjs tests/generation-api.test.mjs tests/change-process.test.mjs tests/supabase-history.test.mjs tests/unified-preparation.test.cjs",
+    "test": "node --test tests/financial-analysis.test.cjs tests/calendar.test.cjs tests/offline.test.cjs tests/safety.test.cjs tests/security-audit.test.mjs tests/push.test.cjs tests/telegram.test.mjs tests/requests.test.mjs tests/requirement-passports.test.mjs tests/desktop-layout.test.mjs tests/pilot-isolation.test.mjs tests/draft-quality.test.cjs tests/ai-proxy.test.mjs tests/ai-transport.test.cjs tests/generation-runner.test.mjs tests/generation-api.test.mjs tests/change-process.test.mjs tests/supabase-history.test.mjs tests/unified-preparation.test.cjs",
     "test:browser": "playwright test"
   },
   "devDependencies": {
-    "vite": "8.2.2",
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "vite": "8.2.2"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.57.4"
   }
 }

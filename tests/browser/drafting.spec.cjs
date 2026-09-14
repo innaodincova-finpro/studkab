@@ -21,6 +21,7 @@ test('saved document is shown on the request card after closing the editor',asyn
  await page.locator('[data-sec="ch1"] .secText').fill('Сохранённый текст документа.');
  await page.getByRole('button',{name:'Сохранить',exact:true}).click();
  await page.locator('.sheet > .sheet-in > .close').click();
+ await page.getByText('Готовый результат',{exact:true}).click();
  await expect(page.getByText('Черновик ещё не собирался.',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Открыть документ',exact:true})).toBeVisible();
  await expect(page.getByText(/разделов · 28 знаков · правка/)).toBeVisible();

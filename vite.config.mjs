@@ -13,7 +13,9 @@ export default defineConfig({
      if(url.pathname==='/sw.js') {res.setHeader('Content-Type','application/javascript');return res.end('/* No worker in acceptance preview. */');}
      if(['/','/index.html','/reestr.html'].includes(url.pathname)){
        let html=fs.readFileSync(path.resolve(url.pathname==='/reestr.html'?'reestr.html':'index.html'),'utf8');
-       html=html.replace(/<script[^>]+src="https:\/\/cdn.jsdelivr.net\/npm\/@supabase[^>]*><\/script>/g,'<script src="/tests/qa-cloud.js"></script>');
+       html=html
+         .replace('<script src="vendor/supabase-2.57.4.js"></script>','<script src="/tests/qa-cloud.js"></script>')
+         .replace(/<script[^>]+src="https:\/\/cdn.jsdelivr.net\/npm\/@supabase[^>]*><\/script>/g,'<script src="/tests/qa-cloud.js"></script>');
        if(url.searchParams.has('no-sdk')) html=html.replace('<script src="/tests/qa-cloud.js"></script>','<script>window.supabase=null;</script>');
        res.setHeader('Content-Type','text/html; charset=utf-8');
        // Explicit live-AI QA opt-in. Mocked cloud remains isolated; only the

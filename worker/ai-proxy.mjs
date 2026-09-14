@@ -89,8 +89,10 @@ function errorBody(e, provider) {
 }
 export default {
   async fetch(request, env) {
+    const allowedOrigin = String(env.ALLOWED_ORIGIN || '').trim();
+    if (!allowedOrigin) return json({error: 'ORIGIN_NOT_CONFIGURED'}, 500, {});
     const cors = {
-      'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, X-Proxy-Token',
       'Access-Control-Max-Age': '86400',

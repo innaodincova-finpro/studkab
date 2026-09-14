@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../worker/ai-proxy.mjs';
-const env={PROXY_TOKEN:'test-only',DEEPSEEK_KEY:'test-key',RATE_MAX:1000};
+const env={PROXY_TOKEN:'test-only',DEEPSEEK_KEY:'test-key',RATE_MAX:1000,ALLOWED_ORIGIN:'https://innaodincova-finpro.github.io'};
 function request(body,headers={}) {return new Request('https://example.test/',{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Token':'test-only',...headers},body:JSON.stringify(body)});}
 const basic={provider:'deepseek',system:'Инструкция',user:'Материалы',max_tokens:8000};
 function reply(reason='stop',text='Полный ответ'){return Response.json({choices:[{finish_reason:reason,message:{content:text}}],usage:{prompt_tokens:5,completion_tokens:7}});}
@@ -36,9 +36,14 @@ test('accepts natural completion and rejects blank completed output',async t=>{
   f.mock.mockImplementation(async()=>reply('stop','   '));r=await worker.fetch(request(basic),env);
   assert.equal((await r.json()).error,'EMPTY:deepseek');
 });
-test('preflight supports preview origin without adding settings',async()=>{
+test('preflight returns only the configured origin',async()=>{
   const r=await worker.fetch(new Request('https://example.test/',{method:'OPTIONS',headers:{Origin:'http://terminal.local:4173'}}),env);
-  assert.equal(r.status,204);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'*');
+  assert.equal(r.status,204);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'https://innaodincova-finpro.github.io');
+});
+test('missing allowed origin fails closed before authentication or provider access',async t=>{
+  const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});
+  const r=await worker.fetch(request(basic),{...env,ALLOWED_ORIGIN:''});
+  assert.equal(r.status,500);assert.deepEqual(await r.json(),{error:'ORIGIN_NOT_CONFIGURED'});assert.equal(f.mock.callCount(),0);
 });
 test('wrong password and malformed payload never contact provider',async t=>{
   const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});

@@ -43,6 +43,7 @@ test('registry document edited, saved, downloaded and status set',async({page})=
  expect(result).toContain('DOCX XML valid');
  await page.locator('[data-x]').first().click();
  await page.evaluate(()=>{openId='rq-doc';render();});
+ await page.getByText('Выполнение и проверка',{exact:true}).click();
  await page.locator('[data-act="status"]').selectOption('done');await page.reload();
  expect(await page.evaluate(()=>item('rq-doc').status)).toBe('done');
 });
@@ -90,7 +91,7 @@ test('password entry and logged-out notifications are usable on a narrow screen'
  await expect(page.getByRole('button',{name:'Войти, чтобы включить уведомления'})).toBeVisible();
 });
 test('invitation verifies once, retries password save and uses cabinet session storage',async({page})=>{
- await page.route('https://cdn.jsdelivr.net/**',route=>route.fulfill({contentType:'application/javascript',body:`window.supabase={createClient:(url,key,options)=>{window.storageKey=options.auth.storageKey;window.verifyCount=0;window.updateCount=0;return {auth:{getSession:async()=>({data:{session:null}}),verifyOtp:async()=>{window.verifyCount++;return {data:{user:{email:'student@example.test'}}}},updateUser:async()=>{window.updateCount++;return {error:{message:'temporary'}}}}}}};`}));
+ await page.route('**/vendor/supabase-2.57.4.js',route=>route.fulfill({contentType:'application/javascript',body:`window.supabase={createClient:(url,key,options)=>{window.storageKey=options.auth.storageKey;window.verifyCount=0;window.updateCount=0;return {auth:{getSession:async()=>({data:{session:null}}),verifyOtp:async()=>{window.verifyCount++;return {data:{user:{email:'student@example.test'}}}},updateUser:async()=>{window.updateCount++;return {error:{message:'temporary'}}}}}}};`}));
  await page.goto('http://127.0.0.1:4173/activate.html#token=test&email=student%40example.test');
  await page.locator('#password').fill('password123');await page.locator('#repeat').fill('password123');await page.locator('#submit').click();
  await expect(page.locator('#status')).toContainText('пароль не сохранён');
