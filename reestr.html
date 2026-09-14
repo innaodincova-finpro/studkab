@@ -269,7 +269,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 </style>
-<link rel="stylesheet" href="desktop.css?v=2">
+<link rel="stylesheet" href="desktop.css?v=3">
 </head>
 <body data-theme="blue">
 <div class="phone">
@@ -1850,16 +1850,17 @@ function viewList(){
 }
 
 var PASSPORT_CATEGORY={method:'Требование методички',measurable:'Измеримая проверка',expert:'Предметная рекомендация',assumption:'Предположение'};
-function passportCard(x){
+function passportContent(x){
   var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
-  if(!p)return card(lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>');
+  if(!p)return lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>';
   var items=Array.isArray(p.items)?p.items:[];
-  return card(lab('Паспорт требований · версия '+Number(p.revision||1))+
+  return lab('Паспорт требований · версия '+Number(p.revision||1))+
     '<div class="row" style="margin-bottom:8px"><span class="pill '+(p.status==='approved'?'p-ok':'p-och')+'">'+(p.status==='approved'?'утверждён':p.status==='stale'?'устарел':'проект')+'</span></div>'+
     (p.summary?'<p class="hint">'+esc(p.summary)+'</p>':'')+
     (items.length?'<div>'+items.map(function(q){return '<div class="stat"><span>'+esc(PASSPORT_CATEGORY[q.category]||q.category)+(q.source?' · '+esc(q.source):'')+'</span><b>'+esc(q.text)+'</b></div>';}).join('')+'</div>':'<p class="hint">Пункты пока не добавлены.</p>')+
-    '<div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-edit" data-id="'+esc(x.id)+'">Новая версия</button>'+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'">Утвердить</button>':'')+'</div>');
+    '<div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-edit" data-id="'+esc(x.id)+'">Новая версия</button>'+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'">Утвердить</button>':'')+'</div>';
 }
+function passportCard(x){ return card(passportContent(x)); }
 async function loadPassports(x){
  if(!window.Oblako||!Oblako.requestApi)throw Error('Войдите в аккаунт реестра');
  var result=await Oblako.requestApi({action:'passport-get',id:x.id});x.passports=result.passports||[];render();return x.passports;
@@ -1883,6 +1884,10 @@ function viewItem(id){
     return !!String(part.text||"").trim() || (Array.isArray(part.figures) && part.figures.length>0);
   })));
 
+  function group(key,title,inner,open){return '<details class="fold fold-group" data-request="'+esc(x.id)+'" data-group="'+key+'"'+(open?' open':'')+'><summary>'+title+'</summary><div class="in">'+inner+'</div></details>';}
+  var savedGroup="";
+  try{savedGroup=localStorage.getItem("studkab-open-group:"+x.id)||"";}catch(e){}
+  var defaultGroup=savedGroup||(hasDoc?'result':(x.status==='work'?'progress':'requirements'));
   var h = '<button type="button" class="mini" data-act="back" style="margin:0 0 10px">← Заявки</button>' +
     '<div class="title" style="font-size:21px">' + esc(x.student || "Без имени") + '</div>' +
     '<div class="mut" style="margin:4px 0 2px">' + esc([x.group, x.workType, x.deadline ? "срок " + ruDate(x.deadline) : ""].filter(Boolean).join(" · ")) + '</div>' +
@@ -1891,43 +1896,43 @@ function viewItem(id){
                  : '<span class="mut">контакт не указан</span>') +
     '</div>';
 
-  h += card(lab("Документ") +
-    (hasDoc
-      ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков' + (x.doc.updated ? ' · правка ' + ruDate(x.doc.updated) : '') + '</div>'
-      : '<div class="mut">Черновик ещё не собирался.</div>') +
-    '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (hasDoc ? "Открыть документ" : "Собрать документ") + '</button></div>', "now");
+  h += card(lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
+    row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group));
 
-  if(x.requestNumber) h += card(lab("Передача студенту") + '<p class="hint">Передайте проверенный документ прямо в кабинет автора заявки.</p><button type="button" class="btn" data-act="deliver-result" data-id="'+esc(x.id)+'">Передать черновик студенту</button>');
-
+  var requirements = row("Требования", x.requirements) + row("Организация", x.org) + row("Методичка", x.methodNotes) +
+    row("Факультет", x.faculty) + row("Кафедра", x.kafedra) + row("Направление", x.program) + row("Форма", x.form) +
+    row("Курс", x.course) + row("Руководитель", x.supervisor) + row("Город", x.city) + row("Оформление", fmtShort(x.format));
   if (r && diff.length){
-    h += card(lab("Оформление расходится со справочником") +
+    requirements += lab("Оформление расходится с требованиями вуза") +
       '<ul style="margin:0 0 8px;padding-left:18px;font-size:13px">' +
         diff.map(function(d){ return '<li>' + d.label + ': в заявке <b>' + esc(d.req) + '</b>, в справочнике <b>' + esc(d.ref) + '</b></li>' }).join("") + '</ul>' +
       '<div class="chips" style="margin-top:6px"><button type="button" class="chip" data-act="ref-open" data-id="' + r.id + '">Карточка вуза</button>' +
-      '<button type="button" class="chip warn" data-act="ref-accept" data-id="' + esc(x.id) + '">Принять из заявки</button></div>');
+      '<button type="button" class="chip warn" data-act="ref-accept" data-id="' + esc(x.id) + '">Принять из заявки</button></div>';
   } else if (r && !r.verified){
-    h += card(lab("Справочник") +
+    requirements += lab("Требования вуза") +
       '<div class="item tapline" data-act="ref-open" data-id="' + r.id + '" style="padding:4px 0"><div class="ic">?</div>' +
-      '<div class="txt"><b>' + esc(r.univ) + '</b><small>' + (x.refNew ? "новый вуз, появился из этой заявки" : "требования не проверены по методичке") + '</small></div></div>');
+      '<div class="txt"><b>' + esc(r.univ) + '</b><small>' + (x.refNew ? "новый вуз, появился из этой заявки" : "требования не проверены по методичке") + '</small></div></div>';
   }
+  if (r && r.verified) requirements += '<div class="chips"><button type="button" class="chip" data-act="ref-open" data-id="'+r.id+'">Требования вуза ✓</button></div>';
+  if(x.requestNumber) requirements += '<div class="section-separator">'+passportContent(x)+'</div>';
+  h += group("requirements","Требования и материалы",requirements,defaultGroup==="requirements");
 
-  h += card(lab("Работа") + row("Тема", x.topic) + row("Дисциплина", x.discipline) + row("Требования", x.requirements) +
-    (x.org ? row("Организация", x.org) : "") + (x.methodNotes ? row("Методичка", x.methodNotes) : ""));
-  if(x.requestNumber)h += passportCard(x);
-  h += '<details class="fold"><summary>Вуз и оформление</summary><div class="in">' +
-    row("Вуз", x.univ) + row("Факультет", x.faculty) + row("Кафедра", x.kafedra) +
-    row("Направление", x.program) + row("Форма", x.form) + row("Курс", x.course) + row("Руководитель", x.supervisor) + row("Город", x.city) +
-    row("Оформление", fmtShort(x.format)) +
-    (r ? '<div class="chips" style="margin-top:10px"><button type="button" class="chip" data-act="ref-open" data-id="' + r.id + '">Карточка вуза' + (r.verified ? " ✓" : "") + '</button></div>' : '') +
-    '</div></details>';
-
-  h += card(lab("Статус") +
+  var progress = lab("Текущий этап") +
     '<div class="fld"><select data-act="status" data-id="' + esc(x.id) + '">' +
       ORDER.map(function(s2){ return '<option value="' + s2 + '"' + (x.status===s2?" selected":"") + '>' + STATUS[s2] + '</option>' }).join("") +
     '</select></div>' +
     '<div class="fld"><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">' + esc(x.note||"") + '</textarea></div>' +
     '<div class="row"><button type="button" class="chip" data-act="save-note" data-id="' + esc(x.id) + '">Сохранить заметку</button>' +
-    '<button type="button" class="del" data-act="delete" data-id="' + esc(x.id) + '">удалить</button></div>');
+    '<button type="button" class="del" data-act="delete" data-id="' + esc(x.id) + '">удалить</button></div>';
+  h += group("progress","Выполнение и проверка",progress,defaultGroup==="progress");
+
+  var result = (hasDoc
+      ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков' + (x.doc.updated ? ' · правка ' + ruDate(x.doc.updated) : '') + '</div>'
+      : '<div class="mut">Черновик ещё не собирался.</div>') +
+    '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (hasDoc ? "Открыть документ" : "Собрать документ") + '</button></div>';
+  h += group("result","Готовый результат",result,defaultGroup==="result");
+
+  if(x.requestNumber) h += group("delivery","Передача студенту",'<p class="hint">Передайте проверенный документ прямо в кабинет автора заявки.</p><button type="button" class="btn compact-action" data-act="deliver-result" data-id="'+esc(x.id)+'">Передать черновик студенту</button>',defaultGroup==="delivery");
   return h;
 }
 
@@ -2245,6 +2250,12 @@ document.addEventListener("change", function(ev){
     x.status = el.value; var okk = save(); render(); toast(okk ? "Статус: " + STATUS[x.status] : "Не сохранено: браузер не разрешает хранение");
   }
 });
+document.addEventListener("toggle", function(ev){
+  var opened=ev.target;
+  if(!opened.matches || !opened.matches("details.fold-group") || !opened.open)return;
+  document.querySelectorAll("details.fold-group[open]").forEach(function(other){if(other!==opened)other.open=false;});
+  try{localStorage.setItem("studkab-open-group:"+opened.dataset.request,opened.dataset.group);}catch(e){}
+},true);
 document.addEventListener("keydown", function(ev){
   if (ev.key === "Escape"){ var m = document.querySelector(".sheet"); if (m) m.remove(); }
 });
