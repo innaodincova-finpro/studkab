@@ -35,15 +35,17 @@ test('university registry stays compact and opens one university at a time',asyn
   {id:'ref-a2',univ:'Первый университет',faculty:'Факультет управления',kafedra:'',format:{},verified:true,requests:1},
   {id:'ref-b1',univ:'Второй университет',faculty:'Институт права',kafedra:'',format:{},verified:true,requests:4}
  ];tab='refs';openRefId=null;render();});
- await expect(page.locator('.ref-group')).toHaveCount(2);
- await expect(page.getByText('Факультет экономики',{exact:true})).toBeHidden();
- const firstUniversity=page.locator('.ref-group').filter({hasText:'Первый университет'});
- const secondUniversity=page.locator('.ref-group').filter({hasText:'Второй университет'});
- await firstUniversity.locator('summary').click();
- await expect(page.getByText('Факультет экономики',{exact:true})).toBeVisible();
- await secondUniversity.locator('summary').click();
- await expect(page.getByText('Факультет экономики',{exact:true})).toBeHidden();
- await expect(page.getByText('Институт права',{exact:true})).toBeVisible();
+ const disclosure=await page.evaluate(()=>{
+  const groups=[...document.querySelectorAll('.ref-group')];
+  const first=groups.find(x=>x.textContent.includes('Первый университет'));
+  const second=groups.find(x=>x.textContent.includes('Второй университет'));
+  const initiallyClosed=groups.every(x=>!x.open);
+  first.querySelector('summary').click();
+  const firstOpened=first.open&&first.textContent.includes('Факультет экономики');
+  second.querySelector('summary').click();
+  return {count:groups.length,initiallyClosed,firstOpened,firstClosed:!first.open,secondOpened:second.open&&second.textContent.includes('Институт права')};
+ });
+ expect(disclosure).toEqual({count:2,initiallyClosed:true,firstOpened:true,firstClosed:true,secondOpened:true});
  await page.getByRole('button',{name:'Требует уточнения',exact:true}).click();
  await expect(page.locator('.ref-group')).toHaveCount(1);
  await page.getByPlaceholder('Поиск по вузу, факультету, кафедре').fill('управления');
