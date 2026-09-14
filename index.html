@@ -207,6 +207,28 @@ button,input,select,textarea{font:inherit;color:inherit}
 .cal-legend i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dot-on);margin-right:4px;vertical-align:middle}
 .cal-legend i.tk{background:var(--warm)}
 .cal-legend i.late{background:var(--stop)}
+.calendar-stream{display:flex;flex-direction:column;gap:12px}
+.month-card{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:14px 10px;box-shadow:0 10px 26px var(--card-sh)}
+.month-title{font-family:'Spectral',Georgia,serif;font-size:19px;font-weight:600;margin:0 4px 12px;color:var(--ink)}
+.continuous-cal{gap:3px;align-items:stretch}
+.continuous-cal .d{aspect-ratio:auto;min-height:72px;border-radius:9px;align-items:stretch;justify-content:flex-start;padding:6px 4px;text-align:left;overflow:hidden}
+.continuous-cal .d.out{min-height:72px;visibility:hidden}
+.continuous-cal .day-num{font:500 12px/1.2 'IBM Plex Mono',monospace;text-align:right;padding-right:2px}
+.continuous-cal .day-preview{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-top:5px;font:500 9px/1.25 'Golos Text',sans-serif;color:var(--mut);overflow:hidden;word-break:keep-all;overflow-wrap:normal;hyphens:none;letter-spacing:-.01em}
+.continuous-cal .day-preview.p-s{font-size:8px;letter-spacing:-.02em}
+.continuous-cal .day-preview.p-xs{font-size:7px;letter-spacing:-.03em}
+.continuous-cal .d.has-plan{background:linear-gradient(145deg,var(--days-bg),rgba(255,255,255,.92));border-color:var(--head);box-shadow:inset 0 0 0 1px var(--ic-ring)}
+.continuous-cal .d.has-plan .day-preview{color:var(--accent)}
+.continuous-cal .d.day-missed{background:linear-gradient(145deg,var(--warm-bg),var(--hot-bg));border-color:var(--warm);box-shadow:inset 0 0 0 1px rgba(168,81,71,.12)}
+.continuous-cal .d.day-missed .day-preview,.continuous-cal .d.day-missed .day-num{color:var(--stop)}
+.continuous-cal .d.day-done{background:linear-gradient(145deg,#E7F1EA,rgba(255,255,255,.9));border-color:#9BC3AE;box-shadow:none}
+.continuous-cal .d.day-done .day-preview{color:var(--ok);text-decoration:line-through;opacity:.78}
+.continuous-cal .d.day-done .day-num{color:var(--ok)}
+.continuous-cal .d.today{background:var(--cal-today);border-color:transparent;color:#fff}
+.continuous-cal .d.today .day-preview{color:rgba(255,255,255,.92)}
+.calendar-window{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.calendar-window .mini{margin:0}
+.calendar-window span{font-size:11px;color:var(--mut);text-align:center}
 .dategroup{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--lab);font-weight:600;margin:12px 0 4px}
 .dategroup:first-child{margin-top:0}
 
@@ -1521,6 +1543,41 @@ function dotClass(x, iso, t){
   if (iso < t) return "late";
   return x.kind === "event" ? "ev" : x.kind === "task" ? "tk" : "";
 }
+function calendarDayState(iso, list, t){
+  if (!list.length) return "";
+  var open = list.filter(function(x){ return x.kind !== "done" && x.kind !== "past"; });
+  if (!open.length) return "day-done";
+  return open.some(function(x){ return x.due < t; }) ? "day-missed" : "day-ahead";
+}
+function calendarPreviewSize(text){
+  var words = String(text || "").split(/\s+/), longest = "";
+  words.forEach(function(word){ if (word.length > longest.length) longest = word; });
+  if (longest.length <= 8) return "";
+  if (longest.length <= 11) return "p-s";
+  return "p-xs";
+}
+function calendarDayLabel(iso, list, state){
+  if (!list.length) return ruDate(iso) + ", записей нет";
+  var status = state === "day-done" ? ", всё выполнено" : state === "day-missed" ? ", есть просроченное" : ", запланировано";
+  return ruDate(iso) + ", записей: " + list.length + status;
+}
+function continuousMonth(iso, by, t){
+  var from = monthStart(iso), d0 = parseIso(from), dEnd = parseIso(from);
+  dEnd.setMonth(dEnd.getMonth() + 1); dEnd.setDate(0);
+  var heads = '<div class="dw">пн</div><div class="dw">вт</div><div class="dw">ср</div><div class="dw">чт</div><div class="dw">пт</div><div class="dw">сб</div><div class="dw">вс</div>';
+  var cells = "", shift = (d0.getDay() + 6) % 7;
+  for (var i = 0; i < shift; i++) cells += '<div class="d out"></div>';
+  for (var dd = parseIso(from); dd <= dEnd; dd.setDate(dd.getDate() + 1)){
+    var day = isoOf(dd), list = by[day] || [], state = calendarDayState(day, list, t);
+    var preview = list.slice(0,2).map(function(x){
+      return '<span class="day-preview ' + calendarPreviewSize(x.text) + '">• ' + esc(x.text) + '</span>';
+    }).join("");
+    if (list.length > 2) preview += '<span class="day-preview">ещё ' + (list.length - 2) + '</span>';
+    cells += '<button type="button" class="d' + (day === t ? " today" : "") + (day === calSel ? " sel" : "") + (list.length ? " has-plan" : "") + (state ? " " + state : "") + '" data-act="cal-day" data-d="' + day + '" aria-label="' + esc(calendarDayLabel(day, list, state)) + '">' +
+      '<span class="day-num">' + dd.getDate() + '</span>' + preview + '</button>';
+  }
+  return '<div class="month-card"><div class="month-title">' + monthName(from) + '</div><div class="cal continuous-cal">' + heads + cells + '</div></div>';
+}
 function renderItem(x){
   var t = today(), late = x.kind !== "done" && x.kind !== "past" && x.due < t;
   var icon = x.kind === "deadline" ? "!" : x.kind === "done" ? "✓" : x.kind === "event" || x.kind === "past" ? (x.time || "◷") : "•";
@@ -1547,20 +1604,12 @@ function viewCal(){
   var days = [], from, to;
   if (calMode === "month"){
     from = monthStart(calCursor);
-    var d0 = parseIso(from), dEnd = parseIso(from); dEnd.setMonth(dEnd.getMonth() + 1); dEnd.setDate(0);
-    to = isoOf(dEnd);
-    var shift = (d0.getDay() + 6) % 7, cells = "";
-    for (var i = 0; i < shift; i++) cells += '<div class="d out"></div>';
-    for (var dd = parseIso(from); dd <= dEnd; dd.setDate(dd.getDate() + 1)){
-      var iso = isoOf(dd), list = by[iso] || [];
-      var dots = list.slice(0,3).map(function(x){ return '<i class="' + dotClass(x, iso, t) + '"></i>'; }).join("");
-      cells += '<div class="d' + (iso === t ? " today" : "") + (iso === calSel ? " sel" : "") + '" data-act="cal-day" data-d="' + iso + '">' +
-        '<span>' + dd.getDate() + '</span><span class="dots">' + dots + '</span></div>';
-    }
-    h += card('<div class="cal-head"><button type="button" class="mini" data-act="cal-shift" data-n="-1">‹</button><b>' + monthName(from) + '</b>' +
-      '<button type="button" class="mini" data-act="cal-shift" data-n="1">›</button></div>' +
-      '<div class="cal"><div class="dw">пн</div><div class="dw">вт</div><div class="dw">ср</div><div class="dw">чт</div><div class="dw">пт</div><div class="dw">сб</div><div class="dw">вс</div>' + cells + '</div>' +
-      '<div class="cal-legend"><span><i></i>сдача</span><span><i class="tk"></i>дело</span><span><i class="ev"></i>событие</span><span><i class="late"></i>просрочено</span></div>');
+    var lastMonth = shiftMonth(from, 2), lastEnd = parseIso(lastMonth); lastEnd.setMonth(lastEnd.getMonth() + 1); lastEnd.setDate(0);
+    to = isoOf(lastEnd);
+    h += '<div class="calendar-window"><button type="button" class="mini" data-act="cal-shift" data-n="-3">‹ Раньше</button>' +
+      '<span>Учебные дела на три месяца</span><button type="button" class="mini" data-act="cal-shift" data-n="3">Позже ›</button></div>' +
+      '<div class="calendar-stream">' + continuousMonth(from, by, t) + continuousMonth(shiftMonth(from, 1), by, t) + continuousMonth(lastMonth, by, t) + '</div>' +
+      '<div class="cal-legend"><span><i></i>предстоит</span><span><i class="late"></i>просрочено</span><span><i style="background:var(--ok)"></i>выполнено</span></div>';
   } else if (calMode === "range"){
     if (!calFrom) calFrom = t;
     if (!calTo) calTo = addDays(t, 9);
