@@ -28,7 +28,9 @@ for(const file of ['reestr.html','index.html'])test('desktop workspace and mobil
 
 test('university registry stays compact and opens one university at a time',async({page})=>{
  await page.goto('http://127.0.0.1:4173/reestr.html');
- await page.evaluate(()=>{QA.switchUser('refs-desktop-test');D.refs=[
+ await page.evaluate(()=>QA.switchUser('refs-desktop-test'));
+ await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
+ await page.evaluate(()=>{D.items=[];D.refs=[
   {id:'ref-a1',univ:'Первый университет',faculty:'Факультет экономики',kafedra:'Кафедра финансов',format:{},verified:false,requests:2},
   {id:'ref-a2',univ:'Первый университет',faculty:'Факультет управления',kafedra:'',format:{},verified:true,requests:1},
   {id:'ref-b1',univ:'Второй университет',faculty:'Институт права',kafedra:'',format:{},verified:true,requests:4}
