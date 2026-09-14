@@ -37,9 +37,11 @@ test('university registry stays compact and opens one university at a time',asyn
  ];tab='refs';openRefId=null;render();});
  await expect(page.locator('.ref-group')).toHaveCount(2);
  await expect(page.getByText('Факультет экономики',{exact:true})).toBeHidden();
- await page.locator('.ref-group').first().locator('summary').click();
+ const firstUniversity=page.locator('.ref-group').filter({hasText:'Первый университет'});
+ const secondUniversity=page.locator('.ref-group').filter({hasText:'Второй университет'});
+ await firstUniversity.locator('summary').click();
  await expect(page.getByText('Факультет экономики',{exact:true})).toBeVisible();
- await page.locator('.ref-group').last().locator('summary').click();
+ await secondUniversity.locator('summary').click();
  await expect(page.getByText('Факультет экономики',{exact:true})).toBeHidden();
  await expect(page.getByText('Институт права',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Требует уточнения',exact:true}).click();
