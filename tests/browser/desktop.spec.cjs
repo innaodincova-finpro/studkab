@@ -35,14 +35,16 @@ test('university registry stays compact and opens one university at a time',asyn
   {id:'ref-a2',univ:'Первый университет',faculty:'Факультет управления',kafedra:'',format:{},verified:true,requests:1},
   {id:'ref-b1',univ:'Второй университет',faculty:'Институт права',kafedra:'',format:{},verified:true,requests:4}
  ];tab='refs';openRefId=null;render();});
- const disclosure=await page.evaluate(()=>{
+ const disclosure=await page.evaluate(async()=>{
   const groups=[...document.querySelectorAll('.ref-group')];
   const first=groups.find(x=>x.textContent.includes('Первый университет'));
   const second=groups.find(x=>x.textContent.includes('Второй университет'));
   const initiallyClosed=groups.every(x=>!x.open);
   first.querySelector('summary').click();
+  await new Promise(resolve=>setTimeout(resolve,0));
   const firstOpened=first.open&&first.textContent.includes('Факультет экономики');
   second.querySelector('summary').click();
+  await new Promise(resolve=>setTimeout(resolve,0));
   return {count:groups.length,initiallyClosed,firstOpened,firstClosed:!first.open,secondOpened:second.open&&second.textContent.includes('Институт права')};
  });
  expect(disclosure).toEqual({count:2,initiallyClosed:true,firstOpened:true,firstClosed:true,secondOpened:true});
