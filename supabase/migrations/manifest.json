@@ -80,6 +80,12 @@
       "name": "studkab_bounded_test_reconciliation",
       "file": "20260912131239_studkab_bounded_test_reconciliation.sql",
       "sha256": "d24486804fdcf163921a78fad473f8cc98909827d9d4233a6c8c0a57ee5be081"
+    },
+    {
+      "version": "20260914105509",
+      "name": "studkab_requirement_passports",
+      "file": "20260914105509_studkab_requirement_passports.sql",
+      "sha256": "73bf94ab6a68665f18e78097b3edf1ea85091c76b1a0d44f206e6a26d0ac2a2e"
     }
   ]
 }

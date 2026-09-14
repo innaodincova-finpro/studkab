@@ -68,6 +68,38 @@ test('recovery link uses existing account only; invite never resets it',async()=
  calls=[];assert.equal((await accessLink({...args,email:'missing@example.test',recovery:true})).missing,true);assert.equal(calls.length,1);
 });
 
+test('requirement passport is executor-only and bound to an existing request',async()=>{
+ let who=student,reads=0;
+ const db=async(path)=>{reads++;return path.startsWith('studkab_requests?')?[{id:requestId}]:[];};
+ const app=handler({auth:async()=>who,config:async()=>({executor_email:owner.email}),db});
+ assert.equal((await app(request({action:'passport-get',id:requestId}))).status,403);assert.equal(reads,0);
+ who=owner;
+ assert.equal((await app(request({action:'passport-get',id:'forged'}))).status,400);assert.equal(reads,0);
+ assert.equal((await app(request({action:'passport-get',id:requestId}))).status,200);assert.equal(reads,2);
+});
+
+test('passport validation separates evidence categories and strips unknown fields',async()=>{
+ const {validatePassport}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+ const passport={title:'Методичка кафедры',summary:'Проверено вручную',secret:'remove',items:[
+  {id:'R1',category:'method',required:true,text:'Объём 25–30 страниц',source:'Методичка, с. 7',secret:'remove'},
+  {id:'A1',category:'assumption',required:false,text:'Возможно потребуется приложение',source:''}
+ ]};
+ const clean=validatePassport(passport);assert.equal(clean.secret,undefined);assert.equal(clean.items[0].secret,undefined);assert.equal(clean.items.length,2);
+ for(const bad of [null,{items:{}},{items:[{id:'R1',category:'unknown',text:'x'}]},{items:[{id:'R1',category:'method',text:''}]},{items:[{id:'R1',category:'method',text:'x'},{id:'R1',category:'expert',text:'y'}]}])assert.throws(()=>validatePassport(bad));
+});
+
+test('saving and approving a passport use server RPC and never trust a student identity',async()=>{
+ const calls=[];
+ const db=async(path,method,body)=>{calls.push({path,method,body});if(path.startsWith('studkab_requests?'))return[{id:requestId}];return{id:'66666666-6666-4666-8666-666666666666',revision:1};};
+ const app=handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db});
+ const passport={title:'Требования',summary:'',items:[{id:'M1',category:'method',text:'Нужно введение',source:'Задание'}]};
+ assert.equal((await app(request({action:'passport-save',id:requestId,student_id:'forged',passport,sourceFingerprint:'abc'}))).status,200);
+ assert.equal(calls[1].path,'rpc/studkab_requirement_passport_save');assert.equal(calls[1].body.p_request,requestId);assert.equal(calls[1].body.student_id,undefined);
+ assert.equal((await app(request({action:'passport-approve',id:requestId,passportId:'bad',passport}))).status,400);
+ assert.equal((await app(request({action:'passport-approve',id:requestId,passportId:'66666666-6666-4666-8666-666666666666',passport}))).status,200);
+ assert.equal(calls.at(-1).path,'rpc/studkab_requirement_passport_approve');
+});
+
 const requestId='11111111-1111-4111-8111-111111111111';
 const deliveryId='22222222-2222-4222-8222-222222222222';
 const documentFixture={topic:'Тема & <проверка>',student:'Тестовый студент',group:'Т-1',format:{size:14},chapters:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Текст черновика <не HTML>'}}};

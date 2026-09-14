@@ -4,7 +4,7 @@ Captured read-only on 2026-09-13. Project: `dcpthwmuiodrjepifzsd` (“Точка
 
 ## Migration boundary
 
-Production currently records **20** migrations. The STUDKAB repository needs the first **13** migrations through `20260912131239_studkab_bounded_test_reconciliation`: these create STUDKAB and the shared storage/access layer on which it depends. Their exact SQL and SHA-256 values are restored under `supabase/migrations/` and locked by `manifest.json`.
+Production currently records **24** migrations. The STUDKAB repository needs **14** migrations through `20260914105509_studkab_requirement_passports`: these create STUDKAB and the shared storage/access layer on which it depends. Their exact SQL and SHA-256 values are restored under `supabase/migrations/` and locked by `manifest.json`.
 
 The remaining seven migrations are owned by the separate “Точка дня” assistant/reminder subsystem:
 

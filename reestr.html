@@ -1849,6 +1849,28 @@ function viewList(){
   return h;
 }
 
+var PASSPORT_CATEGORY={method:'Требование методички',measurable:'Измеримая проверка',expert:'Предметная рекомендация',assumption:'Предположение'};
+function passportCard(x){
+  var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
+  if(!p)return card(lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>');
+  var items=Array.isArray(p.items)?p.items:[];
+  return card(lab('Паспорт требований · версия '+Number(p.revision||1))+
+    '<div class="row" style="margin-bottom:8px"><span class="pill '+(p.status==='approved'?'p-ok':'p-och')+'">'+(p.status==='approved'?'утверждён':p.status==='stale'?'устарел':'проект')+'</span></div>'+
+    (p.summary?'<p class="hint">'+esc(p.summary)+'</p>':'')+
+    (items.length?'<div>'+items.map(function(q){return '<div class="stat"><span>'+esc(PASSPORT_CATEGORY[q.category]||q.category)+(q.source?' · '+esc(q.source):'')+'</span><b>'+esc(q.text)+'</b></div>';}).join('')+'</div>':'<p class="hint">Пункты пока не добавлены.</p>')+
+    '<div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-edit" data-id="'+esc(x.id)+'">Новая версия</button>'+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'">Утвердить</button>':'')+'</div>');
+}
+async function loadPassports(x){
+ if(!window.Oblako||!Oblako.requestApi)throw Error('Войдите в аккаунт реестра');
+ var result=await Oblako.requestApi({action:'passport-get',id:x.id});x.passports=result.passports||[];render();return x.passports;
+}
+function editPassport(x){
+ var p=(x.passports||[])[0]||{},items=Array.isArray(p.items)?p.items:[];
+ function lines(category){return items.filter(function(q){return q.category===category;}).map(function(q){return q.text;}).join('\n');}
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Паспорт требований</h3><p class="hint">Каждое требование пишите с новой строки. Предположение не считается подтверждённым фактом.</p><div class="fld"><label>Название</label><input id="ppTitle" value="'+esc(p.title||'Требования к работе')+'"></div><div class="fld"><label>Краткое пояснение</label><textarea id="ppSummary">'+esc(p.summary||'')+'</textarea></div>'+Object.keys(PASSPORT_CATEGORY).map(function(k){return '<div class="fld"><label>'+PASSPORT_CATEGORY[k]+'</label><textarea data-pp="'+k+'">'+esc(lines(k))+'</textarea></div>';}).join('')+'<div class="fld"><label>Источник</label><input id="ppSource" placeholder="Например: методичка, с. 7"></div><button type="button" class="btn" data-pp-save="1">Сохранить проект паспорта</button>');
+ wrap.addEventListener('click',async function(e){if(!e.target.closest('[data-pp-save]'))return;var button=e.target.closest('[data-pp-save]'),all=[],n=0,source=wrap.querySelector('#ppSource').value.trim();wrap.querySelectorAll('[data-pp]').forEach(function(area){area.value.split(/\n+/).map(function(s){return s.trim();}).filter(Boolean).forEach(function(value){n++;all.push({id:'P'+n,category:area.dataset.pp,required:area.dataset.pp!=='assumption',text:value,source:source});});});if(!all.length)return toast('Добавьте хотя бы одно требование');button.disabled=true;try{var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:wrap.querySelector('#ppTitle').value,summary:wrap.querySelector('#ppSummary').value,items:all},sourceFingerprint:''});x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));wrap.remove();render();toast('Проект паспорта сохранён');}catch(err){toast(err.message||'Не удалось сохранить паспорт');}finally{button.disabled=false;}});
+}
+
 function viewItem(id){
   var x = item(id);
   if (!x) return '<div class="empty">Заявка не найдена</div>';
@@ -1891,6 +1913,7 @@ function viewItem(id){
 
   h += card(lab("Работа") + row("Тема", x.topic) + row("Дисциплина", x.discipline) + row("Требования", x.requirements) +
     (x.org ? row("Организация", x.org) : "") + (x.methodNotes ? row("Методичка", x.methodNotes) : ""));
+  if(x.requestNumber)h += passportCard(x);
   h += '<details class="fold"><summary>Вуз и оформление</summary><div class="in">' +
     row("Вуз", x.univ) + row("Факультет", x.faculty) + row("Кафедра", x.kafedra) +
     row("Направление", x.program) + row("Форма", x.form) + row("Курс", x.course) + row("Руководитель", x.supervisor) + row("Город", x.city) +
@@ -2268,6 +2291,9 @@ document.addEventListener("click", function(ev){
   if (act === "filter"){ var nf = el.getAttribute("data-k"); if (nf === "all" && filter === "all") query = ""; filter = nf; if (nf === "all") query = ""; return render(); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
   if (act === "deliver-result") return StudResults.deliver(item(id));
+  if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
+  if (act === "passport-edit") {var pe=item(id);if(pe)editPassport(pe);return;}
+  if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items}}).then(function(r){pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){toast(e.message||'Не удалось утвердить паспорт');});return;}
   if (act === "doc-open") return openDocBuilder(id);
   if (act === "px-save"){ readProviderForm(); saved("Сохранено"); return; }
   if (act === "pv-toggle"){

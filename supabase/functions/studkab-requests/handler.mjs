@@ -1,4 +1,5 @@
 import {resultAction} from './results.mjs';
+import {requirementAction} from './requirements.mjs';
 const fields={id:100,t:300,k:100,d:200,u:300,fc:300,kf:300,ct:100,n:200,g:100,pr:200,fo:100,co:50,s:200,dl:10,rq:500,org:1500,mn:1500,cn:200};
 export function validatePayload(p) {
  if(!p||typeof p!=='object'||Array.isArray(p))throw Error('Неверная заявка');
@@ -52,6 +53,9 @@ export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
    if(['deliver','result','prepare-result','review-result'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
+   }
+   if(['passport-get','passport-save','passport-approve'].includes(input.action)){
+    const r=await requirementAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(raw.length>16000)return json({error:'Заявка слишком большая'},413);
    if(input.action==='submit'){
