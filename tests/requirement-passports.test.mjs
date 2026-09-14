@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const sql=fs.readFileSync(new URL('../supabase/requirement-passports.sql.tmpl',import.meta.url),'utf8');
+const sql=fs.readFileSync(new URL('../supabase/migrations/20260914105509_studkab_requirement_passports.sql',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');
 
 test('passport schema is private and callable only through the authenticated server adapter',()=>{
