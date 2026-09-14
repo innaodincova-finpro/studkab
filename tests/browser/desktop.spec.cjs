@@ -25,3 +25,31 @@ for(const file of ['reestr.html','index.html'])test('desktop workspace and mobil
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({animations:'disabled',path:'test-results/mobile-'+file+'.png'});
 });
+
+test('university registry stays compact and opens one university at a time',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>QA.switchUser('refs-desktop-test'));
+ await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
+ await page.evaluate(()=>{D.items=[];D.refs=[
+  {id:'ref-a1',univ:'Первый университет',faculty:'Факультет экономики',kafedra:'Кафедра финансов',format:{},verified:false,requests:2},
+  {id:'ref-a2',univ:'Первый университет',faculty:'Факультет управления',kafedra:'',format:{},verified:true,requests:1},
+  {id:'ref-b1',univ:'Второй университет',faculty:'Институт права',kafedra:'',format:{},verified:true,requests:4}
+ ];tab='refs';openRefId=null;render();});
+ const disclosure=await page.evaluate(async()=>{
+  const groups=[...document.querySelectorAll('.ref-group')];
+  const first=groups.find(x=>x.textContent.includes('Первый университет'));
+  const second=groups.find(x=>x.textContent.includes('Второй университет'));
+  const initiallyClosed=groups.every(x=>!x.open);
+  first.querySelector('summary').click();
+  await new Promise(resolve=>setTimeout(resolve,0));
+  const firstOpened=first.open&&first.textContent.includes('Факультет экономики');
+  second.querySelector('summary').click();
+  await new Promise(resolve=>setTimeout(resolve,0));
+  return {count:groups.length,initiallyClosed,firstOpened,firstClosed:!first.open,secondOpened:second.open&&second.textContent.includes('Институт права')};
+ });
+ expect(disclosure).toEqual({count:2,initiallyClosed:true,firstOpened:true,firstClosed:true,secondOpened:true});
+ await page.getByRole('button',{name:'Требует уточнения',exact:true}).click();
+ await expect(page.locator('.ref-group')).toHaveCount(1);
+ await page.getByPlaceholder('Поиск по вузу, факультету, кафедре').fill('управления');
+ await expect(page.locator('.ref-group')).toHaveCount(0);
+});
