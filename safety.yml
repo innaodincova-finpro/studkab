@@ -1,0 +1,153 @@
+name: Safety checks
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: safety_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Validate change process
+        run: node scripts/validate-change-process.mjs
+        env:
+          CHANGE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CHANGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - run: npm test
+      - run: python3 tests/sql_safety.py
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: test-only
+          PGDATABASE: safety_test
+      - name: Run isolated A1 fault injection
+        run: node tests/a1-fault-injection.mjs
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: test-only
+          PGDATABASE: safety_test
+      - name: Install pinned Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.117.0
+      - name: Replay migrations in isolated Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          replay_dir="$RUNNER_TEMP/studkab-supabase-replay"
+          cp -a "$GITHUB_WORKSPACE" "$replay_dir"
+          mv "$replay_dir/supabase/migrations" "$replay_dir/supabase/migrations.hold"
+          mkdir "$replay_dir/supabase/migrations"
+          cd "$replay_dir"
+
+          cleanup() {
+            supabase stop --no-backup || true
+          }
+          trap cleanup EXIT
+
+          supabase --version
+          supabase start
+
+          rmdir supabase/migrations
+          mv supabase/migrations.hold supabase/migrations
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          migrations = Path('supabase/migrations')
+          pattern = re.compile(
+              r"select\s+cron\.schedule\(\s*'[^']+'\s*,\s*'[^']+'\s*,"
+              r"\s*\$([A-Za-z_][A-Za-z0-9_]*)\$.*?\$\1\$\s*\);",
+              re.IGNORECASE | re.DOTALL,
+          )
+          replaced = 0
+          for path in migrations.glob('*.sql'):
+              source = path.read_text()
+              safe, count = pattern.subn(
+                  "select 1; -- CI replay: external cron invocation disabled",
+                  source,
+              )
+              if count:
+                  path.write_text(safe)
+                  replaced += count
+          if replaced != 3:
+              raise SystemExit(f'Expected to isolate 3 cron schedules, isolated {replaced}')
+          print('Isolated exactly 3 historical cron schedules')
+
+          cron_template = Path('supabase/reconciliation/studkab-cron.sql.tmpl')
+          cron_source = cron_template.read_text()
+
+          def disable_command(match):
+              tag = match.group(1)
+              delimiter = chr(36) + tag + chr(36)
+              prefix = match.group(0).split(delimiter, 1)[0]
+              return prefix + delimiter + 'select 1;' + delimiter + ');'
+
+          cron_safe, cron_count = pattern.subn(disable_command, cron_source)
+          if cron_count != 4:
+              raise SystemExit(f'Expected to isolate 4 final cron jobs, isolated {cron_count}')
+          Path('supabase/reconciliation/studkab-cron.safe.sql').write_text(cron_safe)
+          print('Isolated exactly 4 final cron jobs')
+          PY
+
+          for baseline in baza.sql request-delivery.sql telegram-setup.sql; do
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+              -v ON_ERROR_STOP=1 -f "$baseline"
+          done
+          supabase migration up --local
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-cron.safe.sql
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
+      - run: npm ci
+      - name: Exclude unused Google Chrome apt repository
+        run: |
+          # Playwright downloads its own browsers. A broken third-party Chrome
+          # package index must not block Ubuntu system dependency installation.
+          # Package signature and checksum verification remain enabled.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          for path in Path('/etc/apt/sources.list.d').iterdir():
+              if path.suffix not in ('.list', '.sources'):
+                  continue
+              text = path.read_text()
+              if 'dl.google.com/linux/chrome' not in text:
+                  continue
+              if path.suffix == '.list':
+                  text = '\n'.join(line for line in text.splitlines() if 'dl.google.com/linux/chrome' not in line) + '\n'
+              else:
+                  text = '\n\n'.join(block for block in text.split('\n\n') if 'dl.google.com/linux/chrome' not in block) + '\n'
+              path.write_text(text)
+              print('Excluded Chrome source from', path.name)
+          PY
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: browser-checks
+          path: test-results/
+          retention-days: 7

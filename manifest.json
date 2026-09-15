@@ -1,0 +1,123 @@
+{
+  "captured_at": "2026-09-15T07:29:13Z",
+  "production_project_ref": "dcpthwmuiodrjepifzsd",
+  "note": "SQL SHA-256 is calculated from the exact statement text stored in supabase_migrations.schema_migrations. Later Tochka-only migrations are tracked in PRODUCTION_INVENTORY.md and intentionally not copied into the STUDKAB repository.",
+  "migrations": [
+    {
+      "version": "20260904195115",
+      "name": "create_user_app_data_with_rls",
+      "file": "20260904195115_create_user_app_data_with_rls.sql",
+      "sha256": "dd992f49ed318fe56b87d0425d8d591036bcb1600d0f2b9fb1cc52c1bcf3651e"
+    },
+    {
+      "version": "20260907044825",
+      "name": "backup_before_safe_cloud_561",
+      "file": "20260907044825_backup_before_safe_cloud_561.sql",
+      "sha256": "0f290326b6dd033a25bbdec6dc35bdd392508395991800aa09ac8ccaabd6043c"
+    },
+    {
+      "version": "20260907045407",
+      "name": "safe_cloud_client_guard_561",
+      "file": "20260907045407_safe_cloud_client_guard_561.sql",
+      "sha256": "ad3a6967f4f4ed6bd4ae592a5250f097454ca374928d0fbf761bebc6dc25ae83"
+    },
+    {
+      "version": "20260907055928",
+      "name": "studkab_cloud_safety_v2",
+      "file": "20260907055928_studkab_cloud_safety_v2.sql",
+      "sha256": "8a89e71d33f5937fe79c0d91fc23163ea444221541ddb807ecfa4c9cf76b8e5b"
+    },
+    {
+      "version": "20260907111150",
+      "name": "direct_push",
+      "file": "20260907111150_direct_push.sql",
+      "sha256": "b727f110bf8f51be0dbc629fa283cf20566bb3f5caa443db547b51889aabbc87"
+    },
+    {
+      "version": "20260907113822",
+      "name": "studkab_deadline_push",
+      "file": "20260907113822_studkab_deadline_push.sql",
+      "sha256": "b78a39afdd10251f50be16d78990599d7a494bb0bf0542ad85ca44485466e350"
+    },
+    {
+      "version": "20260909061057",
+      "name": "studkab_result_delivery",
+      "file": "20260909061057_studkab_result_delivery.sql",
+      "sha256": "08e74252907bac89db5c518172b56d33eb7cfa8d2bba1a6bb661322ca3f16783"
+    },
+    {
+      "version": "20260909163029",
+      "name": "atomic_pending_invitation_delete",
+      "file": "20260909163029_atomic_pending_invitation_delete.sql",
+      "sha256": "5a9bbbcb3ac29b7880fa71d2a4f85b66870033c2722c70f64c527e31db7f8097"
+    },
+    {
+      "version": "20260909170917",
+      "name": "tochka_app_scoped_access",
+      "file": "20260909170917_tochka_app_scoped_access.sql",
+      "sha256": "702a8a047e4b1414dc3aef6a0abacfb86684a1c263ae190628d02fe434ae3f66"
+    },
+    {
+      "version": "20260911195103",
+      "name": "studkab_generation_storage_v1",
+      "file": "20260911195103_studkab_generation_storage_v1.sql",
+      "sha256": "5e7e87b88a0e5b31980f9a5b311f5d03807497adc8374a0586af5ffa62793205"
+    },
+    {
+      "version": "20260912094701",
+      "name": "studkab_versioned_delivery",
+      "file": "20260912094701_studkab_versioned_delivery.sql",
+      "sha256": "caab5ed7c5a726dfa482c87190aac822d55711af9e4eac47b35c0c3399db8fbf"
+    },
+    {
+      "version": "20260912123246",
+      "name": "studkab_budget_reconciliation",
+      "file": "20260912123246_studkab_budget_reconciliation.sql",
+      "sha256": "ab279bea98284c4b338047c9e99b990eb2534ab432d041173bcd6f34b9efb231"
+    },
+    {
+      "version": "20260912131239",
+      "name": "studkab_bounded_test_reconciliation",
+      "file": "20260912131239_studkab_bounded_test_reconciliation.sql",
+      "sha256": "d24486804fdcf163921a78fad473f8cc98909827d9d4233a6c8c0a57ee5be081"
+    },
+    {
+      "version": "20260914105509",
+      "name": "studkab_requirement_passports",
+      "file": "20260914105509_studkab_requirement_passports.sql",
+      "sha256": "73bf94ab6a68665f18e78097b3edf1ea85091c76b1a0d44f206e6a26d0ac2a2e"
+    },
+    {
+      "version": "20260915070508",
+      "name": "mandatory_passport_generation_limits",
+      "file": "20260915070508_mandatory_passport_generation_limits.sql",
+      "sha256": "c4c4eb654cae5b15dd143f74d632e97344f80fdcb2c232c400da9b7b04b1b005"
+    },
+    {
+      "version": "20260915072854",
+      "name": "add_gen_job_passport_index",
+      "file": "20260915072854_add_gen_job_passport_index.sql",
+      "sha256": "04dc5fa62b1b6e8ea82051e8dd953cd2de321325af1070fa31f9f9d8e5334ff0"
+    }
+  ],
+  "pending_migrations": [
+    {
+      "version": "20260915130000",
+      "name": "studkab_generation_stop",
+      "file": "20260915130000_studkab_generation_stop.sql",
+      "sha256": "c24aab884b6dd729b8edf0212d89db874f3aa7830f6159707553eb6b21ad9870"
+    },
+    {
+      "version": "20260915130100",
+      "name": "studkab_production_drift_recorded",
+      "file": "20260915130100_studkab_production_drift_recorded.sql",
+      "sha256": "cfd828f1b6f0667c5a71b41cf5b6decfd592832149bdb11406c00077b9d493aa"
+    },
+    {
+      "version": "20260915130200",
+      "name": "studkab_unknown_fully_retained",
+      "file": "20260915130200_studkab_unknown_fully_retained.sql",
+      "sha256": "f86eeea10af072987e92a36a1151385ee27f5028a4c2eeb9de94ae673a230a47"
+    }
+  ]
+}
