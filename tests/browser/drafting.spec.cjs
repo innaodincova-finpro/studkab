@@ -82,7 +82,7 @@ test('preparation blocks zero budget and preserves edited document',async({page}
  await setup(page);await fill(page);await page.setViewportSize({width:390,height:844});
  await page.evaluate(()=>{Oblako.generationApi=async body=>{if(body.action==='history')return {jobs:[]};if(body.action==='estimate')throw Error('BUDGET_BLOCKED');throw Error('Unexpected mutation');};});
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
- await expect(page.locator('[data-prepare-message]')).toContainText('бюджет');
+ await expect(page.locator('[data-prepare-message]')).toContainText('денежный потолок');
  await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:'older-version'};draftItem.doc.structure.ch1.text='Мой сохранённый текст';Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Облачный текст'}]});});
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
  await expect(page.locator('[data-prepare-message]')).toContainText('прежней версии');
