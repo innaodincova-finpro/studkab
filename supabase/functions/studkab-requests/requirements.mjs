@@ -25,10 +25,23 @@ export function validatePassport(input){
  };
 }
 
+export function formatRequirement(format={}){
+ const value=(long,short)=>format[long]??format[short];
+ const parts=[];
+ const font=value('font','fn'),size=value('size','sz');
+ if(font||size)parts.push('шрифт '+[font,size&&size+' пт'].filter(Boolean).join(', '));
+ const margins=[['слева',value('mLeft','ml')],['справа',value('mRight','mr')],['сверху',value('mTop','mt')],['снизу',value('mBottom','mb')]].filter(([,v])=>v!==undefined&&v!==null&&v!=='');
+ if(margins.length)parts.push('поля: '+margins.map(([label,v])=>label+' '+v+' мм').join(', '));
+ const spacing=value('spacing','sp'),indent=value('indent','ind');
+ if(spacing)parts.push('межстрочный интервал '+String(spacing).replace('.',','));
+ if(indent)parts.push('абзацный отступ '+String(indent).replace('.',',')+' см');
+ return parts.join('; ')||'Не указано — требуется уточнить';
+}
+
 export function defaultPassport(payload={}){
  const value=(v,missing='Не указано — требуется уточнить')=>typeof v==='string'&&v.trim()?v.trim():missing;
  const format=payload.fm&&typeof payload.fm==='object'?payload.fm:{};
- const formatting=Object.keys(format).length?JSON.stringify(format):'Не указано — требуется уточнить';
+ const formatting=formatRequirement(format);
  return {title:'Паспорт требований к работе',summary:'Автоматически создан по заявке. Перед запуском проверьте, дополните и утвердите каждый пункт.',items:[
   {id:'WORK_TYPE',category:'method',required:true,text:'Вид работы: '+value(payload.k),source:'Заявка студента'},
   {id:'DISCIPLINE',category:'method',required:true,text:'Дисциплина: '+value(payload.d),source:'Заявка студента'},

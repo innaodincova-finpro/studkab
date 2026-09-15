@@ -4,6 +4,7 @@ import fs from 'node:fs';
 const sql=fs.readFileSync(new URL('../supabase/migrations/20260914105509_studkab_requirement_passports.sql',import.meta.url),'utf8');
 const gate=fs.readFileSync(new URL('../supabase/migrations/20260915070508_mandatory_passport_generation_limits.sql',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');
+const {defaultPassport}=await import('../supabase/functions/studkab-requests/requirements.mjs');
 
 test('passport schema is private and callable only through the authenticated server adapter',()=>{
  assert.match(sql,/enable row level security/i);
@@ -34,4 +35,19 @@ test('executor UI keeps four evidence categories separate and exposes no automat
  assert.match(ui,/Сохранить проект паспорта/);
  assert.match(ui,/Утвердить/);
  assert.doesNotMatch(ui,/data-act="passport-auto-approve"/);
+});
+
+test('default passport stores formatting as readable Russian text instead of internal JSON',()=>{
+ const passport=defaultPassport({fm:{fn:'Times New Roman',sz:14,ml:30,mr:15,mt:20,mb:20,sp:1.5,ind:1.25}});
+ const formatting=passport.items.find(item=>item.id==='FORMATTING').text;
+ assert.match(formatting,/Times New Roman, 14 пт/);
+ assert.match(formatting,/слева 30 мм/);
+ assert.match(formatting,/межстрочный интервал 1,5/);
+ assert.doesNotMatch(formatting,/\{"fn"/);
+});
+
+test('passport UI blocks approval and paid preparation while required facts are unresolved',()=>{
+ assert.match(ui,/Паспорт не утверждён — платная подготовка запрещена/);
+ assert.match(ui,/data-act="passport-approve"[\s\S]+disabled title="Сначала заполните обязательные требования"/);
+ assert.match(ui,/return requireApprovedPassport\(x\)\.then/);
 });
