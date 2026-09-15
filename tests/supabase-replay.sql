@@ -61,10 +61,10 @@ declare
 begin
   select count(*) into applied_count
   from supabase_migrations.schema_migrations
-  where version between '20260904195115' and '20260915050303';
+  where version between '20260904195115' and '20260915070508';
 
-  if applied_count <> 15 then
-    raise exception 'Expected 15 restored migrations, found %', applied_count;
+  if applied_count <> 16 then
+    raise exception 'Expected 16 restored migrations, found %', applied_count;
   end if;
 end
 $$;

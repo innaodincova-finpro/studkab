@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const sql=fs.readFileSync(new URL('../supabase/migrations/20260914105509_studkab_requirement_passports.sql',import.meta.url),'utf8');
-const gate=fs.readFileSync(new URL('../supabase/migrations/20260915050303_mandatory_passport_generation_limits.sql',import.meta.url),'utf8');
+const gate=fs.readFileSync(new URL('../supabase/migrations/20260915070508_mandatory_passport_generation_limits.sql',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');
 
 test('passport schema is private and callable only through the authenticated server adapter',()=>{

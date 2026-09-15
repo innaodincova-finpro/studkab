@@ -12,7 +12,7 @@ test("migration files match the production snapshot plus explicit pending change
   const tracked = manifest.migrations.concat(manifest.pending_migrations || []);
   const expected = tracked.map((item) => item.file).sort();
   assert.deepEqual(files, expected);
-  assert.equal(manifest.migrations.length, 14);
+  assert.equal(manifest.migrations.length, 15);
 
   for (const item of tracked) {
     const sql = await readFile(new URL(item.file, migrationsDir));

@@ -8,7 +8,7 @@ create table public.studkab_requests(id uuid primary key,student_id uuid,payload
 for(const file of [
  'supabase/migrations/20260911195103_studkab_generation_storage_v1.sql',
  'supabase/migrations/20260914105509_studkab_requirement_passports.sql',
- 'supabase/migrations/20260915050303_mandatory_passport_generation_limits.sql'
+ 'supabase/migrations/20260915070508_mandatory_passport_generation_limits.sql'
 ])await db.exec(fs.readFileSync(file,'utf8'));
 await db.exec('update studkab_gen_budget set limit_microusd=1000000 where id=true');
 
