@@ -219,3 +219,70 @@ test('extended financial calculation uses existing materials without AI calls',a
  expect(await page.evaluate(()=>calls.length)).toBe(0);
  await expect(page.getByRole('cell',{name:'25,00',exact:true})).toHaveCount(3);
 });
+
+test('C-051: running preparation can be stopped and a new one started',async({page})=>{
+ await setup(page);await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};
+  window.stopActions=[];Oblako.generationApi=async body=>{stopActions.push(body);
+   if(body.action==='status')return {job:{id:'22222222-2222-4222-8222-222222222222',status:'running'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Сохранённая часть'},{ordinal:1,id:'ch2',section:'ch2',state:'queued',text:null}]};
+   if(body.action==='cancel')return {job:body.job,status:'cancelled'};
+   throw Error('Unexpected paid call');};});
+ await page.locator('[data-prepare]').click();
+ await expect(page.getByRole('button',{name:'Остановить подготовку',exact:true})).toBeVisible();
+ await page.evaluate(()=>{window.confirmAsked=0;window.confirm=()=>{confirmAsked++;return true;};});
+ await page.getByRole('button',{name:'Остановить подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('Подготовка остановлена');
+ await expect(page.locator('[data-prepare]')).toHaveText('Начать подготовку');
+ expect(await page.evaluate(()=>confirmAsked)).toBe(1);
+ expect(await page.evaluate(()=>draftItem.doc.serverJob)).toBeNull();
+ expect(await page.evaluate(()=>stopActions.map(a=>a.action))).toEqual(['status','cancel']);
+ expect(await page.evaluate(()=>stopActions[1].job)).toBe('22222222-2222-4222-8222-222222222222');
+});
+
+test('C-051: declining the confirmation sends nothing',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};
+  window.stopActions=[];Oblako.generationApi=async body=>{stopActions.push(body.action);
+   if(body.action==='status')return {job:{id:'22222222-2222-4222-8222-222222222222',status:'queued'},parts:[]};
+   throw Error('Nothing else may be called');};});
+ await page.locator('[data-prepare]').click();
+ // Проверочная среда подтверждает все окна; здесь явно выбираем «Отмена».
+ await page.evaluate(()=>{window.confirmAsked=0;window.confirm=()=>{confirmAsked++;return false;};});
+ await page.getByRole('button',{name:'Остановить подготовку',exact:true}).click();
+ expect(await page.evaluate(()=>confirmAsked)).toBe(1);
+ expect(await page.evaluate(()=>stopActions)).toEqual(['status']);
+ expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
+});
+
+test('C-051: stopped and outdated runs are not offered for continuation',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{delete draftItem.doc.serverJob;
+  Oblako.generationApi=async body=>{
+   if(body.action==='history')return {jobs:[{id:'22222222-2222-4222-8222-222222222222',status:'cancelled',created_at:'2026-09-15T06:00:00Z'},{id:'33333333-3333-4333-8333-333333333333',status:'stale',created_at:'2026-09-15T05:00:00Z'},{id:'44444444-4444-4444-8444-444444444444',status:'complete',created_at:'2026-09-15T04:00:00Z'}]};
+   throw Error('Paid Start is forbidden here');};});
+ await page.evaluate(()=>{draftItem.passports=[{id:'p',status:'approved',items:[]}];});
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('[data-recover-job]')).toHaveCount(1);
+ await expect(page.locator('[data-recover-job]')).toHaveAttribute('data-recover-job','44444444-4444-4444-8444-444444444444');
+});
+
+test('C-051: outdated run offers exactly one way forward',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};
+  Oblako.generationApi=async body=>{if(body.action==='status')return {job:{id:'22222222-2222-4222-8222-222222222222',status:'stale'},parts:[]};throw Error('Unexpected call');};});
+ await page.locator('[data-prepare]').click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('паспорт требований или материалы изменились');
+ await expect(page.getByRole('button',{name:'Остановить подготовку',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Перейти к новой подготовке',exact:true}).click();
+ expect(await page.evaluate(()=>draftItem.doc.serverJob)).toBeNull();
+ await expect(page.locator('[data-prepare]')).toHaveText('Начать подготовку');
+});
+
+test('C-051: unconfirmed result explains the single automatic retry and full cost hold',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:null};Oblako.generationApi=async body=>{if(body.action!=='status')throw Error('Unexpected call');return {job:{id:'22222222-2222-4222-8222-222222222222',status:'unknown'},parts:[{ordinal:0,id:'ch2__part_1',state:'unknown',text:null,failure:{code:'RESULT_UNKNOWN'}}]};};});
+ await page.locator('[data-prepare]').click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('повторит эту часть не более одного раза');
+ await expect(page.locator('[data-prepare-message]')).toContainText('Расход по ней учтён полностью');
+ await expect(page.locator('[data-prepare-message]')).not.toContainText('Автоматический повтор заблокирован');
+});

@@ -1,9 +1,7 @@
--- Captured production drift on 2026-09-13.
--- This file is replayed after the 13 recorded migrations. It is idempotent so a
--- future controlled reconciliation can record the already-existing objects
--- without recreating or deleting production data.
-begin;
-
+-- C-051, замечание 6 аудита 15.09.2026 (R9, M13): объекты, существующие в рабочей
+-- базе с 13.09.2026, но описанные только в reconciliation/studkab-production-drift.sql
+-- (файл удалён). Текст объектов не изменён и идемпотентен: таблицы создаются только
+-- при отсутствии, функции заменяются тем же текстом, строка тарифа не перезаписывается.
 create table if not exists public.studkab_gen_pricing (
   id boolean primary key default true check (id),
   input_microusd_per_mtok bigint not null check (input_microusd_per_mtok > 0),
@@ -210,5 +208,3 @@ revoke all on function
   public.studkab_gen_resume_budget(),
   public.studkab_gen_maintenance()
 from public, anon, authenticated, service_role;
-
-commit;

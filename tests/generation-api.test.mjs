@@ -107,3 +107,30 @@ test('compact plans reconstruct exact original prompts',()=>{
  for(let i=0;i<plan.length;i++)assert.equal(withContext({input:snapshot,spec:plan[i],ordinal:i},[]).spec.prompt,original[i].prompt);
  assert.throws(()=>withContext({input:{system:'s'},spec:plan[0],ordinal:0},[]),/CONTEXT_INVALID/);
 });
+test('C-051: malformed request number never reaches a database filter',async()=>{
+ for(const action of ['start','estimate']){
+  const s=setup();
+  assert.equal((await s.request({...valid,action,request:'x&payload=not.is.null'})).status,400);
+  assert.equal(s.calls.length,0);
+ }
+});
+test('C-051: cancel is bound to the authenticated executor and needs no budget',async()=>{
+ const s=setup({enabled:false,budget:0});
+ const r=await s.request({action:'cancel',job,owner:'other'});
+ assert.equal(r.status,200);
+ const call=s.calls.find(c=>c.path==='rpc/studkab_gen_cancel');
+ assert.deepEqual(call.args,{p_owner:uid,p_job:job});
+ assert.equal(s.calls.some(c=>c.path.startsWith('studkab_gen_budget')),false);
+});
+test('C-051: cancel rejects malformed job and hides foreign jobs',async()=>{
+ const s=setup();
+ assert.equal((await s.request({action:'cancel',job:'x&owner_id=neq.x'})).status,400);
+ assert.equal(s.calls.length,0);
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),db:async()=>'not_found'});
+ const r=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify({action:'cancel',job})}));
+ assert.equal(r.status,404);
+});
+test('C-051: student cannot cancel executor jobs',async()=>{
+ const s=setup({user:{id:uid,email:'student@example.test',email_confirmed_at:'yes'}});
+ assert.equal((await s.request({action:'cancel',job})).status,403);assert.equal(s.calls.length,0);
+});

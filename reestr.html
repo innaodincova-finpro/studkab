@@ -343,8 +343,8 @@ function load(){
   if (!D.refs){ D.refs = seedRefs(); }
   if (!D.settings) D.settings = {};
   delete D.settings.dsKey;
-  if (D.settings.proxyUrl === undefined) D.settings.proxyUrl = "";
-  if (D.settings.proxyToken === undefined) D.settings.proxyToken = "";
+  /* C-051: пароль посредника в браузере не хранится и не используется. */
+  delete D.settings.proxyToken; delete D.settings.proxyUrl;
   if (!D.settings.providers) D.settings.providers = {};
   PROVIDERS.forEach(function(pv){
     if (!D.settings.providers[pv.id]) D.settings.providers[pv.id] = { on: pv.id === "deepseek", model: pv.model };
@@ -678,9 +678,7 @@ var PROVIDERS = [
 ];
 /* считать всё, что вписано в форму настроек, до перерисовки экрана */
 function readProviderForm(){
-  var stg = D.settings, u = document.getElementById("pxUrl"), t = document.getElementById("pxTok"), df = document.getElementById("pxDef");
-  if (u) stg.proxyUrl = u.value.trim().replace(/\/+$/, "");
-  if (t) stg.proxyToken = t.value.trim();
+  var stg = D.settings, df = document.getElementById("pxDef");
   if (df) stg.defaultProvider = df.value;
   document.querySelectorAll("[data-pvmodel]").forEach(function(inp){
     var pid = inp.getAttribute("data-pvmodel");
@@ -689,10 +687,10 @@ function readProviderForm(){
   });
 }
 function providerName(id){ var p = PROVIDERS.filter(function(q){ return q.id === id })[0]; return p ? p.name : id; }
-/* нейросеть готова, только если настроен посредник И отмечен хотя бы один поставщик */
+/* Прежние кнопки браузерной генерации. Сами обращения отключены (C-044);
+   пароль посредника браузеру не нужен (C-051). */
 function aiReady(){
-  var st = D.settings || {};
-  return !!(st.proxyUrl && st.proxyToken && activeProviders().length);
+  return activeProviders().length > 0;
 }
 function activeProviders(){
   return PROVIDERS.filter(function(pv){ return (D.settings.providers[pv.id] || {}).on; });
@@ -854,9 +852,7 @@ function openDocBuilder(id){
             return '<option value="' + pv.id + '"' + (pv.id === D.settings.defaultProvider ? " selected" : "") + '>' + pv.name + ' · ' + esc((D.settings.providers[pv.id]||{}).model || pv.model) + '</option>';
           }).join("") + '</select></div>'
       : '<div class="warnbar">' +
-          (!((D.settings||{}).proxyUrl && (D.settings||{}).proxyToken)
-            ? 'Посредник не настроен — откройте «Ещё» → «Нейросети» и впишите адрес и пароль.'
-            : 'Не отмечен ни один поставщик — откройте «Ещё» → «Нейросети».') +
+          'Не отмечен ни один поставщик — откройте «Ещё» → «Нейросети».' +
           ' Пока разделы можно писать вручную или копировать запрос кнопкой «запрос» — сохранение и Word работают без нейросети.</div>') +
     '</details>' + DraftEditor.form(x) +
     '<p class="mut" style="margin:14px 0 6px;font-weight:600">Шаг 1. Подготовка текста</p>' +
@@ -1010,9 +1006,10 @@ function openDocBuilder(id){
         }
         if(!doc.serverJob||!doc.serverJob.id)return Oblako.generationApi({action:'history',request:String(x.id)}).then(function(info){
           current();var target=wrap.querySelector('[data-prepare-result]');target.replaceChildren();
-          if(info.jobs.length){
+          var activeJobs=info.jobs.filter(function(job){return job.status!=='cancelled'&&job.status!=='stale';});
+          if(activeJobs.length){
             message.textContent='Найдена сохранённая подготовка. Выберите нужный запуск (показаны последние 20). Материалы выбранного запуска потребуется сверить.';
-            info.jobs.forEach(function(job){var b=document.createElement('button');b.type='button';b.className='chip';b.dataset.recoverJob=job.id;b.textContent='Продолжить запуск '+job.created_at;target.appendChild(b);});
+            activeJobs.forEach(function(job){var b=document.createElement('button');b.type='button';b.className='chip';b.dataset.recoverJob=job.id;b.textContent='Продолжить запуск '+job.created_at;target.appendChild(b);});
             return null;
           }
           return requireApprovedPassport(x).then(function(materialFingerprint){
@@ -1041,12 +1038,12 @@ function openDocBuilder(id){
         return Oblako.generationApi({action:'status',job:doc.serverJob.id}).then(function(info){
           if(!info)return;
           current();
-          var labels={queued:'Ожидает обработки',running:'Выполняется',unknown:'Результат последнего запроса неизвестен. Автоматический повтор заблокирован.',budget:'Остановлено по лимиту расходов',complete:'Части сохранены. Требуется проверка документа.'};
+          var labels={queued:'Ожидает обработки',running:'Выполняется',unknown:'Результат последнего запроса неизвестен. Расход по нему учтён полностью.',budget:'Остановлено по лимиту расходов',complete:'Части сохранены. Требуется проверка документа.',cancelled:'Подготовка остановлена вами. Новые запросы к нейросети не отправляются.',stale:'Подготовка остановлена: паспорт требований или материалы изменились после запуска.'};
           message.textContent=(labels[info.job.status]||'Состояние уточняется')+' Сохранено частей: '+info.parts.filter(function(p){return p.state==='done';}).length+' из '+info.parts.length+'.';
           var failed=info.parts.filter(function(p){return p.failure;});
           if(failed.length){
             var reasons={OUTPUT_LIMIT:'Ответ оборвался: достигнут предел длины ответа нейросети.',LEASE_EXPIRED_AFTER_DISPATCH:'После отправки запроса подтверждение не получено вовремя.',RESULT_UNKNOWN:'Не удалось подтвердить полный ответ нейросети.'};
-            message.textContent='Подготовка остановлена. '+failed.map(function(p){return 'Часть '+(p.ordinal+1)+': '+(reasons[p.failure.code]||reasons.RESULT_UNKNOWN);}).join(' ')+' Автоматический повтор заблокирован. Сохранено частей: '+info.parts.filter(function(p){return p.state==='done';}).length+' из '+info.parts.length+'.';
+            message.textContent='Подготовка остановлена. '+failed.map(function(p){return 'Часть '+(p.ordinal+1)+': '+(reasons[p.failure.code]||reasons.RESULT_UNKNOWN);}).join(' ')+(failed.some(function(p){return p.failure.code==='OUTPUT_LIMIT';})?' Автоматический повтор заблокирован: при том же пределе ответ снова оборвётся.':' Сервер повторит эту часть не более одного раза. Расход по ней учтён полностью.')+' Сохранено частей: '+info.parts.filter(function(p){return p.state==='done';}).length+' из '+info.parts.length+'.';
           }
           if(doc.serverJob.basis===null)message.textContent+=' Связь с текущими материалами не подтверждена: проверьте выбранную версию.';
           else if(doc.serverJob.basis!==DraftEditor.basis(x))message.textContent+=' Материалы изменены: это результат прежней версии.';
@@ -1091,6 +1088,33 @@ function openDocBuilder(id){
           };
           review.appendChild(apply);
           target.appendChild(review);
+          // C-051: одно действие управления запуском — остановить активный или начать новый.
+          var jobControl=document.createElement('button');jobControl.type='button';jobControl.className='chip';
+          if(['queued','running','unknown','budget'].indexOf(info.job.status)>=0){
+            jobControl.textContent='Остановить подготовку';
+            jobControl.onclick=function(){
+              if(!confirm('Остановить подготовку? Сохранённые части останутся. Запрос, отправленный в эту минуту, завершится и будет учтён в расходах.'))return;
+              jobControl.disabled=true;
+              Oblako.generationApi({action:'cancel',job:info.job.id}).then(function(r){
+                current();
+                if(r.status!=='cancelled'){message.textContent='Подготовка уже завершена, остановка не требуется.';jobControl.remove();return;}
+                doc.serverJob=null;save();
+                wrap.querySelector('[data-prepare]').textContent='Начать подготовку';
+                message.textContent='Подготовка остановлена. Новые запросы к нейросети не отправляются. Сохранённый текст можно применить из блока «Собранный текст и объём».';
+                jobControl.remove();
+              }).catch(function(e){jobControl.disabled=false;message.textContent=e.message==='UNKNOWN_ACTION'?'Остановка станет доступна после обновления сервера.':'Остановить не удалось. Повторите попытку.';});
+            };
+            target.appendChild(jobControl);
+          }else if(info.job.status==='cancelled'||info.job.status==='stale'){
+            jobControl.textContent='Перейти к новой подготовке';
+            jobControl.onclick=function(){
+              current();doc.serverJob=null;save();
+              wrap.querySelector('[data-prepare]').textContent='Начать подготовку';
+              message.textContent='Проверьте паспорт требований и нажмите «Начать подготовку».';
+              jobControl.remove();
+            };
+            target.appendChild(jobControl);
+          }
           info.parts.filter(function(p){return p.state==='done';}).forEach(function(p){var details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent=(((doc.order||[]).filter(function(q){return q.id===(p.section||p.id);})[0]||{}).name||p.section||p.id)+(/__part_(\d+)$/.test(p.id)?', часть '+p.id.replace(/^.*__part_/,''):'');text.style.whiteSpace='pre-wrap';text.textContent=p.text;details.append(summary,text);target.appendChild(details);});
         });
       }).catch(function(e){
@@ -2064,8 +2088,7 @@ function viewMore(){
   var c = counts(), st = D.settings || {};
   var pvs = st.providers || {};
   var configured = aiReady();
-  var nets = '<div class="fld"><label>Адрес посредника</label><input type="text" id="pxUrl" value="' + esc(st.proxyUrl||"") + '" placeholder="https://имя.имя.workers.dev"></div>' +
-      '<div class="fld"><label>Пароль посредника</label><input type="password" id="pxTok" value="' + esc(st.proxyToken||"") + '"></div>' +
+  var nets = '<p class="hint">Подготовка идёт только через сервер. Пароль посредника на устройстве не хранится и не вводится.</p>' +
       PROVIDERS.map(function(pv){
         var c2 = pvs[pv.id] || {};
         return '<div class="item" style="align-items:flex-start">' +
@@ -2082,7 +2105,7 @@ function viewMore(){
   function moreFold(title, body){ return '<details class="fold"><summary>' + title + '</summary><div class="in">' + body + '</div></details>'; }
 
   return '<details class="fold"><summary>Нейросети' + (configured ? ' <span class="pill p-ok">настройки сохранены</span>'
-      : ' <span class="pill p-och">' + (st.proxyUrl && st.proxyToken ? 'нет поставщика' : 'не настроено') + '</span>') + '</summary><div class="in">' + nets + '</div></details>' +
+      : ' <span class="pill p-och">' + 'нет поставщика' + '</span>') + '</summary><div class="in">' + nets + '</div></details>' +
     moreFold("Хранение записей", CloudUI.panel()) +
     moreFold("Доступ студентов", '<p class="hint">Для первого входа без Google создайте персональную ссылку и отправьте её только этому студенту. Пароль он задаст сам.</p><button class="chip" onclick="openInvitation()">Создать приглашение</button><button class="chip" onclick="openInvitation(true)">Восстановить доступ</button>') +
     moreFold("Итоги",
@@ -2179,10 +2202,6 @@ function cloudApply(remote){
   if (bad){ toast("Записи в базе повреждены: " + bad); return false; }
   var next = JSON.parse(JSON.stringify(remote));
   if (next.settings) { delete next.settings.proxyToken; delete next.settings.dsKey; }
-  if (CLOUD_APP === "reestr") {
-    next.settings = next.settings || {};
-    next.settings.proxyToken = (D.settings || {}).proxyToken || "";
-  }
   try { localStorage.setItem(KEY, JSON.stringify(next)); }
   catch(e) { toast("Не удалось сохранить на устройстве. Загрузка отменена"); return false; }
   D = next; load(); render(); Oblako.pause(); Oblako.accept(D);
@@ -2445,9 +2464,8 @@ document.addEventListener("click", function(ev){
           var o = JSON.parse(r.result);
           var bad = checkBackup(o);
           if (bad){ toast(bad); return; }
-          var keepToken = (D.settings||{}).proxyToken || "";
           D = o; if (!D.settings) D.settings = {};
-          D.settings.proxyToken = keepToken;
+          delete D.settings.proxyToken;
           var okI = save(); load(); D.items.forEach(function(x){ if (!x.refId) refIntake(x); });
           okI = save() && okI; render();
           toast(okI ? "Данные загружены" : "Данные показаны, но не сохранены: браузер не разрешает хранение");
