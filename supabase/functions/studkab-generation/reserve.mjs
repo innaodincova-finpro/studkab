@@ -1,4 +1,6 @@
+import {reserveMicrousd} from '../_shared/deepseek-cost.mjs';
 export function checkReserve(claim){
- if(!Number.isSafeInteger(claim.spec?.max_cost_microusd)||claim.spec.max_cost_microusd<250000)throw Error('RESERVE_TOO_SMALL');
+ const maximum=claim.spec?.max_cost_microusd,needed=reserveMicrousd(claim.input?.system,claim.spec?.prompt,claim.spec?.max_output_tokens);
+ if(!Number.isSafeInteger(maximum)||maximum<needed)throw Error('RESERVE_TOO_SMALL');
  return claim;
 }

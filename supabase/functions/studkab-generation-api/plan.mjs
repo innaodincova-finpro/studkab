@@ -1,5 +1,5 @@
 // Chunking is an execution bound, not proof of academic completeness.
-export function expandParts(parts,cost){
+export function expandParts(parts,cost,maxOutputTokens=4000){
  const plan=[];
  for(const p of parts){
   const target=p.target_chars==null?4500:p.target_chars;
@@ -14,7 +14,7 @@ export function expandParts(parts,cost){
     'Продолжай сохранённые части, не повторяй их. Раздели содержание по смыслу; '+
     'не начинай новое введение и не пиши заключение всего раздела до последней части. '+
     'Не выдумывай факты, числа или источники для заполнения объёма.';
-   plan.push({id,section_id:p.id,part_index:i,part_count:count,prompt,max_cost_microusd:cost});
+   plan.push({id,section_id:p.id,part_index:i,part_count:count,prompt,max_cost_microusd:cost,max_output_tokens:maxOutputTokens,target_chars:Math.ceil(target/count)});
    if(plan.length>100)throw Error('TOO_MANY_PARTS');
   }
  }

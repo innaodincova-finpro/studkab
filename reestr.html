@@ -1004,12 +1004,18 @@ function openDocBuilder(id){
           if(!queue.length)throw Error('Все разделы уже заполнены.');
           var system='',parts=queue.map(function(c){var p=sectionPrompt(x,c);if(system&&system!==p.system)throw Error('Структура запроса изменилась.');system=p.system;return {id:c.id,prompt:p.user,target_chars:DraftQuality.budget(c).target};});
           message.textContent='Требования проверены. Запускаю подготовку разделов…';
-          return Oblako.generationApi({action:'capabilities'}).then(function(capabilities){
+          return passportFingerprint(x).then(function(materialFingerprint){
             current();
-            if(!capabilities.enabled)throw Error('GENERATION_NOT_CONFIGURED');
-            if(!capabilities.budgetAvailable)throw Error('BUDGET_BLOCKED');
-            return Oblako.generationApi({action:'start',request:String(x.id),system:system,parts:parts});
+            var payload={request:String(x.id),system:system,parts:parts,materialFingerprint:materialFingerprint};
+            if(button.dataset.costFingerprint!==materialFingerprint)return Oblako.generationApi(Object.assign({action:'estimate'},payload)).then(function(estimate){
+              current();button.dataset.costFingerprint=materialFingerprint;
+              button.textContent='Подтвердить запуск до $'+(estimate.maxCostMicrousd/1000000).toFixed(2);
+              message.textContent='Расчётный максимум этого запуска: $'+(estimate.estimatedCostMicrousd/1000000).toFixed(3)+'. Предел работы: $'+(estimate.maxCostMicrousd/1000000).toFixed(2)+'. Доступно в общем бюджете: $'+(estimate.remainingMicrousd/1000000).toFixed(2)+'. Проверьте суммы и нажмите кнопку ещё раз.';
+              return null;
+            });
+            return Oblako.generationApi(Object.assign({action:'start'},payload));
           }).then(function(started){
+            if(!started)return null;
             current();doc.serverJob={id:started.job,basis:DraftEditor.basis(x)};save();
             wrap.querySelector('[data-prepare]').textContent='Продолжить подготовку';
             message.textContent='Подготовка сохранена на сервере. Окно можно закрыть. Позже нажмите «Продолжить подготовку», чтобы увидеть состояние.';
@@ -1072,7 +1078,7 @@ function openDocBuilder(id){
           info.parts.filter(function(p){return p.state==='done';}).forEach(function(p){var details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent=(((doc.order||[]).filter(function(q){return q.id===(p.section||p.id);})[0]||{}).name||p.section||p.id)+(/__part_(\d+)$/.test(p.id)?', часть '+p.id.replace(/^.*__part_/,''):'');text.style.whiteSpace='pre-wrap';text.textContent=p.text;details.append(summary,text);target.appendChild(details);});
         });
       }).catch(function(e){
-        var labels={BUDGET_BLOCKED:'Запуск заблокирован: разрешённый бюджет не задан или исчерпан.',GENERATION_NOT_CONFIGURED:'Облачная подготовка ещё не настроена.',COST_NOT_CONFIGURED:'Не настроен расчёт предельной стоимости.',FORBIDDEN:'Доступно только исполнителю.',UNAUTHORIZED:'Войдите в аккаунт.',SERVICE_UNAVAILABLE:'Сервис недоступен. Повторите проверку статуса.',NOT_FOUND:'Задание не найдено в вашем аккаунте.',INPUT_TOO_BIG:'Материалы слишком велики для одного запуска. Они не были обрезаны.'};
+        var labels={BUDGET_BLOCKED:'Запуск заблокирован: предел этой работы или общий денежный потолок исчерпан.',PASSPORT_REQUIRED:'Сначала проверьте и утвердите паспорт текущей версии материалов.',WORK_TYPE_REQUIRED:'Уточните вид работы в заявке: контрольная, курсовая или ВКР/диплом.',WORK_LIMIT_NOT_CONFIGURED:'Для этого вида работы не настроен денежный предел.',GENERATION_NOT_CONFIGURED:'Облачная подготовка ещё не настроена.',COST_NOT_CONFIGURED:'Не настроен расчёт предельной стоимости.',FORBIDDEN:'Доступно только исполнителю.',UNAUTHORIZED:'Войдите в аккаунт.',SERVICE_UNAVAILABLE:'Сервис недоступен. Повторите проверку статуса.',NOT_FOUND:'Задание не найдено в вашем аккаунте.',INPUT_TOO_BIG:'Материалы слишком велики для одного запуска. Они не были обрезаны.'};
         message.textContent=labels[e.message]||e.message;
       }).finally(function(){button.disabled=false;});
       return;
@@ -1815,6 +1821,11 @@ function viewList(){
 }
 
 var PASSPORT_CATEGORY={method:'Требование методички',measurable:'Измеримая проверка',expert:'Предметная рекомендация',assumption:'Предположение'};
+async function passportFingerprint(x){
+ var bytes=new TextEncoder().encode(DraftEditor.basis(x));
+ var digest=await crypto.subtle.digest('SHA-256',bytes);
+ return Array.from(new Uint8Array(digest)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+}
 function passportContent(x){
   var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
   if(!p)return lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>';
@@ -1828,18 +1839,21 @@ function passportContent(x){
 function passportCard(x){ return card(passportContent(x)); }
 async function loadPassports(x){
  if(!window.Oblako||!Oblako.requestApi)throw Error('Войдите в аккаунт реестра');
- var result=await Oblako.requestApi({action:'passport-get',id:x.id});x.passports=result.passports||[];render();return x.passports;
+ var result=await Oblako.requestApi({action:'passport-ensure',id:x.id,sourceFingerprint:await passportFingerprint(x)});x.passports=result.passports||[];render();return x.passports;
 }
 function editPassport(x){
  var p=(x.passports||[])[0]||{},items=Array.isArray(p.items)?p.items:[];
  function lines(category){return items.filter(function(q){return q.category===category;}).map(function(q){return q.text;}).join('\n');}
  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Паспорт требований</h3><p class="hint">Каждое требование пишите с новой строки. Предположение не считается подтверждённым фактом.</p><div class="fld"><label>Название</label><input id="ppTitle" value="'+esc(p.title||'Требования к работе')+'"></div><div class="fld"><label>Краткое пояснение</label><textarea id="ppSummary">'+esc(p.summary||'')+'</textarea></div>'+Object.keys(PASSPORT_CATEGORY).map(function(k){return '<div class="fld"><label>'+PASSPORT_CATEGORY[k]+'</label><textarea data-pp="'+k+'">'+esc(lines(k))+'</textarea></div>';}).join('')+'<div class="fld"><label>Источник</label><input id="ppSource" placeholder="Например: методичка, с. 7"></div><button type="button" class="btn" data-pp-save="1">Сохранить проект паспорта</button>');
- wrap.addEventListener('click',async function(e){if(!e.target.closest('[data-pp-save]'))return;var button=e.target.closest('[data-pp-save]'),all=[],n=0,source=wrap.querySelector('#ppSource').value.trim();wrap.querySelectorAll('[data-pp]').forEach(function(area){area.value.split(/\n+/).map(function(s){return s.trim();}).filter(Boolean).forEach(function(value){n++;all.push({id:'P'+n,category:area.dataset.pp,required:area.dataset.pp!=='assumption',text:value,source:source});});});if(!all.length)return toast('Добавьте хотя бы одно требование');button.disabled=true;try{var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:wrap.querySelector('#ppTitle').value,summary:wrap.querySelector('#ppSummary').value,items:all},sourceFingerprint:''});x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));wrap.remove();render();toast('Проект паспорта сохранён');}catch(err){toast(err.message||'Не удалось сохранить паспорт');}finally{button.disabled=false;}});
+ wrap.addEventListener('click',async function(e){if(!e.target.closest('[data-pp-save]'))return;var button=e.target.closest('[data-pp-save]'),all=[],n=0,source=wrap.querySelector('#ppSource').value.trim();wrap.querySelectorAll('[data-pp]').forEach(function(area){area.value.split(/\n+/).map(function(s){return s.trim();}).filter(Boolean).forEach(function(value){n++;all.push({id:'P'+n,category:area.dataset.pp,required:area.dataset.pp!=='assumption',text:value,source:source});});});if(!all.length)return toast('Добавьте хотя бы одно требование');button.disabled=true;try{var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:wrap.querySelector('#ppTitle').value,summary:wrap.querySelector('#ppSummary').value,items:all},sourceFingerprint:await passportFingerprint(x)});x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));wrap.remove();render();toast('Проект паспорта сохранён');}catch(err){toast(err.message||'Не удалось сохранить паспорт');}finally{button.disabled=false;}});
 }
 
 function viewItem(id){
   var x = item(id);
   if (!x) return '<div class="empty">Заявка не найдена</div>';
+  if(x.requestNumber&&!Array.isArray(x.passports)&&!x._passportLoading){
+    x._passportLoading=true;setTimeout(function(){loadPassports(x).catch(function(e){toast(e.message||'Не удалось создать паспорт');}).finally(function(){x._passportLoading=false;});},0);
+  }
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
   var r = x.refId ? refById(x.refId) : findRef(x);
   var diff = r ? fmtDiff(x.format, r.format) : [];
@@ -2291,7 +2305,7 @@ document.addEventListener("click", function(ev){
   if (act === "deliver-result") return StudResults.deliver(item(id));
   if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
   if (act === "passport-edit") {var pe=item(id);if(pe)editPassport(pe);return;}
-  if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items}}).then(function(r){pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){toast(e.message||'Не удалось утвердить паспорт');});return;}
+  if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;passportFingerprint(pa).then(function(sourceFingerprint){return Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items},sourceFingerprint:sourceFingerprint});}).then(function(r){pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){toast(e.message||'Не удалось утвердить паспорт');});return;}
   if (act === "doc-open") return openDocBuilder(id);
   if (act === "px-save"){ readProviderForm(); saved("Сохранено"); return; }
   if (act === "pv-toggle"){

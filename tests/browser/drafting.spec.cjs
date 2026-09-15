@@ -28,13 +28,15 @@ test('saved document is shown on the request card after closing the editor',asyn
 });
 test('one preparation control starts a saved server job',async({page})=>{
  await setup(page);await fill(page);await page.setViewportSize({width:390,height:844});
- await page.evaluate(()=>{window.preparationActions=[];Oblako.generationApi=async body=>{preparationActions.push(body.action);if(body.action==='history')return {jobs:[]};if(body.action==='capabilities')return {enabled:true,budgetAvailable:true};if(body.action==='start')return {job:'22222222-2222-4222-8222-222222222222'};throw Error('Unexpected action');};});
+ await page.evaluate(()=>{window.preparationActions=[];Oblako.generationApi=async body=>{preparationActions.push(body.action);if(body.action==='history')return {jobs:[]};if(body.action==='estimate')return {estimatedCostMicrousd:18000,maxCostMicrousd:250000,remainingMicrousd:500000};if(body.action==='start')return {job:'22222222-2222-4222-8222-222222222222'};throw Error('Unexpected action');};});
  await expect(page.getByRole('button',{name:'Начать подготовку',exact:true})).toHaveCount(1);
  await expect(page.getByText('Подготовка в облаке',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('Расчётный максимум');
+ await page.getByRole('button',{name:/Подтвердить запуск/}).click();
  await expect(page.locator('[data-prepare-message]')).toContainText('Окно можно закрыть');
  await expect(page.getByRole('button',{name:'Продолжить подготовку',exact:true})).toBeVisible();
- expect(await page.evaluate(()=>preparationActions)).toEqual(['history','capabilities','start']);
+ expect(await page.evaluate(()=>preparationActions)).toEqual(['history','estimate','history','start']);
  expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
 });
 
@@ -78,9 +80,9 @@ test('legacy mobile generation control is blocked before network dispatch',async
 
 test('preparation blocks zero budget and preserves edited document',async({page})=>{
  await setup(page);await fill(page);await page.setViewportSize({width:390,height:844});
- await page.evaluate(()=>{Oblako.generationApi=async body=>{if(body.action==='history')return {jobs:[]};if(body.action==='capabilities')return {enabled:true,budgetAvailable:false};throw Error('Unexpected mutation');};});
+ await page.evaluate(()=>{Oblako.generationApi=async body=>{if(body.action==='history')return {jobs:[]};if(body.action==='estimate')throw Error('BUDGET_BLOCKED');throw Error('Unexpected mutation');};});
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
- await expect(page.locator('[data-prepare-message]')).toContainText('бюджет');
+ await expect(page.locator('[data-prepare-message]')).toContainText('денежный потолок');
  await page.evaluate(()=>{draftItem.doc.serverJob={id:'22222222-2222-4222-8222-222222222222',basis:'older-version'};draftItem.doc.structure.ch1.text='Мой сохранённый текст';Oblako.generationApi=async()=>({job:{status:'unknown'},parts:[{ordinal:0,id:'ch1',section:'ch1',state:'done',text:'Облачный текст'}]});});
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
  await expect(page.locator('[data-prepare-message]')).toContainText('прежней версии');

@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handler,validatePayload} from '../supabase/functions/studkab-requests/handler.mjs';
 const p={id:'rq-test',t:'Тема',cn:'Контакт',dl:'2026-10-12',fm:{sz:14}};
-const owner={id:'owner',email:'inna_odincova@mail.ru',email_confirmed_at:'2026-01-01'};
-const student={...owner,id:'student',email:'student@example.com'};
+const owner={id:'owner',email:'owner@example.test',email_confirmed_at:'2026-01-01'};
+const student={...owner,id:'student',email:'student@example.test'};
 const request=(body,headers={authorization:'Bearer test'})=>new Request('https://example.test',{method:'POST',headers,body:JSON.stringify(body)});
 test('server validates types, identifiers, dates, formatting and strips unknown keys',()=>{
  for(const bad of [null,[],{...p,id:'bad"'},{...p,cn:''},{...p,t:{}},{...p,dl:'2026-02-31'},{...p,fm:{sz:100}}])assert.throws(()=>validatePayload(bad));
@@ -42,12 +42,12 @@ test('Telegram failure leaves request pending with retry, successful send marks 
 
 test('only confirmed executor can create invitations; invalid email never reaches admin API',async()=>{
  let calls=0;
- const deps={auth:async()=>({id:'s',email:'student@test.ru',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@test.ru'}),invite:async()=>{calls++;return {url:'private'}}};
+ const deps={auth:async()=>({id:'s',email:'student@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),invite:async()=>{calls++;return {url:'private'}}};
  const req=email=>new Request('https://example.test',{method:'POST',headers:{authorization:'Bearer x'},body:JSON.stringify({action:'invite',email})});
- assert.equal((await handler(deps)(req('a@test.ru'))).status,403);assert.equal(calls,0);
- deps.auth=async()=>({id:'o',email:'owner@test.ru',email_confirmed_at:'yes'});
+ assert.equal((await handler(deps)(req('invitee@example.test'))).status,403);assert.equal(calls,0);
+ deps.auth=async()=>({id:'o',email:'owner@example.test',email_confirmed_at:'yes'});
  assert.equal((await handler(deps)(req('bad'))).status,400);assert.equal(calls,0);
- assert.equal((await handler(deps)(req('a@test.ru'))).status,200);assert.equal(calls,1);
+ assert.equal((await handler(deps)(req('invitee@example.test'))).status,200);assert.equal(calls,1);
 });
 
 test('recovery is executor-only and requires explicit identity verification',async()=>{
@@ -79,13 +79,16 @@ test('requirement passport is executor-only and bound to an existing request',as
 });
 
 test('passport validation separates evidence categories and strips unknown fields',async()=>{
- const {validatePassport}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+ const {validatePassport,defaultPassport}=await import('../supabase/functions/studkab-requests/requirements.mjs');
  const passport={title:'Методичка кафедры',summary:'Проверено вручную',secret:'remove',items:[
   {id:'R1',category:'method',required:true,text:'Объём 25–30 страниц',source:'Методичка, с. 7',secret:'remove'},
   {id:'A1',category:'assumption',required:false,text:'Возможно потребуется приложение',source:''}
  ]};
  const clean=validatePassport(passport);assert.equal(clean.secret,undefined);assert.equal(clean.items[0].secret,undefined);assert.equal(clean.items.length,2);
  for(const bad of [null,{items:{}},{items:[{id:'R1',category:'unknown',text:'x'}]},{items:[{id:'R1',category:'method',text:''}]},{items:[{id:'R1',category:'method',text:'x'},{id:'R1',category:'expert',text:'y'}]}])assert.throws(()=>validatePassport(bad));
+ const generated=defaultPassport({k:'Курсовая работа',d:'Экономика',rq:'25 страниц'});
+ assert.deepEqual(generated.items.map(x=>x.id),['WORK_TYPE','DISCIPLINE','STRUCTURE','VOLUME','METHODOLOGY','FORMATTING','SOURCES','CALCULATIONS','ANTIPLAGIARISM','TEACHER']);
+ assert.match(generated.items.find(x=>x.id==='ANTIPLAGIARISM').text,/требуется уточнить/i);
 });
 
 test('saving and approving a passport use server RPC and never trust a student identity',async()=>{
@@ -96,8 +99,17 @@ test('saving and approving a passport use server RPC and never trust a student i
  assert.equal((await app(request({action:'passport-save',id:requestId,student_id:'forged',passport,sourceFingerprint:'abc'}))).status,200);
  assert.equal(calls[1].path,'rpc/studkab_requirement_passport_save');assert.equal(calls[1].body.p_request,requestId);assert.equal(calls[1].body.student_id,undefined);
  assert.equal((await app(request({action:'passport-approve',id:requestId,passportId:'bad',passport}))).status,400);
- assert.equal((await app(request({action:'passport-approve',id:requestId,passportId:'66666666-6666-4666-8666-666666666666',passport}))).status,200);
+ assert.equal((await app(request({action:'passport-approve',id:requestId,passportId:'66666666-6666-4666-8666-666666666666',passport,sourceFingerprint:'a'.repeat(64)}))).status,200);
  assert.equal(calls.at(-1).path,'rpc/studkab_requirement_passport_approve');
+ assert.equal(calls.at(-1).body.p_expected_fingerprint,'a'.repeat(64));
+});
+
+test('an unresolved automatic passport cannot be approved',async()=>{
+ const db=async path=>path.startsWith('studkab_requests?')?[{id:requestId,payload:{k:'Курсовая работа'}}]:[];
+ const app=handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db});
+ const {defaultPassport}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+ const response=await app(request({action:'passport-approve',id:requestId,passportId:'66666666-6666-4666-8666-666666666666',passport:defaultPassport({k:'Курсовая работа'}),sourceFingerprint:'a'.repeat(64)}));
+ assert.equal(response.status,409);
 });
 
 const requestId='11111111-1111-4111-8111-111111111111';

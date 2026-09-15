@@ -54,7 +54,7 @@ export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
    if(['deliver','result','prepare-result','review-result'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
    }
-   if(['passport-get','passport-save','passport-approve'].includes(input.action)){
+   if(['passport-get','passport-ensure','passport-save','passport-approve'].includes(input.action)){
     const r=await requirementAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(raw.length>16000)return json({error:'Заявка слишком большая'},413);

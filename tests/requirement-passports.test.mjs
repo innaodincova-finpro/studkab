@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const sql=fs.readFileSync(new URL('../supabase/migrations/20260914105509_studkab_requirement_passports.sql',import.meta.url),'utf8');
+const gate=fs.readFileSync(new URL('../supabase/migrations/20260915070508_mandatory_passport_generation_limits.sql',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');
 
 test('passport schema is private and callable only through the authenticated server adapter',()=>{
@@ -11,6 +12,14 @@ test('passport schema is private and callable only through the authenticated ser
  assert.match(sql,/security invoker/i);
  assert.match(sql,/revoke all on function[\s\S]+from public,anon,authenticated/i);
  assert.match(sql,/grant execute on function[\s\S]+to service_role/i);
+});
+
+test('generation gate binds approved passport, work limits and temporary total ceiling',()=>{
+ assert.match(gate,/source_fingerprint=coalesce\(p_input->>'material_fingerprint',''\)/i);
+ assert.match(gate,/\('control',100000\),\('coursework',250000\),\('thesis',600000\)/i);
+ assert.match(gate,/temporary_total_microusd\) values\(true,500000\)/i);
+ assert.match(gate,/cost>j\.max_cost_microusd-used/i);
+ assert.match(gate,/least\(b\.limit_microusd,policy\.temporary_total_microusd\)/i);
 });
 
 test('passport versions are request-scoped, immutable in number and approve only unchanged items',()=>{

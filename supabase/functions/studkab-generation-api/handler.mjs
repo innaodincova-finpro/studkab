@@ -1,4 +1,5 @@
 import {expandParts} from './plan.mjs';
+import {reserveMicrousd,MAX_OUTPUT_TOKENS} from '../_shared/deepseek-cost.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store',
  'Access-Control-Allow-Origin':'https://innaodincova-finpro.github.io',
  'Access-Control-Allow-Headers':'authorization,content-type,apikey',
@@ -6,6 +7,14 @@ const headers={'Content-Type':'application/json','Cache-Control':'no-store',
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
 const idPattern=/^[a-zA-Z0-9_-]{1,100}$/;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
+const fingerprint=/^[a-f0-9]{64}$/;
+export function workKind(value){
+ const v=String(value||'').toLowerCase();
+ if(/вкр|выпускн|диплом/.test(v))return 'thesis';
+ if(/курсов/.test(v))return 'coursework';
+ if(/контрольн/.test(v))return 'control';
+ return null;
+}
 export function failure(attempt){
  if(!attempt)return null;
  const code=attempt.detail?.finish_reason==='length'?'OUTPUT_LIMIT':attempt.reason==='LEASE_EXPIRED_AFTER_DISPATCH'?'LEASE_EXPIRED_AFTER_DISPATCH':'RESULT_UNKNOWN';
@@ -13,11 +22,12 @@ export function failure(attempt){
  for(const key of ['prompt_tokens','completion_tokens'])if(Number.isSafeInteger(attempt.detail?.[key])&&attempt.detail[key]>=0&&attempt.detail[key]<=1000000000)out[key]=attempt.detail[key];
  return out;
 }
-export function prepare(input,cost){
- if(typeof input.request!=='string'||!idPattern.test(input.request) || typeof input.system!=='string' || !input.system.trim()
+export function prepare(input,workLimit){
+ if(typeof input.request!=='string'||!uuid.test(input.request) || !fingerprint.test(input.materialFingerprint||'')
+ || typeof input.system!=='string' || !input.system.trim()
  || input.system.length>100000 || !Array.isArray(input.parts) || input.parts.length<1 || input.parts.length>100)
   throw Error('INVALID_INPUT');
- if(!Number.isSafeInteger(cost)||cost<250000||cost>999999999999)throw Error('COST_NOT_CONFIGURED');
+ if(!Number.isSafeInteger(workLimit)||workLimit<1||workLimit>999999999999)throw Error('COST_NOT_CONFIGURED');
  const ids=new Set();
  const validated=input.parts.map(p=>{
   if(!p || typeof p.id!=='string'||!idPattern.test(p.id)||ids.has(p.id)
@@ -27,8 +37,8 @@ export function prepare(input,cost){
   // Ignore all client price, owner, model and URL fields.
   return {id:p.id,prompt:p.prompt,target_chars:p.target_chars};
  });
- const plan=expandParts(validated,cost);
- const snapshot={system:input.system,prompts:{}};
+ const plan=expandParts(validated,workLimit,MAX_OUTPUT_TOKENS);
+ const snapshot={system:input.system,prompts:{},material_fingerprint:input.materialFingerprint};
  for(const part of validated)snapshot.prompts[part.id]=part.prompt;
  for(const part of plan){
   const original=snapshot.prompts[part.section_id];
@@ -36,8 +46,14 @@ export function prepare(input,cost){
   part.prompt=part.prompt.slice(original.length);
   part.prompt_ref=part.section_id;
  }
+ let precedingBytes=0,estimatedTotal=0;
+ for(const part of plan){
+  part.estimated_cost_microusd=reserveMicrousd(input.system,snapshot.prompts[part.prompt_ref]+part.prompt,part.max_output_tokens,precedingBytes);
+  estimatedTotal+=part.estimated_cost_microusd;
+  precedingBytes+=part.target_chars*4+96;
+ }
  if(new TextEncoder().encode(JSON.stringify({input:snapshot,plan})).byteLength>900000)throw Error('INPUT_TOO_BIG');
- return {snapshot,plan};
+ return {snapshot,plan,estimatedTotal};
 }
 export function handler({auth,config,db,settings}){
  return async req=>{
@@ -55,19 +71,34 @@ export function handler({auth,config,db,settings}){
    if(!input||typeof input!=='object'||Array.isArray(input))return reply({error:'INVALID_INPUT'},400);
    if(input.action==='capabilities'){
     const [b]=await db('studkab_gen_budget?id=eq.true&select=limit_microusd,reserved_microusd');
+    const [policy]=await db('studkab_gen_policy?id=eq.true&select=temporary_total_microusd');
     const s=settings();
-    return reply({enabled:s.enabled===true&&Number.isSafeInteger(s.cost)&&s.cost>=250000,
-     budgetAvailable:Number.isSafeInteger(s.cost)&&s.cost>=250000&&!!b&&Number(b.limit_microusd)-Number(b.reserved_microusd)>=s.cost});
+    const remaining=!!b&&!!policy?Math.max(0,Math.min(Number(b.limit_microusd),Number(policy.temporary_total_microusd))-Number(b.reserved_microusd)):0;
+    return reply({enabled:s.enabled===true,budgetAvailable:remaining>0,remainingMicrousd:remaining});
    }
-   if(input.action==='start'){
+   if(input.action==='start'||input.action==='estimate'){
     const s=settings();
     if(!s.enabled)return reply({error:'GENERATION_NOT_CONFIGURED'},503);
-    let prepared;try{prepared=prepare(input,s.cost);}catch(e){return reply({error:e.message},400);}
+    const [requestRow]=await db('studkab_requests?id=eq.'+input.request+'&select=id,payload&limit=1');
+    if(!requestRow)return reply({error:'REQUEST_NOT_FOUND'},404);
+    const kind=workKind(requestRow.payload?.k);
+    if(!kind)return reply({error:'WORK_TYPE_REQUIRED'},409);
+    const [limit]=await db('studkab_gen_limits?work_kind=eq.'+kind+'&select=max_cost_microusd&limit=1');
+    if(!limit)return reply({error:'WORK_LIMIT_NOT_CONFIGURED'},503);
+    let prepared;try{prepared=prepare(input,Number(limit.max_cost_microusd));}catch(e){return reply({error:e.message},400);}
+    const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&status=eq.approved&source_fingerprint=eq.'+input.materialFingerprint+'&select=id,revision,source_fingerprint&order=revision.desc&limit=1');
+    if(!passport)return reply({error:'PASSPORT_REQUIRED'},409);
     const [b]=await db('studkab_gen_budget?id=eq.true&select=limit_microusd,reserved_microusd');
-    if(!b||Number(b.limit_microusd)-Number(b.reserved_microusd)<s.cost)return reply({error:'BUDGET_BLOCKED'},409);
+    const [policy]=await db('studkab_gen_policy?id=eq.true&select=temporary_total_microusd');
+    const remaining=!!b&&!!policy?Math.min(Number(b.limit_microusd),Number(policy.temporary_total_microusd))-Number(b.reserved_microusd):0;
+    if(remaining<=0||prepared.estimatedTotal>Number(limit.max_cost_microusd)||prepared.estimatedTotal>remaining)return reply({error:'BUDGET_BLOCKED'},409);
+    if(input.action==='estimate')return reply({status:'estimate',passportRevision:passport.revision,workKind:kind,
+     maxCostMicrousd:Number(limit.max_cost_microusd),estimatedCostMicrousd:prepared.estimatedTotal,remainingMicrousd:remaining});
     const job=await db('rpc/studkab_gen_start',{p_owner:user.id,p_request:input.request,
-     p_input:prepared.snapshot,p_plan:prepared.plan});
-    return reply({job,status:'queued'});
+     p_input:prepared.snapshot,p_plan:prepared.plan,p_passport:passport.id,p_work_kind:kind,
+     p_max_cost_microusd:Number(limit.max_cost_microusd)});
+    return reply({job,status:'queued',passportRevision:passport.revision,workKind:kind,
+     maxCostMicrousd:Number(limit.max_cost_microusd),estimatedCostMicrousd:prepared.estimatedTotal,remainingMicrousd:remaining});
    }
    if(input.action==='history'){
     if(typeof input.request!=='string'||!idPattern.test(input.request))return reply({error:'INVALID_INPUT'},400);

@@ -46,11 +46,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 17 then
-    raise exception 'Expected 17 STUDKAB tables, found %', table_count;
+  if table_count <> 19 then
+    raise exception 'Expected 19 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 17 then
-    raise exception 'RLS enabled on only % of 17 STUDKAB tables', rls_count;
+  if rls_count <> 19 then
+    raise exception 'RLS enabled on only % of 19 STUDKAB tables', rls_count;
   end if;
 end
 $$;
@@ -61,22 +61,22 @@ declare
 begin
   select count(*) into applied_count
   from supabase_migrations.schema_migrations
-  where version between '20260904195115' and '20260914105509';
+  where version between '20260904195115' and '20260915072854';
 
-  if applied_count <> 14 then
-    raise exception 'Expected 14 restored migrations, found %', applied_count;
+  if applied_count <> 16 then
+    raise exception 'Expected 16 restored migrations, found %', applied_count;
   end if;
 end
 $$;
 
 do $$
 begin
-  if to_regprocedure('public.studkab_gen_start(uuid,text,jsonb,jsonb)') is null
+  if to_regprocedure('public.studkab_gen_start(uuid,text,jsonb,jsonb,uuid,text,bigint)') is null
      or to_regprocedure('public.studkab_gen_claim()') is null
      or to_regprocedure('public.studkab_gen_dispatch(uuid,integer,uuid)') is null
      or to_regprocedure('public.studkab_gen_settle(uuid,integer,uuid,uuid,text,jsonb)') is null
      or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text)') is null
-     or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb)') is null
+     or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text)') is null
      or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null then
     raise exception 'One or more required STUDKAB functions are missing';
   end if;

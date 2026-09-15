@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-13T05:38:06Z",
+  "captured_at": "2026-09-15T07:29:13Z",
   "production_project_ref": "dcpthwmuiodrjepifzsd",
   "note": "SQL SHA-256 is calculated from the exact statement text stored in supabase_migrations.schema_migrations. Later Tochka-only migrations are tracked in PRODUCTION_INVENTORY.md and intentionally not copied into the STUDKAB repository.",
   "migrations": [
@@ -86,6 +86,20 @@
       "name": "studkab_requirement_passports",
       "file": "20260914105509_studkab_requirement_passports.sql",
       "sha256": "73bf94ab6a68665f18e78097b3edf1ea85091c76b1a0d44f206e6a26d0ac2a2e"
+    },
+    {
+      "version": "20260915070508",
+      "name": "mandatory_passport_generation_limits",
+      "file": "20260915070508_mandatory_passport_generation_limits.sql",
+      "sha256": "c4c4eb654cae5b15dd143f74d632e97344f80fdcb2c232c400da9b7b04b1b005"
+    },
+    {
+      "version": "20260915072854",
+      "name": "add_gen_job_passport_index",
+      "file": "20260915072854_add_gen_job_passport_index.sql",
+      "sha256": "04dc5fa62b1b6e8ea82051e8dd953cd2de321325af1070fa31f9f9d8e5334ff0"
     }
+  ],
+  "pending_migrations": [
   ]
 }
