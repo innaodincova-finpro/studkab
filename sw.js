@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v46-security";
+const CACHE = "studkab-v47-budget";
 const SHELL = [
   "./desktop.css?v=1",
   "./",
@@ -36,7 +36,7 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => /^studkab-v[0-9]+(?:-desktop)?$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => /^studkab-v[0-9]+(?:-[a-z0-9-]+)?$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())     // берём управление без перезагрузки
   );
 });
