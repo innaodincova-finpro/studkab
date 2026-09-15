@@ -994,7 +994,7 @@ function openDocBuilder(id){
       if(button.disabled)return;
       if(!window.Oblako||!Oblako.generationApi){message.textContent='Войдите в аккаунт реестра.';return;}
       var visiblePassport=Array.isArray(x.passports)&&x.passports[0];
-      if(!recover&&(!visiblePassport||visiblePassport.status!=='approved')){
+      if(!recover&&(!doc.serverJob||!doc.serverJob.id)&&(!visiblePassport||visiblePassport.status!=='approved')){
         message.textContent='Сначала проверьте и утвердите паспорт текущей версии материалов.';
         return;
       }
