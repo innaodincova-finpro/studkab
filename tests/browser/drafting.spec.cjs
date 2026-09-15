@@ -48,6 +48,7 @@ test('mobile passport is readable and blocks preparation before checking filled 
    {id:'FORMATTING',category:'measurable',required:true,source:'Заявка студента',text:'Оформление: {"fn":"Times New Roman","mb":20,"ml":30,"mr":15,"mt":20,"sp":1.5,"sz":14,"ind":1.25}'},
    {id:'VOLUME',category:'measurable',required:true,source:'Методические требования',text:'Объём: Не указано — требуется уточнить'}
   ];
+  draftItem.requestNumber=draftItem.id;
   draftItem.passports=[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'draft',title:'Паспорт',summary:'',items}];
   Object.values(draftItem.doc.structure).forEach(part=>part.text='Уже заполненный раздел.');
   Oblako.requestApi=async body=>({passports:[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'draft',source_fingerprint:body.sourceFingerprint,title:'Паспорт',summary:'',items}]});
