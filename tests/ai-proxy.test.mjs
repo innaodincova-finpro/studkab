@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import worker from '../worker/ai-proxy.mjs';
 const env={PROXY_TOKEN:'test-only',DEEPSEEK_KEY:'test-key',RATE_MAX:1000,ALLOWED_ORIGIN:'https://innaodincova-finpro.github.io'};
 function request(body,headers={}) {return new Request('https://example.test/',{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Token':'test-only',...headers},body:JSON.stringify(body)});}
-const basic={provider:'deepseek',system:'Инструкция',user:'Материалы',max_tokens:8000};
+const basic={provider:'deepseek',model:'deepseek-flash',system:'Инструкция',user:'Материалы',max_tokens:8000};
 function reply(reason='stop',text='Полный ответ'){return Response.json({choices:[{finish_reason:reason,message:{content:text}}],usage:{prompt_tokens:5,completion_tokens:7}});}
 test('preserves both fields beyond the former 40000-character cut',async t=>{
   let sent;
@@ -74,7 +74,7 @@ test('heartbeat never converts incomplete provider output into success',async t=
   assert.equal(body.text,undefined);
   // Причина обрыва обязана дойти до журнала: без неё расследовать нечего.
   assert.equal(body.detail.reason,'length');
-  assert.equal(body.detail.limit_tokens,8000);
+  assert.equal(body.detail.limit_tokens,4000);
   assert.equal(typeof body.detail.completion_tokens,'number');
 });
 test('failure detail never carries prompts, answers or secrets',async t=>{
@@ -98,15 +98,34 @@ test('client cancellation aborts upstream without retry',async t=>{
   const reader=r.body.getReader();await reader.read();await reader.cancel();
   assert.equal(signal.aborted,true);assert.equal(f.mock.callCount(),1);
 });
-test('explicit modern DeepSeek models route without silently changing legacy models',async t=>{
+test('only the server model is routed and the answer limit matches the reserve',async t=>{
   let sent;
   t.mock.method(globalThis,'fetch',async(url,opts)=>{assert.equal(url,'https://api.deepseek.com/chat/completions');sent=JSON.parse(opts.body);return reply();});
-  for(const model of ['deepseek-chat','deepseek-reasoner','deepseek-flash','deepseek-v4-pro']){
-    const r=await worker.fetch(request({...basic,model,max_tokens:2500}),env);
-    assert.equal(r.status,200);assert.equal(sent.model,model);assert.equal(sent.max_tokens,2500);
-    assert.deepEqual(sent.thinking,model==='deepseek-flash'?{type:'disabled'}:undefined);
-    assert.equal((await r.json()).model,model);
+  const r=await worker.fetch(request({...basic,max_tokens:2500}),env);
+  assert.equal(r.status,200);assert.equal(sent.model,'deepseek-flash');assert.equal(sent.max_tokens,2500);
+  assert.deepEqual(sent.thinking,{type:'disabled'});
+  await worker.fetch(request({...basic,max_tokens:8000}),env);assert.equal(sent.max_tokens,4000);
+  await worker.fetch(request(basic),{...env,MAX_TOKENS:'8000'});assert.equal(sent.max_tokens,4000);
+});
+test('C-051: other providers, expensive models and a missing model never reach a paid service',async t=>{
+  const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});
+  const keys={...env,OPENAI_KEY:'x',ANTHROPIC_KEY:'x',YANDEX_KEY:'x',YANDEX_FOLDER:'x',GIGACHAT_AUTH:'x'};
+  for(const body of [
+    {...basic,model:undefined},
+    {...basic,model:'deepseek-reasoner'},{...basic,model:'deepseek-v4-pro'},{...basic,model:'deepseek-chat'},
+    {...basic,provider:'anthropic',model:'claude-opus-5'},{...basic,provider:'openai',model:'gpt-4.1'},
+    {...basic,provider:'yandex',model:'yandexgpt/latest'},{...basic,provider:'gigachat',model:'GigaChat-Max'}
+  ]){
+    const r=await worker.fetch(request(body),keys);
+    assert.equal(r.status,400,JSON.stringify(body.provider+':'+body.model));
   }
+  assert.equal(f.mock.callCount(),0);
+});
+test('C-051: password of a different length or prefix is rejected',async t=>{
+  const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});
+  for(const token of ['test-onl','test-only-x','','TEST-ONLY'])
+    assert.equal((await worker.fetch(request(basic,{'X-Proxy-Token':token}),env)).status,401);
+  assert.equal(f.mock.callCount(),0);
 });
 test('unknown DeepSeek model blocked before paid dispatch',async t=>{
   const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});

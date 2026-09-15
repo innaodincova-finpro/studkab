@@ -20,3 +20,9 @@ test('all remaining legacy call sites are protected by the fail-closed function'
  assert.match(code,/return Promise\.reject\(new Error\("DIRECT_AI_DISABLED"\)\)/);
  assert.ok((html.match(/askAI\(/g)||[]).length>1);
 });
+
+test('C-051: the registry neither asks for nor keeps the proxy password',()=>{
+ assert.doesNotMatch(html,/id="pxTok"|<label>Пароль посредника/);
+ assert.doesNotMatch(html,/stg\.proxyToken\s*=|proxyToken\s*=\s*keepToken|next\.settings\.proxyToken\s*=/);
+ assert.match(html,/delete D\.settings\.proxyToken; delete D\.settings\.proxyUrl;/);
+});

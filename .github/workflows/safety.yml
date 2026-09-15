@@ -34,6 +34,7 @@ jobs:
         env:
           CHANGE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           CHANGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - run: npm ci
       - run: npm test
       - run: python3 tests/sql_safety.py
         env:
@@ -120,10 +121,8 @@ jobs:
               -v ON_ERROR_STOP=1 -f "$baseline"
           done
           supabase migration up --local
-          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-production-drift.sql
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/reconciliation/studkab-cron.safe.sql
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"             -v ON_ERROR_STOP=1             -f tests/supabase-replay.sql
-      - run: npm ci
       - name: Exclude unused Google Chrome apt repository
         run: |
           # Playwright downloads its own browsers. A broken third-party Chrome

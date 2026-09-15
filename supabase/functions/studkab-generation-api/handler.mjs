@@ -79,6 +79,7 @@ export function handler({auth,config,db,settings}){
    if(input.action==='start'||input.action==='estimate'){
     const s=settings();
     if(!s.enabled)return reply({error:'GENERATION_NOT_CONFIGURED'},503);
+    if(typeof input.request!=='string'||!uuid.test(input.request))return reply({error:'INVALID_INPUT'},400);
     const [requestRow]=await db('studkab_requests?id=eq.'+input.request+'&select=id,payload&limit=1');
     if(!requestRow)return reply({error:'REQUEST_NOT_FOUND'},404);
     const kind=workKind(requestRow.payload?.k);
@@ -104,6 +105,13 @@ export function handler({auth,config,db,settings}){
     if(typeof input.request!=='string'||!idPattern.test(input.request))return reply({error:'INVALID_INPUT'},400);
     const jobs=await db('studkab_gen_jobs?request_id=eq.'+encodeURIComponent(input.request)+'&owner_id=eq.'+encodeURIComponent(user.id)+'&select=id,request_id,version,status,created_at&order=created_at.desc&limit=20');
     return reply({jobs});
+   }
+   if(input.action==='cancel'){
+    // C-051: остановка не зависит от включения генерации и бюджета.
+    if(!uuid.test(input.job||''))return reply({error:'INVALID_JOB'},400);
+    const status=await db('rpc/studkab_gen_cancel',{p_owner:user.id,p_job:input.job});
+    if(status==='not_found')return reply({error:'NOT_FOUND'},404);
+    return reply({job:input.job,status});
    }
    if(input.action==='status'){
     if(!uuid.test(input.job||''))return reply({error:'INVALID_JOB'},400);

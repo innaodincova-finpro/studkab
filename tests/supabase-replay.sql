@@ -77,7 +77,8 @@ begin
      or to_regprocedure('public.studkab_gen_settle(uuid,integer,uuid,uuid,text,jsonb)') is null
      or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text)') is null
      or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text)') is null
-     or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null then
+     or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null
+     or to_regprocedure('public.studkab_gen_cancel(uuid,uuid)') is null then
     raise exception 'One or more required STUDKAB functions are missing';
   end if;
 end
@@ -135,5 +136,29 @@ begin
   end if;
 end
 $cron$;
+
+do $c051$
+begin
+  if (select count(*) from supabase_migrations.schema_migrations
+      where version in ('20260915130000','20260915130100','20260915130200')) <> 3 then
+    raise exception 'C-051 migrations were not applied';
+  end if;
+  if to_regprocedure('public.studkab_gen_maintenance()') is null
+     or to_regprocedure('public.studkab_gen_reconcile_unknown(uuid,bigint,text)') is null then
+    raise exception 'C-051 generation maintenance objects are missing';
+  end if;
+  if has_function_privilege('service_role','public.studkab_gen_reconcile_unknown(uuid,bigint,text)','EXECUTE') then
+    raise exception 'Unknown reconciliation is exposed beyond the administrator';
+  end if;
+  if pg_get_constraintdef((select oid from pg_constraint where conname='studkab_gen_jobs_status_check'))
+     not like '%cancelled%' then
+    raise exception 'Generation jobs cannot be cancelled';
+  end if;
+  if has_function_privilege('authenticated','public.studkab_gen_cancel(uuid,uuid)','EXECUTE')
+     or has_function_privilege('anon','public.studkab_gen_cancel(uuid,uuid)','EXECUTE') then
+    raise exception 'Cancellation is exposed to browser roles';
+  end if;
+end
+$c051$;
 
 select 'PASS: clean migration replay, schema inventory, RLS and cron isolation verified' as result;

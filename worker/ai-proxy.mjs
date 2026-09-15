@@ -1,19 +1,27 @@
-// Посредник реестра. Секреты задаются только в Cloudflare Variables and Secrets.
-// Существующие имена: PROXY_TOKEN, DEEPSEEK_KEY, OPENAI_KEY, ANTHROPIC_KEY,
-// YANDEX_KEY, YANDEX_FOLDER, GIGACHAT_AUTH. ALLOWED_ORIGIN сохраняет прежний смысл.
+// Посредник серверной очереди STUDKAB. Секреты задаются только в Cloudflare
+// Variables and Secrets: PROXY_TOKEN, DEEPSEEK_KEY. ALLOWED_ORIGIN сохраняет прежний смысл.
+// Ключи других поставщиков (OPENAI_KEY, ANTHROPIC_KEY, YANDEX_*, GIGACHAT_AUTH)
+// кодом больше не читаются; их можно удалить в Cloudflare.
 // Лимиты — символы JS, не токены модели. Превышение отклоняется, текст не обрезается.
 const MAX_CONTEXT = 180000;
 const MAX_BODY = 1200000; // UTF-8 bytes; includes JSON escaping and Cyrillic.
+// C-051: посредник обслуживает только серверную очередь STUDKAB. Разрешены один
+// поставщик и одна модель, по которой сервер рассчитывает резерв бюджета.
+// Прочие поставщики отклоняются до обращения к платной модели.
 const ALLOWED = {
-  deepseek: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-flash', 'deepseek-v4-pro'],
-  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'gpt-4.1-mini'],
-  anthropic: ['claude-sonnet-5', 'claude-haiku-4-5-20251001', 'claude-opus-5'],
-  yandex: ['yandexgpt/latest', 'yandexgpt-lite/latest', 'yandexgpt/rc'],
-  gigachat: ['GigaChat', 'GigaChat-Pro', 'GigaChat-Max'],
+  deepseek: ['deepseek-flash'],
 };
+const MAX_OUTPUT = 4000; // совпадает с MAX_OUTPUT_TOKENS серверного резерва
 function modelAllowed(provider, model) {
-  const list = ALLOWED[provider] || [];
-  return list.includes(model) || (provider === 'yandex' && model.startsWith('gpt://') && list.some(m => model.endsWith('/' + m)));
+  return (ALLOWED[provider] || []).includes(model);
+}
+// Сравнение без раннего выхода: время ответа не подсказывает пароль.
+function sameSecret(given, expected) {
+  if (typeof given !== 'string' || typeof expected !== 'string') return false;
+  const a = new TextEncoder().encode(given), b = new TextEncoder().encode(expected);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < b.length; i++) diff |= (a[i] ?? 0) ^ b[i];
+  return diff === 0;
 }
 const hits = new Map();
 function allow(ip, max) {
@@ -100,7 +108,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, {status: 204, headers: cors});
     if (request.method !== 'POST') return json({error: 'POST only'}, 405, cors);
     if (!env.PROXY_TOKEN) return json({error: 'NOTOKEN_SERVER'}, 500, cors);
-    if (request.headers.get('X-Proxy-Token') !== env.PROXY_TOKEN) return json({error: 'TOKEN'}, 401, cors);
+    if (!sameSecret(request.headers.get('X-Proxy-Token'), env.PROXY_TOKEN)) return json({error: 'TOKEN'}, 401, cors);
     const ip = request.headers.get('CF-Connecting-IP') || '?';
     if (!allow(ip, Number(env.RATE_MAX) || 20)) return json({error: 'RATE:proxy'}, 429, cors);
     let raw, body;
@@ -112,9 +120,9 @@ export default {
     const provider = String(body.provider || 'deepseek');
     if (!Object.hasOwn(ALLOWED, provider)) return json({error: 'UNKNOWN_PROVIDER:' + provider}, 400, cors);
     const model = String(body.model || '').trim();
-    if (model && !modelAllowed(provider, model)) return json({error: 'UNKNOWN_MODEL:' + provider}, 400, cors);
+    if (!modelAllowed(provider, model)) return json({error: 'UNKNOWN_MODEL:' + provider}, 400, cors);
     const configuredLimit = Number(env.MAX_TOKENS);
-    const tokenLimit = Number.isFinite(configuredLimit) && configuredLimit >= 100 ? Math.min(Math.floor(configuredLimit), 8000) : 8000;
+    const tokenLimit = Number.isFinite(configuredLimit) && configuredLimit >= 100 ? Math.min(Math.floor(configuredLimit), MAX_OUTPUT) : MAX_OUTPUT;
     const requestedTokens = Number(body.max_tokens);
     const q = {
       provider, model, system: body.system, user: body.user,
@@ -178,51 +186,13 @@ function result(text, tokens, provider, model, detail) {
   return out;
 }
 async function ask(q, env) {
-  switch (q.provider) {
-    case 'deepseek': return openaiLike('https://api.deepseek.com/chat/completions', env.DEEPSEEK_KEY, q.model || 'deepseek-chat', q, 'deepseek');
-    case 'openai': return openaiLike('https://api.openai.com/v1/chat/completions', env.OPENAI_KEY, q.model || 'gpt-4o-mini', q, 'openai');
-    case 'anthropic': return anthropic(env.ANTHROPIC_KEY, q.model || 'claude-sonnet-5', q);
-    case 'yandex': return yandex(env.YANDEX_KEY, env.YANDEX_FOLDER, q.model || 'yandexgpt/latest', q);
-    case 'gigachat': return gigachat(env.GIGACHAT_AUTH, q.model || 'GigaChat', q);
-  }
+  return openaiLike('https://api.deepseek.com/chat/completions', env.DEEPSEEK_KEY, q.model, q, 'deepseek');
 }
 async function openaiLike(url, key, model, q, who) {
   if (!key) throw Error('NOKEY:' + who);
-  const j = await post(url, {'Content-Type':'application/json', Authorization:'Bearer ' + key}, JSON.stringify({...(who === 'deepseek' && model === 'deepseek-flash' ? {thinking:{type:'disabled'}} : {}), model, messages:[{role:'system', content:q.system},{role:'user', content:q.user}], temperature:q.temperature, max_tokens:q.max_tokens}), who, q.signal);
+  const j = await post(url, {'Content-Type':'application/json', Authorization:'Bearer ' + key}, JSON.stringify({thinking:{type:'disabled'}, model, messages:[{role:'system', content:q.system},{role:'user', content:q.user}], temperature:q.temperature, max_tokens:q.max_tokens}), who, q.signal);
   const u = j.usage || {};
   const info = {model, request_id: j?.id, limit_tokens: q.max_tokens, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens};
   complete(j?.choices?.[0]?.finish_reason, ['stop'], who, info);
   return result(j?.choices?.[0]?.message?.content, (u.prompt_tokens || 0) + (u.completion_tokens || 0), who, model, Object.assign({reason: j?.choices?.[0]?.finish_reason}, info));
-}
-async function anthropic(key, model, q) {
-  if (!key) throw Error('NOKEY:anthropic');
-  const j = await post('https://api.anthropic.com/v1/messages', {'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'}, JSON.stringify({model, max_tokens:q.max_tokens, temperature:q.temperature, system:q.system, messages:[{role:'user',content:q.user}]}), 'anthropic', q.signal);
-  const u = j.usage || {};
-  const info = {model, request_id: j?.id, limit_tokens: q.max_tokens, prompt_tokens: u.input_tokens, completion_tokens: u.output_tokens};
-  complete(j.stop_reason, ['end_turn', 'stop_sequence'], 'anthropic', info);
-  const text = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-  return result(text, (u.input_tokens || 0) + (u.output_tokens || 0), 'anthropic', model, Object.assign({reason: j.stop_reason}, info));
-}
-async function yandex(key, folder, model, q) {
-  if (!key || !folder) throw Error('NOKEY:yandex');
-  const modelUri = model.startsWith('gpt://') ? model : 'gpt://' + folder + '/' + model;
-  const j = await post('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {'Content-Type':'application/json',Authorization:'Api-Key ' + key,'x-folder-id':folder}, JSON.stringify({modelUri,completionOptions:{stream:false,temperature:q.temperature,maxTokens:String(q.max_tokens)},messages:[{role:'system',text:q.system},{role:'user',text:q.user}]}), 'yandex', q.signal);
-  const yu = j?.result?.usage || {};
-  const yinfo = {limit_tokens: q.max_tokens, prompt_tokens: Number(yu.inputTextTokens), completion_tokens: Number(yu.completionTokens)};
-  complete(j?.result?.alternatives?.[0]?.status, ['ALTERNATIVE_STATUS_FINAL'], 'yandex', yinfo);
-  return result(j?.result?.alternatives?.[0]?.message?.text, yu.totalTokens, 'yandex', modelUri, Object.assign({reason: j?.result?.alternatives?.[0]?.status}, yinfo));
-}
-let gigaToken = null, gigaExpires = 0;
-async function gigachat(auth, model, q) {
-  if (!auth) throw Error('NOKEY:gigachat');
-  if (!gigaToken || Date.now() > gigaExpires - 60000) {
-    const tj = await post('https://ngw.devices.sberbank.ru:9443/api/v2/oauth', {Authorization:'Basic ' + auth, RqUID:crypto.randomUUID(), 'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'}, 'scope=GIGACHAT_API_PERS', 'gigachat-oauth', q.signal);
-    if (!tj.access_token) throw Error('AUTH:gigachat-oauth');
-    gigaToken = tj.access_token; gigaExpires = Number(tj.expires_at) || (Date.now() + 25 * 60 * 1000);
-  }
-  const j = await post('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {'Content-Type':'application/json',Authorization:'Bearer ' + gigaToken,Accept:'application/json'}, JSON.stringify({model,messages:[{role:'system',content:q.system},{role:'user',content:q.user}],temperature:q.temperature,max_tokens:q.max_tokens}), 'gigachat', q.signal);
-  const gu = j.usage || {};
-  const ginfo = {model, limit_tokens: q.max_tokens, prompt_tokens: gu.prompt_tokens, completion_tokens: gu.completion_tokens};
-  complete(j?.choices?.[0]?.finish_reason, ['stop'], 'gigachat', ginfo);
-  return result(j?.choices?.[0]?.message?.content, gu.total_tokens, 'gigachat', model, Object.assign({reason: j?.choices?.[0]?.finish_reason}, ginfo));
 }
