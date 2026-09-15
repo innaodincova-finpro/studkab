@@ -54,6 +54,7 @@ test('mobile passport is readable and blocks preparation before checking filled 
   window.preparationActions=[];Oblako.generationApi=async body=>{preparationActions.push(body.action);if(body.action==='history')return {jobs:[]};throw Error('Paid action is forbidden');};
   openId=draftItem.id;render();
  });
+ await page.getByText('Требования и материалы',{exact:true}).click();
  await expect(page.getByText('Паспорт не утверждён — платная подготовка запрещена.',{exact:false})).toBeVisible();
  await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
  await expect(page.getByText(/шрифт Times New Roman, 14 пт/)).toBeVisible();
