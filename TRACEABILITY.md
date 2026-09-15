@@ -822,3 +822,10 @@ M8/M10/M12. По результату проверки C-048 на физичес
 Локально пройдены 173/173 Node-теста и `git diff --check`. Browser-проверка
 остаётся обязательной в GitHub Safety. Supabase, данные и DeepSeek не изменены;
 платных запросов не было.
+# C-050 — трассировка обязательных проверок содержания
+
+| Требование | Реализация | Проверка |
+|---|---|---|
+| Все источники утверждённого паспорта отражены в библиографии | `draft-quality.js: sourceCheck` | `approved passport sources must all appear in bibliography` |
+| Однословный обрывок не проходит готовность | `draft-quality.js: proseIntegrity`, `draft-editor.js: check` | `one-word prose fragment blocks readiness` |
+| Обновление доходит до мобильного ярлыка | версии ресурсов и новый cache namespace в `reestr.html`, `sw.js` | Safety + браузерная приёмка после публикации |

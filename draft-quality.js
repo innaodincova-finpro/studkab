@@ -52,7 +52,27 @@
   inList.forEach(function(n){
    if(used.indexOf(n)<0)errors.push('Источник [S'+n+'] есть в списке, но ни разу не использован в тексте.');
   });
+  var passport=Array.isArray(x.passports)&&x.passports[0],required=[];
+  if(passport&&passport.status==='approved')((passport.items)||[]).forEach(function(item){
+   if(String(item.id||'').toUpperCase()!=='SOURCES'||/не\s+требу/i.test(item.text||''))return;
+   String(item.text||'').replace(/^Источники\s*:\s*/i,'').split(/[;\n]+/).map(function(v){return v.trim();}).filter(function(v){return v.length>=5&&!/не\s+указано|требуется\s+уточнить/i.test(v);}).forEach(function(v){required.push(v);});
+  });
+  function sourceKey(v){return String(v).toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').split(/\s+/).filter(function(w){return w.length>=4||/^\d{4}$/.test(w);});}
+  var available=[list,String(((x.doc||{}).structure||{}).refs&&((x.doc||{}).structure||{}).refs.text||'')].join('\n').toLowerCase();
+  required.forEach(function(label){var keys=sourceKey(label),matches=keys.filter(function(key){return available.indexOf(key)>=0;});if(keys.length&&matches.length<Math.min(2,keys.length))errors.push('Источник из утверждённого паспорта не найден в списке литературы: '+label+'.');});
   return {inList:inList,used:used,errors:Array.from(new Set(errors))};
+ }
+ function proseIntegrity(x){
+  var d=x.doc||{},errors=[];
+  (d.order||[]).forEach(function(c){
+   if(c.id==='refs')return;
+   var text=String(((d.structure||{})[c.id]||{}).text||'').replace(/^\s*\|.*\|\s*$/gm,' ');
+   text.split(/(?<=[.!?…])\s+/).forEach(function(sentence){
+    var clean=sentence.replace(/\[S\s*\d+\]/gi,'').trim(),words=clean.match(/[\p{L}\p{N}]+/gu)||[];
+    if(words.length===1&&clean.length>2)errors.push('Раздел «'+c.name+'»: найдено оборванное или бессодержательное предложение «'+clean+'».');
+   });
+  });
+  return {errors:Array.from(new Set(errors))};
  }
  // R5. Согласованность разделов между собой.
  function consistency(x){
@@ -270,6 +290,6 @@
  }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={consistency:consistency,sourceCheck:sourceCheck,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={consistency:consistency,sourceCheck:sourceCheck,proseIntegrity:proseIntegrity,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);
