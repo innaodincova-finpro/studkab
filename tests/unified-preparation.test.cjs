@@ -19,8 +19,9 @@ test('unified preparation has one final Word output', () => {
 
 test('a lost job is searched before a new paid start', () => {
   const history = html.indexOf("action:'history'");
-  const capabilities = html.indexOf("action:'capabilities'", history);
-  const start = html.indexOf("action:'start'", capabilities);
-  assert.ok(history > -1 && capabilities > history && start > capabilities);
+  const estimate = html.indexOf("action:'estimate'", history);
+  const start = html.indexOf("action:'start'", estimate);
+  assert.ok(history > -1 && estimate > history && start > estimate);
+  assert.match(html,/Проверьте суммы и нажмите кнопку ещё раз/);
   assert.match(html, /Paid Start|Автоматический повтор заблокирован/);
 });

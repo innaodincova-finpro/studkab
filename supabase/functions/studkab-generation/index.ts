@@ -3,6 +3,7 @@ import {checkReserve} from './reserve.mjs';
 import {withContext} from './context.mjs';
 import {machineAuthorization} from './auth.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const anonKey=Deno.env.get('SUPABASE_ANON_KEY');
 const token=Deno.env.get('STUDKAB_PROXY_TOKEN');
 const enabled=Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true';
 async function db(path:string,body?:unknown,method?:string){
@@ -16,7 +17,7 @@ async function provider(c:any,id:string){
  const r=await fetch('https://calm-bird-dae8.bf6mhynzgm.workers.dev',{
  method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Token':token!},
  body:JSON.stringify({provider:'deepseek',model:'deepseek-flash',system:c.input.system,
- user:c.spec.prompt,max_tokens:8000,temperature:0.4,client_request_id:id}),
+ user:c.spec.prompt,max_tokens:c.spec.max_output_tokens,temperature:0.4,client_request_id:id}),
  signal:AbortSignal.timeout(120000)});
  const value=await r.json();
  // Preserve safe provider diagnostics without treating an HTTP error as completion.
@@ -25,10 +26,10 @@ async function provider(c:any,id:string){
 }
 Deno.serve(handler({
  // Gateway JWT verification remains enabled; a user JWT is insufficient here.
- authorize:async(req:Request)=>machineAuthorization(req,{serviceKey:key,anonKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjcHRod211aW9kcmplcGlmenNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1NDQzMTQsImV4cCI6MjEwNDEyMDMxNH0.m2q95-t6bM36I_uhJE3HYOABfdhbYoCPF0U_OsWAprY'}),
+ authorize:async(req:Request)=>machineAuthorization(req,{serviceKey:key,anonKey}),
  config:async()=>(await db('studkab_request_config?id=eq.true&select=cron_token'))[0],
  rpc:(name:string,args:unknown)=>db('rpc/'+name,args),
- prepare:async(c:any)=>withContext(checkReserve(c),await db('studkab_gen_parts?job_id=eq.'+c.job_id+'&ordinal=lt.'+c.ordinal+'&select=ordinal,state,result&order=ordinal.asc')),
+ prepare:async(c:any)=>checkReserve(withContext(c,await db('studkab_gen_parts?job_id=eq.'+c.job_id+'&ordinal=lt.'+c.ordinal+'&select=ordinal,state,result&order=ordinal.asc'))),
  failClaim:async(c:any)=>{
   const rows=await db('studkab_gen_parts?job_id=eq.'+c.job_id+'&ordinal=eq.'+c.ordinal+'&claim=eq.'+c.claim+'&state=eq.claimed&lease_until=gt.'+encodeURIComponent(new Date().toISOString()),{state:'unknown'},'PATCH');
   if(!rows?.length)throw Error('STALE_CLAIM');

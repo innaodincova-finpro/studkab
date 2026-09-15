@@ -25,16 +25,42 @@ export function validatePassport(input){
  };
 }
 
+export function defaultPassport(payload={}){
+ const value=(v,missing='Не указано — требуется уточнить')=>typeof v==='string'&&v.trim()?v.trim():missing;
+ const format=payload.fm&&typeof payload.fm==='object'?payload.fm:{};
+ const formatting=Object.keys(format).length?JSON.stringify(format):'Не указано — требуется уточнить';
+ return {title:'Паспорт требований к работе',summary:'Автоматически создан по заявке. Перед запуском проверьте, дополните и утвердите каждый пункт.',items:[
+  {id:'WORK_TYPE',category:'method',required:true,text:'Вид работы: '+value(payload.k),source:'Заявка студента'},
+  {id:'DISCIPLINE',category:'method',required:true,text:'Дисциплина: '+value(payload.d),source:'Заявка студента'},
+  {id:'STRUCTURE',category:'method',required:true,text:'Структура: '+value(payload.mn),source:'Методические требования'},
+  {id:'VOLUME',category:'measurable',required:true,text:'Объём: Не указано — требуется уточнить',source:'Методические требования'},
+  {id:'METHODOLOGY',category:'expert',required:true,text:'Методология: '+value(payload.mn),source:'Методические требования'},
+  {id:'FORMATTING',category:'measurable',required:true,text:'Оформление: '+formatting,source:'Заявка студента'},
+  {id:'SOURCES',category:'method',required:true,text:'Источники: Не указано — требуется уточнить',source:'Методические требования'},
+  {id:'CALCULATIONS',category:'expert',required:true,text:'Расчёты: '+value(payload.org),source:'Заявка и материалы'},
+  {id:'ANTIPLAGIARISM',category:'measurable',required:true,text:'Система и порог оригинальности: Не указано — требуется уточнить',source:'Требования вуза'},
+  {id:'TEACHER',category:'method',required:true,text:'Условия преподавателя: '+value(payload.rq),source:'Заявка студента'}
+ ]};
+}
+
 export async function requirementAction(input,user,{db,config}){
  const cfg=await config();
  if((user.email||'').toLowerCase()!==(cfg.executor_email||'').toLowerCase())return {status:403,data:{error:'Паспорт требований доступен только исполнителю'}};
  const request=typeof input.id==='string'&&/^[a-f0-9-]{36}$/.test(input.id)?input.id:null;
  if(!request)return {status:400,data:{error:'Неверный номер заявки'}};
- const [row]=await db('studkab_requests?select=id&limit=1&id=eq.'+request);
+ const [row]=await db('studkab_requests?select=id,payload&limit=1&id=eq.'+request);
  if(!row)return {status:404,data:{error:'Заявка не найдена'}};
  if(input.action==='passport-get'){
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   return {status:200,data:{passports:rows}};
+ }
+ if(input.action==='passport-ensure'){
+  if(!/^[a-f0-9]{64}$/.test(input.sourceFingerprint||''))return {status:400,data:{error:'Сначала сохраните актуальные материалы'}};
+  const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
+  if(rows.length&&rows[0].source_fingerprint===input.sourceFingerprint)return {status:200,data:{passports:rows,created:false}};
+  const passport=rows.length?{title:rows[0].title,summary:'Материалы изменились. Проверьте новую версию перед утверждением.',items:rows[0].items}:defaultPassport(row.payload);
+  const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_source_fingerprint:input.sourceFingerprint});
+  return {status:200,data:{passports:[created].concat(rows),created:true}};
  }
  let passport;
  try{passport=validatePassport(input.passport);}catch(e){return {status:400,data:{error:e.message}};}
@@ -45,7 +71,9 @@ export async function requirementAction(input,user,{db,config}){
  if(input.action==='passport-approve'){
   const version=typeof input.passportId==='string'&&/^[a-f0-9-]{36}$/.test(input.passportId)?input.passportId:null;
   if(!version)return {status:400,data:{error:'Выберите версию паспорта'}};
-  const result=await db('rpc/studkab_requirement_passport_approve','POST',{p_request:request,p_passport:version,p_actor:user.id,p_expected_items:passport.items});
+  if(passport.items.some(item=>item.required&&/не указано|требуется уточнить/i.test(item.text)))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
+  const expected=text(input.sourceFingerprint,128,'версию материалов',true);
+  const result=await db('rpc/studkab_requirement_passport_approve','POST',{p_request:request,p_passport:version,p_actor:user.id,p_expected_items:passport.items,p_expected_fingerprint:expected});
   return {status:200,data:{passport:result}};
  }
  return {status:400,data:{error:'Неизвестное действие'}};

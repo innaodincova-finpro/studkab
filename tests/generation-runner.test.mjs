@@ -53,6 +53,13 @@ test('budget refusal never invokes provider',async()=>{
 });
 
 import {machineAuthorization} from '../supabase/functions/studkab-generation/auth.mjs';
+import {readFileSync} from 'node:fs';
+
+test('runner reads the public gateway key from environment instead of embedding a project JWT',()=>{
+ const source=readFileSync(new URL('../supabase/functions/studkab-generation/index.ts',import.meta.url),'utf8');
+ assert.match(source,/Deno\.env\.get\('SUPABASE_ANON_KEY'\)/);
+ assert.doesNotMatch(source,/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+});
 test('scheduler accepts only configured project bearer; arbitrary user JWT is rejected',()=>{
  const check=token=>machineAuthorization(new Request('https://internal',{headers:{Authorization:'Bearer '+token}}),{serviceKey:'service-test',anonKey:'project-test'});
  assert.equal(check('project-test'),true);assert.equal(check('service-test'),true);assert.equal(check('user-jwt'),false);
@@ -92,6 +99,7 @@ test('oversized context stops before dispatch and provider',async()=>{
 
 test('test runner refuses underfunded immutable parts before dispatch',async()=>{
  const {checkReserve}=await import('../supabase/functions/studkab-generation/reserve.mjs');
- for(const value of [undefined,0,249999,'250000',NaN])assert.throws(()=>checkReserve({spec:{max_cost_microusd:value}}));
- const c={spec:{max_cost_microusd:250000}};assert.equal(checkReserve(c),c);
+ const base={input:{system:'facts'},spec:{prompt:'write',max_output_tokens:4000}};
+ for(const value of [undefined,0,7000,'250000',NaN])assert.throws(()=>checkReserve({...base,spec:{...base.spec,max_cost_microusd:value}}));
+ const c={...base,spec:{...base.spec,max_cost_microusd:10000}};assert.equal(checkReserve(c),c);
 });
