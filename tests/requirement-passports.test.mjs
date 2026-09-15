@@ -32,7 +32,8 @@ test('passport versions are request-scoped, immutable in number and approve only
 
 test('executor UI keeps four evidence categories separate and exposes no automatic AI action',()=>{
  for(const label of ['Требование методички','Измеримая проверка','Предметная рекомендация','Предположение'])assert.match(ui,new RegExp(label));
- assert.match(ui,/Сохранить проект паспорта/);
+ assert.match(ui,/Сохранить уточнения/);
+ assert.match(ui,/Повторно вводить остальные данные не нужно/);
  assert.match(ui,/Утвердить/);
  assert.doesNotMatch(ui,/data-act="passport-auto-approve"/);
 });
