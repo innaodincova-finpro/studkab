@@ -65,7 +65,11 @@ test('mobile passport is readable and blocks preparation before checking filled 
  await expect(page.locator('#fab')).toBeHidden();
  await expect(page.locator('.workflow-next')).toContainText('Нужно уточнить требования');
  await page.locator('.workflow-next').getByRole('button',{name:'Уточнить требования',exact:true}).click();
- await expect(page.locator('.sheet').getByRole('heading',{name:'Уточнить требования'})).toBeVisible();
+ const passportSheet=page.locator('.sheet');
+ await expect(passportSheet.getByRole('heading',{name:'Уточнить требования'})).toBeVisible();
+ await expect(passportSheet.locator('textarea')).toHaveCount(1);
+ await expect(passportSheet.getByText('Объём · Методические требования',{exact:true})).toBeVisible();
+ await expect(passportSheet.getByText('Оформление · Заявка студента',{exact:true})).toHaveCount(0);
  await page.keyboard.press('Escape');
  await page.evaluate(()=>openDocBuilder(draftItem.id));
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
