@@ -71,12 +71,12 @@ $$;
 
 do $$
 begin
-  if to_regprocedure('public.studkab_gen_start(uuid,text,jsonb,jsonb)') is null
+  if to_regprocedure('public.studkab_gen_start(uuid,text,jsonb,jsonb,uuid,text,bigint)') is null
      or to_regprocedure('public.studkab_gen_claim()') is null
      or to_regprocedure('public.studkab_gen_dispatch(uuid,integer,uuid)') is null
      or to_regprocedure('public.studkab_gen_settle(uuid,integer,uuid,uuid,text,jsonb)') is null
      or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text)') is null
-     or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb)') is null
+     or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text)') is null
      or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null then
     raise exception 'One or more required STUDKAB functions are missing';
   end if;
