@@ -62,11 +62,26 @@ test('mobile passport is readable and blocks preparation before checking filled 
  await expect(page.getByText(/\{"fn"/)).toHaveCount(0);
  const passportItem=page.locator('.passport-item').first();
  expect(await passportItem.evaluate(el=>getComputedStyle(el).display)).toBe('block');
- await page.getByRole('button',{name:'Документ',exact:true}).click();
+ await expect(page.locator('#fab')).toBeHidden();
+ await expect(page.locator('.workflow-next')).toContainText('Нужно уточнить требования');
+ await page.locator('.workflow-next').getByRole('button',{name:'Уточнить требования',exact:true}).click();
+ await expect(page.locator('.sheet').getByRole('heading',{name:'Уточнить требования'})).toBeVisible();
+ await page.keyboard.press('Escape');
+ await page.evaluate(()=>openDocBuilder(draftItem.id));
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
  await expect(page.locator('[data-prepare-message]')).toContainText('утвердите паспорт');
  await expect(page.locator('[data-prepare-message]')).not.toContainText('Все разделы уже заполнены');
  expect(await page.evaluate(()=>preparationActions)).toEqual([]);
+});
+
+test('request card shows one next action for an approved passport',async({page})=>{
+ await setup(page);await page.keyboard.press('Escape');
+ await page.evaluate(()=>{draftItem.requestNumber=draftItem.id;openId=draftItem.id;render();});
+ await expect(page.locator('#fab')).toBeHidden();
+ await expect(page.locator('.workflow-next')).toContainText('Требования утверждены');
+ await expect(page.locator('.workflow-next').getByRole('button',{name:'Подготовить работу',exact:true})).toBeVisible();
+ await page.locator('.workflow-next').getByRole('button',{name:'Подготовить работу',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
 });
 
 test('technical aborted fetch is not shown to the user',async({page})=>{

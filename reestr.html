@@ -185,6 +185,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .passport-item span{color:var(--mut);font-size:11px}
 .passport-item b{margin-top:5px;font-weight:500;line-height:1.45}
 .passport-warning{margin:12px 0 0}
+.workflow-next{border-color:var(--accent);padding:16px}
+.workflow-next .workflow-title{font-size:17px;font-weight:600;margin:0 0 5px}
+.workflow-next .workflow-copy{color:var(--mut);font-size:13px;line-height:1.45;margin:0 0 12px}
+.workflow-next .btn{width:100%}
 .switch{display:flex;background:var(--bar-bg);border-radius:12px;padding:3px;margin-bottom:12px}
 .switch button{flex:1;border:0;background:transparent;padding:9px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;color:var(--mut)}
 .switch button[aria-selected="true"]{background:#fff;color:var(--accent);box-shadow:0 4px 12px var(--card-sh)}
@@ -1761,8 +1765,7 @@ function render(){
     fab.innerHTML = '<i aria-hidden="true">＋</i><span>Вуз</span>';
   }
   else if (openId){
-    fab.hidden = false; fab.setAttribute("data-act","doc-open"); fab.setAttribute("data-id", openId);
-    fab.innerHTML = '<i aria-hidden="true">✎</i><span>Документ</span>';
+    fab.hidden = true; fab.removeAttribute("data-act"); fab.removeAttribute("data-id");
   } else {
     fab.hidden = false; fab.setAttribute("data-act","paste"); fab.removeAttribute("data-id");
     fab.innerHTML = '<i aria-hidden="true">＋</i><span>Из текста</span>';
@@ -1836,6 +1839,17 @@ function viewList(){
 var PASSPORT_CATEGORY={method:'Требование методички',measurable:'Измеримая проверка',expert:'Предметная рекомендация',assumption:'Предположение'};
 var PASSPORT_ITEM_LABEL={WORK_TYPE:'Вид работы',DISCIPLINE:'Дисциплина',STRUCTURE:'Структура',VOLUME:'Объём',METHODOLOGY:'Методология',FORMATTING:'Оформление',SOURCES:'Источники',CALCULATIONS:'Расчёты',ANTIPLAGIARISM:'Оригинальность',TEACHER:'Условия преподавателя'};
 function passportUnresolved(p){return ((p&&p.items)||[]).filter(function(q){return q.required!==false&&/не указано|требуется уточнить/i.test(q.text||'');});}
+function requestWorkflow(x){
+ var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[];
+ if(!p)return {step:1,title:'Сначала проверьте требования',copy:'Приложение соберёт паспорт работы по заявке и приложенным материалам. Платного запуска не будет.',action:'passport-load',label:'Проверить требования'};
+ if(p.status!=='approved'&&unresolved.length)return {step:1,title:'Нужно уточнить требования',copy:'Не заполнено: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', ')+'. После уточнения паспорт можно будет утвердить.',action:'passport-edit',label:'Уточнить требования'};
+ if(p.status!=='approved')return {step:1,title:'Требования заполнены',copy:'Проверьте паспорт и утвердите его. До утверждения платная подготовка запрещена.',action:'passport-approve',label:'Утвердить паспорт'};
+ if(x.doc&&x.doc.serverJob&&x.doc.serverJob.id)return {step:2,title:'Подготовка уже сохранена',copy:'Откройте работу, чтобы увидеть состояние и продолжить с места остановки.',action:'doc-open',label:'Продолжить подготовку'};
+ var hasText=!!(x.doc&&(x.doc.order||[]).some(function(c){return String(((x.doc.structure||{})[c.id]||{}).text||'').trim();}));
+ if(hasText)return {step:2,title:'Текст подготовлен',copy:'Откройте работу для проверки, доработки и сохранения Word.',action:'doc-open',label:'Проверить работу'};
+ return {step:2,title:'Требования утверждены',copy:'Следующий шаг — проверить стоимость и только после отдельного подтверждения запустить подготовку.',action:'doc-open',label:'Подготовить работу'};
+}
+function workflowCard(x){var w=requestWorkflow(x);return card(lab('Следующий шаг · '+w.step+' из 3')+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p><button type="button" class="btn" data-act="'+w.action+'" data-id="'+esc(x.id)+'">'+esc(w.label)+'</button>','workflow-next');}
 function passportFormatText(f){
  function val(longKey,shortKey){return f[longKey]!=null?f[longKey]:f[shortKey];}
  var parts=[],font=val('font','fn'),size=val('size','sz');
@@ -1885,8 +1899,9 @@ async function requireApprovedPassport(x){
 function editPassport(x){
  var p=(x.passports||[])[0]||{},items=Array.isArray(p.items)?p.items:[];
  function lines(category){return items.filter(function(q){return q.category===category;}).map(function(q){return q.text;}).join('\n');}
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Паспорт требований</h3><p class="hint">Каждое требование пишите с новой строки. Предположение не считается подтверждённым фактом.</p><div class="fld"><label>Название</label><input id="ppTitle" value="'+esc(p.title||'Требования к работе')+'"></div><div class="fld"><label>Краткое пояснение</label><textarea id="ppSummary">'+esc(p.summary||'')+'</textarea></div>'+Object.keys(PASSPORT_CATEGORY).map(function(k){return '<div class="fld"><label>'+PASSPORT_CATEGORY[k]+'</label><textarea data-pp="'+k+'">'+esc(lines(k))+'</textarea></div>';}).join('')+'<div class="fld"><label>Источник</label><input id="ppSource" placeholder="Например: методичка, с. 7"></div><button type="button" class="btn" data-pp-save="1">Сохранить проект паспорта</button>');
- wrap.addEventListener('click',async function(e){if(!e.target.closest('[data-pp-save]'))return;var button=e.target.closest('[data-pp-save]'),all=[],n=0,source=wrap.querySelector('#ppSource').value.trim();wrap.querySelectorAll('[data-pp]').forEach(function(area){area.value.split(/\n+/).map(function(s){return s.trim();}).filter(Boolean).forEach(function(value){n++;all.push({id:'P'+n,category:area.dataset.pp,required:area.dataset.pp!=='assumption',text:value,source:source});});});if(!all.length)return toast('Добавьте хотя бы одно требование');button.disabled=true;try{var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:wrap.querySelector('#ppTitle').value,summary:wrap.querySelector('#ppSummary').value,items:all},sourceFingerprint:await passportFingerprint(x)});x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));wrap.remove();render();toast('Проект паспорта сохранён');}catch(err){toast(err.message||'Не удалось сохранить паспорт');}finally{button.disabled=false;}});
+ var fields=items.length?items.map(function(q,n){var unresolved=/не указано|требуется уточнить/i.test(q.text||'');return '<div class="fld"><label>'+esc(PASSPORT_ITEM_LABEL[q.id]||PASSPORT_CATEGORY[q.category]||'Требование')+(q.source?' · '+esc(q.source):'')+'</label><textarea data-pp-item="'+n+'"'+(unresolved?' class="needs-value"':'')+'>'+esc(q.text||'')+'</textarea>'+(unresolved?'<small>Замените слова «не указано» конкретным требованием. Если требования нет, так и напишите: «не требуется».</small>':'')+'</div>';}).join(''):Object.keys(PASSPORT_CATEGORY).map(function(k){return '<div class="fld"><label>'+PASSPORT_CATEGORY[k]+'</label><textarea data-pp="'+k+'">'+esc(lines(k))+'</textarea></div>';}).join('');
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Уточнить требования</h3><p class="hint">Исправьте только пункты, выделенные как неуточнённые. Повторно вводить остальные данные не нужно.</p>'+fields+'<button type="button" class="btn" data-pp-save="1">Сохранить уточнения</button>');
+ wrap.addEventListener('click',async function(e){if(!e.target.closest('[data-pp-save]'))return;var button=e.target.closest('[data-pp-save]'),all=[];if(items.length){wrap.querySelectorAll('[data-pp-item]').forEach(function(area){var original=items[Number(area.dataset.ppItem)]||{};all.push(Object.assign({},original,{text:area.value.trim()}));});}else{var n=0;wrap.querySelectorAll('[data-pp]').forEach(function(area){area.value.split(/\n+/).map(function(s){return s.trim();}).filter(Boolean).forEach(function(value){n++;all.push({id:'P'+n,category:area.dataset.pp,required:area.dataset.pp!=='assumption',text:value,source:''});});});}if(!all.length||all.some(function(q){return !q.text;}))return toast('Заполните все обязательные пункты');button.disabled=true;try{var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:p.title||'Требования к работе',summary:p.summary||'',items:all},sourceFingerprint:await passportFingerprint(x)});x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));wrap.remove();render();toast('Уточнения сохранены. Проверьте следующий шаг.');}catch(err){toast(err.message||'Не удалось сохранить требования');}finally{button.disabled=false;}});
 }
 
 function viewItem(id){
@@ -1918,6 +1933,8 @@ function viewItem(id){
 
   h += card(lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
     row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group));
+
+  if(x.requestNumber) h += workflowCard(x);
 
   var requirements = row("Требования", x.requirements) + row("Организация", x.org) + row("Методичка", x.methodNotes) +
     row("Факультет", x.faculty) + row("Кафедра", x.kafedra) + row("Направление", x.program) + row("Форма", x.form) +
