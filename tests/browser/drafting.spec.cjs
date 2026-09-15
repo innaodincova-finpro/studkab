@@ -1,5 +1,5 @@
 const {test,expect}=require('@playwright/test');
-async function setup(page){await page.goto('http://127.0.0.1:4173/reestr.html');await page.evaluate(()=>QA.switchUser('draft-editor'));await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);await page.evaluate(()=>{const x=fromPayload({id:'33333333-3333-4333-8333-333333333333',t:'Анализ финансового состояния предприятия',k:'Курсовая работа',n:'Тест'});x.topic='Анализ финансового состояния предприятия';x.group='Э-1';D.items.push(x);window.draftItem=x;docOf(x);aiReady=()=>true;window.calls=[];window.actualAskAI=askAI;askAI=async(p,s,u)=>{calls.push({s,u});return{text:'Содержательный текст раздела на основе предоставленных материалов.',tokens:1};};openDocBuilder(x.id);});}
+async function setup(page){await page.goto('http://127.0.0.1:4173/reestr.html');await page.evaluate(()=>QA.switchUser('draft-editor'));await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);await page.evaluate(()=>{const x=fromPayload({id:'33333333-3333-4333-8333-333333333333',t:'Анализ финансового состояния предприятия',k:'Курсовая работа',n:'Тест'});x.topic='Анализ финансового состояния предприятия';x.group='Э-1';D.items.push(x);window.draftItem=x;docOf(x);aiReady=()=>true;window.calls=[];window.actualAskAI=askAI;askAI=async(p,s,u)=>{calls.push({s,u});return{text:'Содержательный текст раздела на основе предоставленных материалов.',tokens:1};};Oblako.requestApi=async body=>{if(body.action!=='passport-ensure')throw Error('Unexpected request action');return {passports:[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'approved',source_fingerprint:body.sourceFingerprint,title:'Требования',summary:'',items:[]}]};};openDocBuilder(x.id);});}
 async function fill(page){await page.getByText('Материалы для подготовки',{exact:true}).click();await page.locator('#draft-organization').fill('Учебная организация');await page.locator('#draft-period').fill('2024–2025');await page.locator('#draft-requirements').fill('Проанализировать ликвидность и структуру финансирования');await page.locator('#draft-materials').fill('Проверенные данные учебного примера. Ограничение: причина изменений неизвестна.');await page.locator('#draft-sources').fill('OpenStax. Financial Statement Analysis. https://openstax.org/books/principles-financial-accounting/pages/a-financial-statement-analysis');await page.locator('#draft-finance').fill('2024;100;60;40;20;40;150;15\n2025;120;70;50;30;40;180;18');}
 test('section image survives editor refresh and can be removed',async({page})=>{
  await setup(page);
@@ -38,6 +38,33 @@ test('one preparation control starts a saved server job',async({page})=>{
  await expect(page.getByRole('button',{name:'Продолжить подготовку',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>preparationActions)).toEqual(['history','estimate','history','start']);
  expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
+});
+
+test('mobile passport is readable and blocks preparation before checking filled sections',async({page})=>{
+ await setup(page);await page.setViewportSize({width:390,height:844});
+ await page.keyboard.press('Escape');
+ await page.evaluate(()=>{
+  const items=[
+   {id:'FORMATTING',category:'measurable',required:true,source:'Заявка студента',text:'Оформление: {"fn":"Times New Roman","mb":20,"ml":30,"mr":15,"mt":20,"sp":1.5,"sz":14,"ind":1.25}'},
+   {id:'VOLUME',category:'measurable',required:true,source:'Методические требования',text:'Объём: Не указано — требуется уточнить'}
+  ];
+  draftItem.passports=[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'draft',title:'Паспорт',summary:'',items}];
+  Object.values(draftItem.doc.structure).forEach(part=>part.text='Уже заполненный раздел.');
+  Oblako.requestApi=async body=>({passports:[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'draft',source_fingerprint:body.sourceFingerprint,title:'Паспорт',summary:'',items}]});
+  window.preparationActions=[];Oblako.generationApi=async body=>{preparationActions.push(body.action);if(body.action==='history')return {jobs:[]};throw Error('Paid action is forbidden');};
+  openId=draftItem.id;render();
+ });
+ await expect(page.getByText('Паспорт не утверждён — платная подготовка запрещена.',{exact:false})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
+ await expect(page.getByText(/шрифт Times New Roman, 14 пт/)).toBeVisible();
+ await expect(page.getByText(/\{"fn"/)).toHaveCount(0);
+ const passportItem=page.locator('.passport-item').first();
+ expect(await passportItem.evaluate(el=>getComputedStyle(el).display)).toBe('block');
+ await page.getByRole('button',{name:'Документ',exact:true}).click();
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('утвердите паспорт');
+ await expect(page.locator('[data-prepare-message]')).not.toContainText('Все разделы уже заполнены');
+ expect(await page.evaluate(()=>preparationActions)).toEqual(['history']);
 });
 
 test('server preparation continues after reopening the document',async({page})=>{
