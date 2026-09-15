@@ -76,7 +76,7 @@ test('mobile passport is readable and blocks preparation before checking filled 
 
 test('request card shows one next action for an approved passport',async({page})=>{
  await setup(page);await page.keyboard.press('Escape');
- await page.evaluate(()=>{openId=draftItem.id;render();});
+ await page.evaluate(()=>{draftItem.requestNumber=draftItem.id;openId=draftItem.id;render();});
  await expect(page.locator('#fab')).toBeHidden();
  await expect(page.locator('.workflow-next')).toContainText('Требования утверждены');
  await expect(page.locator('.workflow-next').getByRole('button',{name:'Подготовить работу',exact:true})).toBeVisible();
