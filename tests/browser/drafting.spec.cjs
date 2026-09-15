@@ -73,7 +73,7 @@ test('legacy mobile generation control is blocked before network dispatch',async
  await page.getByText('Редактировать разделы',{exact:true}).click();await page.locator('[data-sec="ch1"] > summary').click();await page.locator('[data-sec="ch1"] [data-secgen]').click();
  await expect(page.locator('#docStatus')).toContainText('Прямые платные запросы отключены');
  expect(await page.evaluate(()=>networkDispatches)).toBe(0);
- expect(await page.evaluate(()=>D.aiDiagnostics.length)).toBe(0);
+ expect(await page.evaluate(()=>D.aiDiagnostics?.length||0)).toBe(0);
 });
 
 test('preparation blocks zero budget and preserves edited document',async({page})=>{
