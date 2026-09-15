@@ -993,6 +993,11 @@ function openDocBuilder(id){
       var message=wrap.querySelector('[data-prepare-message]'),button=prepare||recover;
       if(button.disabled)return;
       if(!window.Oblako||!Oblako.generationApi){message.textContent='Войдите в аккаунт реестра.';return;}
+      var visiblePassport=Array.isArray(x.passports)&&x.passports[0];
+      if(!recover&&(!doc.serverJob||!doc.serverJob.id)&&(!visiblePassport||visiblePassport.status!=='approved')){
+        message.textContent='Сначала проверьте и утвердите паспорт текущей версии материалов.';
+        return;
+      }
       button.disabled=true;message.textContent='Проверяю сохранённое состояние…';
       Promise.resolve().then(function(){
         current();
@@ -1086,7 +1091,8 @@ function openDocBuilder(id){
         });
       }).catch(function(e){
         var labels={BUDGET_BLOCKED:'Запуск заблокирован: предел этой работы или общий денежный потолок исчерпан.',PASSPORT_REQUIRED:'Сначала проверьте и утвердите паспорт текущей версии материалов.',WORK_TYPE_REQUIRED:'Уточните вид работы в заявке: контрольная, курсовая или ВКР/диплом.',WORK_LIMIT_NOT_CONFIGURED:'Для этого вида работы не настроен денежный предел.',GENERATION_NOT_CONFIGURED:'Облачная подготовка ещё не настроена.',COST_NOT_CONFIGURED:'Не настроен расчёт предельной стоимости.',FORBIDDEN:'Доступно только исполнителю.',UNAUTHORIZED:'Войдите в аккаунт.',SERVICE_UNAVAILABLE:'Сервис недоступен. Повторите проверку статуса.',NOT_FOUND:'Задание не найдено в вашем аккаунте.',INPUT_TOO_BIG:'Материалы слишком велики для одного запуска. Они не были обрезаны.'};
-        message.textContent=labels[e.message]||e.message;
+        var technicalNetworkError=/Fetch is aborted|AbortError|TimeoutError|Failed to fetch|NetworkError|Load failed/i.test(String(e&&e.message||''));
+        message.textContent=labels[e.message]||(technicalNetworkError?'Сервер не ответил вовремя. Платная подготовка не запускалась. Проверьте соединение и повторите позже.':(e.message||'Не удалось выполнить проверку.'));
       }).finally(function(){button.disabled=false;});
       return;
     }
