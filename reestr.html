@@ -689,47 +689,9 @@ function activeProviders(){
 /* meta: { section, stage, attempt } — какой раздел и на каком шаге.
    В журнал попадают только метки и числа: ни текста запроса, ни ответа. */
 function askAI(providerId, system, user, meta){
-  var clientRequestId = crypto.randomUUID();
-  var st = D.settings, cfg = st.providers[providerId] || {};
-  var url = (st.proxyUrl || "").trim();
-  meta = Object.assign({}, meta || {}, {client_request_id: clientRequestId});
-  if (url){
-    var data = D, started = Date.now(), phase = 'connect', status = 0, detail = null;
-    var controller = new AbortController();
-    var timer = setTimeout(function(){ controller.abort(); }, 195000);
-    return Promise.resolve().then(function(){return fetch(url, {
-      method:"POST", signal:controller.signal,
-      headers:{ "Content-Type":"application/json", "X-Proxy-Token": st.proxyToken || "" },
-      body: JSON.stringify({ client_request_id: clientRequestId, provider: providerId, model: cfg.model || "", system: system, user: user, max_tokens: 8000, temperature: 0.2, keepalive:true })
-    });}).then(function(r){
-      phase = 'body'; status = r.status;
-      return r.json().catch(function(e){ if(e.name === "AbortError" || /Failed to fetch|NetworkError|Load failed/i.test(e.message||""))throw e; throw new Error("HTTP:proxy:" + r.status); }).then(function(j){
-        if (j && j.detail) detail = j.detail;
-        if (!r.ok) throw new Error(j && j.error || "HTTP:proxy:" + r.status);
-        return j;
-      });
-    }).then(function(j){
-      if (j && j.detail) detail = j.detail;
-      if (j.error) throw new Error(j.error);
-      if (j.complete === false) throw new Error("INCOMPLETE:" + providerId);
-      if (!j.text) throw new Error("EMPTY:" + providerId);
-      /* удачный ответ тоже запоминаем, если подошли близко к пределу:
-         по этому видно, что раздел вот-вот перестанет помещаться */
-      if (D === data) writeDiag(data, providerId, meta, 'body', status, Math.round((Date.now()-started)/1000), detail && Number(detail.limit_tokens)>0 && Number(detail.completion_tokens)>=Number(detail.limit_tokens)*0.9 ? 'NEAR_LIMIT' : 'SUCCESS', detail, system, user);
-      return { text: j.text, tokens: j.tokens || 0, provider: j.provider || providerId };
-    }).catch(function(e){
-      var elapsed = Math.round((Date.now()-started)/1000);
-      var network = /Failed to fetch|NetworkError|Load failed/i.test(e.message||'');
-      /* раньше любая ошибка сводилась к «RESPONSE» и причина терялась;
-         теперь берём точный код посредника, когда он есть */
-      var upstream = safeCode(e && e.message);
-      var code = controller.signal.aborted ? 'CLIENT_TIMEOUT' : network ? 'NETWORK' : (upstream || 'RESPONSE');
-      if (D === data) writeDiag(data, providerId, meta, phase, status, elapsed, code, detail, system, user);
-      if(code === 'CLIENT_TIMEOUT' || code === 'NETWORK')throw Error(code+':'+phase+':'+elapsed);
-      throw e;
-    }).finally(function(){clearTimeout(timer);});
-  }
-  return Promise.reject(new Error("NOPROXY"));
+  /* C-044: прямые платные вызовы из браузера запрещены. Вся генерация должна
+     проходить через studkab-generation-api и серверное резервирование бюджета. */
+  return Promise.reject(new Error("DIRECT_AI_DISABLED"));
 }
 /* Код посредника вида INCOMPLETE:deepseek или HTTP:proxy:502 — только метки. */
 function safeCode(m){
@@ -782,6 +744,7 @@ function diagLine(r){
 }
 function aiErrorText(e){
   var m = (e && e.message) || "", who = m.split(":")[1] || "";
+  if (m === "DIRECT_AI_DISABLED") return "Прямые платные запросы отключены. Используйте «Начать подготовку»: там расход проверяется серверным лимитом до отправки.";
   var nm = who ? providerName(who) : "";
   if (/^(CLIENT_TIMEOUT|NETWORK):/.test(m)) {
     var parts=m.split(':');
@@ -2036,7 +1999,7 @@ function viewMore(){
           '<button type="button" class="tick' + (c2.on ? " on" : "") + '" data-act="pv-toggle" data-id="' + pv.id + '">' + (c2.on ? "✓" : "") + '</button>' +
           '<div class="txt"><b>' + pv.name + '</b>' +
             '<input type="text" data-pvmodel="' + pv.id + '" value="' + esc(c2.model || pv.model) + '" style="margin-top:6px;padding:8px;font-size:13px" placeholder="модель"></div>' +
-          '<button type="button" class="mini" data-act="pv-test" data-id="' + pv.id + '">проверить</button></div>';
+      '<button type="button" class="mini" data-act="pv-test" data-id="' + pv.id + '">проверить лимит</button></div>';
       }).join("") +
       '<div class="fld" style="margin-top:12px"><label>По умолчанию</label><select id="pxDef">' +
         PROVIDERS.map(function(pv){ return '<option value="' + pv.id + '"' + (st.defaultProvider === pv.id ? " selected" : "") + '>' + pv.name + '</option>' }).join("") +
@@ -2342,8 +2305,10 @@ document.addEventListener("click", function(ev){
     var b2 = el; b2.textContent = "…";
     readProviderForm();
     if (!save()) toast("Настройки не сохранены: браузер не разрешает хранение");
-    askAI(id, "Ты помощник.", "Ответь одним словом: работает",{section:"connection",stage:"check",attempt:1}).then(function(r){ toast(providerName(id) + " отвечает: " + r.text.slice(0,40)); })
-      .catch(function(e){ toast(aiErrorText(e)); }).then(function(){ b2.textContent = "проверить"; });
+    if(!window.Oblako||!Oblako.generationApi){toast("Войдите в аккаунт реестра.");b2.textContent="проверить лимит";return;}
+    Oblako.generationApi({action:'capabilities'}).then(function(r){
+      toast(!r.enabled ? "Серверная подготовка отключена." : !r.budgetAvailable ? "Подготовка остановлена: серверный лимит исчерпан." : "Серверная подготовка доступна, лимит проверен. Платного запроса не было.");
+    }).catch(function(e){toast(aiErrorText(e));}).then(function(){b2.textContent="проверить лимит";});
     return;
   }
   if (act === "copy-prompt"){ var x2 = item(id); if (x2) copyText(buildPrompt(x2)); return; }
