@@ -66,7 +66,15 @@ test('mobile passport is readable and blocks preparation before checking filled 
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
  await expect(page.locator('[data-prepare-message]')).toContainText('утвердите паспорт');
  await expect(page.locator('[data-prepare-message]')).not.toContainText('Все разделы уже заполнены');
- expect(await page.evaluate(()=>preparationActions)).toEqual(['history']);
+ expect(await page.evaluate(()=>preparationActions)).toEqual([]);
+});
+
+test('technical aborted fetch is not shown to the user',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{Oblako.generationApi=async()=>{throw Error('Fetch is aborted');};});
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('Сервер не ответил вовремя');
+ await expect(page.locator('[data-prepare-message]')).not.toContainText('Fetch is aborted');
 });
 
 test('server preparation continues after reopening the document',async({page})=>{
