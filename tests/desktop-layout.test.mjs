@@ -14,7 +14,7 @@ test('desktop request detail uses a bounded grouped workflow',()=>{
  assert.match(ui,/Выполнение и проверка/);
  assert.match(ui,/Готовый результат/);
  assert.match(ui,/details\.fold-group\[open\]/);
- assert.match(ui,/desktop\.css\?v=4/);
+ assert.match(ui,/desktop\.css\?v=5/);
 });
 
 test('university registry uses compact semantic disclosure',()=>{

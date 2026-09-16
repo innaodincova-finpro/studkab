@@ -1,6 +1,10 @@
 /* One application and data model; layout responds to available screen width. */
 .registry-table{width:100%;border-collapse:collapse;text-align:left}
-.registry-table .open-request{font:inherit;color:var(--ink);font-weight:600;border:0;background:none;padding:0;text-align:left;cursor:pointer}
+.registry-table .open-request{font:inherit;color:var(--ink);font-weight:600;border:0;background:none;padding:4px 0;min-height:32px;text-align:left;cursor:pointer}
+/* C-052: заявка открывается нажатием в любом месте строки. Указатель нужен и для iPhone:
+   без него Safari не передаёт нажатие по строке. */
+.registry-table .request-row{cursor:pointer;-webkit-tap-highlight-color:rgba(0,0,0,.06)}
+.registry-table .request-row:active{background:var(--ground)}
 .registry-table small{display:block;color:var(--mut);margin-top:4px}
 .registry-table td{overflow-wrap:anywhere}
 .ref-tools{display:flex;align-items:flex-start;gap:10px;margin-bottom:14px}

@@ -281,7 +281,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 </style>
-<link rel="stylesheet" href="desktop.css?v=4">
+<link rel="stylesheet" href="desktop.css?v=5">
 </head>
 <body data-theme="blue">
 <div class="phone">
@@ -1855,7 +1855,7 @@ function viewList(){
   }
   h += list.length ? card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Студент</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Статус</th></tr></thead><tbody>'+list.map(function(x){
     var over=x.deadline && x.deadline<today() && x.status!=="done" && x.status!=="off";
-    return '<tr><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(x.student||"Без имени")+'</button>'+(x.group?'<small>'+esc(x.group)+'</small>':'')+'</td><td>'+esc(x.univ||"Вуз не указан")+'</td><td>'+esc(x.topic||"Тема не указана")+'</td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small>Срок прошёл</small>':'')+'</td><td>'+pill(x.status)+'</td></tr>';
+    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(x.student||"Без имени")+'</button>'+(x.group?'<small>'+esc(x.group)+'</small>':'')+'</td><td>'+esc(x.univ||"Вуз не указан")+'</td><td>'+esc(x.topic||"Тема не указана")+'</td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small>Срок прошёл</small>':'')+'</td><td>'+pill(x.status)+'</td></tr>';
   }).join('')+'</tbody></table>') : '<div class="empty">В этом отборе пусто.</div>';
   return h;
 }
