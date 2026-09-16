@@ -86,6 +86,14 @@ await scenario('Повторный запуск ничего не меняет',
  assert.equal((await db.query('select count(*)::int c from supabase_migrations.schema_migrations')).rows[0].c,3);
 });
 
+await scenario('Запись под номером времени применения считается установкой',async()=>{
+ const db=await fresh();
+ await db.query("insert into supabase_migrations.schema_migrations values('20260916135700','20260916100000_studkab_cloud_write_guard',array['--'])");
+ await assert.rejects(db.exec(INSTALL),/Уже установлено/);
+ await reset(db);
+ assert.equal((await db.query("select to_regclass('public.studkab_members') is null missing")).rows[0].missing,true);
+});
+
 await scenario('Объекты без записи в перечне останавливают установку',async()=>{
  const db=await fresh();
  await db.exec(fs.readFileSync('supabase/migrations/20260916100100_studkab_members.sql','utf8'));

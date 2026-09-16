@@ -17,6 +17,11 @@ export const PROBES=[
  ['studkab-push',{'x-job-key':'wrong'},403],
 ];
 const LIST=VERSIONS.map(([v])=>`'${v}'`).join(',');
+// Изменение может быть записано средствами Supabase под номером времени применения;
+// название записи при этом — имя файла. Поэтому запись ищется и по номеру, и по названию.
+const NAMES=VERSIONS.flatMap(([v,n])=>[`'${v}_${n}'`,`'${n}'`]).join(',');
+const FOUND=([v,n])=>`(select count(*) from supabase_migrations.schema_migrations where version='${v}' or name in ('${v}_${n}','${n}'))>0`;
+const INSTALLED=VERSIONS.map(v=>`(${FOUND(v)})::int`).join('+');
 
 export async function install({env,request=fetch,run=execFileSync,log=console.log,summary=async()=>{},read=readFile,wait=ms=>new Promise(r=>setTimeout(r,ms))}){
  const supa=env.SUPABASE_ACCESS_TOKEN?.trim();
@@ -31,7 +36,7 @@ export async function install({env,request=fetch,run=execFileSync,log=console.lo
 
  // 1. Состояние до изменений (пункт 10а). Ничего не меняется.
  const [before]=await sql(`select
-  (select count(*) from supabase_migrations.schema_migrations where version in (${LIST}))::int installed,
+  (${INSTALLED}) installed,
   (select count(*) from supabase_migrations.schema_migrations where version='20260915130200')::int base,
   (select count(*) from public.studkab_gen_jobs where status in ('queued','running'))::int active,
   (select count(*) from public.studkab_requests)::int requests,
@@ -61,7 +66,7 @@ export async function install({env,request=fetch,run=execFileSync,log=console.lo
 
  // 3. Проверка изменений и сохранности записей (пункт 10в).
  const [after]=await sql(`select
-  (select count(*) from supabase_migrations.schema_migrations where version in (${LIST}))::int installed,
+  (${INSTALLED}) installed,
   (select count(*) from public.studkab_requests)::int requests,
   (select count(*) from public.app_data where app in ('kabinet','reestr'))::int cloud,
   (select count(*) from public.studkab_push_subscriptions)::int subs,
@@ -77,12 +82,12 @@ export async function install({env,request=fetch,run=execFileSync,log=console.lo
  if(after.executor<1)throw Error('Исполнитель не получил допуск');
  if(after.members<before.expected)throw Error('Допуск получили не все действующие пользователи: '+after.members+' из '+before.expected);
  const manifest=JSON.parse(await read('supabase/migrations/manifest.json','utf8'));
- const recorded=await sql(`select version,encode(sha256(convert_to(statements[1],'UTF8')),'hex') sha from supabase_migrations.schema_migrations where version in (${LIST}) order by version`);
+ const recorded=await sql(`select version,name,encode(sha256(convert_to(array_to_string(statements,E'\\n'),'UTF8')),'hex') sha from supabase_migrations.schema_migrations where version in (${LIST}) or name in (${NAMES}) order by version`);
  for(const [version,name] of VERSIONS){
   const item=(manifest.pending_migrations||[]).concat(manifest.migrations).find(m=>m.version===version);
   const file=await read('supabase/migrations/'+version+'_'+name+'.sql','utf8');
   if(!item||createHash('sha256').update(file).digest('hex')!==item.sha256)throw Error('Опись не совпадает с файлом изменения '+version);
-  if(recorded.find(r=>r.version===version)?.sha!==item.sha256)throw Error('Текст изменения '+version+' в базе не совпадает с описью');
+  if(recorded.find(r=>r.version===version||r.name===version+'_'+name||r.name===name)?.sha!==item.sha256)throw Error('Текст изменения '+version+' в базе не совпадает с описью');
  }
  await summary(`База: установлено, текст совпадает с описью. Допущено ${after.members}: исполнитель ${after.executor}, перенесено ${after.backfill}, по приглашению ${after.invited}. Заявки ${after.requests}, облачные записи ${after.cloud}, подписки ${after.subs} — без изменений.\n`);
 

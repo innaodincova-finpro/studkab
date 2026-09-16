@@ -4,7 +4,11 @@
 -- Текст изменений совпадает с файлами supabase/migrations; проверка — tests/c054-install.test.mjs.
 begin;
 do $guard$ begin
- if exists(select 1 from supabase_migrations.schema_migrations where version in ('20260916100000','20260916100100')) then
+ -- Изменение может быть записано под номером времени применения, а названием — именем файла.
+ if exists(select 1 from supabase_migrations.schema_migrations
+   where version in ('20260916100000','20260916100100')
+      or name in ('20260916100000_studkab_cloud_write_guard','studkab_cloud_write_guard',
+                  '20260916100100_studkab_members','studkab_members')) then
   raise exception 'Уже установлено';
  end if;
  if to_regclass('public.app_data') is null or to_regclass('public.studkab_requests') is null then

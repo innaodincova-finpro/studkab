@@ -12,7 +12,10 @@ test("migration files match the production snapshot plus explicit pending change
   const tracked = manifest.migrations.concat(manifest.pending_migrations || []);
   const expected = tracked.map((item) => item.file).sort();
   assert.deepEqual(files, expected);
-  assert.equal(manifest.migrations.length, 19);
+  // 19 изменений на момент снимка + два изменения C-054, применённых 16.09.2026.
+  assert.equal(manifest.migrations.length, 21);
+  for (const item of manifest.migrations.filter((x) => x.production_version))
+    assert.match(item.production_version, /^\d{14}$/, item.file);
 
   for (const item of tracked) {
     const sql = await readFile(new URL(item.file, migrationsDir));
