@@ -1,5 +1,6 @@
 import webpush from 'npm:web-push@3.6.7';
 import {dueEvents,validSubscription} from './schedule.js';
+import {cronAllowed,memberAllowed} from './access.mjs';
 const URL_BASE=Deno.env.get('SUPABASE_URL')!;
 const SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const cors={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS'};
@@ -14,7 +15,7 @@ async function config(){
  return c;
 }
 async function send(sub:any,message:any,c:any){
- const details=webpush.generateRequestDetails(sub.subscription,JSON.stringify(message),{TTL:300,urgency:'high',contentEncoding:'aes128gcm',vapidDetails:{subject:'mailto:inna_odincova@mail.ru',publicKey:c.vapid.publicKey,privateKey:c.vapid.privateKey}});
+ const details=webpush.generateRequestDetails(sub.subscription,JSON.stringify(message),{TTL:300,urgency:'high',contentEncoding:'aes128gcm',vapidDetails:{subject:'https://innaodincova-finpro.github.io/studkab/',publicKey:c.vapid.publicKey,privateKey:c.vapid.privateKey}});
  const res=await fetch(details.endpoint,{method:'POST',headers:details.headers,body:new Uint8Array(details.body),redirect:'error',signal:AbortSignal.timeout(10000)});
  if(res.status===404||res.status===410)await db('studkab_push_subscriptions?id=eq.'+sub.id,'PATCH',{enabled:false,last_error:'Разрешение истекло. Включите уведомления снова.'});
  if(!res.ok)throw new Error('push '+res.status);
@@ -53,7 +54,11 @@ Deno.serve(async req=>{
  if(req.method!=='POST')return json({error:'Используйте POST'},405);
  try{
   const cronKey=req.headers.get('x-job-key');
-  if(cronKey){const c=await config();if(cronKey!==c.cron_token)return json({error:'Нет доступа'},403);return json(await dispatch(c));}
+  if(cronKey){
+    // C-054: ключ проверяется до config(), которая может создать ключи подписи.
+    if(!await cronAllowed(cronKey,async()=>(await db('studkab_push_configuration?id=eq.1&select=cron_token'))[0]?.cron_token))return json({error:'Нет доступа'},403);
+    return json(await dispatch(await config()));
+   }
   const auth=req.headers.get('authorization');if(!auth?.startsWith('Bearer '))return json({error:'Войдите в приложение'},401);
   const userRes=await fetch(URL_BASE+'/auth/v1/user',{headers:{apikey:SERVICE,Authorization:auth},signal:AbortSignal.timeout(10000)});
   if(!userRes.ok)return json({error:'Войдите в приложение заново'},401);
@@ -62,6 +67,7 @@ Deno.serve(async req=>{
   const input=JSON.parse(raw),c=await config();
   if(input.action==='key')return json({publicKey:c.vapid.publicKey});
   if(input.action==='subscribe'){
+   if(!await memberAllowed(user.id,async(id:string)=>(await db('studkab_members?user_id=eq.'+id+'&select=user_id')).length===1))return json({error:'Уведомления доступны после приглашения исполнителя'},403);
    if(!validSubscription(input.subscription))return json({error:'Браузер передал неподдерживаемую подписку'},400);
    try{new Intl.DateTimeFormat('en',{timeZone:input.timezone}).format();}catch{return json({error:'Не удалось определить часовой пояс'},400);}
    if(typeof input.timezone!=='string'||input.timezone.length>80)return json({error:'Нужен часовой пояс'},400);

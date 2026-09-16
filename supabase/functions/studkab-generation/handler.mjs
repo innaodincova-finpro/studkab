@@ -1,3 +1,4 @@
+import {sameSecret} from '../_shared/secret-equal.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
 export function handler({config,rpc,provider,ready,authorize,readiness,prepare,failClaim}) {
@@ -10,7 +11,7 @@ export function handler({config,rpc,provider,ready,authorize,readiness,prepare,f
   let cfg;
   try{cfg=await config();}catch{return reply({error:'CONFIG_UNAVAILABLE'},503);}
   const token=req.headers.get('X-Studkab-Runner');
-  if(!cfg?.cron_token||!token||token!==cfg.cron_token)return reply({error:'UNAUTHORIZED'},401);
+  if(!sameSecret(token,cfg?.cron_token))return reply({error:'UNAUTHORIZED'},401);
   if(req.headers.get('X-Studkab-Probe')==='1') {
    const state=readiness?readiness():{};
    return reply({enabled:state.enabled===true,providerConfigured:state.providerConfigured===true});

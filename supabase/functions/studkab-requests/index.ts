@@ -18,5 +18,8 @@ async function send(row:any){
  const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:owner.owner_chat_id,text,reply_markup:{inline_keyboard:[[{text:'Открыть заявку в реестре',url:'https://innaodincova-finpro.github.io/studkab/reestr.html#request='+row.id}]]}}),signal:AbortSignal.timeout(10000)});
  const data=await r.json();if(!r.ok||!data.ok)throw Error('Telegram unavailable');
 }
-const invite=(email:string,recovery=false)=>accessLink({base,key,email,recovery});
-Deno.serve(handler({auth,db,send,invite,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
+const uuid=/^[0-9a-f-]{36}$/i;
+// C-054: допуск студента хранится в studkab_members.
+const isMember=async(id:string)=>uuid.test(id)&&(await db('studkab_members?user_id=eq.'+id+'&select=user_id')).length===1;
+const invite=(email:string,recovery=false)=>accessLink({base,key,email,recovery,isMember});
+Deno.serve(handler({auth,db,send,invite,isMember,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));

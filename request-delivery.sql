@@ -6,7 +6,8 @@ create table public.studkab_request_config (
  cron_token text not null default (gen_random_uuid()::text||gen_random_uuid()::text)
 );
 insert into public.studkab_request_config(id,executor_email,notification_email)
-values(true,'inna_odincova@mail.ru','inna_odincova@mail.ru');
+-- C-054: в рабочей базе указан адрес исполнителя; в открытом репозитории он не хранится.
+values(true,'executor@example.invalid','executor@example.invalid');
 create table public.studkab_requests (
  id uuid primary key default gen_random_uuid(),
  number bigint generated always as identity unique,

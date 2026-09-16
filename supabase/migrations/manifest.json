@@ -118,5 +118,18 @@
       "sha256": "f86eeea10af072987e92a36a1151385ee27f5028a4c2eeb9de94ae673a230a47"
     }
   ],
-  "pending_migrations": []
+  "pending_migrations": [
+    {
+      "version": "20260916100000",
+      "name": "studkab_cloud_write_guard",
+      "file": "20260916100000_studkab_cloud_write_guard.sql",
+      "sha256": "14694fee56c1970a02455631e19098ca65a70748b384e097c7fc3f388489b9e1"
+    },
+    {
+      "version": "20260916100100",
+      "name": "studkab_members",
+      "file": "20260916100100_studkab_members.sql",
+      "sha256": "707f4f8f83ab8a531039b66a13b5a1c8ced26846d1468c68da166a21ee340329"
+    }
+  ]
 }

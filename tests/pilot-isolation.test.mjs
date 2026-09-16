@@ -29,7 +29,7 @@ test('three synthetic students remain isolated across submit, sign-in and Word r
   if(path.startsWith('studkab_requests?select=id,number,payload,created_at'))return rows;
   throw Error(`Unexpected synthetic path: ${path} ${method||''}`);
  };
- const app=handler({auth:async()=>current,config:async()=>({executor_email:executor.email}),db});
+ const app=handler({auth:async()=>current,config:async()=>({executor_email:executor.email}),isMember:async()=>true,db});
  for(let i=0;i<students.length;i++){
   current=students[i];
   const response=await app(call({action:'submit',student_id:executor.id,payload:{id:`pilot-${i+1}`,t:`${current.mark}: синтетическая тема`,cn:'SYNTHETIC',fm:{sz:14}}}));
@@ -79,7 +79,7 @@ test('twenty concurrent synthetic students do not mix requests or results',async
   if(path.startsWith('studkab_requests?select=id,number,payload,created_at'))return [...rows].sort((a,b)=>a.number-b.number);
   throw Error(`Unexpected load path: ${path} ${method||''}`);
  };
- const apps=loadStudents.map(student=>handler({auth:async()=>student,config:async()=>({executor_email:executor.email}),db}));
+ const apps=loadStudents.map(student=>handler({auth:async()=>student,config:async()=>({executor_email:executor.email}),isMember:async()=>true,db}));
  const submitted=await Promise.all(apps.map((app,i)=>app(call({action:'submit',student_id:executor.id,payload:{id:`load-${i+1}`,t:`LOAD-STUDENT-${i+1}`,cn:'SYNTHETIC',fm:{sz:14}}}))));
  assert.ok(submitted.every(response=>response.status===200));
  assert.equal(rows.length,count);assert.equal(new Set(rows.map(row=>row.id)).size,count);assert.equal(new Set(rows.map(row=>row.student_id)).size,count);
@@ -91,9 +91,9 @@ test('twenty concurrent synthetic students do not mix requests or results',async
  const foreign=await Promise.all(apps.map((app,i)=>app(call({action:'result',id:rows.find(row=>row.student_id===loadStudents[(i+1)%count].id).id}))));
  assert.ok(foreign.every(response=>response.status===404));assert.equal(resultReads,foreignReadsBefore);
 
- const reopened=loadStudents.map(student=>handler({auth:async()=>student,config:async()=>({executor_email:executor.email}),db}));
+ const reopened=loadStudents.map(student=>handler({auth:async()=>student,config:async()=>({executor_email:executor.email}),isMember:async()=>true,db}));
  const restored=await Promise.all(reopened.map((app,i)=>app(call({action:'result',id:rows.find(row=>row.student_id===loadStudents[i].id).id}))));
  assert.ok(restored.every(response=>response.status===200));
- const registry=handler({auth:async()=>executor,config:async()=>({executor_email:executor.email}),db});
+ const registry=handler({auth:async()=>executor,config:async()=>({executor_email:executor.email}),isMember:async()=>true,db});
  const inbox=await registry(call({action:'inbox'}));assert.equal(inbox.status,200);assert.equal((await inbox.json()).rows.length,count);
 });

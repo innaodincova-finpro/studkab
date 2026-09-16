@@ -1,3 +1,4 @@
+import {sameSecret} from '../_shared/secret-equal.mjs';
 import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
 const fields={id:100,t:300,k:100,d:200,u:300,fc:300,kf:300,ct:100,n:200,g:100,pr:200,fo:100,co:50,s:200,dl:10,rq:500,org:1500,mn:1500,cn:200};
@@ -24,7 +25,7 @@ export function validatePayload(p) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,invite,isMember,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -32,7 +33,7 @@ export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
    const job=req.headers.get('x-job-key');
    if(job){
     const cfg=await config();
-    if(job!==cfg.cron_token)return json({error:'Нет доступа'},403);
+    if(!sameSecret(job,cfg?.cron_token))return json({error:'Нет доступа'},403);
     const rows=await db('rpc/claim_studkab_requests','POST',{});
     let sent=0,failed=0;
     for(const row of rows){
@@ -59,6 +60,8 @@ export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
    }
    if(raw.length>16000)return json({error:'Заявка слишком большая'},413);
    if(input.action==='submit'){
+    // C-054: заявку подаёт только студент, которому исполнитель выдал доступ.
+    if(typeof isMember!=='function'||(await isMember(user.id))!==true)return json({error:'Подача заявок открывается после приглашения исполнителя. Попросите у исполнителя приглашение.'},403);
     let payload;try{payload=validatePayload(input.payload);}catch(e){return json({error:e.message},400);}
     const result=await db('rpc/submit_studkab_request','POST',{student:user.id,content:payload});
     if(result.conflict)return json({error:'Эта заявка уже передана. Для изменения условий свяжитесь с исполнителем.'},409);
@@ -71,7 +74,14 @@ export function handler({auth,config,db,send,invite,now=()=>Date.now()}) {
     if(user.email.toLowerCase()!==cfg.executor_email.toLowerCase())return json({error:'Приглашения доступны только исполнителю'},403);
     const email=typeof input.email==='string'?input.email.trim().toLowerCase():'';
     if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Проверьте адрес почты'},400);
-    return json(await invite(email,input.action==='recover'));
+    const link=await invite(email,input.action==='recover');
+    const {userId,...answer}=link||{};
+    // C-054: приглашение выдаёт допуск к кабинету; восстановление допуск не меняет.
+    if(input.action==='invite'&&userId&&(answer.url||answer.existing)){
+     if(!/^[0-9a-f-]{36}$/i.test(userId))throw Error('Invalid account');
+     await db('rpc/studkab_member_add','POST',{p_user:userId});
+    }
+    return json(answer);
    }
    if(input.action==='inbox'){
     const cfg=await config();
