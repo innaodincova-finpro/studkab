@@ -46,11 +46,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 19 then
-    raise exception 'Expected 19 STUDKAB tables, found %', table_count;
+  if table_count <> 20 then
+    raise exception 'Expected 20 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 19 then
-    raise exception 'RLS enabled on only % of 19 STUDKAB tables', rls_count;
+  if rls_count <> 20 then
+    raise exception 'RLS enabled on only % of 20 STUDKAB tables', rls_count;
   end if;
 end
 $$;
