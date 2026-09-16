@@ -11,6 +11,7 @@ const MAX_BODY = 1200000; // UTF-8 bytes; includes JSON escaping and Cyrillic.
 const ALLOWED = {
   deepseek: ['deepseek-flash'],
 };
+const SITE_ORIGIN = 'https://innaodincova-finpro.github.io';
 const MAX_OUTPUT = 4000; // совпадает с MAX_OUTPUT_TOKENS серверного резерва
 function modelAllowed(provider, model) {
   return (ALLOWED[provider] || []).includes(model);
@@ -97,8 +98,11 @@ function errorBody(e, provider) {
 }
 export default {
   async fetch(request, env) {
-    const allowedOrigin = String(env.ALLOWED_ORIGIN || '').trim();
-    if (!allowedOrigin) return json({error: 'ORIGIN_NOT_CONFIGURED'}, 500, {});
+    // C-051: запись секрета через API Cloudflare удалила текстовую переменную
+    // ALLOWED_ORIGIN, и посредник перестал отвечать. Без переменной используется
+    // адрес сайта приложения; открытый доступ для любых сайтов по-прежнему запрещён.
+    const configuredOrigin = String(env.ALLOWED_ORIGIN || '').trim();
+    const allowedOrigin = configuredOrigin && configuredOrigin !== '*' ? configuredOrigin : SITE_ORIGIN;
     const cors = {
       'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
