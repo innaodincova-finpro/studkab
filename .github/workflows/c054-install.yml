@@ -1,0 +1,28 @@
+name: C-054 установка доступа и данных студентов
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: studkab-production-install
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.repository == 'innaodincova-finpro/studkab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - run: npm ci
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.117.0
+      - name: Проверка сценария установки
+        run: node --test tests/c054-install.test.mjs tests/c054-install-sql.test.mjs
+      - name: Установка
+        run: node scripts/c054-install.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
