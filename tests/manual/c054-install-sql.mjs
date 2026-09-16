@@ -86,6 +86,14 @@ await scenario('Повторный запуск ничего не меняет',
  assert.equal((await db.query('select count(*)::int c from supabase_migrations.schema_migrations')).rows[0].c,3);
 });
 
+await scenario('Объекты без записи в перечне останавливают установку',async()=>{
+ const db=await fresh();
+ await db.exec(fs.readFileSync('supabase/migrations/20260916100100_studkab_members.sql','utf8'));
+ await assert.rejects(db.exec(INSTALL),/уже есть в базе, но изменения не зарегистрированы/);
+ await reset(db);
+ assert.equal((await db.query('select count(*)::int c from supabase_migrations.schema_migrations')).rows[0].c,1);
+});
+
 await scenario('Без изменений C-051 установка не начинается',async()=>{
  const db=await fresh({c051:false});
  await assert.rejects(db.exec(INSTALL),/C-051/);

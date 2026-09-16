@@ -39,6 +39,9 @@ export async function install({env,request=fetch,run=execFileSync,log=console.lo
   (select count(*) from public.studkab_push_subscriptions)::int subs,
   (select coalesce(max(octet_length(data::text)),0) from public.app_data where app in ('kabinet','reestr'))::bigint biggest,
   (select count(*) from auth.users u join public.studkab_request_config c on c.id and lower(u.email)=lower(c.executor_email))::int executor,
+  (to_regclass('public.studkab_members') is not null
+   or to_regprocedure('public.studkab_app_data_guard()') is not null
+   or to_regprocedure('public.studkab_current_member()') is not null) objects,
   (select count(*) from (
     select student_id as user_id from public.studkab_requests
     union select user_id from public.app_data where app in ('kabinet','reestr')
@@ -48,6 +51,8 @@ export async function install({env,request=fetch,run=execFileSync,log=console.lo
  if(before.active>0)throw Error('Идёт подготовка работы ('+before.active+'). Установка отложена, ничего не изменено');
  if(Number(before.biggest)>10485760)throw Error('Есть запись кабинета или реестра больше 10 МБ ('+before.biggest+' байт). Установка остановлена, ничего не изменено');
  if(before.executor<1)throw Error('Исполнитель из studkab_request_config не найден среди аккаунтов: список допущенных оставил бы исполнителя без доступа');
+ // Объекты без записи в перечне изменений: сначала сверка состояния (scripts/c054-state.mjs).
+ if(before.installed===0&&before.objects)throw Error('Объекты C-054 уже есть в базе, но изменения не зарегистрированы. Ничего не изменено: сначала выполните сверку состояния');
  await summary(`## C-054: установка\nДо изменений: заявок ${before.requests}, облачных записей кабинета и реестра ${before.cloud}, подписок ${before.subs}, наибольшая запись ${before.biggest} байт, допуск ожидается у ${before.expected} аккаунтов.\n`);
 
  // 2. База (пункт 10б). Файл сам проверяет порядок и повторный запуск.
