@@ -75,14 +75,30 @@ export async function install({env,request=fetch,run=execFileSync,log=console.lo
  const cfr=await request(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/${WORKER}/secrets`,{method:'PUT',headers:{Authorization:'Bearer '+cf,'Content-Type':'application/json'},body:JSON.stringify({name:'PROXY_TOKEN',text:value,type:'secret_text'}),signal:AbortSignal.timeout(60000)});
  const cfj=await cfr.json().catch(()=>({}));
  if(!cfr.ok||!cfj.success)throw Error('Cloudflare не принял новый пароль ('+cfr.status+'). В Supabase он уже записан: подготовка остановлена до повторного запуска');
+ // Запись секрета создаёт новую версию посредника, но может не сделать её рабочей.
+ // Рабочей делается последняя версия, если это ещё не так.
+ const cfApi=async(path,options={})=>{
+  const r=await request(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/${WORKER}${path}`,{...options,headers:{Authorization:'Bearer '+cf,'Content-Type':'application/json'},signal:AbortSignal.timeout(60000)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok||!j.success)throw Error('Cloudflare '+r.status+' '+path+'. Новый пароль записан в Supabase и Cloudflare, но версия посредника не подтверждена: подготовка остановлена до повторного запуска');
+  return j.result;
+ };
+ const versions=await cfApi('/versions');
+ const latest=(versions?.items||versions||[])[0]?.id;
+ if(!latest)throw Error('Cloudflare не вернул список версий посредника');
+ const active=(await cfApi('/deployments'))?.deployments?.[0]?.versions||[];
+ const live=active.length===1&&active[0].version_id===latest&&Number(active[0].percentage)===100;
+ log('Посредник: последняя версия '+(live?'уже рабочая':'не рабочая, делается рабочей'));
+ if(!live)await cfApi('/deployments',{method:'POST',body:JSON.stringify({strategy:'percentage',versions:[{version_id:latest,percentage:100}],annotations:{'workers/message':'C-051: новый пароль посредника'}})});
 
  // 5. Проверка без платного запроса: неизвестная модель отклоняется до поставщика.
  let accepted=false;
- for(let i=0;i<6&&!accepted;i++){
+ for(let i=0;i<18&&!accepted;i++){
   if(i)await new Promise(r=>setTimeout(r,10000));
   const probe=await request(WORKER_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Token':value},body:JSON.stringify({provider:'deepseek',model:'c051-probe',system:'x',user:'x'}),signal:AbortSignal.timeout(30000)});
   const body=await probe.json().catch(()=>({}));
   accepted=probe.status===400&&body.error==='UNKNOWN_MODEL:deepseek';
+  log('Проверка посредника '+(i+1)+': ответ '+probe.status+' '+(typeof body.error==='string'?body.error.slice(0,40):''));
  }
  if(!accepted)throw Error('Посредник не подтвердил новый пароль');
  const names=(await api('/secrets')).map(s=>s.name);
