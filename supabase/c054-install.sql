@@ -13,6 +13,12 @@ do $guard$ begin
  if not exists(select 1 from supabase_migrations.schema_migrations where version='20260915130200') then
   raise exception 'Сначала установите изменения C-051';
  end if;
+ -- Объекты без записи в перечне изменений: установка не повторяется вслепую.
+ if to_regclass('public.studkab_members') is not null
+    or to_regprocedure('public.studkab_app_data_guard()') is not null
+    or to_regprocedure('public.studkab_current_member()') is not null then
+  raise exception 'Объекты C-054 уже есть в базе, но изменения не зарегистрированы: нужна сверка состояния';
+ end if;
 end $guard$;
 -- ===== 20260916100000_studkab_cloud_write_guard.sql
 -- C-054, замечание 3 аудита 15.09.2026 (R9, M1): записи кабинета и реестра

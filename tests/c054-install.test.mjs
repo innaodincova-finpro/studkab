@@ -9,7 +9,7 @@ const sha=version=>manifest.pending_migrations.concat(manifest.migrations).find(
 // Ответ настроек входа содержит и секреты: проверка следит, что наружу идут только пределы.
 const AUTH={rate_limit_verify:30,rate_limit_token_refresh:150,rate_limit_otp:30,security_captcha_enabled:false,smtp_pass:'secret-smtp-pass',hook_send_sms_secrets:'secret-hook'};
 
-function world({installed=0,base=1,active=0,biggest=1000,executor=1,expected=7,members=7,memberExecutor=1,guard=1,memberAdd=true,rows={},recorded=null,versions={before:3,after:4},verifyJwt=null,probe={},auth=AUTH}={}){
+function world({installed=0,base=1,active=0,biggest=1000,executor=1,objects=false,expected=7,members=7,memberExecutor=1,guard=1,memberAdd=true,rows={},recorded=null,versions={before:3,after:4},verifyJwt=null,probe={},auth=AUTH}={}){
  const calls=[],logs=[],runs=[],parts=[];
  let done=installed,deployed=false;
  const slugs=PROBES.map(([slug])=>slug);
@@ -22,7 +22,7 @@ function world({installed=0,base=1,active=0,biggest=1000,executor=1,expected=7,m
    if(q.includes('C-054: доступ и данные студентов')){done=2;parts.push('file');return Response.json([])}
    if(q.includes('encode(sha256'))return Response.json(recorded||VERSIONS.map(([v])=>({version:v,sha:sha(v)})));
    if(q.includes('pg_trigger'))return Response.json([{installed:done,requests:3,cloud:4,subs:2,guard,members,executor:memberExecutor,backfill:members-memberExecutor,invited:0,member_add:memberAdd,...rows}]);
-   return Response.json([{installed:done,base,active,requests:3,cloud:4,subs:2,biggest,executor,expected}]);
+   return Response.json([{installed:done,base,active,requests:3,cloud:4,subs:2,biggest,executor,expected,objects}]);
   }
   if(url.endsWith('/functions'))return Response.json(funcs());
   if(url.endsWith('/config/auth'))return Response.json(auth);
@@ -65,7 +65,7 @@ test('C-054 установка: секреты настроек входа не 
 });
 
 test('C-054 установка: идущая подготовка, чужая версия базы и запись больше 10 МБ останавливают установку',async()=>{
- for(const [opts,pattern] of [[{active:1},/Идёт подготовка/],[{base:0},/не соответствует C-051/],[{biggest:10485761},/больше 10 МБ/],[{executor:0},/Исполнитель из studkab_request_config/]]){
+ for(const [opts,pattern] of [[{active:1},/Идёт подготовка/],[{base:0},/не соответствует C-051/],[{biggest:10485761},/больше 10 МБ/],[{executor:0},/Исполнитель из studkab_request_config/],[{objects:true},/уже есть в базе, но изменения не зарегистрированы/]]){
   const w=world(opts);
   await assert.rejects(install(w.args),pattern);
   assert.equal(w.parts.length,0,'файл установки не выполнялся');
