@@ -46,11 +46,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 19 then
-    raise exception 'Expected 19 STUDKAB tables, found %', table_count;
+  if table_count <> 20 then
+    raise exception 'Expected 20 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 19 then
-    raise exception 'RLS enabled on only % of 19 STUDKAB tables', rls_count;
+  if rls_count <> 20 then
+    raise exception 'RLS enabled on only % of 20 STUDKAB tables', rls_count;
   end if;
 end
 $$;
@@ -160,5 +160,22 @@ begin
   end if;
 end
 $c051$;
+
+do $c054$
+begin
+  if not exists(select 1 from pg_trigger where tgname='studkab_app_data_guard' and tgrelid='public.app_data'::regclass) then
+    raise exception 'C-054: cloud write guard is missing';
+  end if;
+  if has_function_privilege('authenticated','public.studkab_app_data_guard()','EXECUTE') then
+    raise exception 'C-054: guard function is exposed';
+  end if;
+  if to_regclass('public.studkab_members') is null
+     or has_table_privilege('authenticated','public.studkab_members','SELECT')
+     or has_function_privilege('authenticated','public.studkab_member_add(uuid)','EXECUTE')
+     or not has_function_privilege('authenticated','public.studkab_current_member()','EXECUTE') then
+    raise exception 'C-054: student access list is missing or exposed';
+  end if;
+end
+$c054$;
 
 select 'PASS: clean migration replay, schema inventory, RLS and cron isolation verified' as result;

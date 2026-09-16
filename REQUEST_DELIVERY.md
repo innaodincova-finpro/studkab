@@ -1,10 +1,10 @@
 # Direct student request delivery
 
-Phase 2 adds authenticated cabinet submissions, a durable private server inbox and Telegram notifications. Email recipient is configured as inna_odincova@mail.ru, but email sending and bot conversations remain unimplemented. No SMTP/domain claim is made.
+Phase 2 adds authenticated cabinet submissions, a durable private server inbox and Telegram notifications. Email recipient is the executor address stored in `studkab_request_config`, but email sending and bot conversations remain unimplemented. No SMTP/domain claim is made.
 
 ## Provisioning
 
-Apply request-delivery.sql once after telegram-setup.sql. All tables and RPCs are closed to anon/authenticated; the Edge Function validates the session against Auth and uses the verified email for executor-only inbox access. The executor account is inna_odincova@mail.ru. Never accept a recipient or student ID supplied by a browser.
+Apply request-delivery.sql once after telegram-setup.sql. All tables and RPCs are closed to anon/authenticated; the Edge Function validates the session against Auth and uses the verified email for executor-only inbox access. The executor account is the address stored in `studkab_request_config.executor_email` (not kept in the public repository). Never accept a recipient or student ID supplied by a browser.
 
 Deploy studkab-requests with verify_jwt=false: browser requests authenticate through Auth; jobs authenticate with the separate configuration cron token. Schedule a per-minute pg_cron job invoking the function using pg_net and reading the key directly from studkab_request_config. Do not expose the key in logs or Git. Deploy the updated studkab-telegram handler after enabling direct intake.
 

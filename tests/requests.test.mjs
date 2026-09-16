@@ -22,7 +22,7 @@ test('auth and inbox ownership are enforced before reading requests',async()=>{
 });
 test('submission binds authenticated identity; conflicts and limits are explicit',async()=>{
  let result={id:'stored',number:42},seen;
- const app=handler({auth:async()=>student,db:async(path,method,body)=>{seen=body;return result;}});
+ const app=handler({auth:async()=>student,isMember:async()=>true,db:async(path,method,body)=>{seen=body;return result;}});
  const r=await (await app(request({action:'submit',payload:p,student_id:'owner'}))).json();
  assert.equal(r.saved,true);assert.equal(r.number,42);assert.equal(seen.student,'student');assert.equal(r.email,'not_configured');
  result={conflict:true};assert.equal((await app(request({action:'submit',payload:p}))).status,409);
@@ -62,7 +62,7 @@ test('recovery link uses existing account only; invite never resets it',async()=
  const {accessLink}=await import('../supabase/functions/studkab-requests/access-links.mjs');
  let calls=[];
  const request=async(url,opts)=>{calls.push({url,body:opts.body});if(url.includes('/admin/users'))return Response.json({users:[{email:'s@example.test',email_confirmed_at:'yes'}]});return Response.json({hashed_token:'one-time-test',verification_type:'recovery'});};
- const args={base:'https://test',key:'test',email:'s@example.test',request};
+ const args={base:'https://test',key:'test',email:'s@example.test',request,isMember:async()=>true};
  assert.equal((await accessLink(args)).existing,true);assert.equal(calls.length,1);
  calls=[];const result=await accessLink({...args,recovery:true});assert.match(result.url,/type=recovery/);assert.equal(JSON.parse(calls[1].body).type,'recovery');
  calls=[];assert.equal((await accessLink({...args,email:'missing@example.test',recovery:true})).missing,true);assert.equal(calls.length,1);

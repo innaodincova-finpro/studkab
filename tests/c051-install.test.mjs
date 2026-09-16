@@ -91,7 +91,7 @@ test('C-051 установка: файлы установки содержат �
  const {createHash}=await import('node:crypto');
  const manifest=JSON.parse(await readFile('supabase/migrations/manifest.json','utf8'));
  const files={'20260915130000':'supabase/c051-install-1.sql','20260915130100':'supabase/c051-install-2.sql','20260915130200':'supabase/c051-install-2.sql'};
- for(const m of manifest.pending_migrations){
+ for(const m of manifest.migrations.concat(manifest.pending_migrations).filter(m=>files[m.version])){
   const body=await readFile('supabase/migrations/'+m.file,'utf8');
   assert.equal(createHash('sha256').update(body).digest('hex'),m.sha256);
   const install=await readFile(files[m.version],'utf8');
