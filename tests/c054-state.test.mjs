@@ -4,8 +4,8 @@ import {readFile} from 'node:fs/promises';
 import {state,STATE_QUERY,MEMBERS_QUERY,MIGRATIONS_QUERY,DEFS_QUERY,COLUMNS_QUERY,GRANTS_QUERY,bodyFromFile,bodyFromDatabase} from '../scripts/c054-state.mjs';
 
 const env={SUPABASE_ACCESS_TOKEN:'test-supa'};
-const GUARD_FILE='supabase/migrations/20260916100000_studkab_cloud_write_guard.sql';
-const MEMBERS_FILE='supabase/migrations/20260916100100_studkab_members.sql';
+const GUARD_FILE='supabase/migrations/20260916135700_20260916100000_studkab_cloud_write_guard.sql';
+const MEMBERS_FILE='supabase/migrations/20260916135724_20260916100100_studkab_members.sql';
 const guardText=await readFile(GUARD_FILE,'utf8');
 const membersText=await readFile(MEMBERS_FILE,'utf8');
 const TAG='$'+'function'+'$';
@@ -47,16 +47,16 @@ test('C-054 состояние: выводит перечень, объекты,
  const result=await state(w.args);
  assert.equal(result.verdict,'объекты есть, в перечне изменений не зарегистрированы');
  const text=w.logs.join('\n');
- assert.match(text,/20260916100000 — нет/);
+ assert.match(text,/20260916135700 — нет/);
  assert.match(text,/таблица допущенных есть/);
  assert.match(text,/заявок 3, облачных записей кабинета и реестра 4, подписок 2/);
  assert.match(text,/backfill — 6, executor — 1/);
 });
 
 test('C-054 состояние: перечень изменений с 20260915 выводится номером и названием',async()=>{
- const w=world({migrations:[{version:'20260915130000',name:'studkab_generation_stop'},{version:'20260916100000',name:'studkab_cloud_write_guard'}]});
+ const w=world({migrations:[{version:'20260915130000',name:'studkab_generation_stop'},{version:'20260916135700',name:'20260916100000_studkab_cloud_write_guard'}]});
  await state(w.args);
- assert.match(w.logs.join('\n'),/Перечень изменений с 20260915: 20260915130000 studkab_generation_stop; 20260916100000 studkab_cloud_write_guard\./);
+ assert.match(w.logs.join('\n'),/Перечень изменений с 20260915: 20260915130000 studkab_generation_stop; 20260916135700 20260916100000_studkab_cloud_write_guard\./);
  assert.ok(!DEFS_QUERY.includes('statements')&&!MIGRATIONS_QUERY.includes('statements'),'текст изменений не запрашивается');
 });
 
@@ -64,17 +64,17 @@ test('C-054 состояние: текст функций сверяется с 
  const w=world();
  const result=await state(w.args);
  assert.deepEqual(result.comparison,{
-  save_app_data_v2:'совпадает с 20260916100100',
-  studkab_app_data_guard:'совпадает с 20260916100000',
-  studkab_current_member:'совпадает с 20260916100100',
-  studkab_member_add:'совпадает с 20260916100100',
+  save_app_data_v2:'совпадает с 20260916135724',
+  studkab_app_data_guard:'совпадает с 20260916135700',
+  studkab_current_member:'совпадает с 20260916135724',
+  studkab_member_add:'совпадает с 20260916135724',
  });
- assert.match(w.logs.join('\n'),/save_app_data_v2 — совпадает с 20260916100100/);
+ assert.match(w.logs.join('\n'),/save_app_data_v2 — совпадает с 20260916135724/);
 });
 
 test('C-054 состояние: различает прежнюю версию save_app_data_v2, чужой текст и отсутствие функции',async()=>{
  const early=await state(world({defs:defsFromFiles(guardText)}).args);
- assert.equal(early.comparison.save_app_data_v2,'совпадает с 20260916100000');
+ assert.equal(early.comparison.save_app_data_v2,'совпадает с 20260916135700');
  const changed=await state(world({defs:[{fn:'save_app_data_v2',def:asDatabase('save_app_data_v2','begin return; end')},
   {fn:'studkab_app_data_guard',def:null},{fn:'studkab_current_member',def:null},{fn:'studkab_member_add',def:null}]}).args);
  assert.equal(changed.comparison.save_app_data_v2,'не совпадает');

@@ -1,17 +1,17 @@
 // C-054: состояние рабочей базы по изменениям этапа 3. Только чтение.
-// Запуск 16.09.2026 остановился с ошибкой «relation "studkab_members" already exists»:
-// объекты в базе есть, а в перечне изменений оба изменения не зарегистрированы.
-// Этот сценарий показывает фактическое состояние и ничего не меняет: нет ни одной
-// команды изменения данных или схемы, только select.
+// Изменения установлены 16.09.2026 под номерами времени применения 20260916135700 и
+// 20260916135724; названия записей — имена исходных файлов. Сценарий показывает
+// фактическое состояние и ничего не меняет: нет ни одной команды изменения данных
+// или схемы, только select.
 import {appendFile,readFile} from 'node:fs/promises';
 
 export const PROJECT='dcpthwmuiodrjepifzsd';
-export const VERSIONS=['20260916100000','20260916100100'];
+export const VERSIONS=['20260916135700','20260916135724'];
 const FN='public.save_app_data_v2(text,jsonb,bigint)';
 
 export const STATE_QUERY=`select
- (select count(*) from supabase_migrations.schema_migrations where version='20260916100000')::int reg_guard,
- (select count(*) from supabase_migrations.schema_migrations where version='20260916100100')::int reg_members,
+ (select count(*) from supabase_migrations.schema_migrations where version='20260916135700')::int reg_guard,
+ (select count(*) from supabase_migrations.schema_migrations where version='20260916135724')::int reg_members,
  (select count(*) from supabase_migrations.schema_migrations where version='20260915130200')::int reg_c051,
  (select count(*) from pg_trigger where tgrelid='public.app_data'::regclass and tgname='studkab_app_data_guard')::int trigger_guard,
  to_regclass('public.studkab_members') is not null table_members,
@@ -82,13 +82,13 @@ export async function state({env,request=fetch,log=console.log,summary=async()=>
  const [access]=s.table_members?await sql(GRANTS_QUERY):[{grants:'таблицы нет',rls:null,policies:0}];
 
  // Сверка текста функций с файлами изменений.
- const guardFile=await read('supabase/migrations/20260916100000_studkab_cloud_write_guard.sql','utf8');
- const membersFile=await read('supabase/migrations/20260916100100_studkab_members.sql','utf8');
+ const guardFile=await read('supabase/migrations/20260916135700_20260916100000_studkab_cloud_write_guard.sql','utf8');
+ const membersFile=await read('supabase/migrations/20260916135724_20260916100100_studkab_members.sql','utf8');
  const expected={
-  save_app_data_v2:[['20260916100100',bodyFromFile(membersFile,'save_app_data_v2')],['20260916100000',bodyFromFile(guardFile,'save_app_data_v2')]],
-  studkab_app_data_guard:[['20260916100000',bodyFromFile(guardFile,'studkab_app_data_guard')]],
-  studkab_current_member:[['20260916100100',bodyFromFile(membersFile,'studkab_current_member')]],
-  studkab_member_add:[['20260916100100',bodyFromFile(membersFile,'studkab_member_add')]],
+  save_app_data_v2:[['20260916135724',bodyFromFile(membersFile,'save_app_data_v2')],['20260916135700',bodyFromFile(guardFile,'save_app_data_v2')]],
+  studkab_app_data_guard:[['20260916135700',bodyFromFile(guardFile,'studkab_app_data_guard')]],
+  studkab_current_member:[['20260916135724',bodyFromFile(membersFile,'studkab_current_member')]],
+  studkab_member_add:[['20260916135724',bodyFromFile(membersFile,'studkab_member_add')]],
  };
  const comparison=Object.entries(expected).map(([fn,variants])=>{
   const body=bodyFromDatabase(defs[fn]);
@@ -98,7 +98,7 @@ export async function state({env,request=fetch,log=console.log,summary=async()=>
  });
 
  const lines=[
-  `Перечень изменений: 20260916100000 — ${s.reg_guard?'зарегистрировано':'нет'}, 20260916100100 — ${s.reg_members?'зарегистрировано':'нет'}, C-051 (20260915130200) — ${s.reg_c051?'зарегистрировано':'нет'}.`,
+  `Перечень изменений: 20260916135700 — ${s.reg_guard?'зарегистрировано':'нет'}, 20260916135724 — ${s.reg_members?'зарегистрировано':'нет'}, C-051 (20260915130200) — ${s.reg_c051?'зарегистрировано':'нет'}.`,
   `Объекты: триггер ${s.trigger_guard?'есть':'нет'}, таблица допущенных ${s.table_members?'есть':'нет'}, функции: защита ${s.fn_guard?'есть':'нет'}, проверка допуска ${s.fn_current?'есть':'нет'}, выдача допуска ${s.fn_add?'есть':'нет'}.`,
   `save_app_data_v2: проверка допуска ${s.save_member?'есть':'нет'}, предел 10 МБ ${s.save_limit?'есть':'нет'}, метка записи через приложение ${s.save_marker?'есть':'нет'}, отпечаток ${s.save_md5||'нет функции'}.`,
   `Записи: заявок ${s.requests}, облачных записей кабинета и реестра ${s.cloud}, подписок ${s.subs}, наибольшая запись ${s.biggest} байт, идущих подготовок ${s.active}.`,
