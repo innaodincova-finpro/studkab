@@ -40,10 +40,16 @@ test('preflight returns only the configured origin',async()=>{
   const r=await worker.fetch(new Request('https://example.test/',{method:'OPTIONS',headers:{Origin:'http://terminal.local:4173'}}),env);
   assert.equal(r.status,204);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'https://innaodincova-finpro.github.io');
 });
-test('missing allowed origin fails closed before authentication or provider access',async t=>{
+test('C-051: missing or wildcard origin falls back to the application site, never to any site',async t=>{
   const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});
-  const r=await worker.fetch(request(basic),{...env,ALLOWED_ORIGIN:''});
-  assert.equal(r.status,500);assert.deepEqual(await r.json(),{error:'ORIGIN_NOT_CONFIGURED'});assert.equal(f.mock.callCount(),0);
+  for(const origin of ['',undefined,'*']){
+    const r=await worker.fetch(request({...basic,model:'c051-probe'}),{...env,ALLOWED_ORIGIN:origin});
+    assert.equal(r.status,400);assert.deepEqual(await r.json(),{error:'UNKNOWN_MODEL:deepseek'});
+    assert.equal(r.headers.get('Access-Control-Allow-Origin'),'https://innaodincova-finpro.github.io');
+    const bad=await worker.fetch(request(basic,{'X-Proxy-Token':'wrong'}),{...env,ALLOWED_ORIGIN:origin});
+    assert.equal(bad.status,401);
+  }
+  assert.equal(f.mock.callCount(),0);
 });
 test('wrong password and malformed payload never contact provider',async t=>{
   const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});

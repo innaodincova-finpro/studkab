@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {install} from '../scripts/c051-install.mjs';
 
 const env={SUPABASE_ACCESS_TOKEN:'test-supa',CLOUDFLARE_API_TOKEN:'test-cf',CLOUDFLARE_ACCOUNT_ID:'1335d0bfa8029bd5f2da8867560ac512'};
-function world({autoDeploy=false,deployOk=true,cfRead=true,active=0,installed=0,base=1,cfOk=true,probe=400,changeRows=false}={}){
+function world({keys=['DEEPSEEK_KEY','PROXY_TOKEN'],autoDeploy=false,deployOk=true,cfRead=true,active=0,installed=0,base=1,cfOk=true,probe=400,changeRows=false}={}){
  const calls=[];let done=installed;let deployed='v-old';const logs=[];let secret=null;
  const counts={requests:3,jobs:2,attempts:4,results:1,reserved:1000};
  const request=async(url,o={})=>{
@@ -16,6 +16,7 @@ function world({autoDeploy=false,deployOk=true,cfRead=true,active=0,installed=0,
    if(q.includes('cancel'))return Response.json([{installed:done,cancel:done===3,...counts,requests:changeRows?4:3}]);
    return Response.json([{installed:done,base,active,...counts,passports:2}]);
   }
+  if(url.includes('api.cloudflare.com')&&url.endsWith('/settings'))return Response.json({success:true,result:{bindings:keys.map(name=>({name,type:'secret_text'}))}});
   if(url.includes('api.cloudflare.com')&&url.endsWith('/versions'))return Response.json({success:true,result:{items:[{id:'v-new'},{id:'v-old'}]}});
   if(url.includes('api.cloudflare.com')&&url.endsWith('/deployments')&&!o.method)return Response.json({success:true,result:{deployments:[{versions:[{version_id:deployed,percentage:100}]}]}});
   if(url.includes('api.cloudflare.com')&&url.endsWith('/deployments')){deployed=body.versions[0].version_id;return Response.json({success:deployOk},{status:deployOk?200:403});}
@@ -114,4 +115,10 @@ test('C-051 установка: уже рабочая версия посред�
 });
 test('C-051 установка: отказ Cloudflare в развёртывании версии не считается успехом',async()=>{
  await assert.rejects(install(world({deployOk:false}).args),/версия посредника не подтверждена/);
+});
+
+test('C-051 установка: пропавший ключ DeepSeek у посредника останавливает установку',async()=>{
+ const w=world({keys:['PROXY_TOKEN']});
+ await assert.rejects(install(w.args),/пропала настройка DEEPSEEK_KEY/);
+ assert.equal(w.calls.some(c=>c.url.includes('workers.dev')),false);
 });

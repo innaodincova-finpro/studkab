@@ -90,6 +90,12 @@ export async function install({env,request=fetch,run=execFileSync,log=console.lo
  const live=active.length===1&&active[0].version_id===latest&&Number(active[0].percentage)===100;
  log('Посредник: последняя версия '+(live?'уже рабочая':'не рабочая, делается рабочей'));
  if(!live)await cfApi('/deployments',{method:'POST',body:JSON.stringify({strategy:'percentage',versions:[{version_id:latest,percentage:100}],annotations:{'workers/message':'C-051: новый пароль посредника'}})});
+ // Запись секрета может потерять другие настройки посредника. Проверяются имена,
+ // значения не читаются и не выводятся.
+ const bindings=((await cfApi('/settings'))?.bindings||[]).map(x=>x.name).filter(Boolean).sort();
+ log('Посредник: настройки '+bindings.join(', '));
+ for(const need of ['DEEPSEEK_KEY','PROXY_TOKEN'])
+  if(!bindings.includes(need))throw Error('У посредника пропала настройка '+need+'. Подготовку работ не запускать до восстановления');
 
  // 5. Проверка без платного запроса: неизвестная модель отклоняется до поставщика.
  let accepted=false;
