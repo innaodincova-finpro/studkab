@@ -18,14 +18,14 @@ async function fresh(){
  await db.exec(fs.readFileSync('request-delivery.sql','utf8').replace(/executor@example\.invalid/g,'executor@example.test'));
  await db.exec(`create table public.studkab_push_subscriptions(id uuid primary key default gen_random_uuid(),user_id uuid references auth.users(id))`);
  await db.exec(fs.readFileSync('supabase/migrations/20260907055928_studkab_cloud_safety_v2.sql','utf8').replace(/^do \$guard\$.*$/m,''));
- await db.exec(fs.readFileSync('supabase/migrations/20260916100000_studkab_cloud_write_guard.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20260916135700_20260916100000_studkab_cloud_write_guard.sql','utf8'));
  // Данные, существующие до установки списка.
  await db.query("insert into studkab_requests(student_id,client_id,payload) values($1,'c1','{}')",[ids.withRequest]);
  await db.exec("set role service_role;");
  await db.query("insert into app_data(user_id,app,data) values($1,'kabinet','{}')",[ids.withCabinet]);
  await db.exec("reset role;");
  await db.query('insert into studkab_push_subscriptions(user_id) values($1)',[ids.withPush]);
- if(!before)await db.exec(fs.readFileSync('supabase/migrations/20260916100100_studkab_members.sql','utf8'));
+ if(!before)await db.exec(fs.readFileSync('supabase/migrations/20260916135724_20260916100100_studkab_members.sql','utf8'));
  const as=async(uid,sql,args=[])=>{await db.exec(`reset role; set role authenticated; set request.jwt.claim.sub='${uid}';`);try{return (await db.query(sql,args)).rows;}finally{await db.exec('reset role;');}};
  return {db,as};
 }

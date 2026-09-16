@@ -1,7 +1,7 @@
 {
   "captured_at": "2026-09-16",
   "production_project_ref": "dcpthwmuiodrjepifzsd",
-  "note": "SQL SHA-256 is calculated from the exact statement text stored in supabase_migrations.schema_migrations. Later Tochka-only migrations are tracked in PRODUCTION_INVENTORY.md and intentionally not copied into the STUDKAB repository.",
+  "note": "SQL SHA-256 is calculated from the exact statement text stored in supabase_migrations.schema_migrations. Later Tochka-only migrations are tracked in PRODUCTION_INVENTORY.md and intentionally not copied into the STUDKAB repository. Изменения C-054 установлены 16.09.2026 под номерами времени применения 20260916135700 и 20260916135724; название записи в базе — имя исходного файла, поэтому имена файлов содержат оба номера.",
   "migrations": [
     {
       "version": "20260904195115",
@@ -116,20 +116,19 @@
       "name": "studkab_unknown_fully_retained",
       "file": "20260915130200_studkab_unknown_fully_retained.sql",
       "sha256": "f86eeea10af072987e92a36a1151385ee27f5028a4c2eeb9de94ae673a230a47"
-    }
-  ],
-  "pending_migrations": [
+    },
     {
-      "version": "20260916100000",
-      "name": "studkab_cloud_write_guard",
-      "file": "20260916100000_studkab_cloud_write_guard.sql",
+      "version": "20260916135700",
+      "name": "20260916100000_studkab_cloud_write_guard",
+      "file": "20260916135700_20260916100000_studkab_cloud_write_guard.sql",
       "sha256": "14694fee56c1970a02455631e19098ca65a70748b384e097c7fc3f388489b9e1"
     },
     {
-      "version": "20260916100100",
-      "name": "studkab_members",
-      "file": "20260916100100_studkab_members.sql",
+      "version": "20260916135724",
+      "name": "20260916100100_studkab_members",
+      "file": "20260916135724_20260916100100_studkab_members.sql",
       "sha256": "707f4f8f83ab8a531039b66a13b5a1c8ced26846d1468c68da166a21ee340329"
     }
-  ]
+  ],
+  "pending_migrations": []
 }

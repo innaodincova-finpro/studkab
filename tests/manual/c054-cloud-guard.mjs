@@ -15,7 +15,7 @@ async function fresh(){
  alter default privileges in schema public grant all on tables to anon,authenticated,service_role;`);
  await db.exec(fs.readFileSync('baza.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20260907055928_studkab_cloud_safety_v2.sql','utf8').replace(/^do \$guard\$.*$/m,''));
- if(!before)await db.exec(fs.readFileSync('supabase/migrations/20260916100000_studkab_cloud_write_guard.sql','utf8'));
+ if(!before)await db.exec(fs.readFileSync('supabase/migrations/20260916135700_20260916100000_studkab_cloud_write_guard.sql','utf8'));
  await db.query('insert into auth.users values($1)',[u]);
  const as=async(sql,args=[])=>{await db.exec(`reset role; set role authenticated; set request.jwt.claim.sub='${u}';`);try{return (await db.query(sql,args)).rows;}finally{await db.exec('reset role;');}};
  return {db,as};
