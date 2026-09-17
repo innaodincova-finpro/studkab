@@ -909,11 +909,13 @@ Supabase, Cloudflare и рабочие данные этим изменение�
 
 | Требование | Реализация | Проверка | Фактический статус |
 |---|---|---|---|
-| `service_role` имеет только `SELECT`, `INSERT` на `studkab_members` | `20260917114944_c054_service_role_grants.sql`, создана Supabase CLI | `c054-grants-sql.test.mjs`: расширенные права → только два разрешённых | локально проверено; production не применено |
+| `service_role` имеет только `SELECT`, `INSERT` на `studkab_members` | production migration `20260917120817_c054_service_role_grants.sql` | `c054-grants-sql.test.mjs`; production read-only ACL | применено и проверено |
 | Данные и владелец таблицы сохраняются | migration содержит только `REVOKE`/`GRANT` | PGlite: число строк и владелец до/после совпадают; статический запрет DML/DDL | локально проверено |
 | Права владельца `postgres` не считаются drift | фильтрация owner-grants в `scripts/c054-state.mjs` | fixture включает полный набор owner-grants и получает `security=true` | локально проверено |
 | Migration входит в контролируемую историю | `manifest.json`, SHA-256 и `package.json` | `supabase-history.test.mjs`, полный `npm test` | локально 250/250 |
 
-Фактический read-only запуск `main@999573c` является основанием исправления, но не
-доказательством его применения. Повторная production-сверка выполняется только после
-PR, Safety, объединения и отдельного разрешённого запуска migration.
+Production `apply_migration` зарегистрировал версию `20260917120817` с именем
+`c054_service_role_grants`. После применения подтверждены только `INSERT`/`SELECT`
+у `service_role`, RLS включён, policies 0, активных подготовок 0. Контрольные количества
+до и после не изменились: заявки 5, облачные записи 6, подписки 3, допущенные 5.
+Репозиторий синхронизируется с фактическим номером без повторного изменения базы.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 
-const file='supabase/migrations/20260917114944_c054_service_role_grants.sql';
+const file='supabase/migrations/20260917120817_c054_service_role_grants.sql';
 const sql=await readFile(file,'utf8');
 const rows=async(db,query)=>(await db.query(query)).rows;
 

@@ -116,6 +116,12 @@
       "name": "studkab_unknown_fully_retained",
       "file": "20260915130200_studkab_unknown_fully_retained.sql",
       "sha256": "f86eeea10af072987e92a36a1151385ee27f5028a4c2eeb9de94ae673a230a47"
+    },
+    {
+      "version": "20260917120817",
+      "name": "c054_service_role_grants",
+      "file": "20260917120817_c054_service_role_grants.sql",
+      "sha256": "3e40910e336b4a702eab48fd034907fbeb923544bda2d30b33659f660b6a9767"
     }
   ],
   "pending_migrations": [
@@ -130,12 +136,6 @@
       "name": "studkab_members",
       "file": "20260916100100_studkab_members.sql",
       "sha256": "707f4f8f83ab8a531039b66a13b5a1c8ced26846d1468c68da166a21ee340329"
-    },
-    {
-      "version": "20260917114944",
-      "name": "c054_service_role_grants",
-      "file": "20260917114944_c054_service_role_grants.sql",
-      "sha256": "3e40910e336b4a702eab48fd034907fbeb923544bda2d30b33659f660b6a9767"
     }
   ]
 }
