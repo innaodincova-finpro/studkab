@@ -30,6 +30,7 @@ export const TRIGGER_QUERY=`select t.tgname,t.tgenabled,(t.tgtype & 1)<>0 is_row
  from pg_trigger t where t.tgrelid='public.app_data'::regclass and not t.tgisinternal and t.tgname='studkab_app_data_guard'`;
 export const SECURITY_QUERY=`select
  (select relrowsecurity from pg_class where oid='public.studkab_members'::regclass) rls,
+ (select pg_get_userbyid(relowner) from pg_class where oid='public.studkab_members'::regclass) owner,
  (select count(*)::int from pg_policies where schemaname='public' and tablename='studkab_members') policies,
  coalesce((select jsonb_agg(jsonb_build_object('grantee',grantee,'privilege',privilege_type) order by grantee,privilege_type)
  from information_schema.role_table_grants where table_schema='public' and table_name='studkab_members'),'[]'::jsonb) grants`;
@@ -113,8 +114,10 @@ export async function state({env,request=fetch,log=console.log,summary=async()=>
  const triggerOk=triggers.length===1&&triggers[0].tgenabled==='O'&&bool(triggers[0].is_row)&&bool(triggers[0].is_before)
   &&bool(triggers[0].on_insert)&&bool(triggers[0].on_update)&&bool(triggers[0].on_delete)
   &&triggers[0].function_name==='studkab_app_data_guard()';
- const grants=json(security?.grants||[]).map(x=>x.grantee+':'+x.privilege).sort();
- const securityOk=bool(security?.rls)&&Number(security?.policies)===0
+ // Права владельца postgres не являются выданными клиентской роли и не считаются
+ // drift. Для service_role допустимы только SELECT и INSERT.
+ const grants=json(security?.grants||[]).filter(x=>x.grantee!==security?.owner).map(x=>x.grantee+':'+x.privilege).sort();
+ const securityOk=security?.owner==='postgres'&&bool(security?.rls)&&Number(security?.policies)===0
   &&JSON.stringify(grants)===JSON.stringify(['service_role:INSERT','service_role:SELECT']);
  const accessByName=Object.fromEntries(access.map(x=>[x.fn,x]));
  const exactAccess=(name,{definer,anon,authenticated,service})=>{
