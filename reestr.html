@@ -1891,6 +1891,7 @@ function passportItemText(q){
  return value;
 }
 async function passportFingerprint(x){
+ docOf(x);
  var bytes=new TextEncoder().encode(DraftEditor.basis(x));
  var digest=await crypto.subtle.digest('SHA-256',bytes);
  return Array.from(new Uint8Array(digest)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
