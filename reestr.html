@@ -1042,7 +1042,7 @@ function openDocBuilder(id){
           message.textContent=(labels[info.job.status]||'Состояние уточняется')+' Сохранено частей: '+info.parts.filter(function(p){return p.state==='done';}).length+' из '+info.parts.length+'.';
           var failed=info.parts.filter(function(p){return p.failure;});
           if(failed.length){
-            var reasons={OUTPUT_LIMIT:'Ответ оборвался: достигнут предел длины ответа нейросети.',LEASE_EXPIRED_AFTER_DISPATCH:'После отправки запроса подтверждение не получено вовремя.',RESULT_UNKNOWN:'Не удалось подтвердить полный ответ нейросети.'};
+            var reasons={OUTPUT_LIMIT:'Ответ оборвался: достигнут предел длины ответа нейросети.',LEASE_EXPIRED_AFTER_DISPATCH:'После отправки запроса подтверждение не получено вовремя.',CONTEXT_TOO_BIG:'Материалы и сохранённые части превышают допустимый объём контекста.',PREPARATION_UNAVAILABLE:'Не удалось безопасно подготовить следующую часть к отправке.',RESULT_UNKNOWN:'Не удалось подтвердить полный ответ нейросети.'};
             message.textContent='Подготовка остановлена. '+failed.map(function(p){return 'Часть '+(p.ordinal+1)+': '+(reasons[p.failure.code]||reasons.RESULT_UNKNOWN);}).join(' ')+(failed.some(function(p){return p.failure.code==='OUTPUT_LIMIT';})?' Автоматический повтор заблокирован: при том же пределе ответ снова оборвётся.':' Сервер повторит эту часть не более одного раза. Расход по ней учтён полностью.')+' Сохранено частей: '+info.parts.filter(function(p){return p.state==='done';}).length+' из '+info.parts.length+'.';
           }
           if(doc.serverJob.basis===null)message.textContent+=' Связь с текущими материалами не подтверждена: проверьте выбранную версию.';
@@ -1844,14 +1844,14 @@ function viewList(){
       ? '<div class="row" style="margin-bottom:10px"><span class="mut">Отбор: ' +
         (filter !== "all" ? STATUS[filter] : "поиск") + ' · ' + list0(filter, query).length + '</span>' +
         '<button type="button" class="mini" data-act="filter" data-k="all">показать все</button></div>'
-      : '') + '<div class="fld"><input type="search" id="q" value="' + esc(query) + '" placeholder="Поиск по фамилии, вузу, теме"></div>' +
+      : '') + '<div class="fld"><input type="search" id="q" aria-label="Поиск заявок" value="' + esc(query) + '" placeholder="Поиск по фамилии, вузу, теме"></div>' +
     '<div class="pick" style="margin-bottom:12px">' + chips.map(function(f){
       var n = f.k==="all" ? c.all : c[f.k];
       if (f.k !== "all" && !n) return "";
       return '<button type="button" aria-pressed="' + (filter===f.k) + '" data-act="filter" data-k="' + f.k + '">' + f.t + ' · ' + n + '</button>';
     }).join("") + '</div>';
   if (!D.items.length){
-    return h + '<div class="empty">Заявок нет. Откройте ссылку из сообщения студента — она встанет сюда.</div>';
+    return h + '<div class="empty">Заявок нет. Новые заявки из кабинета студента появятся здесь после обновления списка.</div>';
   }
   h += list.length ? card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Студент</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Статус</th></tr></thead><tbody>'+list.map(function(x){
     var over=x.deadline && x.deadline<today() && x.status!=="done" && x.status!=="off";
@@ -1980,10 +1980,10 @@ function viewItem(id){
   h += group("requirements","Требования и материалы",requirements,defaultGroup==="requirements");
 
   var progress = lab("Текущий этап") +
-    '<div class="fld"><select data-act="status" data-id="' + esc(x.id) + '">' +
+    '<div class="fld"><label for="requestStatus">Статус заявки</label><select id="requestStatus" data-act="status" data-id="' + esc(x.id) + '">' +
       ORDER.map(function(s2){ return '<option value="' + s2 + '"' + (x.status===s2?" selected":"") + '>' + STATUS[s2] + '</option>' }).join("") +
     '</select></div>' +
-    '<div class="fld"><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">' + esc(x.note||"") + '</textarea></div>' +
+    '<div class="fld"><label for="note">Заметка исполнителя</label><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">' + esc(x.note||"") + '</textarea></div>' +
     '<div class="row"><button type="button" class="chip" data-act="save-note" data-id="' + esc(x.id) + '">Сохранить заметку</button>' +
     '<button type="button" class="del" data-act="delete" data-id="' + esc(x.id) + '">удалить</button></div>';
   h += group("progress","Выполнение и проверка",progress,defaultGroup==="progress");
@@ -1994,7 +1994,7 @@ function viewItem(id){
     '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (hasDoc ? "Открыть документ" : "Собрать документ") + '</button></div>';
   h += group("result","Готовый результат",result,defaultGroup==="result");
 
-  if(x.requestNumber) h += group("delivery","Передача студенту",'<p class="hint">Передайте проверенный документ прямо в кабинет автора заявки.</p><button type="button" class="btn compact-action" data-act="deliver-result" data-id="'+esc(x.id)+'">Передать черновик студенту</button>',defaultGroup==="delivery");
+  if(x.requestNumber) h += group("delivery","Передача студенту",'<p class="hint">Передайте проверенную версию Word прямо в кабинет автора заявки.</p><button type="button" class="btn compact-action" data-act="deliver-result" data-id="'+esc(x.id)+'">Проверить и передать Word</button>',defaultGroup==="delivery");
   return h;
 }
 
@@ -2032,7 +2032,7 @@ function viewRef(id){
   if (!r) return '<div class="empty">Карточка не найдена</div>';
   var f = r.format || {};
   function fld(idd, label, val, type){
-    return '<div class="fld"><label>' + label + '</label><input type="' + (type||"text") + '" id="' + idd + '" value="' + esc(val==null?"":val) + '"></div>';
+    return '<div class="fld"><label for="' + idd + '">' + label + '</label><input type="' + (type||"text") + '" id="' + idd + '" value="' + esc(val==null?"":val) + '"></div>';
   }
   var reqs = D.items.filter(function(x){ return x.refId === r.id });
   return '<button type="button" class="mini" data-act="ref-back" style="margin:0 0 10px">← Вузы</button>' +
@@ -2133,10 +2133,10 @@ function viewMore(){
       '<button type="button" class="chip" data-act="import">Загрузить копию</button><button type="button" class="chip" data-act="cloud-before-copy">Копии перед заменой</button></div>' +
       '<div class="hint">Без входа данные хранятся только в этом браузере. После входа доступно облачное сохранение. Копию можно скачать отдельно. Ключи и пароль посредника в копию не попадают — на новом устройстве впишите их заново.</div>') +
     '<details class="fold"><summary>Как это работает</summary><div class="in">' +
-      '<div class="item"><div class="ic">1</div><div class="txt"><b>Студент отправляет заявку</b><small>Сообщение приходит в WhatsApp или Telegram</small></div></div>' +
-      '<div class="item"><div class="ic">2</div><div class="txt"><b>Вы открываете ссылку из сообщения</b><small>Заявка встаёт в список. Не открылась — «Из текста» внизу списка</small></div></div>' +
+      '<div class="item"><div class="ic">1</div><div class="txt"><b>Студент отправляет заявку</b><small>Заявка сохраняется в облаке и попадает в реестр</small></div></div>' +
+      '<div class="item"><div class="ic">2</div><div class="txt"><b>Вы открываете заявку</b><small>Обновите список и откройте нужную строку</small></div></div>' +
       '<div class="item"><div class="ic">3</div><div class="txt"><b>Готовите документ</b><small>Добавьте материалы и проверенные источники один раз, затем нажмите «Начать подготовку». Процесс сохранится на сервере: окно можно закрыть и продолжить позже. Проверьте факты, расчёты и оформление перед передачей студенту.</small></div></div>' +
-      '<div class="item"><div class="ic">4</div><div class="txt"><b>Отправляете файл студенту</b><small>В мессенджер. Ставите статус</small></div></div>' +
+      '<div class="item"><div class="ic">4</div><div class="txt"><b>Передаёте проверенную версию</b><small>После проверки Word появляется в кабинете студента</small></div></div>' +
       '<div class="item"><div class="ic">5</div><div class="txt"><b>Справочник вузов</b><small>Наполняется из заявок сам. «Проверено» ставите вы, когда сверили с методичкой</small></div></div>' +
       '<div class="item"><div class="ic">6</div><div class="txt"><b>Ключи нейросетей</b><small>Хранятся у посредника на Cloudflare. Подключение — по инструкции</small></div></div>' +
     '</div></details>';
@@ -2291,15 +2291,26 @@ function openInvitation(recovery){
   };
 }
 
+var modalSequence=0;
 function openModal(html){
+  var opener=document.activeElement;
   var wrap = document.createElement("div");
   wrap.className = "sheet";
   wrap.innerHTML = '<div class="sheet-in">' + html + '</div>';
+  wrap.setAttribute("role","dialog");wrap.setAttribute("aria-modal","true");
+  var heading=wrap.querySelector("h1,h2,h3");
+  if(heading){heading.id=heading.id||"modal-title-"+(++modalSequence);wrap.setAttribute("aria-labelledby",heading.id);}else{wrap.setAttribute("aria-label","Диалог");}
+  var closeButton=wrap.querySelector("[data-x]");if(closeButton&&!closeButton.getAttribute("aria-label"))closeButton.setAttribute("aria-label","Закрыть");
   document.body.appendChild(wrap);
+  var nativeRemove=wrap.remove.bind(wrap);
+  wrap.remove=function(){if(!wrap.isConnected)return;nativeRemove();if(opener&&opener.isConnected&&opener.focus)opener.focus();};
   wrap.addEventListener("click", function(ev){
     if (ev.target === wrap){ wrap.remove(); return; }
     if (ev.target.closest("[data-x]")) wrap.remove();
   });
+  var focusable=function(){return Array.from(wrap.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')).filter(function(el){return !el.hidden&&!el.closest('[hidden]');});};
+  wrap.addEventListener("keydown",function(ev){if(ev.key!=="Tab")return;var list=focusable();if(!list.length){ev.preventDefault();return;}var first=list[0],last=list[list.length-1];if(ev.shiftKey&&document.activeElement===first){ev.preventDefault();last.focus();}else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first.focus();}});
+  var first=focusable()[0];if(first)first.focus();
   return wrap;
 }
 

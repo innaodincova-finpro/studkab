@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {handler,prepare,failure,workKind} from '../supabase/functions/studkab-generation-api/handler.mjs';
+import {handler,prepare,failure,diagnostic,workKind} from '../supabase/functions/studkab-generation-api/handler.mjs';
 import {reserveMicrousd} from '../supabase/functions/_shared/deepseek-cost.mjs';
 const uid='11111111-1111-4111-8111-111111111111',job='22222222-2222-4222-8222-222222222222';
 const requestId='33333333-3333-4333-8333-333333333333',passportId='44444444-4444-4444-8444-444444444444',materialFingerprint='a'.repeat(64);
@@ -18,6 +18,7 @@ function setup({user={id:uid,email:'owner@example.test',email_confirmed_at:'yes'
  if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];
  if(path.startsWith('studkab_requirement_passports'))return passport?[{id:passportId,revision:1,source_fingerprint:materialFingerprint}]:[];
  if(path.startsWith('rpc/'))return job;if(path.startsWith('studkab_gen_jobs'))return missing?[]:[{id:job,status:'running'}];
+ if(path.startsWith('studkab_gen_attempts'))return [];
  return [{ordinal:0,state:'done',result:'Сохранено',spec:{id:'intro',prompt:'private'},claim:'private-token'}];}});
  return {calls,request:body=>h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify(body)}))};
 }
@@ -27,7 +28,7 @@ test('zero budget blocks start before database mutation',async()=>{const s=setup
 test('disabled integration does not read budget or create job',async()=>{const s=setup({enabled:false});assert.equal((await s.request(valid)).status,503);assert.equal(s.calls.length,0);});
 test('server owner and reserve override client fields',async()=>{const s=setup();const body={...valid,owner:'other',parts:[{...valid.parts[0],max_cost_microusd:1}]};assert.equal((await s.request(body)).status,200);const args=s.calls.at(-1).args;assert.equal(args.p_owner,uid);assert.equal(args.p_plan[0].max_cost_microusd,250000);});
 test('same request produces identical immutable RPC input',async()=>{const s=setup();await s.request(valid);await s.request(valid);const starts=s.calls.filter(c=>c.path.startsWith('rpc/'));assert.deepEqual(starts[0].args,starts[1].args);});
-test('status always filters by authenticated owner and omits secrets',async()=>{const s=setup();const r=await s.request({action:'status',job,owner:'other'});const value=await r.json();assert.ok(s.calls[0].path.includes('owner_id=eq.'+uid));assert.deepEqual(value.parts,[{ordinal:0,id:'intro',section:'intro',state:'done',text:'Сохранено',failure:null}]);});
+test('status always filters by authenticated owner and omits secrets',async()=>{const s=setup();const r=await s.request({action:'status',job,owner:'other'});const value=await r.json();assert.ok(s.calls[0].path.includes('owner_id=eq.'+uid));assert.deepEqual(value.diagnostics,[]);assert.deepEqual(value.parts,[{ordinal:0,id:'intro',section:'intro',state:'done',text:'Сохранено',failure:null}]);});
 test('missing or foreign job returns no part data',async()=>{const s=setup({missing:true});assert.equal((await s.request({action:'status',job})).status,404);assert.equal(s.calls.length,1);});
 test('query injection cannot reach database',async()=>{const s=setup();assert.equal((await s.request({action:'status',job:'x&owner_id=neq.x'})).status,400);assert.equal(s.calls.length,0);});
 test('plan rejects duplicates, invalid sizes and missing trusted costs',()=>{assert.throws(()=>prepare({...valid,parts:[valid.parts[0],valid.parts[0]]},250000));assert.throws(()=>prepare(valid,0));assert.throws(()=>prepare({...valid,system:'x'.repeat(100001)},250000));});
@@ -133,4 +134,9 @@ test('C-051: cancel rejects malformed job and hides foreign jobs',async()=>{
 test('C-051: student cannot cancel executor jobs',async()=>{
  const s=setup({user:{id:uid,email:'student@example.test',email_confirmed_at:'yes'}});
  assert.equal((await s.request({action:'cancel',job})).status,403);assert.equal(s.calls.length,0);
+});
+test('R1 diagnostics expose bounded operational fields and omit arbitrary detail',()=>{
+ assert.deepEqual(diagnostic({ordinal:2,section:'chapter-2',stage:'provider',attempt:1,request_id:'11111111-1111-4111-8111-111111111111',reason:'RESULT_UNKNOWN',finish_reason:'length',started_at:'2026-09-17T12:00:00Z',finished_at:null,promptTokens:10,completionTokens:20,secret:'x'}),
+  {ordinal:2,section:'chapter-2',stage:'provider',attempt:1,requestId:'11111111-1111-4111-8111-111111111111',reason:'RESULT_UNKNOWN',finishReason:'length',startedAt:'2026-09-17T12:00:00Z',finishedAt:null,promptTokens:10,completionTokens:20});
+ assert.equal(diagnostic({stage:'private-stage'}),null);
 });

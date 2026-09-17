@@ -30,11 +30,9 @@ Deno.serve(handler({
  config:async()=>(await db('studkab_request_config?id=eq.true&select=cron_token'))[0],
  rpc:(name:string,args:unknown)=>db('rpc/'+name,args),
  prepare:async(c:any)=>checkReserve(withContext(c,await db('studkab_gen_parts?job_id=eq.'+c.job_id+'&ordinal=lt.'+c.ordinal+'&select=ordinal,state,result&order=ordinal.asc'))),
- failClaim:async(c:any)=>{
-  const rows=await db('studkab_gen_parts?job_id=eq.'+c.job_id+'&ordinal=eq.'+c.ordinal+'&claim=eq.'+c.claim+'&state=eq.claimed&lease_until=gt.'+encodeURIComponent(new Date().toISOString()),{state:'unknown'},'PATCH');
-  if(!rows?.length)throw Error('STALE_CLAIM');
-  await db('studkab_gen_jobs?id=eq.'+c.job_id+'&status=in.(queued,running)',{status:'unknown'},'PATCH');
- },
+ failClaim:(c:any,code:string)=>db('rpc/studkab_gen_fail_preparation',{
+  p_job:c.job_id,p_ordinal:c.ordinal,p_claim:c.claim,p_reason:code
+ }),
  provider,ready:()=>enabled && !!token,
  readiness:()=>({enabled,providerConfigured:!!token})
 }));

@@ -23,7 +23,7 @@ export function handler({config,rpc,provider,ready,authorize,readiness,prepare,f
   if(prepare){
    try{c=await prepare(c);}catch(e){
     const code=e.message==='CONTEXT_TOO_BIG'?'CONTEXT_TOO_BIG':'PREPARATION_UNAVAILABLE';
-    try{if(failClaim)await failClaim(c);}catch{return reply({status:'block_unconfirmed',code},503);}
+    try{if(failClaim)await failClaim(c,code);}catch{return reply({status:'block_unconfirmed',code},503);}
     return reply({status:'blocked',code,job:c.job_id},409);
    }
   }

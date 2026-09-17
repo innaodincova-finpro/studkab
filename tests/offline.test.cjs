@@ -34,3 +34,21 @@ test('successful navigation refreshes its own offline copy',async()=>{
  assert.equal(await (await w.page('reestr.html')).text(),'new registry');
  assert.equal(await w.entries.get(base+'reestr.html').clone().text(),'new registry');
 });
+
+test('push opens only a same-origin application URL and rejects foreign targets',async()=>{
+ const handlers={},shown=[],opened=[],navigated=[];
+ const existing={url:base+'index.html',navigate:async url=>{navigated.push(url);existing.url=url},focus:async()=>{}};
+ const self={
+  location:{origin:new URL(base).origin},
+  registration:{scope:base,showNotification:async(title,options)=>shown.push({title,options})},
+  clients:{matchAll:async()=>[existing],openWindow:async url=>opened.push(url)},
+  addEventListener:(name,fn)=>handlers[name]=fn
+ };
+ vm.runInNewContext(fs.readFileSync('sw.js','utf8'),{URL,Response,fetch:async()=>new Response('ok'),caches:{open:async()=>({addAll:async()=>{},match:async()=>null,put:async()=>{}}),keys:async()=>[],delete:async()=>{}},self});
+ let done;handlers.push({data:{json:()=>({body:'Готово',url:'index.html#request=42',expiresAt:Date.now()+60000})},waitUntil:p=>done=p});await done;
+ assert.equal(shown[0].options.data.url,base+'index.html#request=42');
+ handlers.notificationclick({notification:{data:shown[0].options.data,close(){}},waitUntil:p=>done=p});await done;
+ assert.deepEqual(navigated,[base+'index.html#request=42']);assert.deepEqual(opened,[]);
+ handlers.push({data:{json:()=>({url:'https://evil.test/phishing',expiresAt:Date.now()+60000})},waitUntil:p=>done=p});await done;
+ assert.equal(shown[1].options.data.url,base);
+});
