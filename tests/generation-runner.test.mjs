@@ -89,12 +89,12 @@ test('part context includes only preceding completed results without truncation'
  assert.equal(c.spec.prompt,'continue');
 });
 test('oversized context stops before dispatch and provider',async()=>{
- let sent=0,blocked=0;
+ let sent=0,blocked=0,reason;
  const h=handler({authorize:async()=>true,config:async()=>({cron_token:'test'}),ready:()=>true,
  rpc:async name=>{if(name!=='studkab_gen_claim')throw Error('MUST_NOT_DISPATCH');return claim;},
- prepare:async()=>{throw Error('CONTEXT_TOO_BIG');},failClaim:async()=>{blocked++;},provider:async()=>{sent++;}});
+  prepare:async()=>{throw Error('CONTEXT_TOO_BIG');},failClaim:async(c,code)=>{blocked++;reason=code;},provider:async()=>{sent++;}});
  const r=await h(new Request('https://internal',{method:'POST',headers:{'X-Studkab-Runner':'test'}}));
- assert.equal(r.status,409);assert.equal((await r.json()).code,'CONTEXT_TOO_BIG');assert.equal(sent,0);assert.equal(blocked,1);
+ assert.equal(r.status,409);assert.equal((await r.json()).code,'CONTEXT_TOO_BIG');assert.equal(sent,0);assert.equal(blocked,1);assert.equal(reason,'CONTEXT_TOO_BIG');
 });
 
 test('test runner refuses underfunded immutable parts before dispatch',async()=>{

@@ -22,6 +22,14 @@ export function failure(attempt){
  for(const key of ['prompt_tokens','completion_tokens'])if(Number.isSafeInteger(attempt.detail?.[key])&&attempt.detail[key]>=0&&attempt.detail[key]<=1000000000)out[key]=attempt.detail[key];
  return out;
 }
+const diagnosticStages=new Set(['preparation','provider']);
+export function diagnostic(value){
+ if(!value||!diagnosticStages.has(value.stage))return null;
+ const out={ordinal:value.ordinal,section:value.section||null,stage:value.stage,attempt:value.attempt,requestId:value.request_id||null,
+  reason:value.reason||null,finishReason:value.finish_reason||null,startedAt:value.started_at||null,finishedAt:value.finished_at||null};
+ for(const key of ['promptTokens','completionTokens'])if(Number.isSafeInteger(value[key])&&value[key]>=0&&value[key]<=1000000000)out[key]=value[key];
+ return out;
+}
 export function prepare(input,workLimit){
  if(typeof input.request!=='string'||!uuid.test(input.request) || !fingerprint.test(input.materialFingerprint||'')
  || typeof input.system!=='string' || !input.system.trim()
@@ -117,10 +125,18 @@ export function handler({auth,config,db,settings}){
     if(!uuid.test(input.job||''))return reply({error:'INVALID_JOB'},400);
     const [job]=await db('studkab_gen_jobs?id=eq.'+input.job+'&owner_id=eq.'+encodeURIComponent(user.id)+'&select=id,request_id,version,status,created_at');
     if(!job)return reply({error:'NOT_FOUND'},404);
-    const parts=await db('studkab_gen_parts?job_id=eq.'+job.id+'&select=ordinal,state,result,spec&order=ordinal.asc');
-    const attempts=await db('studkab_gen_attempts?job_id=eq.'+job.id+'&select=ordinal,reason,detail&order=started_at.desc');
+    const parts=await db('studkab_gen_parts?job_id=eq.'+job.id+'&select=ordinal,state,result,spec,failure_stage,failure_reason,failure_count,failure_at&order=ordinal.asc');
+    const attempts=await db('studkab_gen_attempts?job_id=eq.'+job.id+'&select=request_id,ordinal,state,reason,detail,started_at,finished_at&order=ordinal.asc,started_at.asc');
     // Claim tokens, input prompts and service configuration never enter the response.
-    return reply({job,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,failure:p.state==='unknown'?failure(attempts.find(a=>a.ordinal===p.ordinal)):null}))});
+    const counters=new Map(),diagnostics=[];
+    for(const a of attempts){const n=(counters.get(a.ordinal)||0)+1;counters.set(a.ordinal,n);const part=parts.find(p=>p.ordinal===a.ordinal);const d=diagnostic({
+     ordinal:a.ordinal,section:part?.spec?.section_id||part?.spec?.id,stage:'provider',attempt:n,request_id:a.request_id,reason:a.reason,
+     finish_reason:a.detail?.finish_reason,started_at:a.started_at,finished_at:a.finished_at,
+     promptTokens:a.detail?.prompt_tokens,completionTokens:a.detail?.completion_tokens});if(d)diagnostics.push(d);}
+    for(const p of parts)if(p.failure_stage==='preparation'){const d=diagnostic({ordinal:p.ordinal,section:p.spec?.section_id||p.spec?.id,stage:'preparation',
+     attempt:p.failure_count,reason:p.failure_reason,started_at:p.failure_at,finished_at:p.failure_at});if(d)diagnostics.push(d);}
+    return reply({job,diagnostics,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,
+     failure:p.state==='unknown'?(p.failure_stage==='preparation'?{code:p.failure_reason}:failure(attempts.find(a=>a.ordinal===p.ordinal))):null}))});
    }
    return reply({error:'UNKNOWN_ACTION'},400);
   }catch{return reply({error:'SERVICE_UNAVAILABLE'},503);}

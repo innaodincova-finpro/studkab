@@ -105,19 +105,32 @@ self.addEventListener('push', event => {
  event.waitUntil((async()=>{
   let data;try{data=event.data.json();}catch{return;}
   if(!data || Date.now()>Number(data.expiresAt))return;
+  const root=new URL('./',self.registration.scope);
+  let target=root.href;
+  try{
+   const candidate=new URL(String(data.url||''),root);
+   if(candidate.origin===root.origin && candidate.pathname.startsWith(root.pathname))target=candidate.href;
+  }catch{}
   await self.registration.showNotification('Кабинет студента', {
    body:String(data.body||'Откройте кабинет, чтобы посмотреть напоминание.').slice(0,250),
-   tag:String(data.tag||'studkab').slice(0,250),data:{url:new URL('./',self.registration.scope).href}
+   tag:String(data.tag||'studkab').slice(0,250),data:{url:target}
   });
  })());
 });
 self.addEventListener('notificationclick', event => {
  event.notification.close();
  event.waitUntil((async()=>{
-  const url=new URL('./',self.registration.scope).href;
+  const root=new URL('./',self.registration.scope);
+  let url=root.href;
+  try{
+   const candidate=new URL(String(event.notification.data?.url||''),root);
+   if(candidate.origin===root.origin && candidate.pathname.startsWith(root.pathname))url=candidate.href;
+  }catch{}
   const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-  const existing=windows.find(w=>w.url===url || w.url===url+'index.html');
+  const existing=windows.find(w=>w.url===url);
   if(existing)return existing.focus();
+  const appWindow=windows.find(w=>{try{return new URL(w.url).origin===root.origin && new URL(w.url).pathname.startsWith(root.pathname);}catch{return false;}});
+  if(appWindow){await appWindow.navigate(url);return appWindow.focus();}
   return self.clients.openWindow(url);
  })());
 });

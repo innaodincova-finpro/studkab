@@ -136,6 +136,12 @@
       "name": "studkab_members",
       "file": "20260916100100_studkab_members.sql",
       "sha256": "707f4f8f83ab8a531039b66a13b5a1c8ced26846d1468c68da166a21ee340329"
+    },
+    {
+      "version": "20260917150000",
+      "name": "studkab_preparation_diagnostics",
+      "file": "20260917150000_studkab_preparation_diagnostics.sql",
+      "sha256": "9c694f7f842c5053857de78ab178ce5c0db53b1c6f2e17a72b68e5192421d7da"
     }
   ]
 }

@@ -1312,12 +1312,12 @@ function openWorkEditor(workId){
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>'+
     '<h2>Тема и срок</h2>'+
-    '<div class="field" style="margin-top:14px"><label>Тема работы</label><input type="text" id="eTopic" value="'+esc(w.topic)+'"></div>'+
-    '<div class="field"><label>Срок сдачи</label><input type="date" id="eDue" value="'+esc(w.deadline||"")+'"></div>'+
-    '<div class="field"><label>Требования (объём, оригинальность)</label><input type="text" id="eReq" value="'+esc(w.requirements||"")+'"></div>'+
+    '<div class="field" style="margin-top:14px"><label for="eTopic">Тема работы</label><input type="text" id="eTopic" value="'+esc(w.topic)+'"></div>'+
+    '<div class="field"><label for="eDue">Срок сдачи</label><input type="date" id="eDue" value="'+esc(w.deadline||"")+'"></div>'+
+    '<div class="field"><label for="eReq">Требования (объём, оригинальность)</label><input type="text" id="eReq" value="'+esc(w.requirements||"")+'"></div>'+
     '<div class="fgrid">'+
-      '<div class="field"><label>Автор</label><input type="text" id="eStud" value="'+esc(w.student||"")+'"></div>'+
-      '<div class="field"><label>Группа</label><input type="text" id="eGroup" value="'+esc(w.group||"")+'"></div>'+
+      '<div class="field"><label for="eStud">Автор</label><input type="text" id="eStud" value="'+esc(w.student||"")+'"></div>'+
+      '<div class="field"><label for="eGroup">Группа</label><input type="text" id="eGroup" value="'+esc(w.group||"")+'"></div>'+
     '</div>'+
     '<div class="rowbtns">'+
       '<button type="button" class="b b-main" data-save="1">Сохранить</button>'+
@@ -1344,12 +1344,12 @@ function openNewWork(){
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>'+
     '<h2>Новая работа</h2>'+
-    '<div class="field" style="margin-top:14px"><label>Тема</label><input type="text" id="nTopic" placeholder="Например: Организация работы проектной команды"></div>'+
-    '<div class="field"><label>Вид работы</label>'+
+    '<div class="field" style="margin-top:14px"><label for="nTopic">Тема</label><input type="text" id="nTopic" placeholder="Например: Организация работы проектной команды"></div>'+
+    '<div class="field"><label for="nType">Вид работы</label>'+
       '<select id="nType"><option>Курсовая работа</option><option>Выпускная квалификационная работа</option>'+
       '<option>Реферат</option><option>Контрольная работа</option><option>Эссе</option><option>Отчёт по практике</option></select></div>'+
-    '<div class="field"><label>Срок сдачи</label><input type="date" id="nDue" value="'+addDays(today(),30)+'"></div>'+
-    '<div class="field"><label>Оформление</label><select id="nTpl">'+
+    '<div class="field"><label for="nDue">Срок сдачи</label><input type="date" id="nDue" value="'+addDays(today(),30)+'"></div>'+
+    '<div class="field"><label for="nTpl">Оформление</label><select id="nTpl">'+
       '<option value="">Общий ГОСТ (уточнить по методичке)</option>'+
       (D.templates||[]).map(function(t){ return '<option value="'+t.id+'">'+esc(t.name)+'</option>' }).join("")+
     '</select></div>'+
@@ -1888,7 +1888,7 @@ function viewMore(){
   }
   var s = D.settings, c = counts();
   function fld(id, label, val, ph){
-    return '<div class="fld"><label>' + label + '</label><input type="text" id="' + id + '" value="' + esc(val || "") + '"' +
+    return '<div class="fld"><label for="' + id + '">' + label + '</label><input type="text" id="' + id + '" value="' + esc(val || "") + '"' +
       (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
   }
   var h = section("Данные студента",
@@ -1899,7 +1899,7 @@ function viewMore(){
     fld("stKaf", "Кафедра", s.kafedra) +
     fld("stProg", "Направление подготовки", s.program, "Например: 38.03.02 Менеджмент") +
     '<div class="fgrid">' +
-      '<div class="fld"><label>Форма обучения</label><select id="stForm">' +
+      '<div class="fld"><label for="stForm">Форма обучения</label><select id="stForm">' +
         ["", "очная", "очно-заочная", "заочная"].map(function(v){
           return '<option value="' + v + '"' + ((s.form || "") === v ? " selected" : "") + '>' + (v || "не указана") + '</option>'; }).join("") +
       '</select></div>' + fld("stCourse", "Курс", s.course) + '</div>' +
@@ -1920,8 +1920,8 @@ function viewMore(){
     '<p class="hint" id="push-status" role="status" aria-live="polite">Уведомления подключаются отдельно на каждом устройстве.</p>' : '<p class="hint">Напоминания о сроках приходят на этот телефон, даже когда кабинет закрыт. Для этого нужен вход и сохранение работ в облаке.</p><button class="chip" data-act="cloud">Войти, чтобы включить уведомления</button>');
 
   h += section("Настройки",
-    '<div class="fld"><label>Предупреждать заранее, дней</label><input type="number" id="stWarn" min="1" max="30" value="' + (s.warnDays || 3) + '"></div>' +
-    '<div class="fld"><label>Адрес реестра для заявок</label><input type="text" id="stReg" value="' + esc(s.registryUrl || "") + '"></div>' +
+    '<div class="fld"><label for="stWarn">Предупреждать заранее, дней</label><input type="number" id="stWarn" min="1" max="30" value="' + (s.warnDays || 3) + '"></div>' +
+    '<div class="fld"><label for="stReg">Адрес реестра для заявок</label><input type="text" id="stReg" value="' + esc(s.registryUrl || "") + '"></div>' +
     '<button type="button" class="btn ghost" data-act="save-settings">Сохранить</button>');
 
   h += section("Итоги",
@@ -2084,18 +2084,28 @@ function openCloud(){
 }
 
 /* ---------- ОКНА СНИЗУ ---------- */
+var modalSequence=0;
 function openModal(html, onMount){
+  var opener=document.activeElement;
   var wrap = document.createElement("div");
   wrap.className = "sheet open";
   wrap.innerHTML = '<div class="sheet-in">' + html + '</div>';
+  wrap.setAttribute("role","dialog");wrap.setAttribute("aria-modal","true");
+  var heading=wrap.querySelector("h1,h2,h3");
+  if(heading){heading.id=heading.id||"modal-title-"+(++modalSequence);wrap.setAttribute("aria-labelledby",heading.id);}else{wrap.setAttribute("aria-label","Диалог");}
+  var closeButton=wrap.querySelector("[data-x]");if(closeButton&&!closeButton.getAttribute("aria-label"))closeButton.setAttribute("aria-label","Закрыть");
   document.body.appendChild(wrap);
+  var nativeRemove=wrap.remove.bind(wrap);
+  wrap.remove=function(){if(!wrap.isConnected)return;nativeRemove();if(opener&&opener.isConnected&&opener.focus)opener.focus();};
   wrap.addEventListener("click", function(ev){
     if (ev.target === wrap){ wrap.remove(); return; }
     if (ev.target.closest("[data-x]")) wrap.remove();
   });
   if (onMount) onMount(wrap);
-  var first = wrap.querySelector("input[type=text],textarea");
-  if (first && window.innerWidth > 600) first.focus();
+  var focusable=function(){return Array.from(wrap.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')).filter(function(el){return !el.hidden&&!el.closest('[hidden]');});};
+  wrap.addEventListener("keydown",function(ev){if(ev.key!=="Tab")return;var list=focusable();if(!list.length){ev.preventDefault();return;}var first=list[0],last=list[list.length-1];if(ev.shiftKey&&document.activeElement===first){ev.preventDefault();last.focus();}else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first.focus();}});
+  var first = focusable()[0];
+  if (first) first.focus();
   return wrap;
 }
 function pickTemplate(workId){
