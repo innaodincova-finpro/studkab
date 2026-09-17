@@ -3,7 +3,12 @@
  'use strict';
  var marker=/\[(?:ДАННЫЕ СТУДЕНТА|СФОРМУЛИРОВАТЬ САМОСТОЯТЕЛЬНО|ПРОВЕРИТЬ ИСТОЧНИК|выше\/ниже|соответствует\/не соответствует|больше\/меньше)[^\]]*\]/gi;
  function financial(x){return /финансов.{0,15}состояни/i.test(x.topic||'')||String(inputs(x).finance||'').trim().length>0;}
- function inputs(x){return Object.assign({organization:x.org||'',period:'',requirements:[x.requirements,x.methodNotes].filter(Boolean).join('\n'),materials:'',sources:'',finance:''},x.doc&&x.doc.inputs||{});}
+ function inputs(x){
+  var result=Object.assign({organization:x.org||'',period:'',requirements:[x.requirements,x.methodNotes].filter(Boolean).join('\n'),materials:'',sources:'',finance:''},x.doc&&x.doc.inputs||{}),d=x.doc||{};
+  if(d.attachmentMaterials)result.materials=[result.materials,d.attachmentMaterials].filter(Boolean).join('\n\n--- ФАЙЛЫ СТУДЕНТА ---\n\n');
+  if(d.attachmentSources)result.sources=[result.sources,d.attachmentSources].filter(Boolean).join('\n\n--- ФАЙЛЫ СТУДЕНТА ---\n\n');
+  return result;
+ }
  function number(s){var t=String(s).trim().replace(/\s/g,'').replace(',','.');if(!/^-?\d+(?:\.\d+)?$/.test(t))throw Error('В таблице есть пустое или нечисловое значение');var n=Number(t);if(!Number.isFinite(n)||Math.abs(n)>1e12)throw Error('Недопустимое число');return n;}
  var names=['Год','Активы','Оборотные активы','Капитал','Долгосрочные обязательства','Краткосрочные обязательства','Выручка','Чистая прибыль'];
  function finance(text){

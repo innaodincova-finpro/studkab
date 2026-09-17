@@ -1,0 +1,20 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
+import {attachmentAction} from '../supabase/functions/studkab-requests/attachments.mjs';
+const student={id:'11111111-1111-4111-8111-111111111111',email:'student@example.test'};
+const executor={id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'};
+const request='33333333-3333-4333-8333-333333333333';
+function deps(){let uploaded=0,removed=[];let inserted=[];return {get uploaded(){return uploaded},get inserted(){return inserted},get removed(){return removed},config:async()=>({executor_email:executor.email}),upload:async()=>{uploaded++;return 'trusted extracted text'},remove:async path=>removed.push(path),download:async()=>({url:'https://signed.example/file',expiresIn:300}),db:async(path,method,body)=>{
+ if(path.startsWith('studkab_requests?'))return [{id:request,student_id:student.id}];
+ if(path==='studkab_request_attachments'&&method==='POST'){inserted.push(body);return [body];}
+ if(path.startsWith('studkab_request_attachments?request_id='))return [];
+ if(path.startsWith('studkab_request_attachments?id='))return [{storage_path:student.id+'/'+request+'/file',file_name:'a.txt'}];
+ throw Error('unexpected '+path);
+}}}
+const valid={action:'attachment-upload',id:request,fileName:'a.txt',contentType:'text/plain',category:'assignment',sizeBytes:3,fileHash:'a'.repeat(64),base64:'YWJj'};
+test('student attachment is bound to owner and immutable request path',async()=>{const d=deps(),r=await attachmentAction(valid,student,d);assert.equal(r.status,200);assert.equal(d.uploaded,1);assert.equal(d.inserted[0].student_id,student.id);assert.match(d.inserted[0].storage_path,new RegExp('^'+student.id+'/'+request+'/'));});
+test('executor may list and download but may not upload for student',async()=>{const d=deps();assert.equal((await attachmentAction({action:'attachment-list',id:request},executor,d)).status,200);assert.equal((await attachmentAction({action:'attachment-download',id:request,attachmentId:'44444444-4444-4444-8444-444444444444'},executor,d)).status,200);assert.equal((await attachmentAction(valid,executor,d)).status,403);});
+test('only executor may obtain extracted attachment context',async()=>{const d=deps();assert.equal((await attachmentAction({action:'attachment-context',id:request},executor,d)).status,200);assert.equal((await attachmentAction({action:'attachment-context',id:request},student,d)).status,403);});
+test('foreign student sees request-not-found response and cannot touch storage',async()=>{const d=deps(),other={id:'55555555-5555-4555-8555-555555555555',email:'other@example.test'};const r=await attachmentAction(valid,other,d);assert.equal(r.status,404);assert.equal(d.uploaded,0);});
+test('invalid type, size, hash and base64 fail before storage',async()=>{for(const change of [{contentType:'text/html'},{sizeBytes:5242881},{fileHash:'x'},{base64:'bad!'}]){const d=deps(),r=await attachmentAction({...valid,...change},student,d);assert.equal(r.status,400);assert.equal(d.uploaded,0);}});
+test('failed metadata insert removes the uploaded object',async()=>{const d=deps(),original=d.db;d.db=async(path,method,body)=>path==='studkab_request_attachments'&&method==='POST'?Promise.reject(Error('database unavailable')):original(path,method,body);await assert.rejects(()=>attachmentAction(valid,student,d));assert.equal(d.uploaded,1);assert.equal(d.removed.length,1);});
+test('migration keeps files private, metadata service-only and concurrent count bounded',()=>{const sql=fs.readFileSync(new URL('../supabase/migrations/20260917144051_studkab_request_attachments.sql',import.meta.url),'utf8');assert.match(sql,/values\('studkab-request-materials','studkab-request-materials',false,/);assert.match(sql,/enable row level security/);assert.match(sql,/revoke all on public\.studkab_request_attachments from public,anon,authenticated/);assert.match(sql,/grant select,insert on public\.studkab_request_attachments to service_role/);assert.match(sql,/pg_advisory_xact_lock/);assert.match(sql,/>= 8/);assert.match(sql,/before update[\s\S]*studkab_request_attachments/);});

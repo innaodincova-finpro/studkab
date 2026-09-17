@@ -1895,6 +1895,16 @@ async function passportFingerprint(x){
  var digest=await crypto.subtle.digest('SHA-256',bytes);
  return Array.from(new Uint8Array(digest)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
 }
+async function loadAttachmentContext(x){
+ if(x._attachmentsLoaded)return x.attachments||[];
+ var result=await Oblako.requestApi({action:'attachment-context',id:x.id});
+ var rows=result.attachments||[],doc=docOf(x),blocks=[],sources=[];
+ rows.forEach(function(a){var head='Файл: '+a.file_name+'; категория: '+a.category+'; SHA-256: '+a.file_hash;var block=head+'\n'+String(a.extracted_text||'').trim();if(a.category==='sources')sources.push(block);else blocks.push(block);});
+ doc.attachmentMaterials=blocks.join('\n\n---\n\n');
+ doc.attachmentSources=sources.join('\n\n---\n\n');
+ x.attachments=rows.map(function(a){return {id:a.id,category:a.category,file_name:a.file_name,size_bytes:a.size_bytes,file_hash:a.file_hash,created_at:a.created_at};});
+ x._attachmentsLoaded=true;return x.attachments;
+}
 function passportContent(x){
   var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
   if(!p)return lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>';
@@ -1909,10 +1919,12 @@ function passportContent(x){
 function passportCard(x){ return card(passportContent(x)); }
 async function loadPassports(x){
  if(!window.Oblako||!Oblako.requestApi)throw Error('Войдите в аккаунт реестра');
+ await loadAttachmentContext(x);
  var result=await Oblako.requestApi({action:'passport-ensure',id:x.id,sourceFingerprint:await passportFingerprint(x)});x.passports=result.passports||[];render();return x.passports;
 }
 async function requireApprovedPassport(x){
  if(!window.Oblako||!Oblako.requestApi)throw Error('UNAUTHORIZED');
+ await loadAttachmentContext(x);
  var sourceFingerprint=await passportFingerprint(x);
  var result=await Oblako.requestApi({action:'passport-ensure',id:x.id,sourceFingerprint:sourceFingerprint});
  x.passports=result.passports||[];
@@ -1976,6 +1988,7 @@ function viewItem(id){
       '<div class="txt"><b>' + esc(r.univ) + '</b><small>' + (x.refNew ? "новый вуз, появился из этой заявки" : "требования не проверены по методичке") + '</small></div></div>';
   }
   if (r && r.verified) requirements += '<div class="chips"><button type="button" class="chip" data-act="ref-open" data-id="'+r.id+'">Требования вуза ✓</button></div>';
+  if(Array.isArray(x.attachments))requirements += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
   if(x.requestNumber) requirements += '<div class="section-separator">'+passportContent(x)+'</div>';
   h += group("requirements","Требования и материалы",requirements,defaultGroup==="requirements");
 
@@ -2391,6 +2404,7 @@ document.addEventListener("click", function(ev){
   if (act === "open"){ openId = id; return render(); }
   if (act === "filter"){ var nf = el.getAttribute("data-k"); if (nf === "all" && filter === "all") query = ""; filter = nf; if (nf === "all") query = ""; return render(); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
+  if (act === "attachment-download") {var aid=el.getAttribute('data-attachment');el.disabled=true;Oblako.requestApi({action:'attachment-download',id:id,attachmentId:aid}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Не удалось скачать файл');}).finally(function(){el.disabled=false;});return;}
   if (act === "deliver-result") return StudResults.deliver(item(id));
   if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
   if (act === "passport-edit") {var pe=item(id);if(pe)editPassport(pe);return;}

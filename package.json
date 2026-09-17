@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "test:attachments": "node --test tests/request-attachments.test.mjs",
+    "pretest": "node --test tests/request-attachments.test.mjs",
     "test": "node --test tests/preparation-diagnostics-sql.test.mjs tests/financial-analysis.test.cjs tests/calendar.test.cjs tests/offline.test.cjs tests/safety.test.cjs tests/security-audit.test.mjs tests/push.test.cjs tests/telegram.test.mjs tests/requests.test.mjs tests/requirement-passports.test.mjs tests/desktop-layout.test.mjs tests/pilot-isolation.test.mjs tests/draft-quality.test.cjs tests/ai-proxy.test.mjs tests/ai-transport.test.cjs tests/generation-runner.test.mjs tests/generation-api.test.mjs tests/change-process.test.mjs tests/supabase-history.test.mjs tests/unified-preparation.test.cjs tests/generation-stop-sql.test.mjs tests/generation-money-sql.test.mjs tests/c051-install.test.mjs tests/home-screen-name.test.mjs tests/service-keys.test.mjs tests/public-repo-privacy.test.mjs tests/cloud-guard-sql.test.mjs tests/student-access.test.mjs tests/members-sql.test.mjs tests/c054-install.test.mjs tests/c054-install-sql.test.mjs tests/c054-state.test.mjs tests/c054-grants-sql.test.mjs",
     "test:browser": "playwright test"
   },
