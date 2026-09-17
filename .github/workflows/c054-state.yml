@@ -1,4 +1,4 @@
-name: C-054 состояние рабочей базы (только чтение)
+name: C-054 расширенная сверка рабочей базы (только чтение)
 on:
   workflow_dispatch:
 permissions:
@@ -13,12 +13,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
-      - name: Проверка сценария
+      - name: Проверка SELECT-only сценария и скрытия данных
         run: node --test tests/c054-state.test.mjs
-      - name: Состояние базы
+      - name: Расширенная сверка состояния базы
         run: node scripts/c054-state.mjs
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
