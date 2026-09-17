@@ -28,7 +28,8 @@ const constraints=[
  {conname:'studkab_members_pkey',contype:'p',definition:'PRIMARY KEY (user_id)'},
 ];
 const trigger=[{tgname:'studkab_app_data_guard',tgenabled:'O',is_row:true,is_before:true,on_insert:true,on_delete:true,on_update:true,function_name:'studkab_app_data_guard()'}];
-const security={rls:true,policies:0,grants:[{grantee:'service_role',privilege:'INSERT'},{grantee:'service_role',privilege:'SELECT'}]};
+const ownerPrivileges=['DELETE','INSERT','REFERENCES','SELECT','TRIGGER','TRUNCATE','UPDATE'];
+const security={owner:'postgres',rls:true,policies:0,grants:[...ownerPrivileges.map(privilege=>({grantee:'postgres',privilege})),{grantee:'service_role',privilege:'INSERT'},{grantee:'service_role',privilege:'SELECT'}]};
 const access=[
  {fn:'save_app_data_v2',owner:'postgres',security_definer:false,empty_search_path:true,access:exec(false,true,true)},
  {fn:'studkab_app_data_guard',owner:'postgres',security_definer:false,empty_search_path:true,access:exec(false,false,true)},
@@ -109,7 +110,9 @@ test('C-054 expanded: проверяются PK, FK, cascade и CHECK',async()=>
 });
 
 test('C-054 expanded: проверяются RLS, policies и лишние grants',async()=>{
+ assert.equal((await state(world().args)).checks.security,true,'права владельца postgres не drift');
  assert.equal((await state(world({security:[{...security,rls:false}]}).args)).checks.security,false);
+ assert.equal((await state(world({security:[{...security,owner:'other'}]}).args)).checks.security,false);
  assert.equal((await state(world({security:[{...security,policies:1}]}).args)).checks.security,false);
  assert.equal((await state(world({security:[{...security,grants:[...security.grants,{grantee:'authenticated',privilege:'SELECT'}]}]}).args)).checks.security,false);
 });
