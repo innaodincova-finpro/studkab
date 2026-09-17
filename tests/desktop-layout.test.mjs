@@ -39,6 +39,19 @@ test('registry instructions describe cloud intake and reviewed Word delivery',()
  assert.doesNotMatch(ui,/Передать черновик студенту/);
 });
 
+test('student request accepts bounded private materials before generation',()=>{
+ assert.match(cabinet,/data-request-file="assignment"/);
+ assert.match(cabinet,/data-request-file="methodology"/);
+ assert.match(cabinet,/data-request-file="data"/);
+ assert.match(cabinet,/data-request-file="sources"/);
+ assert.match(cabinet,/5242880/);
+ assert.match(cabinet,/crypto\.subtle\.digest\('SHA-256'/);
+ assert.match(cabinet,/attachment-list/);
+ assert.match(cabinet,/attachment-upload/);
+ assert.match(ui,/attachment-context/);
+ assert.match(ui,/attachment-download/);
+});
+
 test('university registry uses compact semantic disclosure',()=>{
  assert.match(css,/\.screen\[data-view=refs\]\{max-width:1100px\}/);
  assert.match(css,/\.ref-tools\{display:flex/);

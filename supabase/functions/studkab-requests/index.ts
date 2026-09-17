@@ -1,6 +1,8 @@
 import {accessLink} from './access-links.mjs';
 import {handler} from './handler.mjs';
+import {extract} from './extract.ts';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const bucket='studkab-request-materials';
 async function db(path:string,method='GET',body?:unknown){
  const r=await fetch(base+'/rest/v1/'+path,{method,headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'return=representation'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(10000)});
  if(!r.ok)throw Error('Database unavailable');return r.status===204?null:await r.json();
@@ -22,4 +24,28 @@ const uuid=/^[0-9a-f-]{36}$/i;
 // C-054: допуск студента хранится в studkab_members.
 const isMember=async(id:string)=>uuid.test(id)&&(await db('studkab_members?user_id=eq.'+id+'&select=user_id')).length===1;
 const invite=(email:string,recovery=false)=>accessLink({base,key,email,recovery,isMember});
-Deno.serve(handler({auth,db,send,invite,isMember,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
+const b64=/^[A-Za-z0-9+/]*={0,2}$/;
+async function upload(path:string,type:string,value:string,size:number,expectedHash:string){
+ if(!value||value.length>7200000||!b64.test(value))throw Error('Invalid file');
+ let raw:string;try{raw=atob(value);}catch{throw Error('Invalid file');}
+ const bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));
+ if(bytes.byteLength!==size)throw Error('Invalid file size');
+ const digest=await crypto.subtle.digest('SHA-256',bytes);
+ const actual=Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,'0')).join('');
+ if(actual!==expectedHash)throw Error('Invalid file hash');
+ const extractedText=await extract(bytes,type);
+ const r=await fetch(base+'/storage/v1/object/'+bucket+'/'+path,{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':type,'x-upsert':'false'},body:bytes,signal:AbortSignal.timeout(30000)});
+ if(!r.ok)throw Error('Storage unavailable');
+ return extractedText;
+}
+async function download(path:string,fileName:string){
+ const r=await fetch(base+'/storage/v1/object/sign/'+bucket+'/'+path,{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:300,download:fileName}),signal:AbortSignal.timeout(10000)});
+ if(!r.ok)throw Error('Storage unavailable');const data=await r.json();
+ const signed=String(data.signedURL||data.signedUrl||'');if(!signed.startsWith('/storage/v1/object/sign/'))throw Error('Storage unavailable');
+ return {url:base+signed,fileName,expiresIn:300};
+}
+async function remove(path:string){
+ const r=await fetch(base+'/storage/v1/object/'+bucket+'/'+path,{method:'DELETE',headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000)});
+ if(!r.ok)throw Error('Storage cleanup unavailable');
+}
+Deno.serve(handler({auth,db,send,invite,isMember,upload,download,remove,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));

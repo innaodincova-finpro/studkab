@@ -1,6 +1,7 @@
 import {sameSecret} from '../_shared/secret-equal.mjs';
 import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
+import {attachmentAction} from './attachments.mjs';
 const fields={id:100,t:300,k:100,d:200,u:300,fc:300,kf:300,ct:100,n:200,g:100,pr:200,fo:100,co:50,s:200,dl:10,rq:500,org:1500,mn:1500,cn:200};
 export function validatePayload(p) {
  if(!p||typeof p!=='object'||Array.isArray(p))throw Error('Неверная заявка');
@@ -25,7 +26,7 @@ export function validatePayload(p) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,invite,isMember,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,invite,isMember,upload,download,remove,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -57,6 +58,9 @@ export function handler({auth,config,db,send,invite,isMember,now=()=>Date.now()}
    }
    if(['passport-get','passport-ensure','passport-save','passport-approve'].includes(input.action)){
     const r=await requirementAction(input,user,{db,config});return json(r.data,r.status||200);
+   }
+   if(['attachment-upload','attachment-list','attachment-context','attachment-download'].includes(input.action)){
+    const r=await attachmentAction(input,user,{db,config,upload,download,remove});return json(r.data,r.status||200);
    }
    if(raw.length>16000)return json({error:'Заявка слишком большая'},413);
    if(input.action==='submit'){

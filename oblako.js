@@ -238,7 +238,7 @@
     if (!session || session.user.id !== expected || epoch !== expectedEpoch) throw new Error("Войдите заново");
     var res = await fetch(global.OBLAKO_CONFIG.url + "/functions/v1/studkab-requests", {
       method:"POST", headers:{"Content-Type":"application/json",Authorization:"Bearer " + session.access_token},
-      body:JSON.stringify(body),signal:AbortSignal.timeout(20000)
+      body:JSON.stringify(body),signal:AbortSignal.timeout(body&&body.action==='attachment-upload'?60000:20000)
     });
     var data = await res.json();
     if (epoch !== expectedEpoch || userId !== expected) throw new Error("Аккаунт изменился. Повторите действие");

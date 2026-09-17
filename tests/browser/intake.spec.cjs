@@ -52,7 +52,7 @@ test('direct request confirms only server acknowledgement and keeps retry ID',as
  await page.evaluate(()=>{
   D.works=[{id:'w-direct',topic:'Тест прямой заявки',format:{},req:{id:'rq-direct',contact:'test',org:'',notes:''}}];
   window.requestsSeen=[];
-  Oblako.requestApi=async body=>{requestsSeen.push(body);return {saved:true,id:'11111111-1111-4111-8111-111111111111',number:42};};
+  Oblako.requestApi=async body=>{requestsSeen.push(body);if(body.action==='attachment-list')return {attachments:[]};return {saved:true,id:'11111111-1111-4111-8111-111111111111',number:42};};
   openRequest('w-direct');
  });
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
@@ -61,7 +61,8 @@ test('direct request confirms only server acknowledgement and keeps retry ID',as
  await page.evaluate(()=>{Oblako.requestApi=async body=>{requestsSeen.push(body);throw Error('Сеть недоступна');};openRequest('w-direct');});
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
  await expect(page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true})).toBeEnabled();
- expect(await page.evaluate(()=>requestsSeen.map(x=>x.payload.id))).toEqual(['rq-direct','rq-direct']);
+ expect(await page.evaluate(()=>requestsSeen.map(x=>x.action))).toEqual(['submit','attachment-list','attachment-list']);
+ expect(await page.evaluate(()=>requestsSeen.filter(x=>x.action==='submit').map(x=>x.payload.id))).toEqual(['rq-direct']);
  expect(await page.evaluate(()=>D.works[0].req.number)).toBe(42);
 });
 test('cloud inbox repeated load preserves executor document and notes',async({page})=>{
