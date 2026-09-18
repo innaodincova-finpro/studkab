@@ -10,10 +10,10 @@ test('executor reviews Word, retries safely and receives an honest delivery conf
  await expect(page.getByText('Требования методички и правила оформления выполнены',{exact:true})).toHaveCount(1);
  await expect(page.getByText('Прибыль и денежные потоки',{exact:true})).toHaveCount(0);
  await expect(page.getByText('Методические требования кафедры менеджмента',{exact:true})).toHaveCount(1);
- await page.getByRole('button',{name:'Передать в кабинет студента',exact:true}).click();await expect(page.locator('[data-result-status]')).toContainText('Проверьте документ');expect(await page.evaluate(()=>deliveries.length)).toBe(0);
- const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Проверить Word перед передачей'}).click();expect((await downloaded).suggestedFilename()).toMatch(/\.docx$/);
- await page.locator('details').filter({has:page.locator('[data-criterion]')}).evaluate(el=>el.open=true);for(const status of await page.locator('[data-criterion-status]').all())await status.selectOption('pass');for(const field of await page.locator('[data-criterion]').all())await field.fill('Synthetic evidence at page 1');await page.locator('[data-criterion-status="C08"]').selectOption('not_applicable');await page.locator('[data-criterion="C08"]').fill('No calculations are required for this work');await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Передать в кабинет студента',exact:true}).click();await expect(page.locator('[data-result-status]')).toContainText('Временный сбой');
- await page.getByRole('button',{name:'Передать в кабинет студента',exact:true}).click();await expect(page.locator('[data-result-status]')).toContainText('доступен студенту');
+ await page.getByRole('button',{name:'Завершить проверку и передать',exact:true}).click();await expect(page.locator('[data-result-status]')).toContainText('Проверьте документ');expect(await page.evaluate(()=>deliveries.length)).toBe(0);
+ const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Открыть точный Word'}).click();expect((await downloaded).suggestedFilename()).toMatch(/\.docx$/);
+ await page.locator('details').filter({has:page.locator('[data-criterion]')}).evaluate(el=>el.open=true);for(const status of await page.locator('[data-criterion-status]').all())await status.selectOption('pass');for(const field of await page.locator('[data-criterion]').all())await field.fill('Synthetic evidence at page 1');await page.locator('[data-criterion-status="C08"]').selectOption('not_applicable');await page.locator('[data-criterion="C08"]').fill('No calculations are required for this work');await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Завершить проверку и передать',exact:true}).click();await expect(page.locator('[data-result-status]')).toContainText('Временный сбой');
+ await page.getByRole('button',{name:'Завершить проверку и передать',exact:true}).click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
  expect(await page.evaluate(()=>deliveries[0].deliveryId===deliveries[1].deliveryId)).toBe(true);await expect(page.getByRole('button',{name:'Черновик передан',exact:true})).toBeDisabled();
  await page.screenshot({path:'test-results/result-delivery-mobile.png'});
 });
@@ -43,7 +43,7 @@ test('editing a recipient or document after opening delivery prevents sending',a
  });
  await page.getByRole('checkbox').check();
  await page.evaluate(()=>{candidate.id='22222222-2222-4222-8222-222222222222';});
- await page.getByRole('button',{name:'Передать в кабинет студента',exact:true}).click();
+ await page.getByRole('button',{name:'Завершить проверку и передать',exact:true}).click();
  await expect(page.locator('[data-result-status]')).toContainText('Документ или получатель изменился');
  expect(await page.evaluate(()=>deliveries.length)).toBe(0);
 });
