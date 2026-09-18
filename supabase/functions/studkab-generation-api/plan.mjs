@@ -4,7 +4,9 @@ export function expandParts(parts,cost,maxOutputTokens=4000){
  for(const p of parts){
   const target=p.target_chars==null?4500:p.target_chars;
   if(!Number.isSafeInteger(target)||target<1||target>200000)throw Error('INVALID_TARGET');
-  const count=Math.ceil(target/2000);
+  // 3600 characters keeps a part comfortably below the 4000-token response
+  // ceiling while avoiding repeated transmission of the same source packet.
+  const count=Math.ceil(target/3600);
   for(let i=0;i<count;i++){
    const id=count===1?p.id:p.id+'__part_'+(i+1);
    const prompt=p.prompt+'\n\nОГРАНИЧЕНИЕ ТЕКУЩЕГО ЗАПРОСА: исходное задание выше относится ко всему разделу. '+
