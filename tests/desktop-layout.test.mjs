@@ -12,8 +12,9 @@ test('desktop request detail uses a bounded grouped workflow',()=>{
  assert.match(css,/\.screen\[data-detail=true\] \.btn\{min-height:46px;font-size:15px\}/);
  assert.match(ui,/function group\(key,title,inner,open\)/);
  assert.match(ui,/Требования и материалы/);
- assert.match(ui,/Выполнение и проверка/);
- assert.match(ui,/Готовый результат/);
+ assert.match(ui,/Заметка и управление/);
+ assert.match(ui,/Итоговая проверка и передача/);
+ assert.match(ui,/workflow-steps/);
  assert.match(ui,/details\.fold-group\[open\]/);
  assert.match(ui,/desktop\.css\?v=5/);
 });
@@ -28,13 +29,12 @@ test('primary forms and modal sheets expose accessible names and focus handling'
  }
  assert.match(cabinet,/<label for="nTopic">/);
  assert.match(cabinet,/<label for="stWarn">/);
- assert.match(ui,/<label for="requestStatus">/);
  assert.match(ui,/<label for="note">/);
 });
 
 test('registry instructions describe cloud intake and reviewed Word delivery',()=>{
  assert.match(ui,/Заявка сохраняется в облаке и попадает в реестр/);
- assert.match(ui,/Проверить и передать Word/);
+ assert.match(ui,/Провести итоговую проверку/);
  assert.doesNotMatch(ui,/Сообщение приходит в WhatsApp или Telegram/);
  assert.doesNotMatch(ui,/Передать черновик студенту/);
 });

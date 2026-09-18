@@ -6,7 +6,7 @@ for(const size of [{width:390,height:844},{width:1440,height:1000}]){
   await page.setViewportSize(size);
   await page.goto('http://127.0.0.1:4173/reestr.html');
   await page.evaluate(()=>QA.switchUser('row-open'));
-  for(const part of ['Демонстрационный кейс','Анализ финансового состояния — учебный пример','ДЕМО']){
+  for(const part of ['Демонстрационный кейс','Анализ финансового состояния — учебный пример','Учебный пример · ДЕМО']){
    await page.evaluate(seed);
    await page.getByText(part,{exact:true}).click();
    await expect(page.getByRole('button',{name:'← Заявки',exact:true})).toBeVisible();

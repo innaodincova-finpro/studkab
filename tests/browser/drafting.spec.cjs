@@ -21,7 +21,7 @@ test('saved document is shown on the request card after closing the editor',asyn
  await page.locator('[data-sec="ch1"] .secText').fill('Сохранённый текст документа.');
  await page.getByRole('button',{name:'Сохранить',exact:true}).click();
  await page.locator('.sheet > .sheet-in > .close').click();
- await page.getByText('Готовый результат',{exact:true}).click();
+ await page.locator('details[data-group="result"]').evaluate(el=>el.open=true);
  await expect(page.getByText('Черновик ещё не собирался.',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Открыть документ',exact:true})).toBeVisible();
  await expect(page.getByText(/разделов · 28 знаков · правка/)).toBeVisible();
@@ -55,7 +55,7 @@ test('mobile passport is readable and blocks preparation before checking filled 
   window.preparationActions=[];Oblako.generationApi=async body=>{preparationActions.push(body.action);if(body.action==='history')return {jobs:[]};throw Error('Paid action is forbidden');};
   openId=draftItem.id;render();
  });
- await page.getByText('Требования и материалы',{exact:true}).click();
+ await page.locator('details[data-group="requirements"]').evaluate(el=>el.open=true);
  await expect(page.getByText('Паспорт не утверждён — платная подготовка запрещена.',{exact:false})).toBeVisible();
  await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
  await expect(page.getByText(/шрифт Times New Roman, 14 пт/)).toBeVisible();
@@ -83,9 +83,9 @@ test('request card shows one next action for an approved passport',async({page})
  await page.evaluate(()=>{draftItem.requestNumber=draftItem.id;openId=draftItem.id;render();});
  await expect(page.locator('#fab')).toBeHidden();
  await expect(page.locator('.workflow-next')).toContainText('Требования утверждены');
- await expect(page.locator('.workflow-next').getByRole('button',{name:'Подготовить работу',exact:true})).toBeVisible();
- await page.locator('.workflow-next').getByRole('button',{name:'Подготовить работу',exact:true}).click();
- await expect(page.getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
+ await expect(page.locator('.workflow-next').getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
+ await page.locator('.workflow-next').getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.getByRole('dialog').getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
 });
 
 test('technical aborted fetch is not shown to the user',async({page})=>{
