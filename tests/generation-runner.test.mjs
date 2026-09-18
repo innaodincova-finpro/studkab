@@ -55,19 +55,19 @@ test('budget refusal never invokes provider',async()=>{
 import {machineAuthorization} from '../supabase/functions/studkab-generation/auth.mjs';
 import {readFileSync} from 'node:fs';
 
-test('runner reads the public gateway key from environment instead of embedding a project JWT',()=>{
+test('runner relies on gateway JWT verification instead of an embedded or environment-copied project JWT',()=>{
  const source=readFileSync(new URL('../supabase/functions/studkab-generation/index.ts',import.meta.url),'utf8');
- assert.match(source,/Deno\.env\.get\('SUPABASE_ANON_KEY'\)/);
+ assert.doesNotMatch(source,/Deno\.env\.get\('SUPABASE_ANON_KEY'\)/);
  assert.doesNotMatch(source,/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
 });
-test('scheduler accepts only configured project bearer; arbitrary user JWT is rejected',()=>{
- const check=token=>machineAuthorization(new Request('https://internal',{headers:{Authorization:'Bearer '+token}}),{serviceKey:'service-test',anonKey:'project-test'});
- assert.equal(check('project-test'),true);assert.equal(check('service-test'),true);assert.equal(check('user-jwt'),false);
+test('scheduler requires a bearer already validated by the Supabase gateway',()=>{
+ const check=token=>machineAuthorization(new Request('https://internal',{headers:{Authorization:'Bearer '+token}}));
+ assert.equal(check('project-test'),true);assert.equal(check('user-jwt'),true);assert.equal(check(''),false);
  assert.equal(machineAuthorization(new Request('https://internal'),{}),false);
 });
 test('public scheduler bearer without secret cron cannot access probe or claim',async()=>{
  let touched=false;
- const h=handler({authorize:r=>machineAuthorization(r,{anonKey:'public-test'}),config:async()=>({cron_token:'secret-test'}),
+ const h=handler({authorize:r=>machineAuthorization(r),config:async()=>({cron_token:'secret-test'}),
  ready:()=>true,rpc:()=>{touched=true;}});
  const r=await h(new Request('https://internal',{method:'POST',headers:{Authorization:'Bearer public-test','X-Studkab-Probe':'1'}}));
  assert.equal(r.status,401);assert.equal(touched,false);
