@@ -1,6 +1,15 @@
 (function(global){
  'use strict';
- function editableInputs(x){return Object.assign({organization:x.org||'',period:'',requirements:[x.requirements,x.methodNotes].filter(Boolean).join('\n'),materials:'',sources:'',finance:''},x.doc&&x.doc.inputs||{});}
+ function manualValue(value,attachment){
+  var text=String(value||''),file=String(attachment||''),suffix='\n\n--- ФАЙЛЫ СТУДЕНТА ---\n\n'+file;
+  if(!file)return text;
+  while(text===file||text.endsWith(suffix))text=text===file?'':text.slice(0,-suffix.length);
+  return text;
+ }
+ function editableInputs(x){
+  var p=Object.assign({organization:x.org||'',period:'',requirements:[x.requirements,x.methodNotes].filter(Boolean).join('\n'),materials:'',sources:'',finance:''},x.doc&&x.doc.inputs||{}),d=x.doc||{};
+  p.materials=manualValue(p.materials,d.attachmentMaterials);p.sources=manualValue(p.sources,d.attachmentSources);return p;
+ }
  function form(x){
   var p=editableInputs(x),fields=[['organization','Организация или объект исследования'],['period','Период исследования'],['requirements','Задание и требования преподавателя'],['materials','Фактические материалы и выдержки из источников'],['sources','Проверенная библиография: по одному источнику в строке, с адресом или страницами']];
   var html='<details><summary>Материалы для подготовки</summary><p class="hint">Заполните один раз. Используйте материалы студента и проверенные источники. Текстовые файлы TXT можно загрузить в поле материалов. Библиографию программа включит в документ без выдуманных дополнений.</p>';
