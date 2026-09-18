@@ -26,7 +26,7 @@ test('cabinet request roundtrip, hostile link rejection, repeat preserves work',
  const malformed=await page.evaluate(()=>[null,[],{t:{bad:true}},{t:'x',fm:[]},{t:'x',dl:'not-date'},{t:'x',fm:{sz:-1}}].map(p=>{try{fromPayload(p);return false}catch(e){return true}}));
  expect(malformed.every(Boolean)).toBe(true);
 });
-test('registry document edited, saved, downloaded and status set',async({page})=>{
+test('registry document edited, saved, downloaded and keeps derived stage',async({page})=>{
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>{const x=fromPayload({id:'rq-doc',t:'Проверка документа',n:'Тестовый студент',fm:{ml:30,mr:15,mt:20,mb:20,fn:'Times New Roman',sz:14,sp:1.5,ind:1.25}});D.items=[x];save();openDocBuilder(x.id);});
  await page.getByText('Редактировать разделы',{exact:true}).click();
@@ -43,9 +43,10 @@ test('registry document edited, saved, downloaded and status set',async({page})=
  expect(result).toContain('DOCX XML valid');
  await page.locator('[data-x]').first().click();
  await page.evaluate(()=>{openId='rq-doc';render();});
- await page.getByText('Выполнение и проверка',{exact:true}).click();
- await page.locator('[data-act="status"]').selectOption('done');await page.reload();
- expect(await page.evaluate(()=>item('rq-doc').status)).toBe('done');
+ await page.getByText('Заметка и управление',{exact:true}).click();
+ await expect(page.locator('[data-act="status"]')).toHaveCount(0);
+ await page.locator('#note').fill('Проверяется по фактическому этапу');await page.getByRole('button',{name:'Сохранить заметку'}).click();await page.reload();
+ expect(await page.evaluate(()=>item('rq-doc').note)).toBe('Проверяется по фактическому этапу');
 });
 test('direct request confirms only server acknowledgement and keeps retry ID',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
