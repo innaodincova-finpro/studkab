@@ -156,7 +156,7 @@ test('over-limit estimate shows exact amount without sending start',async({page}
   throw Error('Start must remain blocked');
  };});
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
- await expect(page.locator('[data-prepare-message]')).toContainText('$0.321');
+ await expect(page.locator('[data-prepare-message]')).toContainText('0.321 USD');
  await expect(page.locator('[data-prepare-message]')).toContainText('Запуск заблокирован');
  await expect(page.getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>generationActions)).toEqual(['history','estimate']);
