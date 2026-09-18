@@ -36,8 +36,8 @@ export function validateResult(value) {
 export const reviewCodes=Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(2,'0')).concat(['S01','S02','S03']);
 export function validateReview(criteria){
  if(!criteria||typeof criteria!=='object'||Array.isArray(criteria)||Object.keys(criteria).length!==16)throw Error('Заполните все пункты проверки');
- for(const code of reviewCodes){const c=criteria[code];if(c?.status!=='pass'||typeof c.evidence!=='string'||c.evidence.trim().length<10||c.evidence.length>2000)throw Error('Не подтверждён пункт '+code+': укажите результат и место проверки');}
- return Object.fromEntries(reviewCodes.map(code=>[code,{status:'pass',evidence:criteria[code].evidence.trim()}]));
+ for(const code of reviewCodes){const c=criteria[code];if(!['pass','not_applicable'].includes(c?.status)||typeof c.evidence!=='string'||c.evidence.trim().length<10||c.evidence.length>2000)throw Error('Не подтверждён пункт '+code+': нужен результат без блокера и доказательство');}
+ return Object.fromEntries(reviewCodes.map(code=>[code,{status:criteria[code].status,evidence:criteria[code].evidence.trim()}]));
 }
 const hash=/^[a-f0-9]{64}$/;
 const errors={recipient:'Получатель не совпадает с автором заявки',file:'Некорректный или слишком большой Word',conflict:'Номер операции уже использован. Откройте проверку заново.',stale:'Версия документа или получатель изменились. Повторите проверку.',criteria:'Не все пункты проверки подтверждены',review_required:'Требуется сохранённая проверка этой версии Word. Обновите приложение и повторите проверку.'};
