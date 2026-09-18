@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=10"></script><script src="draft-editor.js?v=7"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=9"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=10"></script><script src="draft-editor.js?v=7"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=9"></script><script src="request-workflow.js?v=1"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -189,6 +189,24 @@ button,input,select,textarea{font:inherit;color:inherit}
 .workflow-next .workflow-title{font-size:17px;font-weight:600;margin:0 0 5px}
 .workflow-next .workflow-copy{color:var(--mut);font-size:13px;line-height:1.45;margin:0 0 12px}
 .workflow-next .btn{width:100%}
+.request-head{margin:0 0 18px}
+.request-head h1{font-family:'Spectral',serif;font-size:28px;line-height:1.2;margin:10px 0 8px}
+.request-meta{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;color:var(--mut);font-size:13px}
+.request-contact{display:flex;align-items:center;gap:8px;margin-top:10px}
+.workflow-steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:0 0 14px;padding:0;list-style:none}
+.workflow-steps li{border-top:4px solid var(--line);padding-top:7px;color:var(--mut);font-size:11px;line-height:1.3}
+.workflow-steps li.done{border-color:var(--ok);color:var(--ink)}
+.workflow-steps li.current{border-color:var(--accent);color:var(--accent);font-weight:600}
+.stage-pill{display:inline-flex;border-radius:99px;padding:5px 10px;background:var(--days-bg);color:var(--accent);font-size:11px;font-weight:600}
+.workflow-blocker{margin:10px 0 0}
+@media(max-width:599px){
+ .request-head h1{font-size:23px}
+ .request-contact{align-items:flex-start;flex-direction:column}
+ .workflow-steps{grid-template-columns:1fr;gap:3px}
+ .workflow-steps li{border-top:0;border-left:4px solid var(--line);padding:4px 8px}
+ .workflow-steps li.done{border-left-color:var(--ok)}
+ .workflow-steps li.current{border-left-color:var(--accent)}
+}
 .switch{display:flex;background:var(--bar-bg);border-radius:12px;padding:3px;margin-bottom:12px}
 .switch button{flex:1;border:0;background:transparent;padding:9px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;color:var(--mut)}
 .switch button[aria-selected="true"]{background:#fff;color:var(--accent);box-shadow:0 4px 12px var(--card-sh)}
@@ -1775,11 +1793,20 @@ function initials(name){
   var p = String(name||"").trim().split(/\s+/);
   return ((p[0]||"")[0]||"") + ((p[1]||"")[0]||"") || "?";
 }
+function requestLabel(x){
+  var number=String(x&&x.requestNumber||'');
+  if(number&&number.length<=24&&!/^[a-f0-9-]{32,}$/i.test(number))return '№ '+number;
+  var code=String(x&&x.topic||'').match(/^([A-ZА-ЯЁ0-9]+(?:-[A-ZА-ЯЁ0-9]+){1,})\s*(?:—|:)/);
+  return code?code[1]:(x&&x.student||'Заявка');
+}
 function counts(){
   var c = { all:D.items.length };
   ORDER.forEach(function(s){ c[s] = D.items.filter(function(x){ return x.status===s }).length });
   return c;
 }
+var STAGE_FILTERS=[['requirements','Требования'],['preparation','Подготовка'],['quality','Проверка'],['delivery','К передаче'],['delivered','Передано'],['cancelled','Отменено']];
+function stageBucket(x){var key=requestWorkflow(x).key;return key==='intake'||key==='passport'?'requirements':key;}
+function stageCounts(){var c={all:D.items.length};STAGE_FILTERS.forEach(function(q){c[q[0]]=D.items.filter(function(x){return stageBucket(x)===q[0];}).length;});return c;}
 function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
 function render(){
@@ -1815,7 +1842,7 @@ function render(){
 function list0(fl, qr){
   var q2 = String(qr||"").toLowerCase();
   return D.items.filter(function(x){
-    if (fl !== "all" && x.status !== fl) return false;
+    if (fl !== "all" && stageBucket(x) !== fl) return false;
     if (!q2) return true;
     return [x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q2) >= 0;
   });
@@ -1848,16 +1875,16 @@ async function receiveInbox() {
   finally{inboxBusy=false;}
 }
 function viewList(){
-  var c = counts(), q = query.toLowerCase();
+  var c = stageCounts(), q = query.toLowerCase();
   var list = D.items.filter(function(x){
-    if (filter !== "all" && x.status !== filter) return false;
+    if (filter !== "all" && stageBucket(x) !== filter) return false;
     if (!q) return true;
     return [x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q) >= 0;
   });
-  var chips = [{k:"all",t:"Все"}].concat(ORDER.map(function(s){ return {k:s,t:STATUS[s]} }));
+  var chips = [{k:"all",t:"Все"}].concat(STAGE_FILTERS.map(function(s){ return {k:s[0],t:s[1]} }));
   var h = '<div class="chips"><button type="button" class="chip" data-act="receive-inbox">Получить заявки из кабинетов</button></div><p class="small">Нажмите «Получить заявки из кабинетов», чтобы обновить список. Если потребуется вход, приложение сообщит об этом.</p>' + (filter !== "all" || query
       ? '<div class="row" style="margin-bottom:10px"><span class="mut">Отбор: ' +
-        (filter !== "all" ? STATUS[filter] : "поиск") + ' · ' + list0(filter, query).length + '</span>' +
+        (filter !== "all" ? (STAGE_FILTERS.filter(function(q){return q[0]===filter;})[0]||[])[1]||"этап" : "поиск") + ' · ' + list0(filter, query).length + '</span>' +
         '<button type="button" class="mini" data-act="filter" data-k="all">показать все</button></div>'
       : '') + '<div class="fld"><input type="search" id="q" aria-label="Поиск заявок" value="' + esc(query) + '" placeholder="Поиск по фамилии, вузу, теме"></div>' +
     '<div class="pick" style="margin-bottom:12px">' + chips.map(function(f){
@@ -1868,9 +1895,10 @@ function viewList(){
   if (!D.items.length){
     return h + '<div class="empty">Заявок нет. Новые заявки из кабинета студента появятся здесь после обновления списка.</div>';
   }
-  h += list.length ? card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Студент</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Статус</th></tr></thead><tbody>'+list.map(function(x){
+  h += list.length ? card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Заявка</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Этап</th></tr></thead><tbody>'+list.map(function(x){
     var over=x.deadline && x.deadline<today() && x.status!=="done" && x.status!=="off";
-    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(x.student||"Без имени")+'</button>'+(x.group?'<small>'+esc(x.group)+'</small>':'')+'</td><td>'+esc(x.univ||"Вуз не указан")+'</td><td>'+esc(x.topic||"Тема не указана")+'</td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small>Срок прошёл</small>':'')+'</td><td>'+pill(x.status)+'</td></tr>';
+    var workflow=requestWorkflow(x),requestName=requestLabel(x);
+    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestName)+'</button><small>'+esc(x.student||"Студент не указан")+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||"Вуз не указан")+'</td><td>'+esc(x.topic||"Тема не указана")+'</td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small>Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(workflow.title)+'</span>'+(workflow.blocker?'<small>'+esc(workflow.blocker)+'</small>':'')+'</td></tr>';
   }).join('')+'</tbody></table>') : '<div class="empty">В этом отборе пусто.</div>';
   return h;
 }
@@ -1879,16 +1907,12 @@ var PASSPORT_CATEGORY={method:'Требование методички',measurab
 var PASSPORT_ITEM_LABEL={WORK_TYPE:'Вид работы',DISCIPLINE:'Дисциплина',STRUCTURE:'Структура',VOLUME:'Объём',METHODOLOGY:'Методология',FORMATTING:'Оформление',SOURCES:'Источники',CALCULATIONS:'Расчёты',ANTIPLAGIARISM:'Оригинальность',TEACHER:'Условия преподавателя'};
 function passportUnresolved(p){return ((p&&p.items)||[]).filter(function(q){return q.required!==false&&/не указано|требуется уточнить/i.test(q.text||'');});}
 function requestWorkflow(x){
- var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[];
- if(!p)return {step:1,title:'Сначала проверьте требования',copy:'Приложение соберёт паспорт работы по заявке и приложенным материалам. Платного запуска не будет.',action:'passport-load',label:'Проверить требования'};
- if(p.status!=='approved'&&unresolved.length)return {step:1,title:'Нужно уточнить требования',copy:'Не заполнено: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', ')+'. После уточнения паспорт можно будет утвердить.',action:'passport-edit',label:'Уточнить требования'};
- if(p.status!=='approved')return {step:1,title:'Требования заполнены',copy:'Проверьте паспорт и утвердите его. До утверждения платная подготовка запрещена.',action:'passport-approve',label:'Утвердить паспорт'};
- if(x.doc&&x.doc.serverJob&&x.doc.serverJob.id)return {step:2,title:'Подготовка уже сохранена',copy:'Откройте работу, чтобы увидеть состояние и продолжить с места остановки.',action:'doc-open',label:'Продолжить подготовку'};
- var hasText=!!(x.doc&&(x.doc.order||[]).some(function(c){return String(((x.doc.structure||{})[c.id]||{}).text||'').trim();}));
- if(hasText)return {step:2,title:'Текст подготовлен',copy:'Откройте работу для проверки, доработки и сохранения Word.',action:'doc-open',label:'Проверить работу'};
- return {step:2,title:'Требования утверждены',copy:'Следующий шаг — проверить стоимость и только после отдельного подтверждения запустить подготовку.',action:'doc-open',label:'Подготовить работу'};
+ var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[],hasDocument=!!(x.doc&&(x.doc.order||[]).some(function(c){var part=(x.doc.structure||{})[c.id]||{};return String(part.text||'').trim()||(Array.isArray(part.figures)&&part.figures.length);})),reviewCurrent=false;
+ if(hasDocument&&x.doc&&x.doc.review)try{reviewCurrent=x.doc.review===DraftQuality.stamp(x);}catch(e){reviewCurrent=false;}
+ return RequestWorkflow.derive({cancelled:x.status==='off',delivered:x.status==='sent',hasPassport:!!p,passportUnresolved:!!unresolved.length,passportBlocker:unresolved.length?'Не указано: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '):'',passportApproved:!!p&&p.status==='approved',hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
 }
-function workflowCard(x){var w=requestWorkflow(x);return card(lab('Следующий шаг · '+w.step+' из 3')+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p><button type="button" class="btn" data-act="'+w.action+'" data-id="'+esc(x.id)+'">'+esc(w.label)+'</button>','workflow-next');}
+function workflowSteps(w){return '<ol class="workflow-steps" aria-label="Этапы заявки">'+w.steps.map(function(s,n){var step=n+1,state=w.complete||step<w.step?'done':step===w.step?'current':'';return '<li class="'+state+'"><span>'+step+'.</span> '+esc(s.label)+'</li>';}).join('')+'</ol>';}
+function workflowCard(x){var w=requestWorkflow(x);return card(workflowSteps(w)+lab(w.complete?'Маршрут завершён':'Следующее действие · этап '+w.step+' из 5')+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p>'+(w.blocker?'<div class="warnbar workflow-blocker">'+esc(w.blocker)+'</div>':'')+(w.action?'<button type="button" class="btn" data-act="'+w.action+'" data-id="'+esc(x.id)+'">'+esc(w.label)+'</button>':''),'workflow-next');}
 function passportFormatText(f){
  function val(longKey,shortKey){return f[longKey]!=null?f[longKey]:f[shortKey];}
  var parts=[],font=val('font','fn'),size=val('size','sz');
@@ -1973,16 +1997,18 @@ function viewItem(id){
   })));
 
   function group(key,title,inner,open){return '<details class="fold fold-group" data-request="'+esc(x.id)+'" data-group="'+key+'"'+(open?' open':'')+'><summary>'+title+'</summary><div class="in">'+inner+'</div></details>';}
-  var savedGroup="";
+  var savedGroup="",workflow=requestWorkflow(x);
   try{savedGroup=localStorage.getItem("studkab-open-group:"+x.id)||"";}catch(e){}
-  var defaultGroup=savedGroup||(hasDoc?'result':(x.status==='work'?'progress':'requirements'));
-  var h = '<button type="button" class="mini" data-act="back" style="margin:0 0 10px">← Заявки</button>' +
-    '<div class="title" style="font-size:21px">' + esc(x.student || "Без имени") + '</div>' +
-    '<div class="mut" style="margin:4px 0 2px">' + esc([x.group, x.workType, x.deadline ? "срок " + ruDate(x.deadline) : ""].filter(Boolean).join(" · ")) + '</div>' +
-    '<div class="row" style="margin:0 0 14px">' +
-      (x.contact ? '<span class="mut">' + esc(x.contact) + '</span><button type="button" class="mini" data-act="copy-contact" data-id="' + esc(x.id) + '">скопировать</button>'
-                 : '<span class="mut">контакт не указан</span>') +
-    '</div>';
+  var stageGroup={intake:'requirements',passport:'requirements',preparation:'result',quality:'result',delivery:'delivery',delivered:'delivery',cancelled:'progress'};
+  var displayNumber=requestLabel(x),topic=x.topic||'Тема не указана',requestTitle=displayNumber!==x.student&&topic.indexOf(displayNumber)!==0?displayNumber+' — '+topic:topic;
+  var defaultGroup=savedGroup||stageGroup[workflow.key]||'requirements';
+  var h = '<button type="button" class="mini" data-act="back">← Заявки</button>' +
+    '<header class="request-head"><h1>' + esc(requestTitle) + '</h1>' +
+    '<div class="request-meta"><span class="stage-pill">'+esc(workflow.title)+'</span><span>'+esc(x.workType||'Тип работы не указан')+'</span>'+(x.deadline?'<span>Срок '+esc(ruDate(x.deadline))+'</span>':'')+'</div>'+
+    '<div class="request-contact"><span class="mut">'+esc(x.student||'Студент не указан')+(x.group?' · '+esc(x.group):'')+'</span>'+
+      (x.contact ? '<span class="mut">' + esc(x.contact) + '</span><button type="button" class="mini" data-act="copy-contact" data-id="' + esc(x.id) + '">Скопировать контакт</button>'
+                 : '<span class="mut">Контакт не указан</span>') +
+    '</div></header>';
 
   h += card(lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
     row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group));
@@ -2008,22 +2034,20 @@ function viewItem(id){
   if(x.requestNumber) requirements += '<div class="section-separator">'+passportContent(x)+'</div>';
   h += group("requirements","Требования и материалы",requirements,defaultGroup==="requirements");
 
-  var progress = lab("Текущий этап") +
-    '<div class="fld"><label for="requestStatus">Статус заявки</label><select id="requestStatus" data-act="status" data-id="' + esc(x.id) + '">' +
-      ORDER.map(function(s2){ return '<option value="' + s2 + '"' + (x.status===s2?" selected":"") + '>' + STATUS[s2] + '</option>' }).join("") +
-    '</select></div>' +
+  var progress = lab("Служебные действия") +
+    '<p class="hint">Этап заявки определяется по паспорту, документу и проверкам. Ручной статус не объявляет работу готовой.</p>'+
     '<div class="fld"><label for="note">Заметка исполнителя</label><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">' + esc(x.note||"") + '</textarea></div>' +
     '<div class="row"><button type="button" class="chip" data-act="save-note" data-id="' + esc(x.id) + '">Сохранить заметку</button>' +
     '<button type="button" class="del" data-act="delete" data-id="' + esc(x.id) + '">удалить</button></div>';
-  h += group("progress","Выполнение и проверка",progress,defaultGroup==="progress");
+  h += group("progress","Заметка и управление",progress,defaultGroup==="progress");
 
   var result = (hasDoc
       ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков' + (x.doc.updated ? ' · правка ' + ruDate(x.doc.updated) : '') + '</div>'
       : '<div class="mut">Черновик ещё не собирался.</div>') +
     '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (hasDoc ? "Открыть документ" : "Собрать документ") + '</button></div>';
-  h += group("result","Готовый результат",result,defaultGroup==="result");
+  h += group("result",hasDoc?"Документ":"Подготовка документа",result,defaultGroup==="result");
 
-  if(x.requestNumber) h += group("delivery","Передача студенту",'<p class="hint">Передайте проверенную версию Word прямо в кабинет автора заявки.</p><button type="button" class="btn compact-action" data-act="deliver-result" data-id="'+esc(x.id)+'">Проверить и передать Word</button>',defaultGroup==="delivery");
+  if(x.requestNumber) h += group("delivery","Итоговая проверка и передача",'<p class="hint">Передача доступна только для проверенной версии Word без блокирующих критериев.</p><button type="button" class="btn compact-action" data-act="deliver-result" data-id="'+esc(x.id)+'">Провести итоговую проверку</button>',defaultGroup==="delivery");
   return h;
 }
 
@@ -2138,9 +2162,8 @@ function viewMore(){
     moreFold("Хранение записей", CloudUI.panel()) +
     moreFold("Доступ студентов", '<p class="hint">Для первого входа без Google создайте персональную ссылку и отправьте её только этому студенту. Пароль он задаст сам.</p><button class="chip" onclick="openInvitation()">Создать приглашение</button><button class="chip" onclick="openInvitation(true)">Восстановить доступ</button>') +
     moreFold("Итоги",
-      [["all","Заявок",c.all],["new","Новых",c.new],["work","В работе",c.work],
-       ["sent","Черновик отправлен",c.sent],["done","Готово",c.done],["off","Отменено",c.off]]
-      .filter(function(q){ return q[0]==="all" || q[0]==="new" || q[2] > 0 })
+      [["all","Заявок",stageCounts().all]].concat(STAGE_FILTERS.map(function(q){return [q[0],q[1],stageCounts()[q[0]]];}))
+      .filter(function(q){ return q[0]==="all" || q[0]==="requirements" || q[2] > 0 })
       .map(function(q){
         var can = q[2] > 0;
         return '<div class="stat' + (can ? ' tapline' : '') + '"' + (can ? ' data-act="go-filter" data-k="' + q[0] + '" style="cursor:pointer"' : '') + '>' +
