@@ -27,7 +27,7 @@
   var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;}),profile=DraftQuality.requirementProfile(x);
   var methodology='<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
   var checklist=methodology+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
-  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Передать черновик студенту</h3><p>'+esc(x.student||'Студент')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Будет передана сохранённая версия документа. Новая передача сохраняется отдельно от предыдущей.</p><button type="button" class="chip" data-preview>Проверить Word перед передачей</button>'+checklist+'<p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="btn" data-deliver>Передать в кабинет студента</button><p role="status" data-result-status></p>');
+  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'Студент не указан')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Сначала проверьте точную версию Word и заполните протокол. Передача откроется только при отсутствии блокирующих критериев.</p><button type="button" class="chip" data-preview>Открыть точный Word</button>'+checklist+'<p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="btn" data-deliver>Завершить проверку и передать</button><p role="status" data-result-status></p>');
   wrap.dataset.accountIdentity=String(identity);
   var msg=wrap.querySelector('[data-result-status]');
   wrap.querySelector('[data-preview]').onclick=function(){if(!same(data,identity)){msg.textContent='Аккаунт изменился. Откройте документ заново.';return;}download(payload,captured);previewed=true;};
@@ -52,8 +52,9 @@
     var result=await Oblako.requestApi(Object.assign({action:'deliver',deliveryId:deliveryId},binding));
     if(!same(data,identity))throw Error('Аккаунт изменился. Проверьте результат после повторного входа.');
     if(!result.saved||result.deliveryId!==deliveryId)throw Error('Передача не подтверждена. Повторите попытку.');
-    msg.textContent='Черновик доступен студенту в его работе: «Черновик от исполнителя». Уведомление в мессенджер не отправлялось.';
-    this.textContent='Черновик передан';
+    x.status='sent';if(typeof save==='function')save();
+    msg.textContent='Проверенная версия доступна студенту в его работе: «Черновик от исполнителя». Уведомление в мессенджер не отправлялось.';
+    this.textContent='Результат передан';
    }catch(e){msg.textContent=e.message||'Передача не подтверждена. Повторите попытку.';this.disabled=false;}
    finally{busy=false;}
   };
