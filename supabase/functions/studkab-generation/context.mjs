@@ -1,5 +1,6 @@
 export function withContext(claim,parts){
  const preceding=parts.filter(p=>p.ordinal<claim.ordinal&&p.state==='done')
+  .filter(p=>typeof claim.spec?.section_id!=='string'||p.spec?.section_id===claim.spec.section_id)
   .sort((a,b)=>a.ordinal-b.ordinal);
  if(preceding.some(p=>typeof p.result!=='string'))throw Error('CONTEXT_INVALID');
  const context=preceding.map(p=>'Сохранённая часть '+p.ordinal+':\n'+p.result).join('\n\n');
