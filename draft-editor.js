@@ -1,7 +1,8 @@
 (function(global){
  'use strict';
+ function editableInputs(x){return Object.assign({organization:x.org||'',period:'',requirements:[x.requirements,x.methodNotes].filter(Boolean).join('\n'),materials:'',sources:'',finance:''},x.doc&&x.doc.inputs||{});}
  function form(x){
-  var p=DraftQuality.inputs(x),fields=[['organization','Организация или объект исследования'],['period','Период исследования'],['requirements','Задание и требования преподавателя'],['materials','Фактические материалы и выдержки из источников'],['sources','Проверенная библиография: по одному источнику в строке, с адресом или страницами']];
+  var p=editableInputs(x),fields=[['organization','Организация или объект исследования'],['period','Период исследования'],['requirements','Задание и требования преподавателя'],['materials','Фактические материалы и выдержки из источников'],['sources','Проверенная библиография: по одному источнику в строке, с адресом или страницами']];
   var html='<details><summary>Материалы для подготовки</summary><p class="hint">Заполните один раз. Используйте материалы студента и проверенные источники. Текстовые файлы TXT можно загрузить в поле материалов. Библиографию программа включит в документ без выдуманных дополнений.</p>';
   fields.forEach(function(f){html+='<div class="fld"><label for="draft-'+f[0]+'">'+f[1]+'</label><textarea id="draft-'+f[0]+'" data-draft-input="'+f[0]+'" maxlength="60000" rows="3">'+esc(p[f[0]])+'</textarea></div>';});
   html+='<label>Загрузить текст материалов (.txt)<input type="file" data-material-file accept=".txt,text/plain"></label>';
@@ -9,9 +10,9 @@
   if(DraftQuality.extended(x))html+='<button type="button" class="chip" data-fin-analysis>Рассчитать 20 показателей</button><p class="hint">Расчёт по таблицам в материалах: три отчётных года и начальные остатки. Нейросеть не используется.</p>';
   return html+'</details>';
  }
- function read(w,x){var p=DraftQuality.inputs(x);w.querySelectorAll('[data-draft-input]').forEach(function(el){p[el.dataset.draftInput]=el.value;});x.doc.inputs=p;}
+ function read(w,x){var p=editableInputs(x);w.querySelectorAll('[data-draft-input]').forEach(function(el){p[el.dataset.draftInput]=el.value;});x.doc.inputs=p;}
  function bind(w,x,saveInput){
-  var fin=w.querySelector('#draft-finance');if(fin)fin.value=DraftQuality.inputs(x).finance;
+  var fin=w.querySelector('#draft-finance');if(fin)fin.value=editableInputs(x).finance;
   w.querySelectorAll('[data-draft-input]').forEach(function(el){el.addEventListener('change',saveInput);});
   [['[data-material-file]','materials'],['[data-finance-file]','finance']].forEach(function(pair){var el=w.querySelector(pair[0]);if(!el)return;el.onchange=async function(){var file=el.files[0];if(!file)return;if(file.size>240000)return toast('Файл слишком большой. Добавьте нужные фрагменты до 60 000 знаков.');var text=await file.text();if(!w.isConnected)return;if(text.length>60000)return toast('Текст превышает 60 000 знаков');w.querySelector('[data-draft-input="'+pair[1]+'"]').value=text;saveInput();};});
  }
