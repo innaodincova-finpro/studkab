@@ -1021,9 +1021,15 @@ function openDocBuilder(id){
             message.textContent='Требования проверены. Запускаю подготовку разделов…';
             var payload={request:String(x.id),system:system,parts:parts,materialFingerprint:materialFingerprint};
             if(button.dataset.costFingerprint!==materialFingerprint)return Oblako.generationApi(Object.assign({action:'estimate'},payload)).then(function(estimate){
-              current();button.dataset.costFingerprint=materialFingerprint;
-              button.textContent='Подтвердить запуск до $'+(estimate.maxCostMicrousd/1000000).toFixed(2);
-              message.textContent='Расчётный максимум этого запуска: $'+(estimate.estimatedCostMicrousd/1000000).toFixed(3)+'. Предел работы: $'+(estimate.maxCostMicrousd/1000000).toFixed(2)+'. Доступно в общем бюджете: $'+(estimate.remainingMicrousd/1000000).toFixed(2)+'. Проверьте суммы и нажмите кнопку ещё раз.';
+              current();
+              if(estimate.canStart===false){
+                delete button.dataset.costFingerprint;button.textContent='Начать подготовку';
+                message.textContent='Расчётный максимум этого запуска: '+(estimate.estimatedCostMicrousd/1000000).toFixed(3)+' USD. Предел работы: '+(estimate.maxCostMicrousd/1000000).toFixed(2)+' USD. Доступно в общем бюджете: '+(estimate.remainingMicrousd/1000000).toFixed(2)+' USD. Запуск заблокирован: расчёт превышает один из лимитов.';
+                return null;
+              }
+              button.dataset.costFingerprint=materialFingerprint;
+              button.textContent='Подтвердить запуск до '+(estimate.maxCostMicrousd/1000000).toFixed(2)+' USD';
+              message.textContent='Расчётный максимум этого запуска: '+(estimate.estimatedCostMicrousd/1000000).toFixed(3)+' USD. Предел работы: '+(estimate.maxCostMicrousd/1000000).toFixed(2)+' USD. Доступно в общем бюджете: '+(estimate.remainingMicrousd/1000000).toFixed(2)+' USD. Проверьте суммы и нажмите кнопку ещё раз.';
               return null;
             });
             return Oblako.generationApi(Object.assign({action:'start'},payload));

@@ -148,6 +148,20 @@ test('preparation blocks zero budget and preserves edited document',async({page}
  await expect(page.locator('[data-prepare-result]')).toContainText('Облачный текст');
 });
 
+test('over-limit estimate shows exact amount without sending start',async({page})=>{
+ await setup(page);await fill(page);
+ await page.evaluate(()=>{window.generationActions=[];Oblako.generationApi=async body=>{
+  generationActions.push(body.action);if(body.action==='history')return {jobs:[]};
+  if(body.action==='estimate')return {canStart:false,estimatedCostMicrousd:321456,maxCostMicrousd:250000,remainingMicrousd:250000};
+  throw Error('Start must remain blocked');
+ };});
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('[data-prepare-message]')).toContainText('0.321 USD');
+ await expect(page.locator('[data-prepare-message]')).toContainText('Запуск заблокирован');
+ await expect(page.getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>generationActions)).toEqual(['history','estimate']);
+});
+
 test('lost cloud job link is recovered by selection without another paid start',async({page})=>{
  await setup(page);
  await page.evaluate(()=>{

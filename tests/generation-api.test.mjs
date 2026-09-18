@@ -79,6 +79,15 @@ test('temporary total ceiling blocks start even when operator budget is larger',
  assert.equal(r.status,409);assert.equal((await r.json()).error,'BUDGET_BLOCKED');
  assert.ok(s.calls.every(c=>!c.path.startsWith('rpc/')));
 });
+test('estimate reports an over-limit amount without creating a job',async()=>{
+ const body={...valid,action:'estimate',parts:[{id:'huge',prompt:'chapter',target_chars:50000}]};
+ const estimate=setup();const er=await estimate.request(body),ev=await er.json();
+ assert.equal(er.status,200);assert.equal(ev.canStart,false);assert.ok(ev.estimatedCostMicrousd>ev.maxCostMicrousd);
+ assert.ok(estimate.calls.every(c=>!c.path.startsWith('rpc/')));
+ const start=setup();const sr=await start.request({...body,action:'start'});
+ assert.equal(sr.status,409);assert.equal((await sr.json()).error,'BUDGET_BLOCKED');
+ assert.ok(start.calls.every(c=>!c.path.startsWith('rpc/')));
+});
 test('estimated cost is server-calculated and returned with the immutable work ceiling',async()=>{
  const s=setup();const r=await s.request({...valid,maxCostMicrousd:1});const value=await r.json();
  assert.equal(r.status,200);assert.equal(value.maxCostMicrousd,250000);

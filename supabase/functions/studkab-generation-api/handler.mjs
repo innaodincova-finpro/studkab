@@ -101,9 +101,10 @@ export function handler({auth,config,db,settings}){
     const [b]=await db('studkab_gen_budget?id=eq.true&select=limit_microusd,reserved_microusd');
     const [policy]=await db('studkab_gen_policy?id=eq.true&select=temporary_total_microusd');
     const remaining=!!b&&!!policy?Math.min(Number(b.limit_microusd),Number(policy.temporary_total_microusd))-Number(b.reserved_microusd):0;
-    if(remaining<=0||prepared.estimatedTotal>Number(limit.max_cost_microusd)||prepared.estimatedTotal>remaining)return reply({error:'BUDGET_BLOCKED'},409);
-    if(input.action==='estimate')return reply({status:'estimate',passportRevision:passport.revision,workKind:kind,
-     maxCostMicrousd:Number(limit.max_cost_microusd),estimatedCostMicrousd:prepared.estimatedTotal,remainingMicrousd:remaining});
+    const canStart=remaining>0&&prepared.estimatedTotal<=Number(limit.max_cost_microusd)&&prepared.estimatedTotal<=remaining;
+    if(input.action==='estimate')return reply({status:'estimate',passportRevision:passport.revision,workKind:kind,canStart,
+     maxCostMicrousd:Number(limit.max_cost_microusd),estimatedCostMicrousd:prepared.estimatedTotal,remainingMicrousd:Math.max(0,remaining)});
+    if(!canStart)return reply({error:'BUDGET_BLOCKED'},409);
     const job=await db('rpc/studkab_gen_start',{p_owner:user.id,p_request:input.request,
      p_input:prepared.snapshot,p_plan:prepared.plan,p_passport:passport.id,p_work_kind:kind,
      p_max_cost_microusd:Number(limit.max_cost_microusd)});
