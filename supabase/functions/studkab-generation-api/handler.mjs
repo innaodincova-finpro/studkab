@@ -54,11 +54,12 @@ export function prepare(input,workLimit){
   part.prompt=part.prompt.slice(original.length);
   part.prompt_ref=part.section_id;
  }
- let precedingBytes=0,estimatedTotal=0;
+ const precedingBytesBySection=new Map();let estimatedTotal=0;
  for(const part of plan){
+  const precedingBytes=precedingBytesBySection.get(part.section_id)||0;
   part.estimated_cost_microusd=reserveMicrousd(input.system,snapshot.prompts[part.prompt_ref]+part.prompt,part.max_output_tokens,precedingBytes);
   estimatedTotal+=part.estimated_cost_microusd;
-  precedingBytes+=part.target_chars*4+96;
+  precedingBytesBySection.set(part.section_id,precedingBytes+part.target_chars*4+96);
  }
  if(new TextEncoder().encode(JSON.stringify({input:snapshot,plan})).byteLength>900000)throw Error('INPUT_TOO_BIG');
  return {snapshot,plan,estimatedTotal};
