@@ -29,7 +29,7 @@ Deno.serve(handler({
  authorize:async(req:Request)=>machineAuthorization(req,{serviceKey:key,anonKey}),
  config:async()=>(await db('studkab_request_config?id=eq.true&select=cron_token'))[0],
  rpc:(name:string,args:unknown)=>db('rpc/'+name,args),
- prepare:async(c:any)=>checkReserve(withContext(c,await db('studkab_gen_parts?job_id=eq.'+c.job_id+'&ordinal=lt.'+c.ordinal+'&select=ordinal,state,result&order=ordinal.asc'))),
+ prepare:async(c:any)=>checkReserve(withContext(c,await db('studkab_gen_parts?job_id=eq.'+c.job_id+'&ordinal=lt.'+c.ordinal+'&select=ordinal,state,result,spec&order=ordinal.asc'))),
  failClaim:(c:any,code:string)=>db('rpc/studkab_gen_fail_preparation',{
   p_job:c.job_id,p_ordinal:c.ordinal,p_claim:c.claim,p_reason:code
  }),

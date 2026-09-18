@@ -88,6 +88,15 @@ test('part context includes only preceding completed results without truncation'
  assert.ok(!result.spec.prompt.includes('future'));assert.ok(!result.spec.prompt.includes('uncertain'));
  assert.equal(c.spec.prompt,'continue');
 });
+test('part context never copies completed text from another section',()=>{
+ const c={ordinal:3,input:{system:'facts'},spec:{section_id:'chapter-2',prompt:'continue'}};
+ const result=withContext(c,[
+  {ordinal:0,state:'done',result:'other chapter',spec:{section_id:'chapter-1'}},
+  {ordinal:1,state:'done',result:'same chapter',spec:{section_id:'chapter-2'}}
+ ]);
+ assert.match(result.spec.prompt,/same chapter/);
+ assert.doesNotMatch(result.spec.prompt,/other chapter/);
+});
 test('oversized context stops before dispatch and provider',async()=>{
  let sent=0,blocked=0,reason;
  const h=handler({authorize:async()=>true,config:async()=>({cron_token:'test'}),ready:()=>true,
