@@ -92,6 +92,14 @@ test('new part target is bounded without reducing total requested volume',()=>{
  assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:2000}]},250000).plan.length,1);
  assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:2001}]},250000).plan.length,2);
 });
+test('estimate accumulates generated context inside each section only',()=>{
+ const one=prepare({...valid,parts:[{id:'a',prompt:'part',target_chars:4000}]},250000);
+ const two=prepare({...valid,parts:[{id:'a',prompt:'part',target_chars:2000},{id:'b',prompt:'part',target_chars:2000}]},250000);
+ const expected=reserveMicrousd(valid.system,'part'+two.plan[0].prompt,4000,0)+
+  reserveMicrousd(valid.system,'part'+two.plan[1].prompt,4000,0);
+ assert.equal(two.estimatedTotal,expected);
+ assert.ok(one.estimatedTotal>two.estimatedTotal);
+});
 test('failure diagnostics expose only bounded safe fields',()=>{
  assert.deepEqual(failure({detail:{finish_reason:'length',completion_tokens:2500,prompt_tokens:12253,secret:'key',text:'private'},reason:'RESULT_UNKNOWN'}),{code:'OUTPUT_LIMIT',prompt_tokens:12253,completion_tokens:2500});
  assert.deepEqual(failure({detail:{finish_reason:'<script>',prompt_tokens:-1,completion_tokens:'secret'}}),{code:'RESULT_UNKNOWN'});
