@@ -202,9 +202,10 @@ test('prepare binds server recipient and rejects invalid file or changed recipie
 test('per-criterion evidence is required; stale and recipient conflicts block delivery',async()=>{
  let calls=0,error=null;
  const app=resultApp(async()=>{calls++;return error?{error}:{reviewId,versionId};});
- for(const bad of [null,{}, {...criteria,C11:{status:'not_checked',evidence:'Not opened in Word'}},{...criteria,C03:{status:'pass',evidence:''}}])assert.equal((await app(request({...binding,action:'review-result',criteria:bad}))).status,400);
+ for(const bad of [null,{}, {...criteria,C11:{status:'manual',evidence:'Not opened in Word'}},{...criteria,C10:{status:'fail',evidence:'Source did not support the claim'}},{...criteria,C03:{status:'pass',evidence:''}}])assert.equal((await app(request({...binding,action:'review-result',criteria:bad}))).status,400);
  assert.equal(calls,0);
  assert.equal((await app(request({...binding,action:'review-result',criteria}))).status,200);
+ assert.equal((await app(request({...binding,action:'review-result',criteria:{...criteria,C08:{status:'not_applicable',evidence:'No calculations are required for this work'}}}))).status,200);
  assert.equal((await app(request({...binding,action:'deliver',deliveryId,recipientId:requestId}))).status,409);
  error='stale';assert.equal((await app(request({...binding,action:'deliver',deliveryId}))).status,409);
  error='review_required';assert.equal((await app(request({...binding,action:'deliver',deliveryId}))).status,428);

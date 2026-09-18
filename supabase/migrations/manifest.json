@@ -172,6 +172,12 @@
       "name": "studkab_request_attachments",
       "file": "20260917144051_studkab_request_attachments.sql",
       "sha256": "897ecc59c32d364da939699d271157b55ad06fdc4f784cac4fac7d8e181e3de1"
+    },
+    {
+      "version": "20260918130000",
+      "name": "review_statuses",
+      "file": "20260918130000_review_statuses.sql",
+      "sha256": "875ab2f8744d213c1c695364677c112b8eeb2461fe678e1f3a510696030644da"
     }
   ]
 }

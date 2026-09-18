@@ -18,7 +18,7 @@ const SHELL = [
   "./draft-quality.js?v=10",
   "./draft-editor.js?v=7",
   "./result-docx.js?v=6",
-  "./results-ui.js?v=8",
+  "./results-ui.js?v=9",
   "./onboarding.js?v=2",
   "./oblako-config.js",
   "./vendor/supabase-2.57.4.js"
