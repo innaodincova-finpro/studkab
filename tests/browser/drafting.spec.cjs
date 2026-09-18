@@ -21,7 +21,7 @@ test('saved document is shown on the request card after closing the editor',asyn
  await page.locator('[data-sec="ch1"] .secText').fill('Сохранённый текст документа.');
  await page.getByRole('button',{name:'Сохранить',exact:true}).click();
  await page.locator('.sheet > .sheet-in > .close').click();
- await page.getByText('Готовый результат',{exact:true}).click();
+ await page.getByText('Документ',{exact:true}).click();
  await expect(page.getByText('Черновик ещё не собирался.',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Открыть документ',exact:true})).toBeVisible();
  await expect(page.getByText(/разделов · 28 знаков · правка/)).toBeVisible();
@@ -83,8 +83,8 @@ test('request card shows one next action for an approved passport',async({page})
  await page.evaluate(()=>{draftItem.requestNumber=draftItem.id;openId=draftItem.id;render();});
  await expect(page.locator('#fab')).toBeHidden();
  await expect(page.locator('.workflow-next')).toContainText('Требования утверждены');
- await expect(page.locator('.workflow-next').getByRole('button',{name:'Подготовить работу',exact:true})).toBeVisible();
- await page.locator('.workflow-next').getByRole('button',{name:'Подготовить работу',exact:true}).click();
+ await expect(page.locator('.workflow-next').getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
+ await page.locator('.workflow-next').getByRole('button',{name:'Начать подготовку',exact:true}).click();
  await expect(page.getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
 });
 
