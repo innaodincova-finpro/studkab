@@ -1,6 +1,15 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const q=require('../draft-quality.js');
 test('student attachments augment rather than overwrite executor inputs',()=>{const x={doc:{inputs:{materials:'Ручные материалы',sources:'Ручной источник'},attachmentMaterials:'Файл задания',attachmentSources:'Файл источников'}};const p=q.inputs(x);assert.match(p.materials,/Ручные материалы[\s\S]*Файл задания/);assert.match(p.sources,/Ручной источник[\s\S]*Файл источников/);assert.equal(x.doc.inputs.materials,'Ручные материалы');});
 test('approved passport sources must all appear in bibliography',()=>{const x={passports:[{status:'approved',items:[{id:'SOURCES',text:'Источники: ISO 21502:2020; PMBOK Guide, 7-е издание, 2021'}]}],doc:{inputs:{sources:'[S1] PMBOK Guide. 7th ed. 2021.'},order:[{id:'intro',name:'Введение'},{id:'refs',name:'Источники'}],structure:{intro:{text:'Содержательный текст [S1].'},refs:{text:'[S1] PMBOK Guide. 7th ed. 2021.'}}}};assert.match(q.sourceCheck(x).errors.join('\n'),/ISO 21502:2020/);});
+test('source evidence binds verified details and fragment to a supported claim',()=>{
+ const good='[S1]\nРеквизиты: Иванов И. И. Управление проектами. 2024. С. 15.\nФрагмент: Проектная команда распределяет ответственность между участниками.\nПодтверждает: В разделе 1 описано распределение ответственности.';
+ const card=q.sourceEvidence(good);assert.equal(card.errors.length,0);assert.match(card.cards[1].fragment,/распределяет ответственность/);
+ for(const bad of [
+  '[S1]\nФрагмент: Достаточно длинный проверяемый фрагмент источника.\nПодтверждает: Утверждение раздела 1.',
+  '[S1]\nРеквизиты: Автор, название, 2024.\nПодтверждает: Утверждение раздела 1.',
+  '[S1]\nРеквизиты: Автор, название, 2024.\nФрагмент: Достаточно длинный проверяемый фрагмент источника.'
+ ])assert.ok(q.sourceEvidence(bad).errors.length);
+});
 test('one-word prose fragment blocks readiness',()=>{const x={doc:{order:[{id:'ch2',name:'Глава 2'}],structure:{ch2:{text:'Основной вывод подтверждён материалами. Дополнительно.'}}}};assert.match(q.proseIntegrity(x).errors.join('\n'),/Дополнительно/);});
 const data='2024;100;60;40;20;40;150;15\n2025;120;70;50;30;40;180;18';
 test('deterministic ratios and transpose table preserve years and evidence',()=>{const r=q.finance(data);assert.deepEqual(r.metrics[0],[2024,1.5,0.4,1.5,20,10]);assert.match(r.text,/\| Показатель \| 2024 \| 2025 \|/);assert.match(r.text,/Таблица 2/);});

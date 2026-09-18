@@ -31,6 +31,26 @@
  function analysis(x){var engine=typeof module==='object'&&module.exports?require('./financial-analysis.js'):root.FinancialAnalysis;if(!engine)throw Error('Расчётный модуль не загружен. Обновите страницу.');var source=inputs(x),data=engine.parse(source.materials);if(String(source.finance||'').trim()){var simple=finance(source.finance).rows;simple.forEach(function(row,i){var expected=[simple[0][0]+i,data.balance.assets?.[i+1],data.balance.current?.[i+1],data.balance.equity?.[i+1],data.balance.longLoan?.[i+1],data.balance.shortLiabilities?.[i+1],data.income.revenue?.[i],data.income.net?.[i]];if(row.some(function(v,j){return v!==expected[j];}))throw Error('Таблица из восьми столбцов не совпадает с материалами');});}return engine.fromMaterials(source.materials);}
  // R7. Проверка источников: ссылка должна вести к источнику из списка,
  // а источник из списка должен использоваться в тексте.
+ function sourceEvidence(value){
+  var text=String(value||''),cards={},errors=[];
+  var marks=Array.from(text.matchAll(/(?:^|\n)\s*\[?S\s*(\d{1,3})\]?\s*/gi));
+  marks.forEach(function(mark,i){
+   var id=Number(mark[1]),start=mark.index+mark[0].length,end=i+1<marks.length?marks[i+1].index:text.length;
+   var body=text.slice(start,end).trim(),fields={};
+   body.split(/\r?\n/).forEach(function(line){
+    var m=line.match(/^\s*(Реквизиты|Фрагмент|Выдержка|Подтверждает)\s*:\s*(.*)$/i);
+    if(m)fields[m[1].toLowerCase()]=m[2].trim();
+   });
+   var fragment=fields['фрагмент']||fields['выдержка']||'';
+   cards[id]={id:id,body:body,details:fields['реквизиты']||'',fragment:fragment,claim:fields['подтверждает']||''};
+  });
+  Object.keys(cards).forEach(function(key){var c=cards[key];
+   if(c.details.length<10)errors.push('Источник [S'+c.id+']: укажите проверенные реквизиты (автор, название, год и ссылка или страницы).');
+   if(c.fragment.length<20)errors.push('Источник [S'+c.id+']: добавьте проверяемый фрагмент или выдержку не короче 20 знаков.');
+   if(c.claim.length<10)errors.push('Источник [S'+c.id+']: укажите, какое утверждение документа подтверждает этот фрагмент.');
+  });
+  return {cards:cards,errors:errors};
+ }
  function sourceCheck(x){
   var list=String(inputs(x).sources||''),errors=[],inList=[],used=[];
   (list.match(/\[S\s*(\d{1,3})\]/gi)||[]).forEach(function(m){
@@ -57,6 +77,9 @@
   inList.forEach(function(n){
    if(used.indexOf(n)<0)errors.push('Источник [S'+n+'] есть в списке, но ни разу не использован в тексте.');
   });
+  var evidence=sourceEvidence(list);
+  inList.forEach(function(n){if(!evidence.cards[n])errors.push('Источник [S'+n+']: отсутствует карточка доказательства.');});
+  errors=errors.concat(evidence.errors);
   var passport=Array.isArray(x.passports)&&x.passports[0],required=[];
   if(passport&&passport.status==='approved')((passport.items)||[]).forEach(function(item){
    if(String(item.id||'').toUpperCase()!=='SOURCES'||/не\s+требу/i.test(item.text||''))return;
@@ -65,7 +88,7 @@
   function sourceKey(v){return String(v).toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').split(/\s+/).filter(function(w){return w.length>=4||/^\d{4}$/.test(w);});}
   var available=[list,String(((x.doc||{}).structure||{}).refs&&((x.doc||{}).structure||{}).refs.text||'')].join('\n').toLowerCase();
   required.forEach(function(label){var keys=sourceKey(label),matches=keys.filter(function(key){return available.indexOf(key)>=0;});if(keys.length&&matches.length<Math.min(2,keys.length))errors.push('Источник из утверждённого паспорта не найден в списке литературы: '+label+'.');});
-  return {inList:inList,used:used,errors:Array.from(new Set(errors))};
+  return {inList:inList,used:used,cards:evidence.cards,errors:Array.from(new Set(errors))};
  }
  function proseIntegrity(x){
   var d=x.doc||{},errors=[];
@@ -295,6 +318,6 @@
  }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={consistency:consistency,sourceCheck:sourceCheck,proseIntegrity:proseIntegrity,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={consistency:consistency,sourceEvidence:sourceEvidence,sourceCheck:sourceCheck,proseIntegrity:proseIntegrity,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);
