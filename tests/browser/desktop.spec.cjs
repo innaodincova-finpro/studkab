@@ -9,7 +9,7 @@ for(const file of ['reestr.html','index.html'])test('desktop workspace and mobil
   await page.evaluate(()=>{D.items=[{id:'desktop-synthetic',student:'Тест рабочего стола',group:'Тест',topic:'Проверка широкой таблицы',univ:'Учебный вуз',status:'new',format:{}}];tab='list';openId=null;render();});
   await expect(page.getByRole('table',{name:'Заявки студентов'})).toBeVisible();
   await page.getByRole('button',{name:'Тест рабочего стола',exact:true}).click();
-  await page.getByText('Готовый результат',{exact:true}).click();
+  await page.getByText('Подготовка документа',{exact:true}).click();
   await expect(page.getByRole('button',{name:'Собрать документ',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Собрать документ',exact:true}).click();
   expect((await page.locator('.sheet-in').last().boundingBox()).width).toBeGreaterThan(1000);
