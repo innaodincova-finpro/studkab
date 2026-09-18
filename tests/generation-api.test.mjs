@@ -35,8 +35,8 @@ test('plan rejects duplicates, invalid sizes and missing trusted costs',()=>{ass
 
 test('large section is split into deterministic separately saved parts',()=>{
  const p=prepare({...valid,parts:[{id:'ch2',prompt:'Практическая глава',target_chars:27000}]},250000);
- assert.equal(p.plan.length,14);assert.equal(p.plan[3].part_index,3);assert.equal(p.plan[0].section_id,'ch2');
- assert.ok(p.plan.every(x=>x.max_cost_microusd===250000));assert.equal(new Set(p.plan.map(x=>x.id)).size,14);
+ assert.equal(p.plan.length,8);assert.equal(p.plan[3].part_index,3);assert.equal(p.plan[0].section_id,'ch2');
+ assert.ok(p.plan.every(x=>x.max_cost_microusd===250000));assert.equal(new Set(p.plan.map(x=>x.id)).size,8);
 });
 test('total part count and target values are bounded',()=>{
  assert.throws(()=>prepare({...valid,parts:[{id:'one',prompt:'test',target_chars:-1}]},250000));
@@ -97,9 +97,9 @@ test('estimated cost is server-calculated and returned with the immutable work c
 
 test('new part target is bounded without reducing total requested volume',()=>{
  const p=prepare({...valid,parts:[{id:'ch2',prompt:'chapter',target_chars:27000}]},250000);
- assert.equal(p.plan.length,14);assert.ok(p.plan.every(x=>x.prompt.includes('1929 знаков')));
- assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:2000}]},250000).plan.length,1);
- assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:2001}]},250000).plan.length,2);
+ assert.equal(p.plan.length,8);assert.ok(p.plan.every(x=>x.prompt.includes('3375 знаков')));
+ assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:3600}]},250000).plan.length,1);
+ assert.equal(prepare({...valid,parts:[{id:'x',prompt:'part',target_chars:3601}]},250000).plan.length,2);
 });
 test('estimate accumulates generated context inside each section only',()=>{
  const one=prepare({...valid,parts:[{id:'a',prompt:'part',target_chars:4000}]},250000);
@@ -117,6 +117,26 @@ test('failure diagnostics expose only bounded safe fields',()=>{
 
 import {withContext} from '../supabase/functions/studkab-generation/context.mjs';
 import {expandParts} from '../supabase/functions/studkab-generation-api/plan.mjs';
+test('R4: 3600-character chunks keep the representative coursework plan below USD 0.25',()=>{
+ const input={request:requestId,materialFingerprint,system:'s'.repeat(19178),parts:[
+  ['ch1',10800],['ch2',10800],['ch3',7200],['intro',3600],['concl',3600]
+ ].map(([id,target_chars])=>({id,prompt:'p'.repeat(1400),target_chars}))};
+ const result=prepare(input,250000);
+ assert.equal(result.plan.length,10);
+ assert.ok(result.estimatedTotal<=250000,`estimate ${result.estimatedTotal} exceeds the coursework limit`);
+ assert.equal(result.plan.filter(p=>p.section_id==='ch1').length,3);
+ assert.equal(result.plan.filter(p=>p.section_id==='intro').length,1);
+});
+test('R4/R7: bibliography cannot enter the paid generation plan',()=>{
+ const input={request:requestId,materialFingerprint,system:'system',parts:[
+  {id:'ch1',prompt:'Draft chapter',target_chars:3600},
+  {id:'refs',prompt:'Generate references',target_chars:1800}
+ ]};
+ const result=prepare(input,250000);
+ assert.deepEqual(result.plan.map(part=>part.section_id),['ch1']);
+ assert.deepEqual(Object.keys(result.snapshot.prompts),['ch1']);
+ assert.throws(()=>prepare({...input,parts:[input.parts[1]]},250000),/INVALID_INPUT/);
+});
 test('compact plans reconstruct exact original prompts',()=>{
  const input={request:requestId,materialFingerprint,system:'system',parts:[{id:'chapter',prompt:'Материалы '.repeat(6000),target_chars:30000}]};
  const original=expandParts(input.parts,250000);

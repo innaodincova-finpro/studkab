@@ -1015,7 +1015,16 @@ function openDocBuilder(id){
           return requireApprovedPassport(x).then(function(materialFingerprint){
             current();
             readBack();var missing=DraftQuality.preflight(x);if(missing.length)throw Error(missing.join('; '));
-            var queue=DraftQuality.sequence(doc).filter(function(c){return !((doc.structure[c.id]||{}).text||'').trim();});
+            var refs=doc.order.filter(function(c){return c.id==='refs';})[0];
+            if(refs){
+              var refsBox=wrap.querySelector('[data-sec="refs"] .secText'),refsText=DraftQuality.inputs(x).sources.trim();
+              if(refsBox&&!refsBox.value.trim()&&refsText){
+                refsBox.value=refsText;
+                wrap.querySelector('[data-sec="refs"] .secStat').textContent=refsText.length+' знаков · Предоставленные источники';
+                readBack();
+              }
+            }
+            var queue=DraftQuality.sequence(doc).filter(function(c){return c.id!=='refs'&&!((doc.structure[c.id]||{}).text||'').trim();});
             if(!queue.length)throw Error('Все разделы уже заполнены.');
             var system='',parts=queue.map(function(c){var p=sectionPrompt(x,c);if(system&&system!==p.system)throw Error('Структура запроса изменилась.');system=p.system;return {id:c.id,prompt:p.user,target_chars:DraftQuality.budget(c).target};});
             message.textContent='Требования проверены. Запускаю подготовку разделов…';

@@ -37,7 +37,9 @@ export function prepare(input,workLimit){
   throw Error('INVALID_INPUT');
  if(!Number.isSafeInteger(workLimit)||workLimit<1||workLimit>999999999999)throw Error('COST_NOT_CONFIGURED');
  const ids=new Set();
- const validated=input.parts.map(p=>{
+ // Older cached clients may still submit refs. Ignore that non-generative
+ // section server-side so it can never consume budget or break the whole job.
+ const validated=input.parts.filter(p=>p?.id!=='refs').map(p=>{
   if(!p || typeof p.id!=='string'||!idPattern.test(p.id)||ids.has(p.id)
    ||typeof p.prompt!=='string'||!p.prompt.trim()||p.prompt.length>80000
    ||input.system.length+p.prompt.length>180000)throw Error('INVALID_PART');
@@ -45,6 +47,7 @@ export function prepare(input,workLimit){
   // Ignore all client price, owner, model and URL fields.
   return {id:p.id,prompt:p.prompt,target_chars:p.target_chars};
  });
+ if(!validated.length)throw Error('INVALID_INPUT');
  const plan=expandParts(validated,workLimit,MAX_OUTPUT_TOKENS);
  const snapshot={system:input.system,prompts:{},material_fingerprint:input.materialFingerprint};
  for(const part of validated)snapshot.prompts[part.id]=part.prompt;

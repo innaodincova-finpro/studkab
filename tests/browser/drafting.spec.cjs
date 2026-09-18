@@ -162,6 +162,19 @@ test('over-limit estimate shows exact amount without sending start',async({page}
  expect(await page.evaluate(()=>generationActions)).toEqual(['history','estimate']);
 });
 
+test('preparation copies provided references without sending them to generation',async({page})=>{
+ await setup(page);await fill(page);
+ await page.evaluate(()=>{window.sentParts=[];Oblako.generationApi=async body=>{
+  if(body.action==='history')return {jobs:[]};
+  if(body.action==='estimate'){sentParts=body.parts;return {canStart:false,estimatedCostMicrousd:190000,maxCostMicrousd:250000,remainingMicrousd:250000};}
+  throw Error('Start must remain blocked');
+ };});
+ await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ expect(await page.evaluate(()=>sentParts.some(part=>part.id==='refs'))).toBe(false);
+ expect(await page.evaluate(()=>draftItem.doc.structure.refs.text)).toContain('OpenStax');
+ await expect(page.locator('[data-sec="refs"] .secStat')).toContainText('Предоставленные источники');
+});
+
 test('lost cloud job link is recovered by selection without another paid start',async({page})=>{
  await setup(page);
  await page.evaluate(()=>{
