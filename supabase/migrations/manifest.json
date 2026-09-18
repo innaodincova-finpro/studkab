@@ -122,6 +122,30 @@
       "name": "c054_service_role_grants",
       "file": "20260917120817_c054_service_role_grants.sql",
       "sha256": "3e40910e336b4a702eab48fd034907fbeb923544bda2d30b33659f660b6a9767"
+    },
+    {
+      "version": "20260918083808",
+      "name": "align_generation_reserve_context",
+      "file": "20260918083808_align_generation_reserve_context.sql",
+      "sha256": "f5dbd7db52a6cb2ec30e58e5f23aa47bb5eb68b78a0c46469353dca3f9adfcc2"
+    },
+    {
+      "version": "20260918090944",
+      "name": "repair_generation_ledger_invariant",
+      "file": "20260918090944_repair_generation_ledger_invariant.sql",
+      "sha256": "8520c97404f4c429e83feab73fda2aa2e11f739bb570780b7a53863d9977acfa"
+    },
+    {
+      "version": "20260918091938",
+      "name": "fix_generation_reconciliation_alias",
+      "file": "20260918091938_fix_generation_reconciliation_alias.sql",
+      "sha256": "8fe69f24f33268994c41246799ab468c13551d02ca8392c9e77fcee2420f34e4"
+    },
+    {
+      "version": "20260918092405",
+      "name": "expose_bounded_job_release_total",
+      "file": "20260918092405_expose_bounded_job_release_total.sql",
+      "sha256": "c270bd9172efffb6e855ad7b8dba65415ca20e6e364e961aef6692a2fe4f8e63"
     }
   ],
   "pending_migrations": [

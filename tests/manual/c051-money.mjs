@@ -17,7 +17,8 @@ async function fresh(){
  for(const f of ['20260911195103_studkab_generation_storage_v1.sql','20260912123246_studkab_budget_reconciliation.sql',
   '20260914105509_studkab_requirement_passports.sql','20260915070508_mandatory_passport_generation_limits.sql',
   '20260915072854_add_gen_job_passport_index.sql','20260915130000_studkab_generation_stop.sql',
-  '20260915130100_studkab_production_drift_recorded.sql',...(before?[]:['20260915130200_studkab_unknown_fully_retained.sql'])])
+  '20260915130100_studkab_production_drift_recorded.sql',...(before?[]:[
+   '20260915130200_studkab_unknown_fully_retained.sql','20260918090944_repair_generation_ledger_invariant.sql'])])
   await db.exec(fs.readFileSync('supabase/migrations/'+f,'utf8'));
  await db.exec('update studkab_gen_budget set limit_microusd=1000000 where id=true');
  const one=async(sql,args=[])=>{const r=(await db.query(sql,args)).rows[0];return r&&Object.values(r)[0];};
@@ -35,7 +36,7 @@ async function fresh(){
  const reserved=async()=>Number(await one('select reserved_microusd from studkab_gen_budget'));
  const partState=()=>one('select state from studkab_gen_parts where job_id=$1 and ordinal=0',[job]);
  const ledger=async()=>{const r=(await db.query(`select (select reserved_microusd from studkab_gen_budget) b,
-  (select coalesce(sum(reservation_microusd),0) from studkab_gen_attempts)-(select coalesce(sum(released_microusd),0) from studkab_gen_reconciliations) e`)).rows[0];
+  ${before?`(select coalesce(sum(reservation_microusd),0) from studkab_gen_attempts)-(select coalesce(sum(released_microusd),0) from studkab_gen_reconciliations)`:`studkab_gen_expected_reserved()`} e`)).rows[0];
   assert.equal(Number(r.b),Number(r.e),'журнал резерва сходится');};
  return {db,one,job,rid,reservation,settle,reserved,partState,ledger};
 }
@@ -76,6 +77,18 @@ await scenario('Сверка по кабинету поставщика возв
  assert.equal(await reserved(),100);
  await assert.rejects(db.query("select studkab_gen_reconcile_unknown($1,$2,$3)",[rid,50,'Кабинет DeepSeek 15.09.2026: повторная сверка']));
  await ledger();
+});
+if(!before)await scenario('Историческая сверка без attempt сохраняет ledger, а новые attempts удалить нельзя',async({db,one,settle,rid,reservation,reserved,ledger})=>{
+ await settle({});
+ await db.exec(`insert into studkab_gen_reconciliations(id,request_ids,retained_microusd,released_microusd,evidence)
+  values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',array['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid],777,222,'Историческая неизменяемая сверка без operational attempt для проверки C-062');
+  update studkab_gen_budget set reserved_microusd=reserved_microusd+777 where id=true;`);
+ await ledger();
+ const back=Number(await one("select studkab_gen_reconcile_unknown($1,$2,$3)",[rid,100,'Подтверждённая стоимость текущей неизвестной попытки для теста C-062']));
+ assert.equal(back,reservation-100);
+ assert.equal(await reserved(),877);
+ await ledger();
+ await assert.rejects(db.query('delete from studkab_gen_attempts where request_id=$1',[rid]),/IMMUTABLE_GENERATION_ATTEMPT/);
 });
 for(const [s,n] of results)console.log(s+' — '+n);
 const failed=results.filter(r=>r[0]!=='пройден').length;

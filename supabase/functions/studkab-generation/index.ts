@@ -3,7 +3,6 @@ import {checkReserve} from './reserve.mjs';
 import {withContext} from './context.mjs';
 import {machineAuthorization} from './auth.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const anonKey=Deno.env.get('SUPABASE_ANON_KEY');
 const token=Deno.env.get('STUDKAB_PROXY_TOKEN');
 const enabled=Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true';
 async function db(path:string,body?:unknown,method?:string){
@@ -25,8 +24,8 @@ async function provider(c:any,id:string){
  return value;
 }
 Deno.serve(handler({
- // Gateway JWT verification remains enabled; a user JWT is insufficient here.
- authorize:async(req:Request)=>machineAuthorization(req,{serviceKey:key,anonKey}),
+ // Gateway JWT verification remains enabled; cron_token provides authorization.
+ authorize:async(req:Request)=>machineAuthorization(req),
  config:async()=>(await db('studkab_request_config?id=eq.true&select=cron_token'))[0],
  rpc:(name:string,args:unknown)=>db('rpc/'+name,args),
  prepare:async(c:any)=>checkReserve(withContext(c,await db('studkab_gen_parts?job_id=eq.'+c.job_id+'&ordinal=lt.'+c.ordinal+'&select=ordinal,state,result,spec&order=ordinal.asc'))),
