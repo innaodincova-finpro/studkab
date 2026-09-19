@@ -178,6 +178,12 @@
       "name": "review_statuses",
       "file": "20260918130000_review_statuses.sql",
       "sha256": "875ab2f8744d213c1c695364677c112b8eeb2461fe678e1f3a510696030644da"
+    },
+    {
+      "version": "20260919124300",
+      "name": "result_review_context_guard",
+      "file": "20260919124300_result_review_context_guard.sql",
+      "sha256": "7c0279620d2cc348b12561dfe2bce4794d4a046722d3b755a84268eee3acb4fd"
     }
   ]
 }

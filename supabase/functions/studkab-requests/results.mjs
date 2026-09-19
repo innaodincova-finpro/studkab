@@ -31,6 +31,11 @@ export function validateResult(value) {
   const v=f[k]??def;if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)throw Error('Проверьте оформление');out.format[k]=v;
  }
  out.format.font=out.format.font||'Times New Roman';out.format.toc=f.toc!==false;
+ if(value.reviewContext!==undefined){
+  const c=value.reviewContext;
+  if(!c||!uuid.test(c.passportId||'')||!hash.test(c.sourceFingerprint||'')||!hash.test(c.fingerprint||''))throw Error('Не подтверждён паспорт проверки');
+  out.reviewContext={passportId:c.passportId,sourceFingerprint:c.sourceFingerprint,fingerprint:c.fingerprint};
+ }
  return out;
 }
 export const reviewCodes=Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(2,'0')).concat(['S01','S02','S03']);
@@ -41,6 +46,30 @@ export function validateReview(criteria){
 }
 const hash=/^[a-f0-9]{64}$/;
 const errors={recipient:'Получатель не совпадает с автором заявки',file:'Некорректный или слишком большой Word',conflict:'Номер операции уже использован. Откройте проверку заново.',stale:'Версия документа или получатель изменились. Повторите проверку.',criteria:'Не все пункты проверки подтверждены',review_required:'Требуется сохранённая проверка этой версии Word. Обновите приложение и повторите проверку.'};
+function canonical(value){
+ if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
+ if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';
+ return JSON.stringify(value);
+}
+async function currentPassport(document,request,db){
+ const c=document?.reviewContext;if(!c)return false;
+ if(await db('rpc/studkab_result_context_version')!==1)throw Error('Серверная защита проверки ещё не установлена');
+ const [p]=await db('studkab_requirement_passports?select=id,status,source_fingerprint&request_id=eq.'+request+'&order=revision.desc&limit=1');
+ return !!p&&p.status==='approved'&&p.id===c.passportId&&p.source_fingerprint===c.sourceFingerprint;
+}
+async function readReviewState(input,request,db){
+ let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
+ if(!await currentPassport(document,input.id,db))return {status:409,data:{error:'Паспорт изменился или не утверждён. Повторите проверку требований.'}};
+ const [version]=await db('studkab_result_versions?select=id,revision,recipient_id,document,document_hash,file_hash,docx_base64&request_id=eq.'+input.id+'&order=revision.desc&limit=1');
+ if(!version)return {data:{state:'none'}};
+ if(version.recipient_id!==request.student_id||canonical(version.document)!==canonical(document))return {data:{state:'stale'}};
+ const [delivery]=await db('studkab_results?select=delivery_id,review_id,created_at&request_id=eq.'+input.id+'&version_id=eq.'+version.id+'&order=created_at.desc,id.desc&limit=1');
+ const reviews=await db('studkab_result_reviews?select=id,version_id,criteria,created_at&version_id=eq.'+version.id+(delivery?'&id=eq.'+delivery.review_id:'&order=created_at.desc,id.desc')+'&limit=1');
+ const review=reviews[0];
+ if(review){try{validateReview(review.criteria);}catch{return {status:409,data:{error:errors.criteria}};}}
+ if(delivery&&!review)return {status:409,data:{error:errors.review_required}};
+ return {data:{state:delivery?'delivered':review?'reviewed':'prepared',receipt:{versionId:version.id,recipientId:version.recipient_id,fileHash:version.file_hash,documentHash:version.document_hash,revision:version.revision},docxBase64:version.docx_base64,review:review?{reviewId:review.id,versionId:review.version_id,criteria:review.criteria,reviewedAt:review.created_at}:null,delivery:delivery?{deliveryId:delivery.delivery_id,createdAt:delivery.created_at}:null}};
+}
 export async function resultAction(input,user,{db,config}) {
  if(input.action!=='result'){
   const cfg=await config();
@@ -59,17 +88,24 @@ export async function resultAction(input,user,{db,config}) {
   }
   return {data:{result:result||null}};
  }
+ if(input.action==='result-review-state')return readReviewState(input,request,db);
  if(!uuid.test(input.versionId||''))return {status:428,data:{error:errors.review_required}};
  let result;
  if(input.action==='prepare-result'){
   let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
   if(request.payload?.n&&document.student.trim()!==request.payload.n.trim())return {status:409,data:{error:errors.recipient}};
+  if(document.reviewContext&&!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
   const file=input.docxBase64;
   if(typeof file!=='string'||file.length>4194304||file.length<8||!/^UEsDB[A-Za-z0-9+/]*={0,2}$/.test(file))return {status:400,data:{error:errors.file}};
   result=await db('rpc/prepare_studkab_result','POST',{request:input.id,version:input.versionId,recipient:request.student_id,content:document,file_base64:file});
  }else{
   if(!uuid.test(input.recipientId||'')||!hash.test(input.fileHash||'')||!hash.test(input.documentHash||'')||!uuid.test(input.reviewId||''))return {status:400,data:{error:'Не хватает данных сохранённой проверки'}};
   if(input.recipientId!==request.student_id)return {status:409,data:{error:errors.recipient}};
+  if(input.document!==undefined){
+   let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
+   const [v]=await db('studkab_result_versions?select=document&request_id=eq.'+input.id+'&id=eq.'+input.versionId+'&limit=1');
+   if(!v||canonical(v.document)!==canonical(document)||!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
+  }
   const args={request:input.id,version:input.versionId,review:input.reviewId,recipient:request.student_id,file_hash:input.fileHash,document_hash:input.documentHash};
   if(input.action==='review-result'){
    let criteria;try{criteria=validateReview(input.criteria);}catch(e){return {status:400,data:{error:e.message}};}
