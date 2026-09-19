@@ -94,3 +94,67 @@
  .screen[data-detail=true] .section-separator{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
  body:has(.screen[data-detail=true]) .fab{display:none}
 }
+
+/* C-070: executor workspace. Shared student layout is unchanged. */
+.registry-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}
+.registry-toolbar h1{font-family:'Spectral',Georgia,serif;font-size:30px;line-height:1.2;margin:0 0 5px}
+.registry-toolbar p{margin:0;font-size:13px}
+.registry-toolbar .chip{min-height:44px}
+.registry-filters{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin-bottom:6px}
+.registry-filters .chip{flex:0 0 auto;min-height:42px}
+.registry-filters [aria-pressed=true]{border-color:var(--accent);color:var(--ink);background:var(--ground);font-weight:600}
+.registry-pagination{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;font-size:13px;color:var(--mut);margin:8px 0 14px}
+.registry-pagination label{display:flex;align-items:center;gap:6px}
+.registry-pagination select{width:auto;min-height:40px;padding:6px 10px}
+.registry-pagination .mini{min-width:40px;min-height:40px}
+.registry-pagination button:disabled{opacity:.4;cursor:default}
+.registry-table .request-next{color:var(--ink);line-height:1.5}
+.request-workspace{display:grid;gap:18px;align-items:start}
+.request-content,.request-action{min-width:0}
+.request-action .card{margin:0}
+.request-tabs{display:flex;overflow-x:auto;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;padding:2px}
+.request-tabs button{flex:0 0 auto;min-height:46px;padding:10px 12px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--mut);font:inherit;font-size:14px;cursor:pointer}
+.request-tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.request-panel[hidden]{display:none!important}
+.request-panel .lab{margin-top:12px}
+.request-history{padding-left:20px;line-height:1.8}
+.request-workspace .workflow-steps{display:none}
+/* Full step list is not repeated: current stage and one next action stay visible. */
+.request-workspace .workflow-next .workflow-title{font-size:19px}
+.request-workspace .workflow-next .btn{margin-top:12px}
+.request-workspace .request-panel{margin-bottom:0}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+@media(min-width:960px){
+ .screen[data-view=list][data-detail=true]{max-width:1420px}
+ .request-workspace{grid-template-columns:minmax(0,1fr) 280px}
+ .request-action{grid-column:2;grid-row:1;position:sticky;top:20px}
+ .request-content{grid-column:1;grid-row:1}
+ .registry-table td:nth-child(2){width:15%}
+ .registry-table td:nth-child(3){width:25%}
+ .registry-table td:last-child{width:25%;white-space:normal}
+ .registry-table td:nth-last-child(2){width:13%}
+}
+@media(max-width:959px){
+ .registry-toolbar{align-items:flex-start;margin-bottom:12px}
+ .registry-toolbar h1{font-size:26px}
+ .registry-toolbar .chip{max-width:150px;font-size:12px;text-align:left}
+ .registry-pagination{font-size:12px;gap:8px}
+ .registry-table td:first-child{padding-right:0}
+ .registry-table td:last-child{position:static;padding-top:8px}
+ .request-workspace{gap:12px}
+ .request-head h1{font-size:24px}
+ .request-action .card{padding:14px}
+ .request-tabs{margin-bottom:12px}
+ .request-tabs button{font-size:13px;padding:10px}
+ .request-panel{padding:16px}
+}
+
+.registry-topic,.request-head h1{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.screen[data-view=list] .mut,.screen[data-view=list] .hint,.screen[data-view=list] .lab,
+.screen[data-view=list] .registry-table small,.screen[data-view=list] .registry-table thead,
+.screen[data-view=list] .registry-pagination,.screen[data-view=list] .request-tabs button{color:#526174}
+@media(max-width:959px){
+ .screen[data-view=list] .hint,.screen[data-view=list] .mut{font-size:13px;line-height:1.5}
+ .registry-table td{font-size:13px}
+ .request-head h1{font-size:24px;line-height:1.25}
+}

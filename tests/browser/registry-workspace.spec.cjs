@@ -1,0 +1,87 @@
+const {test,expect}=require('@playwright/test');
+async function seed(page){
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>QA.switchUser('workspace-synthetic'));
+ await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
+ await page.evaluate(()=>{
+  D.items=Array.from({length:67},(_,i)=>({id:'workspace-'+i,requestNumber:1201+i,student:'Учебный студент '+i,topic:'Тема '+i+' — Организация проектной команды',univ:'Учебный университет',status:i===66?'sent':'new',format:{},passports:[],note:'Сохранённая заметка'}));
+  tab='list';openId=null;filter='all';query='';listPage=1;listPageSize=25;render();
+ });
+}
+test('pagination, number search and return preserve list context',async({page})=>{
+ await seed(page);
+ await expect(page.locator('.request-row')).toHaveCount(25);
+ await page.getByRole('button',{name:'Следующая страница',exact:true}).first().click();
+ await expect(page.locator('.open-request').first()).toHaveText('№ 1226');
+ await page.locator('.open-request').nth(8).scrollIntoViewIfNeeded();
+ const before=await page.evaluate(()=>({scroll:scrollY,data:JSON.stringify(D)}));
+ await page.locator('.open-request').nth(8).click();
+ await page.getByRole('button',{name:'← Заявки',exact:true}).click();
+ expect(await page.evaluate(()=>listPage)).toBe(2);
+ expect(await page.evaluate(()=>Math.abs(scrollY-listScroll))).toBeLessThan(3);
+ expect(await page.evaluate(()=>JSON.stringify(D))).toBe(before.data);
+ await page.getByLabel('Заявок на странице',{exact:true}).first().selectOption('50');
+ await expect(page.locator('.request-row')).toHaveCount(50);
+ await page.getByRole('searchbox',{name:'Поиск заявок'}).fill('1267');
+ await expect(page.locator('.request-row')).toHaveCount(1);
+ await expect(page.locator('.registry-filters')).toContainText('Все · 1');
+ await page.locator('.registry-filters').getByRole('button',{name:'Требования · 0',exact:true}).click();
+ await expect(page.locator('.request-row')).toHaveCount(0);
+ await page.locator('.registry-filters').getByRole('button',{name:'Все · 1',exact:true}).click();
+ await expect(page.getByRole('searchbox')).toHaveValue('1267');
+ await page.locator('.open-request').focus();await page.keyboard.press('Enter');
+ await expect(page.locator('.request-head')).toContainText('№ 1267');
+ await expect(page.locator('.request-action button')).toHaveCount(0);
+});
+test('six tabs retain unsaved note, keyboard focus and request data',async({page})=>{
+ await seed(page);await page.locator('.open-request').first().click();
+ const before=await page.evaluate(()=>JSON.stringify(D));
+ await page.locator('#note').fill('Ещё не сохранено');
+ for(const name of ['Требования','Материалы','Документ','Проверка','Версии и история','Обзор']){
+  await page.getByRole('tab',{name,exact:true}).click();
+  await expect(page.getByRole('tabpanel')).toHaveCount(1);
+ }
+ await expect(page.locator('#note')).toHaveValue('Ещё не сохранено');
+ expect(await page.evaluate(()=>JSON.stringify(D))).toBe(before);
+ await page.getByRole('tab',{name:'Обзор',exact:true}).focus();
+ await page.keyboard.press('ArrowRight');await expect(page.getByRole('tab',{name:'Требования',exact:true})).toBeFocused();
+ await page.keyboard.press('End');await expect(page.getByRole('tab',{name:'Версии и история',exact:true})).toBeFocused();
+ await page.keyboard.press('Home');await page.locator('[data-act="save-note"]').click();
+ expect(await page.evaluate(()=>item('workspace-0').note)).toBe('Ещё не сохранено');
+ await page.evaluate(()=>QA.switchUser('workspace-other'));
+ await expect.poll(()=>page.evaluate(()=>openId)).toBeNull();
+ await expect(page.locator('#note')).toHaveCount(0);
+});
+test('single primary action uses real workflow and keeps exact Word review gate',async({page})=>{
+ await seed(page);
+ for(const kind of ['intake','passport','quality','delivery','cancelled','delivered']){
+  await page.evaluate(kind=>{
+   const x=D.items[0];x.status=kind==='cancelled'?'off':kind==='delivered'?'sent':'new';
+   x.passports=kind==='intake'?[]:[{revision:1,status:kind==='passport'?'draft':'approved',items:[]}];
+   delete x.doc;
+   if(['quality','delivery'].includes(kind)){docOf(x);const id=x.doc.order[0].id;x.doc.structure[id].text='Учебный текст';if(kind==='delivery')x.doc.review=DraftQuality.stamp(x);}
+   openId=x.id;render();
+  },kind);
+  await expect(page.locator('.request-action button[data-act]')).toHaveCount(['cancelled','delivered'].includes(kind)?0:1);
+  const duplicates=await page.evaluate(()=>{const b=document.querySelector('.request-action button[data-act]');return b?document.querySelectorAll('#page button[data-act="'+b.dataset.act+'"]').length:0;});
+  expect(duplicates).toBe(['cancelled','delivered'].includes(kind)?0:1);
+  if(kind==='delivery')await expect(page.locator('.request-action')).toContainText('Провести итоговую проверку');
+  if(kind==='delivered'){await page.getByRole('tab',{name:'Проверка',exact:true}).click();await expect(page.getByRole('button',{name:'Проверить новую версию',exact:true})).toBeVisible();}
+ }
+});
+for(const width of [320,390,768,1440])test('layout stays readable at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await seed(page);
+ await page.evaluate(()=>{D.items[0].topic='Длинная тема исследования '.repeat(18);render();});
+ for(const theme of ['blue','green','lilac']){
+  await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;document.body.dataset.theme=theme;},theme);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ await page.evaluate(()=>{D.theme='blue';applyTheme();D.items[0].topic='Организация проектной команды';render();document.getElementById('toast').style.display='none';});
+ await page.screenshot({path:'test-results/workspace-registry-'+width+'.png'});
+ await page.locator('.open-request').first().click();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByRole('tab',{name:'Материалы',exact:true}).click();
+ await expect(page.getByRole('tabpanel')).toContainText('Список файлов ещё не получен');
+ const action=await page.locator('.request-action').boundingBox();expect(action.x).toBeGreaterThanOrEqual(0);expect(action.x+action.width).toBeLessThanOrEqual(width+1);
+ await page.screenshot({path:'test-results/workspace-request-'+width+'.png'});
+});

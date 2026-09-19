@@ -6,17 +6,14 @@ const css=fs.readFileSync(new URL('../desktop.css',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');
 const cabinet=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 
-test('desktop request detail uses a bounded grouped workflow',()=>{
- assert.match(css,/\.screen\[data-detail=true\]\{display:block;max-width:900px/);
- assert.match(css,/body:has\(\.screen\[data-detail=true\]\) \.fab\{display:none\}/);
- assert.match(css,/\.screen\[data-detail=true\] \.btn\{min-height:46px;font-size:15px\}/);
- assert.match(ui,/function group\(key,title,inner,open\)/);
- assert.match(ui,/Требования и материалы/);
- assert.match(ui,/Заметка и управление/);
- assert.match(ui,/Итоговая проверка и передача/);
- assert.match(ui,/workflow-steps/);
- assert.match(ui,/details\.fold-group\[open\]/);
- assert.match(ui,/desktop\.css\?v=5/);
+test('executor detail has six accessible panels and a separate primary action',()=>{
+ assert.match(css,/request-workspace\{grid-template-columns:minmax\(0,1fr\) 280px/);
+ assert.match(css,/request-panel\[hidden\]/);
+ assert.match(ui,/role="tablist"/);
+ assert.match(ui,/role="tabpanel"/);
+ assert.match(ui,/aria-controls="request-panel-/);
+ assert.match(ui,/request-action/);
+ assert.match(ui,/desktop\.css\?v=6/);
 });
 
 test('primary forms and modal sheets expose accessible names and focus handling',()=>{
@@ -34,7 +31,7 @@ test('primary forms and modal sheets expose accessible names and focus handling'
 
 test('registry instructions describe cloud intake and reviewed Word delivery',()=>{
  assert.match(ui,/Заявка сохраняется в облаке и попадает в реестр/);
- assert.match(ui,/Провести итоговую проверку/);
+ assert.match(fs.readFileSync(new URL('../request-workflow.js',import.meta.url),'utf8'),/Провести итоговую проверку/);
  assert.doesNotMatch(ui,/Сообщение приходит в WhatsApp или Telegram/);
  assert.doesNotMatch(ui,/Передать черновик студенту/);
 });
