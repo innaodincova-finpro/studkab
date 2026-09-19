@@ -53,7 +53,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
-   if(['deliver','result','prepare-result','review-result'].includes(input.action)){
+   if(['deliver','result','prepare-result','review-result','result-review-state'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(['passport-get','passport-ensure','passport-save','passport-approve'].includes(input.action)){

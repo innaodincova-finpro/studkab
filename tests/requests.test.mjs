@@ -220,3 +220,49 @@ test('student receives stored bytes only for the current server recipient',async
  const res=await (await app(request({action:'result',id:requestId}))).json();assert.equal(res.result.docxBase64,'UEsDBAAAAAA=');
  allowed=false;assert.equal((await app(request({action:'result',id:requestId}))).status,409);
 });
+
+const passportId='77777777-7777-4777-8777-777777777777';
+const reviewContext={passportId,sourceFingerprint:'c'.repeat(64),fingerprint:'d'.repeat(64)};
+async function reviewStateApp(options={}){
+ const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
+ const document=validateResult({...documentFixture,reviewContext});const calls=[];
+ const app=handler({auth:async()=>options.student?student:owner,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>{
+  calls.push({path,method,body});
+  if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:1;
+  if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId}];
+  if(path.startsWith('studkab_requirement_passports?'))return [{id:passportId,status:options.stalePassport?'stale':'approved',source_fingerprint:reviewContext.sourceFingerprint}];
+  if(path.startsWith('studkab_result_versions?'))return options.empty?[]:[{id:versionId,revision:1,recipient_id:options.otherRecipient?requestId:recipientId,document:options.changed?{...document,topic:'Changed'}:document,file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
+  if(path.startsWith('studkab_results?'))return options.delivered?[{delivery_id:versionId,review_id:reviewId,created_at:'2026-09-19'}]:[];
+  if(path.startsWith('studkab_result_reviews?'))return options.prepared?[]:[{id:reviewId,version_id:versionId,criteria:options.badReview?{...criteria,C01:{status:'fail',evidence:'Failed content check'}}:criteria,created_at:'2026-09-19'}];
+  throw Error('Unexpected write or query: '+path);
+ }});return {app,document,calls};
+}
+test('C-071 review state is executor-only and never writes or exposes another recipient',async()=>{
+ const denied=await reviewStateApp({student:true});assert.equal((await denied.app(request({action:'result-review-state',id:requestId,document:denied.document}))).status,403);assert.equal(denied.calls.length,0);
+ for(const options of [{},{prepared:true},{delivered:true},{empty:true},{changed:true},{otherRecipient:true}]){
+  const {app,document,calls}=await reviewStateApp(options);const response=await app(request({action:'result-review-state',id:requestId,document}));assert.equal(response.status,200);
+  const data=await response.json();assert.equal(data.state,options.empty?'none':options.changed||options.otherRecipient?'stale':options.delivered?'delivered':options.prepared?'prepared':'reviewed');
+  assert(calls.every(c=>c.method===undefined));
+  if(data.state==='stale')assert.equal(data.docxBase64,undefined);
+  if(data.state==='reviewed'){assert.equal(data.review.reviewId,reviewId);assert.equal(data.receipt.versionId,versionId);assert.equal(data.docxBase64,'UEsDBAAAAAA=');}
+ }
+});
+test('C-071 stale passport and failed stored review block recovery',async()=>{
+ for(const options of [{stalePassport:true},{badReview:true}]){
+  const {app,document}=await reviewStateApp(options);assert.equal((await app(request({action:'result-review-state',id:requestId,document}))).status,409);
+ }
+});
+test('C-071 changed context/document blocks send before any RPC',async()=>{
+ const {app,document,calls}=await reviewStateApp();
+ for(const value of [{...document,topic:'Edited'}, {...document,reviewContext:{...reviewContext,fingerprint:'e'.repeat(64)}}]){
+  assert.equal((await app(request({...binding,action:'deliver',deliveryId:versionId,document:value}))).status,409);
+ }
+ assert(calls.every(c=>!c.path.startsWith('rpc/')||c.path==='rpc/studkab_result_context_version'));
+});
+
+test('C-071 new recovery fails closed before guard migration is installed',async()=>{
+ const {app,document,calls}=await reviewStateApp({guardMissing:true});
+ const response=await app(request({action:'result-review-state',id:requestId,document}));
+ assert.equal(response.status,503);
+ assert(calls.every(c=>!c.path.startsWith('studkab_result_versions?')));
+});
