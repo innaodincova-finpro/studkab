@@ -43,7 +43,7 @@ test('registry document edited, saved, downloaded and keeps derived stage',async
  expect(result).toContain('DOCX XML valid');
  await page.locator('[data-x]').first().click();
  await page.evaluate(()=>{openId='rq-doc';render();});
- await page.getByText('Заметка и управление',{exact:true}).click();
+ await page.getByRole('tab',{name:'Обзор',exact:true}).click();
  await expect(page.locator('[data-act="status"]')).toHaveCount(0);
  await page.locator('#note').fill('Проверяется по фактическому этапу');await page.getByRole('button',{name:'Сохранить заметку'}).click();await page.reload();
  expect(await page.evaluate(()=>item('rq-doc').note)).toBe('Проверяется по фактическому этапу');

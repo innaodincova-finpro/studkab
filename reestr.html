@@ -299,7 +299,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 </style>
-<link rel="stylesheet" href="desktop.css?v=5">
+<link rel="stylesheet" href="desktop.css?v=6">
 </head>
 <body data-theme="blue">
 <div class="phone">
@@ -1814,7 +1814,7 @@ function render(){
   var bar = document.getElementById("tabbar");
   bar.innerHTML = [["list","Заявки","▤"],["refs","Вузы","🏛"],["more","Ещё","≡"]].map(function(x){
     return '<button type="button" data-tab="' + x[0] + '" aria-selected="' + (tab===x[0]) + '"><i aria-hidden="true">' + x[2] + '</i>' + x[1] +
-      (x[0]==="list" && c.new ? " · " + c.new : "") + '</button>';
+      (x[0]==="list" && c.all ? " · " + c.all : "") + '</button>';
   }).join("");
   var t = today();
   document.getElementById("today-date").textContent = weekdayRu(t) + ", " + ruDate(t);
@@ -1823,6 +1823,10 @@ function render(){
   if (tab === "more") p.innerHTML = viewMore();
   else if (tab === "refs") p.innerHTML = openRefId ? viewRef(openRefId) : viewRefs();
   else p.innerHTML = openId ? viewItem(openId) : viewList();
+  if(openId&&tab==='list'){
+    var primary=p.querySelector('.request-action [data-act]');
+    if(primary)p.querySelectorAll('.request-content button[data-act]').forEach(function(button){if(button.dataset.act===primary.dataset.act)button.remove();});
+  }
   cloudPaint();
   var fab = document.getElementById("fab");
   if (tab === "more"){ fab.hidden = true; }
@@ -1844,9 +1848,10 @@ function list0(fl, qr){
   return D.items.filter(function(x){
     if (fl !== "all" && stageBucket(x) !== fl) return false;
     if (!q2) return true;
-    return [x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q2) >= 0;
+    return [requestLabel(x), x.requestNumber, x.id, x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q2) >= 0;
   });
 }
+var listPage=1, listPageSize=25, listScroll=0, listReturnId="", requestTabs={};
 var inboxBusy = false;
 async function receiveInbox() {
   if (inboxBusy) return;
@@ -1875,32 +1880,25 @@ async function receiveInbox() {
   finally{inboxBusy=false;}
 }
 function viewList(){
-  var c = stageCounts(), q = query.toLowerCase();
-  var list = D.items.filter(function(x){
-    if (filter !== "all" && stageBucket(x) !== filter) return false;
-    if (!q) return true;
-    return [x.student, x.univ, x.topic, x.group, x.discipline].join(" ").toLowerCase().indexOf(q) >= 0;
-  });
-  var chips = [{k:"all",t:"Все"}].concat(STAGE_FILTERS.map(function(s){ return {k:s[0],t:s[1]} }));
-  var h = '<div class="chips"><button type="button" class="chip" data-act="receive-inbox">Получить заявки из кабинетов</button></div><p class="small">Нажмите «Получить заявки из кабинетов», чтобы обновить список. Если потребуется вход, приложение сообщит об этом.</p>' + (filter !== "all" || query
-      ? '<div class="row" style="margin-bottom:10px"><span class="mut">Отбор: ' +
-        (filter !== "all" ? (STAGE_FILTERS.filter(function(q){return q[0]===filter;})[0]||[])[1]||"этап" : "поиск") + ' · ' + list0(filter, query).length + '</span>' +
-        '<button type="button" class="mini" data-act="filter" data-k="all">показать все</button></div>'
-      : '') + '<div class="fld"><input type="search" id="q" aria-label="Поиск заявок" value="' + esc(query) + '" placeholder="Поиск по фамилии, вузу, теме"></div>' +
-    '<div class="pick" style="margin-bottom:12px">' + chips.map(function(f){
-      var n = f.k==="all" ? c.all : c[f.k];
-      if (f.k !== "all" && !n) return "";
-      return '<button type="button" aria-pressed="' + (filter===f.k) + '" data-act="filter" data-k="' + f.k + '">' + f.t + ' · ' + n + '</button>';
-    }).join("") + '</div>';
-  if (!D.items.length){
-    return h + '<div class="empty">Заявок нет. Новые заявки из кабинета студента появятся здесь после обновления списка.</div>';
-  }
-  h += list.length ? card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Заявка</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Этап</th></tr></thead><tbody>'+list.map(function(x){
-    var over=x.deadline && x.deadline<today() && x.status!=="done" && x.status!=="off";
-    var workflow=requestWorkflow(x),requestName=requestLabel(x);
-    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestName)+'</button><small>'+esc(x.student||"Студент не указан")+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||"Вуз не указан")+'</td><td>'+esc(x.topic||"Тема не указана")+'</td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small>Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(workflow.title)+'</span>'+(workflow.blocker?'<small>'+esc(workflow.blocker)+'</small>':'')+'</td></tr>';
-  }).join('')+'</tbody></table>') : '<div class="empty">В этом отборе пусто.</div>';
-  return h;
+  var list=list0(filter,query), chips=[{k:"all",t:"Все"}].concat(STAGE_FILTERS.map(function(s){return {k:s[0],t:s[1]};}));
+  var pages=Math.max(1,Math.ceil(list.length/listPageSize));
+  listPage=Math.max(1,Math.min(listPage,pages));
+  var start=(listPage-1)*listPageSize;
+  var h='<div class="registry-toolbar"><div><h1>Заявки</h1><p class="mut">'+D.items.length+' '+plural(D.items.length,'заявка','заявки','заявок')+' · этап и следующий шаг</p></div><button type="button" class="chip" data-act="receive-inbox">Получить заявки из кабинетов</button></div>'+
+    '<div class="fld"><input type="search" id="q" aria-label="Поиск заявок" value="'+esc(query)+'" placeholder="Номер, студент, вуз или тема"></div>'+
+    '<div class="registry-filters" aria-label="Этапы заявок">'+chips.map(function(f){
+      var n=list0(f.k,query).length;
+      return '<button type="button" class="chip" aria-pressed="'+(filter===f.k)+'" data-act="filter" data-k="'+f.k+'">'+f.t+' · '+n+'</button>';
+    }).join('')+'</div>';
+  function pager(){return '<nav class="registry-pagination" aria-label="Страницы заявок"><span role="status">Найдено '+list.length+' · '+(list.length?(start+1)+'–'+Math.min(start+listPageSize,list.length):'0')+'</span><label>На странице <select data-act="page-size" aria-label="Заявок на странице"><option value="25"'+(listPageSize===25?' selected':'')+'>25</option><option value="50"'+(listPageSize===50?' selected':'')+'>50</option></select></label><div><button type="button" class="mini" data-act="list-page" data-page="'+(listPage-1)+'"'+(listPage===1?' disabled':'')+' aria-label="Предыдущая страница">←</button><span> '+listPage+' / '+pages+' </span><button type="button" class="mini" data-act="list-page" data-page="'+(listPage+1)+'"'+(listPage===pages?' disabled':'')+' aria-label="Следующая страница">→</button></div></nav>';}
+  h+=pager();
+  if(!D.items.length)return h+'<div class="empty">Заявок нет. Нажмите «Получить заявки из кабинетов», чтобы обновить список.</div>';
+  h+=list.length?card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Заявка / студент</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Этап и следующий шаг</th></tr></thead><tbody>'+list.slice(start,start+listPageSize).map(function(x){
+    var w=requestWorkflow(x),over=x.deadline&&x.deadline<today()&&!w.complete&&w.key!=='cancelled';
+    var next=x.requestNumber?w.label:'Открыть документ';
+    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button><small>'+esc(x.student||'Студент не указан')+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||'Вуз не указан')+'</td><td><span class="registry-topic">'+esc(x.topic||'Тема не указана')+'</span></td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small class="deadline-overdue">Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(w.title)+'</span>'+(w.blocker?'<small>'+esc(w.blocker)+'</small>':'')+(next?'<small class="request-next">Исполнитель: '+esc(next)+'</small>':'')+'</td></tr>';
+  }).join('')+'</tbody></table>'):'<div class="empty">По этому запросу заявок нет. Измените поиск или этап.</div>';
+  return h+(list.length>10?pager():'');
 }
 
 var PASSPORT_CATEGORY={method:'Требование методички',measurable:'Измеримая проверка',expert:'Предметная рекомендация',assumption:'Предположение'};
@@ -1996,12 +1994,10 @@ function viewItem(id){
     return !!String(part.text||"").trim() || (Array.isArray(part.figures) && part.figures.length>0);
   })));
 
-  function group(key,title,inner,open){return '<details class="fold fold-group" data-request="'+esc(x.id)+'" data-group="'+key+'"'+(open?' open':'')+'><summary>'+title+'</summary><div class="in">'+inner+'</div></details>';}
-  var savedGroup="",workflow=requestWorkflow(x);
-  try{savedGroup=localStorage.getItem("studkab-open-group:"+x.id)||"";}catch(e){}
-  var stageGroup={intake:'requirements',passport:'requirements',preparation:'result',quality:'result',delivery:'delivery',delivered:'delivery',cancelled:'progress'};
+  var workflow=requestWorkflow(x);
+  var defaultGroup=requestTabs[x.id]||'overview';
+  function group(key,title,inner){return '<section class="request-panel card" id="request-panel-'+key+'" role="tabpanel" aria-labelledby="request-tab-'+key+'"'+(defaultGroup!==key?' hidden':'')+'>'+inner+'</section>';}
   var displayNumber=requestLabel(x),topic=x.topic||'Тема не указана',requestTitle=displayNumber!==x.student&&topic.indexOf(displayNumber)!==0?displayNumber+' — '+topic:topic;
-  var defaultGroup=savedGroup||stageGroup[workflow.key]||'requirements';
   var h = '<button type="button" class="mini" data-act="back">← Заявки</button>' +
     '<header class="request-head"><h1>' + esc(requestTitle) + '</h1>' +
     '<div class="request-meta"><span class="stage-pill">'+esc(workflow.title)+'</span><span>'+esc(x.workType||'Тип работы не указан')+'</span>'+(x.deadline?'<span>Срок '+esc(ruDate(x.deadline))+'</span>':'')+'</div>'+
@@ -2010,10 +2006,10 @@ function viewItem(id){
                  : '<span class="mut">Контакт не указан</span>') +
     '</div></header>';
 
-  h += card(lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
-    row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group));
-
-  if(x.requestNumber) h += workflowCard(x);
+  var overview=lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
+    row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group);
+  var panel=x.requestNumber?workflowCard(x):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
+  h+='<div class="request-workspace"><aside class="request-action" aria-label="Следующее действие">'+panel+'</aside><div class="request-content"><div class="request-tabs" role="tablist" aria-label="Разделы заявки">'+[['overview','Обзор'],['requirements','Требования'],['materials','Материалы'],['result','Документ'],['delivery','Проверка'],['history','Версии и история']].map(function(t){return '<button type="button" role="tab" id="request-tab-'+t[0]+'" aria-controls="request-panel-'+t[0]+'" aria-selected="'+(defaultGroup===t[0])+'" tabindex="'+(defaultGroup===t[0]?'0':'-1')+'" data-act="request-tab" data-key="'+t[0]+'" data-id="'+esc(x.id)+'">'+t[1]+'</button>';}).join('')+'</div>';
 
   var requirements = row("Требования", x.requirements) + row("Организация", x.org) + row("Методичка", x.methodNotes) +
     row("Факультет", x.faculty) + row("Кафедра", x.kafedra) + row("Направление", x.program) + row("Форма", x.form) +
@@ -2030,7 +2026,11 @@ function viewItem(id){
       '<div class="txt"><b>' + esc(r.univ) + '</b><small>' + (x.refNew ? "новый вуз, появился из этой заявки" : "требования не проверены по методичке") + '</small></div></div>';
   }
   if (r && r.verified) requirements += '<div class="chips"><button type="button" class="chip" data-act="ref-open" data-id="'+r.id+'">Требования вуза ✓</button></div>';
-  if(Array.isArray(x.attachments))requirements += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
+  var materials='<p class="hint">Материалы предоставляет студент. Здесь можно просмотреть и скачать полученные файлы.</p>';
+  if(Array.isArray(x.attachments))materials += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
+  else materials+='<p class="hint">'+(x.requestNumber?'Список файлов ещё не получен. Обновите материалы.':'У этой ручной заявки нет файлов из кабинета студента.')+'</p>';
+  if(x.requestNumber)materials+='<button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить материалы</button>';
+  h+=group('materials','Материалы',materials);
   if(x.requestNumber) requirements += '<div class="section-separator">'+passportContent(x)+'</div>';
   h += group("requirements","Требования и материалы",requirements,defaultGroup==="requirements");
 
@@ -2039,7 +2039,7 @@ function viewItem(id){
     '<div class="fld"><label for="note">Заметка исполнителя</label><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">' + esc(x.note||"") + '</textarea></div>' +
     '<div class="row"><button type="button" class="chip" data-act="save-note" data-id="' + esc(x.id) + '">Сохранить заметку</button>' +
     '<button type="button" class="del" data-act="delete" data-id="' + esc(x.id) + '">удалить</button></div>';
-  h += group("progress","Заметка и управление",progress,defaultGroup==="progress");
+  h += group("overview","Обзор",overview+'<div class="section-separator">'+progress+'</div>');
 
   var result = (hasDoc
       ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков' + (x.doc.updated ? ' · правка ' + ruDate(x.doc.updated) : '') + '</div>'
@@ -2047,7 +2047,14 @@ function viewItem(id){
     '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (hasDoc ? "Открыть документ" : "Собрать документ") + '</button></div>';
   h += group("result",hasDoc?"Документ":"Подготовка документа",result,defaultGroup==="result");
 
-  if(x.requestNumber) h += group("delivery","Итоговая проверка и передача",'<p class="hint">Передача доступна только для проверенной версии Word без блокирующих критериев.</p><button type="button" class="btn compact-action" data-act="deliver-result" data-id="'+esc(x.id)+'">Провести итоговую проверку</button>',defaultGroup==="delivery");
+  h += group("delivery","Итоговая проверка и передача",x.requestNumber?'<p class="hint">Итоговая проверка относится к точной версии Word. Наличие текста и автоматическая проверка сами по себе не означают одобрение. Передача доступна только без блокирующих критериев.</p>'+(workflow.key==='delivery'?'':workflow.key==='delivered'?'<p>Результат передан. Для следующей версии сначала откройте документ и повторите проверки.</p><button type="button" class="chip" data-act="deliver-result" data-id="'+esc(x.id)+'">Проверить новую версию</button>':'<p>Следуйте действию в панели заявки. Итоговая проверка станет следующим шагом после проверки документа.</p>'):'<p class="hint">Серверная передача недоступна: заявка добавлена вручную.</p>');
+  var versions=Array.isArray(x.passports)?x.passports:[];
+  var history=lab('Версии паспорта')+(versions.length?'<ul class="request-history">'+versions.map(function(p){return '<li>Версия '+esc(p.revision||1)+' · '+esc({approved:'утверждён',draft:'проект',stale:'устарел'}[p.status]||p.status||'статус неизвестен')+'</li>';}).join('')+'</ul>':'<p class="hint">Сохранённые версии паспорта пока не загружены.</p>');
+  if(x.doc&&x.doc.serverJob)history+=lab('Сохранённая подготовка')+'<p class="hint">Состояние и историю серверной подготовки можно посмотреть в редакторе документа.</p>';
+  history+='<p class="hint">Общий список всех переданных версий Word здесь пока недоступен.</p>';
+  h+=group('history','Версии и история',history);
+  h+='</div></div>';
+
   return h;
 }
 
@@ -2217,6 +2224,7 @@ function cloudSwitchUser(id){
   if (id) localStorage.setItem(CLOUD_LOCAL_KEY + ":scoped", "1");
   localStorage.setItem(CLOUD_LOCAL_KEY + ":active-user", id || "");
   KEY = target; D = null;
+  requestTabs={};listPage=1;listScroll=0;listReturnId="";query="";filter="all";
   if (typeof undoStack !== "undefined") { undoStack = []; redoStack = []; }
   if (typeof openId !== "undefined") { openId = null; openRefId = null; }
   load(); render();
@@ -2369,7 +2377,7 @@ function openModal(html){
 /* ---------- ДЕЙСТВИЯ ---------- */
 document.addEventListener("input", function(ev){
   if (ev.target.id === "q"){
-    query = ev.target.value; var p = ev.target.selectionStart, v = ev.target.value; render();
+    query = ev.target.value; listPage=1; var p = ev.target.selectionStart, v = ev.target.value; render();
     var el = document.getElementById("q");
     if (el){ el.focus(); el.value = v; try{ el.setSelectionRange(p,p) }catch(e){} }
   }
@@ -2381,6 +2389,7 @@ document.addEventListener("input", function(ev){
 });
 document.addEventListener("change", function(ev){
   var el = ev.target;
+  if(el.matches('select[data-act="page-size"]')){listPageSize=Number(el.value)===50?50:25;listPage=1;render();document.querySelector('[data-act="page-size"]').focus();return;}
   if (el.tagName === "SELECT" && el.getAttribute("data-act") === "status"){
     var x = item(el.getAttribute("data-id")); if (!x) return;
     x.status = el.value; var okk = save(); render(); toast(okk ? "Статус: " + STATUS[x.status] : "Не сохранено: браузер не разрешает хранение");
@@ -2398,6 +2407,9 @@ document.addEventListener("toggle", function(ev){
   }
 },true);
 document.addEventListener("keydown", function(ev){
+  if(ev.target.matches('.request-tabs [role="tab"]')&&['ArrowLeft','ArrowRight','Home','End'].indexOf(ev.key)>=0){
+    ev.preventDefault();var tabs=Array.from(document.querySelectorAll('.request-tabs [role="tab"]')),n=tabs.indexOf(ev.target);n=ev.key==='Home'?0:ev.key==='End'?tabs.length-1:(n+(ev.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[n].click();tabs[n].focus();
+  }
   if (ev.key === "Escape"){ var m = document.querySelector(".sheet"); if (m) m.remove(); }
 });
 document.addEventListener("click", function(ev){
@@ -2419,9 +2431,9 @@ document.addEventListener("click", function(ev){
     D.aiDiagnostics = []; save(); render(); toast("Журнал очищен"); return;
   }
   if (act === "cloud") return openCloud();
-  if (act === "go-filter"){ tab = "list"; openId = null; filter = el.getAttribute("data-k"); query = ""; return render(); }
+  if (act === "go-filter"){ tab = "list"; openId = null; filter = el.getAttribute("data-k"); query = ""; listPage=1; return render(); }
   if (act === "go-refs"){ tab = "refs"; openRefId = null; return render(); }
-  if (act === "back"){ openId = null; return render(); }
+  if (act === "back"){ openId = null; render();var backButton=Array.from(document.querySelectorAll('.open-request')).find(function(b){return b.dataset.id===listReturnId;});if(backButton)backButton.focus({preventScroll:true});window.scrollTo(0,listScroll);return; }
   if (act === "ref-back"){ openRefId = null; return render(); }
   if (act === "ref-open"){ tab = "refs"; openRefId = id; openId = null; return render(); }
   if (act === "open-from-ref"){ tab = "list"; openId = id; openRefId = null; return render(); }
@@ -2440,8 +2452,16 @@ document.addEventListener("click", function(ev){
     if (xx.methodNotes && (rr2.notes||"").indexOf(xx.methodNotes) < 0) rr2.notes = (rr2.notes ? rr2.notes + "\n" : "") + "Из заявки " + (xx.student||"") + ": " + xx.methodNotes;
     var ok7 = save(); render(); toast(ok7 ? "Справочник обновлён по заявке" : "Не сохранено: браузер не разрешает хранение"); return;
   }
-  if (act === "open"){ openId = id; return render(); }
-  if (act === "filter"){ var nf = el.getAttribute("data-k"); if (nf === "all" && filter === "all") query = ""; filter = nf; if (nf === "all") query = ""; return render(); }
+  if (act === "open"){ listScroll=window.scrollY;listReturnId=id;openId = id;render();document.querySelector('[data-act="back"]').focus({preventScroll:true});return; }
+  if(act==='request-tab'){
+    var key=el.dataset.key;requestTabs[id]=key;
+    document.querySelectorAll('.request-tabs [role="tab"]').forEach(function(b){var selected=b.dataset.key===key;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});
+    document.querySelectorAll('.request-panel').forEach(function(panel){panel.hidden=panel.id!=='request-panel-'+key;});return;
+  }
+  if(act==='list-page'){listPage=Number(el.dataset.page)||1;render();document.querySelector('.registry-pagination').setAttribute('tabindex','-1');document.querySelector('.registry-pagination').focus();return;}
+  if(act==='materials-refresh'){var mx=item(id);if(!mx)return;mx._attachmentsLoaded=false;el.disabled=true;loadAttachmentContext(mx).then(function(){render();}).catch(function(err){toast(err.message||'Не удалось обновить материалы');}).finally(function(){el.disabled=false;});return;}
+
+  if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
   if (act === "attachment-download") {var aid=el.getAttribute('data-attachment');el.disabled=true;Oblako.requestApi({action:'attachment-download',id:id,attachmentId:aid}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Не удалось скачать файл');}).finally(function(){el.disabled=false;});return;}
   if (act === "deliver-result") return StudResults.deliver(item(id));
