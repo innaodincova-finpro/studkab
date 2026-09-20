@@ -46,11 +46,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 21 then
-    raise exception 'Expected 21 STUDKAB tables, found %', table_count;
+  if table_count <> 22 then
+    raise exception 'Expected 22 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 21 then
-    raise exception 'RLS enabled on only % of 21 STUDKAB tables', rls_count;
+  if rls_count <> 22 then
+    raise exception 'RLS enabled on only % of 22 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';

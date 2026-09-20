@@ -8,8 +8,8 @@ const denied={status:404,data:{error:'Заявка не найдена'}};
 
 async function access(id,user,{db,config}){
  if(!uuid.test(String(id||'')))return null;
- const rows=await db('studkab_requests?id=eq.'+id+'&select=id,student_id');
- if(!rows?.length)return null;
+ const rows=await db('studkab_requests?id=eq.'+id+'&select=id,student_id,deleting_at');
+ if(!rows?.length||rows[0].deleting_at)return null;
  const cfg=await config();
  if(user.email?.toLowerCase()===cfg?.executor_email?.toLowerCase())return {row:rows[0],executor:true};
  if(rows[0].student_id===user.id)return {row:rows[0],executor:false};

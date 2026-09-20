@@ -184,6 +184,12 @@
       "name": "result_review_context_guard",
       "file": "20260919124300_result_review_context_guard.sql",
       "sha256": "7c0279620d2cc348b12561dfe2bce4794d4a046722d3b755a84268eee3acb4fd"
+    },
+    {
+      "version": "20260920111220",
+      "name": "c079_request_deletion",
+      "file": "20260920111220_c079_request_deletion.sql",
+      "sha256": "07b5d3208cc334b44f71db62c1d642ea62317f23becd7669c73f3c53e3f453d6"
     }
   ]
 }

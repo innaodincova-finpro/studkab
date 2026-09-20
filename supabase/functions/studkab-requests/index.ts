@@ -46,6 +46,6 @@ async function download(path:string,fileName:string){
 }
 async function remove(path:string){
  const r=await fetch(base+'/storage/v1/object/'+bucket+'/'+path,{method:'DELETE',headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000)});
- if(!r.ok)throw Error('Storage cleanup unavailable');
+ if(!r.ok&&r.status!==404)throw Error('Storage cleanup unavailable');
 }
 Deno.serve(handler({auth,db,send,invite,isMember,upload,download,remove,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
