@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=10"></script><script src="draft-editor.js?v=7"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=10"></script><script src="request-workflow.js?v=2"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=10"></script><script src="draft-editor.js?v=7"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=11"></script><script src="request-workflow.js?v=2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1857,21 +1857,23 @@ async function receiveInbox() {
   if (inboxBusy) return;
   if (!window.Oblako || !Oblako.requestApi) {toast("Вход временно недоступен");return;}
   inboxBusy=true;
-  var expectedData=D, received=[], cursor=0;
+  var expectedData=D, expectedIdentity=Oblako.identity(), received=[], cursor=0;
   var match=location.hash.match(/^#request=([a-f0-9-]{36})$/);
   try {
     do {
-      var result=await Oblako.requestApi({action:"inbox",after:cursor,id:match?match[1]:undefined});
-      if(D!==expectedData) throw new Error("Реестр изменился. Повторите получение заявок");
+      var result=await Oblako.requestApi({action:"inbox",includeDeliveryState:true,after:cursor,id:match?match[1]:undefined});
+      if(D!==expectedData||Oblako.identity()!==expectedIdentity) throw new Error("Реестр изменился. Повторите получение заявок");
       if(!Array.isArray(result.rows))throw new Error("Не удалось прочитать входящие");
       result.rows.forEach(function(row){
         var rec=fromPayload(Object.assign({},row.payload,{id:row.id}));
-        rec.requestNumber=row.number;received.push(rec);
+        rec.requestNumber=row.number;
+        if(row.deliveryState&&typeof row.deliveryState.checkedAt==='string'&&Object.prototype.hasOwnProperty.call(row.deliveryState,'last'))rec.deliveryState=row.deliveryState;
+        received.push(rec);
       });
       cursor=result.next;
     } while(cursor && !match);
     var count=0;
-    received.forEach(function(rec){if(!item(rec.id)){D.items.unshift(rec);refIntake(rec);count++;}});
+    received.forEach(function(rec){var existing=item(rec.id);if(!existing){D.items.unshift(rec);refIntake(rec);count++;}else if(rec.deliveryState){existing.deliveryState=rec.deliveryState;}});
     var stored=save();
     if(match && item(match[1])){openId=match[1];tab="list";}
     if(stored && match)history.replaceState(null,"",location.pathname+location.search);
@@ -1896,7 +1898,8 @@ function viewList(){
   h+=list.length?card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Заявка / студент</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Этап и следующий шаг</th></tr></thead><tbody>'+list.slice(start,start+listPageSize).map(function(x){
     var w=requestWorkflow(x),over=x.deadline&&x.deadline<today()&&!w.complete&&w.key!=='cancelled';
     var next=x.requestNumber?w.label:'Открыть документ';
-    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button><small>'+esc(x.student||'Студент не указан')+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||'Вуз не указан')+'</td><td><span class="registry-topic">'+esc(x.topic||'Тема не указана')+'</span></td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small class="deadline-overdue">Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(w.title)+'</span>'+(w.blocker?'<small>'+esc(w.blocker)+'</small>':'')+(next?'<small class="request-next">Исполнитель: '+esc(next)+'</small>':'')+'</td></tr>';
+    var previous=x.deliveryState&&x.deliveryState.last;
+    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button>'+(previous?'<small>Ранее передано '+esc(ruDate(String(previous.createdAt).slice(0,10)))+'</small>':'')+'<small>'+esc(x.student||'Студент не указан')+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||'Вуз не указан')+'</td><td><span class="registry-topic">'+esc(x.topic||'Тема не указана')+'</span></td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small class="deadline-overdue">Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(w.title)+'</span>'+(w.blocker?'<small>'+esc(w.blocker)+'</small>':'')+(next?'<small class="request-next">Исполнитель: '+esc(next)+'</small>':'')+'</td></tr>';
   }).join('')+'</tbody></table>'):'<div class="empty">По этому запросу заявок нет. Измените поиск или этап.</div>';
   return h+(list.length>10?pager():'');
 }
@@ -1904,10 +1907,16 @@ function viewList(){
 var PASSPORT_CATEGORY={method:'Требование методички',measurable:'Измеримая проверка',expert:'Предметная рекомендация',assumption:'Предположение'};
 var PASSPORT_ITEM_LABEL={WORK_TYPE:'Вид работы',DISCIPLINE:'Дисциплина',STRUCTURE:'Структура',VOLUME:'Объём',METHODOLOGY:'Методология',FORMATTING:'Оформление',SOURCES:'Источники',CALCULATIONS:'Расчёты',ANTIPLAGIARISM:'Оригинальность',TEACHER:'Условия преподавателя'};
 function passportUnresolved(p){return ((p&&p.items)||[]).filter(function(q){return q.required!==false&&/не указано|требуется уточнить/i.test(q.text||'');});}
+function deliveryHistory(x){
+ var state=x.deliveryState,last=state&&state.last;
+ if(!state)return '<p class="hint" data-delivery-history>Сведения о прежней передаче ещё не загружены. Нажмите «Получить заявки из кабинетов».</p>';
+ if(!last)return '<p class="hint" data-delivery-history>На момент обновления сервер не зарегистрировал передачу.</p>';
+ return '<p data-delivery-history><b>Ранее передано: '+esc(ruDate(String(last.createdAt).slice(0,10)))+'</b><br><span class="hint">Это сохранённая передача. Совпадение текущего документа с переданной версией здесь не проверяется.</span></p>';
+}
 function requestWorkflow(x){
  var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[],hasDocument=!!(x.doc&&(x.doc.order||[]).some(function(c){var part=(x.doc.structure||{})[c.id]||{};return String(part.text||'').trim()||(Array.isArray(part.figures)&&part.figures.length);})),reviewCurrent=false;
  if(hasDocument&&x.doc&&x.doc.review)try{reviewCurrent=x.doc.review===DraftQuality.stamp(x);}catch(e){reviewCurrent=false;}
- return RequestWorkflow.derive({cancelled:x.status==='off',delivered:x.status==='sent',hasPassport:!!p,passportUnresolved:!!unresolved.length,passportBlocker:unresolved.length?'Не указано: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '):'',passportApproved:!!p&&p.status==='approved',hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
+ return RequestWorkflow.derive({cancelled:x.status==='off',delivered:!!(window.StudResults&&StudResults.isCurrentDelivery&&StudResults.isCurrentDelivery(x)),hasPassport:!!p,passportUnresolved:!!unresolved.length,passportBlocker:unresolved.length?'Не указано: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '):'',passportApproved:!!p&&p.status==='approved',hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
 }
 function workflowSteps(w){return '<ol class="workflow-steps" aria-label="Этапы заявки">'+w.steps.map(function(s,n){var step=n+1,state=w.complete||step<w.step?'done':step===w.step?'current':'';return '<li class="'+state+'"><span>'+step+'.</span> '+esc(s.label)+'</li>';}).join('')+'</ol>';}
 function workflowCard(x){var w=requestWorkflow(x);return card(workflowSteps(w)+lab(w.complete?'Маршрут завершён':'Следующее действие · этап '+w.step+' из 5')+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p>'+(w.blocker?'<div class="warnbar workflow-blocker">'+esc(w.blocker)+'</div>':'')+(w.action?'<button type="button" class="btn" data-act="'+w.action+'" data-id="'+esc(x.id)+'">'+esc(w.label)+'</button>':''),'workflow-next');}
@@ -2008,7 +2017,7 @@ function viewItem(id){
 
   var overview=lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
     row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group);
-  var panel=x.requestNumber?workflowCard(x):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
+  var panel=x.requestNumber?workflowCard(x)+card(deliveryHistory(x)):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
   h+='<div class="request-workspace"><aside class="request-action" aria-label="Следующее действие">'+panel+'</aside><div class="request-content"><div class="request-tabs" role="tablist" aria-label="Разделы заявки">'+[['overview','Обзор'],['requirements','Требования'],['materials','Материалы'],['result','Документ'],['delivery','Проверка'],['history','Версии и история']].map(function(t){return '<button type="button" role="tab" id="request-tab-'+t[0]+'" aria-controls="request-panel-'+t[0]+'" aria-selected="'+(defaultGroup===t[0])+'" tabindex="'+(defaultGroup===t[0]?'0':'-1')+'" data-act="request-tab" data-key="'+t[0]+'" data-id="'+esc(x.id)+'">'+t[1]+'</button>';}).join('')+'</div>';
 
   var requirements = row("Требования", x.requirements) + row("Организация", x.org) + row("Методичка", x.methodNotes) +
@@ -2051,7 +2060,7 @@ function viewItem(id){
   var versions=Array.isArray(x.passports)?x.passports:[];
   var history=lab('Версии паспорта')+(versions.length?'<ul class="request-history">'+versions.map(function(p){return '<li>Версия '+esc(p.revision||1)+' · '+esc({approved:'утверждён',draft:'проект',stale:'устарел'}[p.status]||p.status||'статус неизвестен')+'</li>';}).join('')+'</ul>':'<p class="hint">Сохранённые версии паспорта пока не загружены.</p>');
   if(x.doc&&x.doc.serverJob)history+=lab('Сохранённая подготовка')+'<p class="hint">Состояние и историю серверной подготовки можно посмотреть в редакторе документа.</p>';
-  history+='<p class="hint">Общий список всех переданных версий Word здесь пока недоступен.</p>';
+  history+=lab('Последняя передача')+deliveryHistory(x);
   h+=group('history','Версии и история',history);
   h+='</div></div>';
 

@@ -46,6 +46,9 @@ test('C-071 saving review never delivers; reopening restores exact bytes and sep
  await page.locator('[data-deliver]').click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').map(c=>c.deliveryId))).toEqual([await page.evaluate(()=>remote.receipt.versionId)]);
  await expect(page.locator('[data-deliver]')).toBeDisabled();
+ expect(await page.evaluate(()=>StudResults.isCurrentDelivery(candidate))).toBe(true);
+ await page.evaluate(()=>candidate.doc.structure.intro.text+=' Изменение после передачи.');
+ expect(await page.evaluate(()=>StudResults.isCurrentDelivery(candidate))).toBe(false);
  await page.screenshot({path:'test-results/separate-review-mobile.png'});
 });
 test('C-071 lost review and delivery responses recover without duplicate writes',async({page})=>{
