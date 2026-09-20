@@ -42,7 +42,16 @@
     if(m)fields[m[1].toLowerCase()]=m[2].trim();
    });
    var fragment=fields['фрагмент']||fields['выдержка']||'';
-   cards[id]={id:id,body:body,details:fields['реквизиты']||'',fragment:fragment,claim:fields['подтверждает']||''};
+   var candidate={id:id,body:body,details:fields['реквизиты']||'',fragment:fragment,claim:fields['подтверждает']||''};
+   var previous=cards[id],structured=Object.keys(fields).length>0;
+   // A plain source occurrence in an attachment cannot erase an explicit card.
+   if(previous&&previous.structured&&structured){
+    if(['details','fragment','claim'].some(function(key){return previous[key]!==candidate[key];}))
+     errors.push('Источник [S'+id+']: найдены различающиеся карточки с одним обозначением. Уточните реквизиты, фрагмент и подтверждаемое утверждение.');
+    return;
+   }
+   if(previous&&previous.structured&&!structured)return;
+   candidate.structured=structured;cards[id]=candidate;
   });
   Object.keys(cards).forEach(function(key){var c=cards[key];
    if(c.details.length<10)errors.push('Источник [S'+c.id+']: укажите проверенные реквизиты (автор, название, год и ссылка или страницы).');

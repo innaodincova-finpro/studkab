@@ -147,3 +147,24 @@ test('C074 numeric statements in data attachments are not treated as assignment 
  x.doc.attachmentMaterials+='\n\n---\n\nФайл: задание.docx; категория: assignment; SHA-256: test\nНе менее 10 источников.';
  assert.equal(q.sourceRequirements(x).minimum,10);
 });
+
+const duplicateCard='[S1]\nРеквизиты: Учебный конспект, 2026, с. 4–6\nФрагмент: Показатели должны быть определены до начала измерения.\nПодтверждает: Необходимость заранее определить показатели.';
+const plainOccurrence='S1 Учебный конспект, 2026, с. 4–6\nПоказатели должны быть определены до начала измерения.';
+test('explicit source card survives attached plain occurrence in both orders',()=>{
+ for(const parts of [[duplicateCard,plainOccurrence],[plainOccurrence,duplicateCard]]){
+  const result=q.sourceEvidence(parts.join('\n\n'));
+  assert.deepEqual(result.errors,[]);assert.equal(result.cards[1].fragment,'Показатели должны быть определены до начала измерения.');
+ }
+ const x={doc:{inputs:{sources:duplicateCard},attachmentSources:plainOccurrence}};
+ assert.deepEqual(q.sourceEvidence(q.inputs(x).sources).errors,[]);
+});
+test('identical cards are harmless but conflicting cards block in both orders',()=>{
+ assert.deepEqual(q.sourceEvidence(duplicateCard+'\n'+duplicateCard).errors,[]);
+ const other=duplicateCard.replace('Учебный конспект','Другой конспект');
+ for(const parts of [[duplicateCard,other],[other,duplicateCard]])assert.match(q.sourceEvidence(parts.join('\n')).errors.join(' '),/различающиеся карточки/);
+});
+test('incomplete duplicate cards cannot fabricate a complete source by merging fields',()=>{
+ const parts=['[S1]\nРеквизиты: Учебный конспект, 2026','[S1]\nФрагмент: Проверяемый фрагмент длиной больше двадцати знаков.\nПодтверждает: Утверждение первой главы.'];
+ for(const list of [parts,[...parts].reverse()])assert.ok(q.sourceEvidence(list.join('\n')).errors.length>0);
+ assert.ok(q.sourceEvidence(plainOccurrence).errors.length>0);
+});
