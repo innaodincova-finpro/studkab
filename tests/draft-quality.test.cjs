@@ -118,3 +118,32 @@ test('Word preserves editable tables with 12pt single spacing and native subsect
  const zip=Buffer.from(await blob.arrayBuffer()).toString('utf8');assert(zip.includes('Неполный черновик'));assert(!zip.includes('### 2.1'));assert(zip.includes('<w:pStyle w:val="Heading2"/>'));
  const table=zip.slice(zip.indexOf('<w:tbl>'),zip.indexOf('</w:tbl>'));assert(table.includes('<w:tblHeader/>'));assert(table.includes('w:sz w:val="24"'));assert(table.includes('w:line="240"'));assert(!table.includes('w:sz w:val="28"'));
 });
+
+test('C074 original assignment minima survive a weakened passport and summary approval',()=>{
+ const x={passports:[{status:'approved',summary:'Согласовано',items:[{id:'P1',text:'Объём 25–30 страниц; структура: введение, три главы, заключение, не менее 5 источников и приложения. Использовать только предоставленные данные и S1–S5.'}]}],doc:{inputs:{requirements:'Задание'},attachmentMaterials:'Файл: задание.docx; категория: assignment; SHA-256: test\nСписок источников\n\nНе менее 10 позиций; в тесте использовать материалы',order:[{id:'refs',name:'Источники'}],structure:{refs:{text:Array.from({length:5},(_,i)=>`${i+1}. Учебный источник`).join('\n')}}}};
+ const before=JSON.stringify(x),r=q.sourceRequirements(x);
+ assert.equal(r.minimum,10);assert.equal(r.passportMinimum,5);assert.equal(r.bibliographyEntries,5);
+ assert.equal(r.errors.length,2);assert(q.documentAcceptance(x).errors.some(e=>e.includes('меньший минимум')));
+ assert.equal(JSON.stringify(x),before);
+ x.passports[0].items[0].text='Не менее 10 источников.';
+ assert.equal(q.sourceRequirements(x).errors.length,1); // Correcting passport alone never makes five references ten.
+ x.doc.structure.refs.text=Array.from({length:10},(_,i)=>`${i+1}. Учебный источник`).join('\n');
+ assert.deepEqual(q.sourceRequirements(x).errors,[]);
+});
+test('C074 evidence report distinguishes blockers, observations and manual verification',()=>{
+ const x={topic:'Менеджмент',doc:{inputs:{requirements:'Проверить содержание',materials:'Учебные данные',sources:''},order:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Текст.'}}}};
+ const r=q.riskReport(x);assert.equal(r.sources.minimum,null);assert(r.manual.length>0);
+ assert(r.groups.some(g=>g.title==='Источники и ссылки'));assert(r.blockers.length>0);
+ assert(!JSON.stringify(r).includes('все требования выполнены'));
+});
+test('C074 browser and Edge explicit minima remain equivalent',async()=>{
+ const {explicitMinima}=await import('../supabase/functions/_shared/source-minimum.mjs');
+ for(const text of ['Не менее 10 источников.','Список источников\n\nНе менее 10 позиций; в тесте использовать материалы','Минимальное количество источников: 12','Не более 10 источников','В материалах 5 источников','Не менее 5 источников на иностранном языке','Не менее 10 источников, из них минимум 5 источников.'])assert.deepEqual(q.sourceMinima(text),explicitMinima(text));
+});
+
+test('C074 numeric statements in data attachments are not treated as assignment minima',()=>{
+ const x={doc:{attachmentMaterials:'Файл: данные.docx; категория: data; SHA-256: test\nВ опросе респонденту предложено минимум 50 источников.',structure:{},order:[]}};
+ assert.equal(q.sourceRequirements(x).minimum,null);
+ x.doc.attachmentMaterials+='\n\n---\n\nФайл: задание.docx; категория: assignment; SHA-256: test\nНе менее 10 источников.';
+ assert.equal(q.sourceRequirements(x).minimum,10);
+});
