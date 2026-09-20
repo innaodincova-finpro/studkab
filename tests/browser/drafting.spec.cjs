@@ -342,6 +342,7 @@ test('C077 new revision edits filled requirements and keeps a separate draft',as
  await setup(page);await page.keyboard.press('Escape');
  await page.evaluate(()=>{
   const items=[{id:'P1',category:'method',required:true,source:'Задание',text:'Не менее 5 источников'},{id:'P2',category:'measurable',required:true,source:'Методичка',text:'Объём 25–30 страниц'}];
+  draftItem.requestNumber=6;
   draftItem.passports=[{id:'old',revision:7,status:'approved',title:'Требования',summary:'Старая запись',items}];
   window.savedPassports=[];
   Oblako.requestApi=async body=>{if(body.action==='attachment-context')return {attachments:[]};if(body.action==='passport-save'){savedPassports.push(body);return {passport:{...body.passport,id:'new',revision:8,status:'draft'}};}throw Error('Unexpected '+body.action);};
