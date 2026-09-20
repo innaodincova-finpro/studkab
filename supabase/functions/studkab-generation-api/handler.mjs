@@ -1,3 +1,4 @@
+import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 import {expandParts} from './plan.mjs';
 import {reserveMicrousd,MAX_OUTPUT_TOKENS} from '../_shared/deepseek-cost.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store',
@@ -99,8 +100,10 @@ export function handler({auth,config,db,settings}){
     const [limit]=await db('studkab_gen_limits?work_kind=eq.'+kind+'&select=max_cost_microusd&limit=1');
     if(!limit)return reply({error:'WORK_LIMIT_NOT_CONFIGURED'},503);
     let prepared;try{prepared=prepare(input,Number(limit.max_cost_microusd));}catch(e){return reply({error:e.message},400);}
-    const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&status=eq.approved&source_fingerprint=eq.'+input.materialFingerprint+'&select=id,revision,source_fingerprint&order=revision.desc&limit=1');
+    const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&status=eq.approved&source_fingerprint=eq.'+input.materialFingerprint+'&select=id,revision,source_fingerprint,items&order=revision.desc&limit=1');
     if(!passport)return reply({error:'PASSPORT_REQUIRED'},409);
+    const conflict=await sourceMinimumGuard(db,input.request,passport.items);
+    if(conflict)return reply(conflict,409);
     const [b]=await db('studkab_gen_budget?id=eq.true&select=limit_microusd,reserved_microusd');
     const [policy]=await db('studkab_gen_policy?id=eq.true&select=temporary_total_microusd');
     const remaining=!!b&&!!policy?Math.min(Number(b.limit_microusd),Number(policy.temporary_total_microusd))-Number(b.reserved_microusd):0;

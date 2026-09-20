@@ -1,3 +1,4 @@
+import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export function validateResult(value) {
  if(!value || typeof value!=='object' || Array.isArray(value)) throw Error('Проверьте документ');
@@ -106,6 +107,9 @@ export async function resultAction(input,user,{db,config}) {
    const [v]=await db('studkab_result_versions?select=document&request_id=eq.'+input.id+'&id=eq.'+input.versionId+'&limit=1');
    if(!v||canonical(v.document)!==canonical(document)||!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
   }
+  const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.id+'&select=id,status,items&order=revision.desc&limit=1');
+  const conflict=await sourceMinimumGuard(db,input.id,passport?.items);
+  if(conflict)return {status:409,data:conflict};
   const args={request:input.id,version:input.versionId,review:input.reviewId,recipient:request.student_id,file_hash:input.fileHash,document_hash:input.documentHash};
   if(input.action==='review-result'){
    let criteria;try{criteria=validateReview(input.criteria);}catch(e){return {status:400,data:{error:e.message}};}

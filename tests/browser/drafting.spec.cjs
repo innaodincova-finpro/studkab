@@ -107,7 +107,7 @@ test('long answer is revised once and an unavailable revision preserves the answ
  await page.evaluate(()=>{window.edits=0;askAI=async(p,s,u)=>{if(u.includes('Редакторская проверка:')){edits++;throw Error('Редактор недоступен');}return {text:'Достоверный текст. '.repeat(140),tokens:1};};});
  await page.locator('[data-sec="ch1"] [data-secgen]').click();await expect(page.locator('#docStatus')).toContainText('Готово');
  expect(await page.evaluate(()=>edits)).toBe(1);expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toContain('Достоверный текст.');
- await page.getByRole('button',{name:'Проверить готовность',exact:true}).click();await expect(page.getByText('Замечания к объёму и повторам:',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Проверить готовность',exact:true}).click();await expect(page.locator('summary').filter({hasText:'Замечания к объёму и повторам'})).toBeVisible();
 });
 
 test('one automatic revision removes flagged recommendations without an extra user action',async({page})=>{
@@ -230,6 +230,7 @@ test('FIN-UAT original criteria prevent approval through the general checkbox',a
  await setup(page);await fill(page);
  await page.locator('#draft-requirements').fill('УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.');
  await page.getByRole('button',{name:'Проверить готовность',exact:true}).click();
+ await page.locator("summary").filter({hasText:"Расчёты контрольного профиля"}).click();
  await expect(page.getByText(/Основной текст: 0 слов/)).toBeVisible();
  await expect(page.getByText(/Общая галочка не разрешает передачу/)).toBeVisible();
  await expect(page.locator('[data-approve]')).toHaveCount(0);
@@ -312,4 +313,27 @@ test('C-051: unconfirmed result explains the single automatic retry and full cos
  await expect(page.locator('[data-prepare-message]')).toContainText('повторит эту часть не более одного раза');
  await expect(page.locator('[data-prepare-message]')).toContainText('Расход по ней учтён полностью');
  await expect(page.locator('[data-prepare-message]')).not.toContainText('Автоматический повтор заблокирован');
+});
+
+test('C074 risk report exposes original minimum and never offers approval for five of ten',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await setup(page);
+ await page.evaluate(()=>{
+  draftItem.passports[0].items=[{id:'P1',text:'Не менее 5 источников.'}];
+  draftItem.doc.attachmentMaterials='Файл: задание.docx; категория: assignment; SHA-256: test\nСписок источников\n\nНе менее 10 позиций; учебный комплект';
+  draftItem.doc.structure.refs={text:Array.from({length:5},(_,i)=>`${i+1}. Учебный источник`).join('\n')};
+  DraftEditor.check(draftItem);
+ });
+ await expect(page.getByRole('heading',{name:'Отчёт проверки документа'})).toBeVisible();
+ await expect(page.locator('[data-risk-summary]')).toContainText('Передача пока недоступна');
+ await page.locator('summary').filter({hasText:'Требования и комплектность'}).click();
+ await expect(page.getByText(/Исходные материалы требуют не менее 10 источников/)).toBeVisible();
+ await expect(page.getByText(/в разделе списка литературы распознано 5/)).toBeVisible();
+ await expect(page.locator('[data-approve]')).toHaveCount(0);
+ await expect(page.getByText('Обязательная ручная проверка',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>draftItem.passports[0].items[0].text)).toBe('Не менее 5 источников.');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.locator('summary').filter({hasText:'Требования и комплектность'}).click();
+ await page.waitForTimeout(300);
+ if(process.env.C074_SCREENSHOT)await page.screenshot({path:process.env.C074_SCREENSHOT});
 });

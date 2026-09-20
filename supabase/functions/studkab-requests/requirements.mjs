@@ -1,3 +1,4 @@
+import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 const categories=new Set(['method','measurable','expert','assumption']);
 const statuses=new Set(['draft','approved','stale']);
 
@@ -85,6 +86,10 @@ export async function requirementAction(input,user,{db,config}){
   const version=typeof input.passportId==='string'&&/^[a-f0-9-]{36}$/.test(input.passportId)?input.passportId:null;
   if(!version)return {status:400,data:{error:'Выберите версию паспорта'}};
   if(passport.items.some(item=>item.required&&/не указано|требуется уточнить/i.test(item.text)))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
+  const [saved]=await db('studkab_requirement_passports?request_id=eq.'+request+'&id=eq.'+version+'&select=items&limit=1');
+  if(!saved)return {status:409,data:{error:'Версия паспорта не найдена'}};
+  const conflict=await sourceMinimumGuard(db,request,saved.items);
+  if(conflict)return {status:409,data:conflict};
   const expected=text(input.sourceFingerprint,128,'версию материалов',true);
   const result=await db('rpc/studkab_requirement_passport_approve','POST',{p_request:request,p_passport:version,p_actor:user.id,p_expected_items:passport.items,p_expected_fingerprint:expected});
   return {status:200,data:{passport:result}};

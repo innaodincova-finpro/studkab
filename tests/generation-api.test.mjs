@@ -16,7 +16,7 @@ function setup({user={id:uid,email:'owner@example.test',email_confirmed_at:'yes'
  if(path.startsWith('studkab_gen_policy'))return [{temporary_total_microusd:total}];
  if(path.startsWith('studkab_requests'))return [{id:requestId,payload:{k:workType}}];
  if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];
- if(path.startsWith('studkab_requirement_passports'))return passport?[{id:passportId,revision:1,source_fingerprint:materialFingerprint}]:[];
+ if(path.startsWith('studkab_requirement_passports'))return passport?[{id:passportId,revision:1,source_fingerprint:materialFingerprint,items:[]}]:[];
  if(path.startsWith('rpc/'))return job;if(path.startsWith('studkab_gen_jobs'))return missing?[]:[{id:job,status:'running'}];
  if(path.startsWith('studkab_gen_attempts'))return [];
  return [{ordinal:0,state:'done',result:'Сохранено',spec:{id:'intro',prompt:'private'},claim:'private-token'}];}});
