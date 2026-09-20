@@ -13,7 +13,7 @@ test('executor detail has six accessible panels and a separate primary action',(
  assert.match(ui,/role="tabpanel"/);
  assert.match(ui,/aria-controls="request-panel-/);
  assert.match(ui,/request-action/);
- assert.match(ui,/desktop\.css\?v=6/);
+ assert.match(ui,/desktop\.css\?v=7/);
 });
 
 test('primary forms and modal sheets expose accessible names and focus handling',()=>{

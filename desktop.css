@@ -158,3 +158,24 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
  .registry-table td{font-size:13px}
  .request-head h1{font-size:24px;line-height:1.25}
 }
+
+/* C-075: all stages are visible; mobile actions occupy their own space. */
+@media(max-width:959px){
+ .registry-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+ .registry-toolbar>div{grid-column:1/-1}
+ .registry-toolbar .chip{max-width:none;width:100%;text-align:center;padding:8px;font-size:12px}
+ .registry-toolbar .fab{position:static;min-height:44px;width:100%;justify-content:center;margin:0;padding:8px;border-radius:12px;font-size:13px;box-shadow:none;z-index:auto}
+ .registry-filters{flex-wrap:wrap;overflow:visible;gap:6px;padding-bottom:4px}
+ .registry-filters .chip{min-height:44px;padding:8px 12px;font-size:12px;max-width:100%;white-space:normal}
+ .screen[data-view=list][data-detail=false]>.card{padding:4px 12px}
+ .registry-table tr{padding:10px 0}
+ .registry-table td{line-height:1.35;padding:1px 0}
+ .registry-table td:last-child{padding-top:5px}
+ .registry-table small{margin-top:2px}
+ .registry-pagination label{flex-wrap:wrap}
+}
+
+@media(min-width:960px){
+ .registry-toolbar>div{margin-right:auto}
+ .registry-toolbar .fab{position:static;flex-shrink:0;min-height:44px;box-shadow:none;z-index:auto}
+}

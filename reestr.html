@@ -299,7 +299,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 </style>
-<link rel="stylesheet" href="desktop.css?v=6">
+<link rel="stylesheet" href="desktop.css?v=7">
 </head>
 <body data-theme="blue">
 <div class="phone">
@@ -319,7 +319,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
   </div>
   <div id="storageWarn" class="warnbar" style="display:none;margin:12px 16px 0">Данные не сохраняются: браузер запретил хранение или память переполнена. Записи пропадут при перезагрузке.</div>
   <section class="screen" id="page"></section>
-  <button class="fab" id="fab" type="button" data-act="paste"><i aria-hidden="true">＋</i><span>Из текста</span></button>
+  <button class="fab" id="fab" type="button" data-act="paste"><i aria-hidden="true">+</i><span>Из текста</span></button>
   <nav class="tabs" id="tabbar" aria-label="Основная навигация"></nav>
 </div>
 <div class="toast" id="toast"></div>
@@ -1819,6 +1819,8 @@ function render(){
   var t = today();
   document.getElementById("today-date").textContent = weekdayRu(t) + ", " + ruDate(t);
   var p = document.getElementById("page");
+  var existingFab=document.getElementById("fab");
+  if(existingFab&&p.contains(existingFab))p.after(existingFab);
   p.dataset.view=tab; p.dataset.detail=String(!!openId);
   if (tab === "more") p.innerHTML = viewMore();
   else if (tab === "refs") p.innerHTML = openRefId ? viewRef(openRefId) : viewRefs();
@@ -1832,14 +1834,16 @@ function render(){
   if (tab === "more"){ fab.hidden = true; }
   else if (tab === "refs"){
     fab.hidden = !!openRefId; fab.setAttribute("data-act","ref-new"); fab.removeAttribute("data-id");
-    fab.innerHTML = '<i aria-hidden="true">＋</i><span>Вуз</span>';
+    fab.innerHTML = '<i aria-hidden="true">+</i><span>Вуз</span>';
   }
   else if (openId){
     fab.hidden = true; fab.removeAttribute("data-act"); fab.removeAttribute("data-id");
   } else {
     fab.hidden = false; fab.setAttribute("data-act","paste"); fab.removeAttribute("data-id");
-    fab.innerHTML = '<i aria-hidden="true">＋</i><span>Из текста</span>';
+    fab.innerHTML = '<i aria-hidden="true">+</i><span>Из текста</span>';
   }
+  var toolbar=p.querySelector(".registry-toolbar");
+  if(toolbar)toolbar.appendChild(fab);else p.after(fab);
   window.scrollTo(0,0); showStorageWarn();
 }
 
