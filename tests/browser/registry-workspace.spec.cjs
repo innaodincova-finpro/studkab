@@ -25,13 +25,13 @@ test('pagination, number search and return preserve list context',async({page})=
  await page.getByRole('searchbox',{name:'Поиск заявок'}).fill('1267');
  await expect(page.locator('.request-row')).toHaveCount(1);
  await expect(page.locator('.registry-filters')).toContainText('Все · 1');
- await page.locator('.registry-filters').getByRole('button',{name:'Требования · 0',exact:true}).click();
+ await page.locator('.registry-filters').getByRole('button',{name:'Подготовка · 0',exact:true}).click();
  await expect(page.locator('.request-row')).toHaveCount(0);
  await page.locator('.registry-filters').getByRole('button',{name:'Все · 1',exact:true}).click();
  await expect(page.getByRole('searchbox')).toHaveValue('1267');
  await page.locator('.open-request').focus();await page.keyboard.press('Enter');
  await expect(page.locator('.request-head')).toContainText('№ 1267');
- await expect(page.locator('.request-action button')).toHaveCount(0);
+ await expect(page.locator('.request-action button')).toHaveCount(1);
 });
 test('six tabs retain unsaved note, keyboard focus and request data',async({page})=>{
  await seed(page);await page.locator('.open-request').first().click();
@@ -62,11 +62,11 @@ test('single primary action uses real workflow and keeps exact Word review gate'
    if(['quality','delivery'].includes(kind)){docOf(x);const id=x.doc.order[0].id;x.doc.structure[id].text='Учебный текст';if(kind==='delivery')x.doc.review=DraftQuality.stamp(x);}
    openId=x.id;render();
   },kind);
-  await expect(page.locator('.request-action button[data-act]')).toHaveCount(['cancelled','delivered'].includes(kind)?0:1);
+  await expect(page.locator('.request-action button[data-act]')).toHaveCount(kind==='cancelled'?0:1);
   const duplicates=await page.evaluate(()=>{const b=document.querySelector('.request-action button[data-act]');return b?document.querySelectorAll('#page button[data-act="'+b.dataset.act+'"]').length:0;});
-  expect(duplicates).toBe(['cancelled','delivered'].includes(kind)?0:1);
+  expect(duplicates).toBe(kind==='cancelled'?0:1);
   if(kind==='delivery')await expect(page.locator('.request-action')).toContainText('Провести итоговую проверку');
-  if(kind==='delivered'){await page.getByRole('tab',{name:'Проверка',exact:true}).click();await expect(page.getByRole('button',{name:'Проверить новую версию',exact:true})).toBeVisible();}
+  if(kind==='delivered')await expect(page.locator('.request-action')).not.toContainText('Маршрут завершён');
  }
 });
 for(const width of [320,390,768,1440])test('layout stays readable at '+width,async({page})=>{
@@ -84,4 +84,49 @@ for(const width of [320,390,768,1440])test('layout stays readable at '+width,asy
  await expect(page.getByRole('tabpanel')).toContainText('Список файлов ещё не получен');
  const action=await page.locator('.request-action').boundingBox();expect(action.x).toBeGreaterThanOrEqual(0);expect(action.x+action.width).toBeLessThanOrEqual(width+1);
  await page.screenshot({path:'test-results/workspace-request-'+width+'.png'});
+});
+
+test('C072 refresh updates history without overwriting an existing document or notes',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{
+  const x=D.items[0];docOf(x);x.doc.structure[x.doc.order[0].id].text='Текущий изменённый текст';
+  window.beforeRefresh=JSON.stringify({doc:x.doc,note:x.note,passports:x.passports,topic:x.topic});
+  Oblako.requestApi=async input=>{
+   if(!input.includeDeliveryState)throw Error('Missing history request');
+   return {rows:[{id:x.id,number:x.requestNumber,payload:{id:x.id,t:'Не перезаписывать тему',n:'Не перезаписывать имя'},deliveryState:{checkedAt:'2026-09-20T10:00:00Z',last:{versionId:'old-version',deliveryId:'receipt',createdAt:'2026-09-18T11:07:52Z'}}}],next:null};
+  };
+ });
+ await page.locator('[data-act="receive-inbox"]').click();
+ await expect(page.locator('.request-row').first()).toContainText('Ранее передано');
+ expect(await page.evaluate(()=>{const x=D.items[0];return JSON.stringify({doc:x.doc,note:x.note,passports:x.passports,topic:x.topic})===beforeRefresh;})).toBe(true);
+ await page.locator('.open-request').first().click();
+ await expect(page.locator('.request-action')).toContainText('Ранее передано');
+ await expect(page.locator('.request-action')).not.toContainText('Маршрут завершён');
+ await page.getByRole('tab',{name:'Версии и история',exact:true}).click();
+ await expect(page.locator('#request-panel-history')).toContainText('18 сентября');
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:'test-results/c072-delivery-history.png'});
+});
+test('C072 an older endpoint cannot erase known delivery history',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{
+  const x=D.items[0];x.deliveryState={checkedAt:'2026-09-20',last:{createdAt:'2026-09-18',versionId:'old'}};
+  Oblako.requestApi=async()=>({rows:[{id:x.id,number:x.requestNumber,payload:{id:x.id,t:x.topic}}],next:null});
+ });
+ await page.locator('[data-act="receive-inbox"]').click();
+ expect(await page.evaluate(()=>D.items[0].deliveryState.last.versionId)).toBe('old');
+});
+test('C072 account change while inbox is pending cannot merge old history',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{
+  window.oldWorkspace=D;
+  Oblako.requestApi=()=>new Promise(resolve=>window.finishInbox=resolve);
+  window.refreshPending=receiveInbox();
+ });
+ await page.evaluate(()=>QA.switchUser('c072-another-account'));
+ await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
+ const before=await page.evaluate(()=>JSON.stringify(D));
+ await page.evaluate(async()=>{finishInbox({rows:[{id:'workspace-0',number:1201,payload:{id:'workspace-0',t:'Old account'},deliveryState:{checkedAt:'2026-09-20',last:{createdAt:'2026-09-18'}}}],next:null});await refreshPending;});
+ expect(await page.evaluate(()=>JSON.stringify(D))).toBe(before);
+ expect(await page.evaluate(()=>oldWorkspace.items[0].deliveryState)).toBeUndefined();
 });

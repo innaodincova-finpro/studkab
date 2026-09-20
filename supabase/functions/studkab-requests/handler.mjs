@@ -95,6 +95,13 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     const after=input.after??0;
     if(!Number.isSafeInteger(after)||after<0)return json({error:'Неверная страница'},400);
     const rows=await db('studkab_requests?select=id,number,payload,created_at&order=number.asc&limit=100'+(id?'&id=eq.'+id:'&number=gt.'+after));
+    if(input.includeDeliveryState===true){
+     // Bounded per-request reads avoid silently truncating history across requests.
+     for(let i=0;i<rows.length;i+=10)await Promise.all(rows.slice(i,i+10).map(async row=>{
+      const [last]=await db('studkab_results?select=delivery_id,version_id,created_at&request_id=eq.'+row.id+'&order=created_at.desc,id.desc&limit=1');
+      row.deliveryState={checkedAt:new Date(now()).toISOString(),last:last?{deliveryId:last.delivery_id,versionId:last.version_id,createdAt:last.created_at}:null};
+     }));
+    }
     return json({rows,next:rows.length===100?rows.at(-1).number:null});
    }
    return json({error:'Неизвестное действие'},400);

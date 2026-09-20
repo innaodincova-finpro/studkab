@@ -75,7 +75,7 @@
     if(delivered&&(!state.delivery||!state.delivery.deliveryId))throw Error('Передача не подтверждена.');
    }
    guard();known=true;status();
-   if(delivered&&x.status!=='sent'){x.status='sent';if(typeof save==='function')save();if(typeof render==='function')render();}
+   if(delivered){x.deliveryConfirmation={context:key,versionId:versionId};x.deliveryState={checkedAt:new Date().toISOString(),last:{deliveryId:state.delivery.deliveryId,versionId:versionId,createdAt:state.delivery.createdAt}};x.status='sent';if(typeof save==='function')save();if(typeof render==='function')render();}
   }
   function binding(){return {id:requestId,versionId:versionId,reviewId:reviewId,recipientId:receipt.recipientId,fileHash:receipt.fileHash,documentHash:receipt.documentHash,document:payload};}
   async function run(action){if(busy)return;busy=true;controls();try{guard();await action();}catch(e){msg.textContent=e.message||'Не удалось подтвердить состояние. Нажмите «Обновить состояние».';}finally{busy=false;controls();}}
@@ -130,5 +130,5 @@
    button.onclick=function(){if(!same(data,identity)){button.hidden=true;button.style.display='none';msg.textContent='Аккаунт изменился. Откройте результат заново.';return;}try{download(result.document,receivedBlob);}catch(e){msg.textContent='Не удалось собрать файл. Откройте результат повторно.';}};
   }catch(e){msg.textContent=e.message||'Не удалось проверить результат. Откройте его повторно.';}
  }
- global.StudResults={deliver:deliver,receive:receive};
+ global.StudResults={deliver:deliver,receive:receive,isCurrentDelivery:function(x){try{return !!x.deliveryConfirmation&&x.deliveryConfirmation.context===contextKey(x)&&!!x.deliveryState&&!!x.deliveryState.last&&x.deliveryState.last.versionId===x.deliveryConfirmation.versionId;}catch(e){return false;}}};
 })(window);

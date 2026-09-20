@@ -266,3 +266,29 @@ test('C-071 new recovery fails closed before guard migration is installed',async
  assert.equal(response.status,503);
  assert(calls.every(c=>!c.path.startsWith('studkab_result_versions?')));
 });
+
+test('C072 inbox refresh returns only server delivery metadata for existing requests',async()=>{
+ let user=owner,reads=[];
+ const id='11111111-1111-4111-8111-111111111111';
+ const app=handler({auth:async()=>user,config:async()=>({executor_email:owner.email}),db:async path=>{
+  reads.push(path);
+  if(path.startsWith('studkab_requests?'))return [{id,number:6,payload:p}];
+  assert.match(path,/select=delivery_id,version_id,created_at/);
+  assert.match(path,/request_id=eq\.11111111/);
+  return [{delivery_id:'receipt',version_id:'version',created_at:'2026-09-18T11:07:52Z'}];
+ }});
+ const r=await (await app(request({action:'inbox',includeDeliveryState:true}))).json();
+ assert.equal(r.rows[0].deliveryState.last.versionId,'version');
+ assert.equal(r.rows[0].deliveryState.last.createdAt,'2026-09-18T11:07:52Z');
+ assert.equal(reads.length,2);
+ user=student;reads=[];
+ assert.equal((await app(request({action:'inbox',includeDeliveryState:true}))).status,403);
+ assert.equal(reads.length,0);
+});
+test('C072 failed delivery read does not return an empty successful state',async()=>{
+ const app=handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async path=>{
+  if(path.startsWith('studkab_requests?'))return [{id:'11111111-1111-4111-8111-111111111111',number:6,payload:p}];
+  throw Error('Offline');
+ }});
+ assert.equal((await app(request({action:'inbox',includeDeliveryState:true}))).status,503);
+});
