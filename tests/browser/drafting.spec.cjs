@@ -365,3 +365,26 @@ test('C077 new revision edits filled requirements and keeps a separate draft',as
  expect(saved.versions[0].status).toBe('draft');
  expect(saved.versions[1].items[0].text).toBe('Не менее 5 источников');
 });
+
+test('C078 section movement and appendices preserve text, figures and saved order',async({page})=>{
+ await setup(page);
+ await page.getByText('Редактировать разделы',{exact:true}).click();
+ await page.locator('[data-sec="ch1"] > summary').click();
+ await page.locator('[data-sec="ch1"] .secText').fill('Текст, который нельзя потерять при перестановке.');
+ await page.getByRole('button',{name:'+ приложение',exact:true}).click();
+ let appendix=page.locator('#docSecs > details').last();
+ await appendix.locator('summary').click();
+ await appendix.locator('.secName').fill('Приложение А');
+ await appendix.locator('.secText').fill('Данные приложения.');
+ await appendix.getByRole('button',{name:'Переместить раздел выше',exact:true}).click();
+ expect(await page.evaluate(()=>draftItem.doc.order.slice(-2).map(c=>c.name))).toEqual(['Приложение А','Список использованных источников']);
+ await page.locator('[data-sec="refs"] > summary').click();
+ await page.locator('[data-sec="refs"]').getByRole('button',{name:'Переместить раздел выше',exact:true}).click();
+ await page.getByRole('button',{name:'Сохранить',exact:true}).click();
+ await page.keyboard.press('Escape');
+ await page.evaluate(()=>openDocBuilder(draftItem.id));
+ expect(await page.evaluate(()=>draftItem.doc.order.slice(-2).map(c=>c.name))).toEqual(['Список использованных источников','Приложение А']);
+ expect(await page.evaluate(()=>draftItem.doc.structure.ch1.text)).toBe('Текст, который нельзя потерять при перестановке.');
+ expect(await page.evaluate(()=>draftItem.doc.structure[draftItem.doc.order.at(-1).id].text)).toBe('Данные приложения.');
+ expect(await page.evaluate(()=>calls.length)).toBe(0);
+});

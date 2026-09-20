@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=11"></script><script src="draft-editor.js?v=8"></script><script src="result-docx.js?v=6"></script><script src="results-ui.js?v=11"></script><script src="request-workflow.js?v=2"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=12"></script><script src="draft-editor.js?v=8"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=11"></script><script src="request-workflow.js?v=2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -850,6 +850,7 @@ function openDocBuilder(id){
         '<input type="number" class="secPages" value="' + (c.pages||"") + '" min="0" style="width:64px;padding:8px;font-size:13px" title="Ориентир объёма текста" aria-label="страниц">' +
         '<button type="button" class="del" data-secdel="' + c.id + '" title="Убрать раздел">✕</button>' +
       '</div>' +
+      '<div class="row" style="gap:6px;margin-bottom:6px"><button type="button" class="mini" data-secmove="-1"'+(i===0?' disabled':'')+' aria-label="Переместить раздел выше">↑ Выше</button><button type="button" class="mini" data-secmove="1"'+(i===doc.order.length-1?' disabled':'')+' aria-label="Переместить раздел ниже">↓ Ниже</button></div>' +
       '<textarea class="secText" style="min-height:' + (t ? 160 : 70) + 'px;font-size:14px" placeholder="Текст появится после общей подготовки">' + esc(t) + '</textarea>' +
       '<div class="secFigures">'+figures.map(function(fig,n){return '<div class="row" style="margin-top:6px"><span class="mut">'+esc(fig.caption||('Изображение '+(n+1)))+'</span><button type="button" class="mini" data-figdel="'+n+'">убрать</button></div>';}).join('')+'</div>'+
       '<label class="mini" style="display:inline-block;margin-top:6px;cursor:pointer">+ график или изображение<input type="file" data-figfile="1" accept="image/png,image/jpeg" hidden></label>'+
@@ -880,7 +881,7 @@ function openDocBuilder(id){
     '<div id="docStatus" class="infobox" style="margin:0 0 10px;display:none"></div>' +
     '<details><summary>Редактировать разделы</summary><p class="hint">Число рядом с названием — ориентир объёма текста: 1 соответствует 1800 знакам с пробелами. Число страниц Word зависит от таблиц и оформления.</p><div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
     '<div class="chips" style="margin-top:4px">' +
-      '<button type="button" class="chip" data-secadd="1">+ раздел</button>' +
+      '<button type="button" class="chip" data-secadd="1">+ раздел</button> <button type="button" class="chip" data-appadd="1">+ приложение</button>' +
     '</div></details>' +
     '<p class="mut" style="margin:14px 0 6px;font-weight:600">Шаг 2. Доводка и проверка</p>' +
     '<button type="button" class="chip ok" data-draft-norm>Довести до нормы</button><button type="button" class="chip" data-draft-check>Проверить готовность</button><button type="button" class="chip" data-draft-restore>Восстановить предыдущую версию</button>' +
@@ -1438,6 +1439,21 @@ function openDocBuilder(id){
         toast(storageOk ? "Документ скачан" : "Документ скачан, но изменения не сохранены");
       }catch(e){ toast("Не удалось собрать документ"); }
       return;
+    }
+    var move=t.closest('[data-secmove]');
+    if(move){
+      readBack();
+      var movedId=move.closest('[data-sec]').getAttribute('data-sec');
+      var from=doc.order.findIndex(function(c){return c.id===movedId;}),to=from+Number(move.getAttribute('data-secmove'));
+      if(from>=0&&to>=0&&to<doc.order.length){doc.order.splice(to,0,doc.order.splice(from,1)[0]);save();}
+      wrap.querySelector('#docSecs').innerHTML=doc.order.map(sec).join('');
+      var moved=Array.from(wrap.querySelectorAll('[data-sec]')).find(function(el){return el.getAttribute('data-sec')===movedId;});
+      if(moved){moved.open=true;moved.querySelector('summary').focus();}return;
+    }
+    if(t.closest('[data-appadd]')){
+      readBack();var aid=uid('app');
+      doc.order.push({id:aid,name:'Приложение',pages:0});doc.structure[aid]={text:''};
+      save();wrap.querySelector('#docSecs').innerHTML=doc.order.map(sec).join('');return;
     }
     if (t.closest("[data-secadd]")){
       readBack();

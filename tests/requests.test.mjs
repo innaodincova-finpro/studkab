@@ -142,7 +142,7 @@ test('delivered Word preserves custom sections and escapes markup',async()=>{
  assert.doesNotMatch(tocZip,/ TOC /);assert.match(tocZip,/PAGEREF section_0/);assert.match(tocZip,/w:name="section_0"/);assert.match(tocZip,/w:anchor="section_0"/);
 });
 
-test('Word renumbers table captions, avoids forced section breaks and embeds stored figures',async()=>{
+test('Word renumbers table captions and embeds stored figures without extra break paragraphs',async()=>{
  const vm=await import('node:vm'),fs=await import('node:fs');
  const c={window:{},TextEncoder,Blob,Uint8Array,DataView,Date,Buffer};vm.runInNewContext(fs.readFileSync(new URL('../result-docx.js',import.meta.url),'utf8'),c);
  const pixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xee6WQAAAABJRU5ErkJggg==';
@@ -291,4 +291,18 @@ test('C072 failed delivery read does not return an empty successful state',async
   throw Error('Offline');
  }});
  assert.equal((await app(request({action:'inbox',includeDeliveryState:true}))).status,503);
+});
+
+test('C078 Word starts sections on new pages and keeps table captions with rows',async()=>{
+ const vm=await import('node:vm'),fs=await import('node:fs');
+ const c={window:{},TextEncoder,Blob};vm.runInNewContext(fs.readFileSync(new URL('../result-docx.js',import.meta.url),'utf8'),c);
+ const chapters=[{id:'a',name:'Введение'},{id:'b',name:'Глава 1'},{id:'app',name:'Приложение А'}];
+ const doc={format:{toc:true},structure:{a:{text:'Текст введения.'},b:{text:'Таблица 1 — Данные\n| Текст | Число |\n| --- | --- |\n| Сохранить точно | 42 |'},app:{text:'Таблица А.1 — Приложение\n| Текст | Число |\n| --- | --- |\n| Сохранить тоже | 17 |'}}};
+ const xml=new TextDecoder().decode(await c.window.ResultDocx(doc,chapters).arrayBuffer());
+ assert.equal((xml.match(/<w:pageBreakBefore\/>/g)||[]).length,2);
+ assert.match(xml,/<w:keepNext\/>[\s\S]*?Таблица 1 — Данные/);
+ assert.match(xml,/<w:keepNext\/>[\s\S]*?Таблица А.1 — Приложение/);
+ assert.match(xml,/Сохранить точно/);assert.match(xml,/Сохранить тоже/);
+ const continuous=new TextDecoder().decode(await c.window.ResultDocx({...doc,format:{sectionPageBreaks:false}},chapters).arrayBuffer());
+ assert.doesNotMatch(continuous,/<w:pageBreakBefore\/>/);
 });
