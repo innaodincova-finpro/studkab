@@ -230,6 +230,7 @@ test('FIN-UAT original criteria prevent approval through the general checkbox',a
  await setup(page);await fill(page);
  await page.locator('#draft-requirements').fill('УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.');
  await page.getByRole('button',{name:'Проверить готовность',exact:true}).click();
+ await page.locator("summary").filter({hasText:"Расчёты контрольного профиля"}).click();
  await expect(page.getByText(/Основной текст: 0 слов/)).toBeVisible();
  await expect(page.getByText(/Общая галочка не разрешает передачу/)).toBeVisible();
  await expect(page.locator('[data-approve]')).toHaveCount(0);
