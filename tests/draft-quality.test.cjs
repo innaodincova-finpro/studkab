@@ -168,3 +168,27 @@ test('incomplete duplicate cards cannot fabricate a complete source by merging f
  for(const list of [parts,[...parts].reverse()])assert.ok(q.sourceEvidence(list.join('\n')).errors.length>0);
  assert.ok(q.sourceEvidence(plainOccurrence).errors.length>0);
 });
+
+test('C078 numeric citations resolve bibliography positions to evidence cards, including ranges',()=>{
+ const cards=[1,2,3].map(n=>'[S'+n+']\nРеквизиты: Автор '+n+'. Подтверждённое исследование '+n+'. 2026.\nФрагмент: Проверенный фрагмент для сопоставления источника.\nПодтверждает: конкретное утверждение документа.').join('\n\n');
+ const x={doc:{inputs:{sources:cards},order:[{id:'ch1',name:'Глава 1'},{id:'refs',name:'Источники'}],structure:{ch1:{text:'Первый [1], второй [2, с. 12], все [1–3] и [1]–[3].'},refs:{text:[1,2,3].map(n=>n+'. Автор '+n+'. Подтверждённое исследование '+n+'. 2026.').join('\n')}}}};
+ assert.deepEqual(q.sourceCheck(x).errors,[]);assert.deepEqual(q.sourceCheck(x).used,[1,2,3]);
+ x.doc.structure.ch1.text='Составная ссылка [1; 2; 3].';assert.deepEqual(q.sourceCheck(x).errors,[]);
+ x.doc.structure.refs.text='1. Автор 3. Подтверждённое исследование 3. 2026.\n2. Автор 1. Подтверждённое исследование 1. 2026.\n3. Автор 2. Подтверждённое исследование 2. 2026.';
+ assert.deepEqual(q.sourceCheck(x).used,[3,1,2]);
+ x.doc.structure.refs.text='1. Неизвестный автор и совершенно другая книга. 2026.';
+ assert(q.sourceCheck(x).errors.some(e=>e.includes('не сопоставлена')));
+ x.doc.structure.ch1.text='Явные ссылки [S1–S3].';assert.deepEqual(q.sourceCheck(x).errors,[]);
+ x.doc.structure.ch1.text='Неизвестный [S9].';assert(q.sourceCheck(x).errors.some(e=>e.includes('нет в списке')));
+});
+test('C078 ambiguous bibliography does not validate numeric references',()=>{
+ const cards=q.sourceEvidence('[S1]\nРеквизиты: Один автор. Название общего источника. 2026.\nФрагмент: Проверенный фрагмент длиной более двадцати знаков.\nПодтверждает: утверждение в работе.\n[S2]\nРеквизиты: Один автор. Название общего источника. 2026.\nФрагмент: Иной проверенный фрагмент длиной более двадцати знаков.\nПодтверждает: другое утверждение в работе.').cards;
+ assert.deepEqual(q.bibliographyLinks('1. Один автор. Название общего источника. 2026.',cards),{});
+ assert.deepEqual(q.bibliographyLinks('1. [S1] Источник\n1. [S2] Другой',cards),{});
+ assert.deepEqual(q.citationTokens('[0] [3–1] [1–999] [2026] [данные студента]'),[]);
+});
+
+test('C078 absent volume guidance does not invent an appendix target',()=>{
+ const x={doc:{order:[{id:'app_a',name:'Приложение А',pages:0}],structure:{app_a:{text:'Краткие данные.'}}}};
+ assert.deepEqual(q.editorialNotes(x),[]);
+});

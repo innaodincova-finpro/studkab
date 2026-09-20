@@ -82,6 +82,8 @@ function buildDocx(w, chapters){
     o = o || {};
     var pPr = '<w:pPr>'+
       (o.style ? '<w:pStyle w:val="'+o.style+'"/>' : '')+
+      (o.keepNext ? '<w:keepNext/>' : '')+
+      (o.pageBreakBefore ? '<w:pageBreakBefore/>' : '')+
       '<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after||0)+'" w:line="'+(o.line||line)+'" w:lineRule="auto"/>'+
       '<w:ind w:firstLine="'+(o.ind||0)+'"/>'+
       '<w:jc w:val="'+(o.jc || "both")+'"/>'+
@@ -149,9 +151,9 @@ function buildDocx(w, chapters){
     var text = (ch.text || "").trim();
     var figures=Array.isArray(ch.figures)?ch.figures:[];
     if (!text && !figures.length) return;
-    if (written > 0 && f.sectionPageBreaks===true) body += pageBreak();
+    var newPage=written > 0 && f.sectionPageBreaks!==false;
     written++;
-    body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240 }).replace('</w:pPr>','</w:pPr><w:bookmarkStart w:id="'+i+'" w:name="section_'+i+'"/>').replace('</w:p>','<w:bookmarkEnd w:id="'+i+'"/></w:p>');
+    body += P(c.name.toUpperCase(), { style:"Heading1", jc:"center", b:true, after:240, pageBreakBefore:newPage }).replace('</w:pPr>','</w:pPr><w:bookmarkStart w:id="'+i+'" w:name="section_'+i+'"/>').replace('</w:p>','<w:bookmarkEnd w:id="'+i+'"/></w:p>');
     var lines=text.split(/\n+/),row=0;
     // The section title is already emitted above. Remove only an exact leading
     // duplicate, preserving subsection headings and the author's body text.
@@ -160,10 +162,9 @@ function buildDocx(w, chapters){
     while(row<lines.length){
       var par=lines[row].trim();
       if(/^#{1,6}\s+/.test(par))par=par.replace(/^#{1,6}\s+/,'');
-      if(/^Таблица\s+\d{1,3}\s*[—–-]/i.test(par)){
-        tableNumber++;
-        par=par.replace(/^(Таблица\s+)\d{1,3}/i,'$1'+tableNumber);
-        body+=P(par,{ind:0,jc:'left',b:true,after:120});row++;continue;
+      if(/^Таблица\s+(?:[А-ЯA-Z]\.)?\d{1,3}\s*[—–-]/i.test(par)){
+        if(/^Таблица\s+\d/i.test(par)){tableNumber++;par=par.replace(/^(Таблица\s+)\d{1,3}/i,'$1'+tableNumber);}
+        body+=P(par,{ind:0,jc:'left',b:true,after:120,keepNext:true});row++;continue;
       }
       if(/^\|.*\|$/.test(par)){
         var grid=[];
@@ -175,7 +176,7 @@ function buildDocx(w, chapters){
         if(cols>8)throw Error('В таблице слишком много столбцов для страницы');
         var tableWidth=11906-mm2tw(f.mLeft)-mm2tw(f.mRight),cw=Math.floor(tableWidth/cols);
         body+='<w:tbl><w:tblPr><w:tblW w:w="'+tableWidth+'" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(k){return '<w:'+k+' w:val="single" w:sz="4" w:color="D9D9D9"/>';}).join('')+'</w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+Array(cols).fill('<w:gridCol w:w="'+cw+'"/>').join('')+'</w:tblGrid>';
-        grid.forEach(function(cells,ri){body+='<w:tr><w:trPr><w:cantSplit/>'+(ri===0?'<w:tblHeader/>':'')+'</w:trPr>';for(var ci=0;ci<cols;ci++)body+='<w:tc><w:tcPr><w:tcW w:w="'+cw+'" w:type="dxa"/>'+(ri===0?'<w:shd w:fill="E8EEF4"/>':'')+'</w:tcPr>'+P(cells[ci]||'',{jc:ci?'center':'left',b:ri===0,half:24,line:240})+'</w:tc>';body+='</w:tr>';});body+='</w:tbl>'+P('');
+        grid.forEach(function(cells,ri){body+='<w:tr><w:trPr><w:cantSplit/>'+(ri===0?'<w:tblHeader/>':'')+'</w:trPr>';for(var ci=0;ci<cols;ci++)body+='<w:tc><w:tcPr><w:tcW w:w="'+cw+'" w:type="dxa"/>'+(ri===0?'<w:shd w:fill="E8EEF4"/>':'')+'</w:tcPr>'+P(cells[ci]||'',{jc:ci?'center':'left',b:ri===0,half:24,line:240,keepNext:ri===0})+'</w:tc>';body+='</w:tr>';});body+='</w:tbl>'+P('');
       }else{
         if(par)body+=P(par,{ind:/^\d+\.\d+/.test(par)?0:ind,jc:/^\d+\.\d+/.test(par)?'left':'both',b:/^\d+\.\d+/.test(par),style:/^\d+\.\d+/.test(par)?'Heading2':undefined});
         row++;

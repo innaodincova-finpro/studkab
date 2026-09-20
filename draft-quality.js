@@ -60,6 +60,40 @@
   });
   return {cards:cards,errors:errors};
  }
+ // Numeric citations use bibliography positions, never assumed S identifiers.
+ function citationTokens(text){
+  var result=[];
+  var joined=String(text||'').replace(/\[(S?\s*\d{1,3})\]\s*[–—-]\s*\[(S?\s*\d{1,3})\]/gi,'[$1–$2]');
+  Array.from(joined.matchAll(/\[([^\]\n]+)\]/g)).forEach(function(match){
+   var body=match[1].replace(/,\s*с\.\s*\d+(?:\s*[–—-]\s*\d+)?\s*$/i,'').trim();
+   if(!/^(?:S?\s*\d{1,3})(?:\s*[–—-]\s*S?\s*\d{1,3})?(?:\s*[,;]\s*S?\s*\d{1,3}(?:\s*[–—-]\s*S?\s*\d{1,3})?)*$/i.test(body))return;
+   body.split(/[,;]/).forEach(function(piece){
+    var ends=piece.trim().split(/\s*[–—-]\s*/),explicit=/^S/i.test(ends[0]),first=Number(ends[0].replace(/\D/g,'')),last=ends.length>1?Number(ends[1].replace(/\D/g,'')):first;
+    if(!first||last<first||last-first>100)return;
+    if(ends.length>1&&/^S/i.test(ends[1])&&!explicit)return;
+    for(var n=first;n<=last;n++)result.push({number:n,explicit:explicit});
+   });
+  });
+  return result;
+ }
+ function bibliographyLinks(text,cards){
+  var rows={},links={};
+  String(text||'').split(/\r?\n/).forEach(function(line){
+   var m=line.match(/^\s*(\d{1,3})[.)]\s+(.+)$/);if(!m)return;
+   var n=Number(m[1]);(rows[n]||(rows[n]=[])).push(m[2]);
+  });
+  function key(value){return String(value).split(/https?:\/\/|\bURL\s*:|Проверено\s+\d|Синтетический\s+фрагмент/i)[0].toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();}
+  Object.keys(rows).forEach(function(n){
+   if(rows[n].length!==1)return;
+   var label=rows[n][0],direct=label.match(/^\[S\s*(\d{1,3})\]\s*/i);
+   if(direct){if(cards[Number(direct[1])])links[n]=Number(direct[1]);return;}
+   var a=key(label),matches=Object.keys(cards).filter(function(id){
+    var b=key(cards[id].details);return a.length>=20&&b.length>=20&&(a===b||a.startsWith(b+' ')||b.startsWith(a+' '));
+   });
+   if(matches.length===1)links[n]=Number(matches[0]);
+  });
+  return links;
+ }
  function sourceCheck(x){
   var list=String(inputs(x).sources||''),errors=[],inList=[],used=[];
   (list.match(/\[S\s*(\d{1,3})\]/gi)||[]).forEach(function(m){
@@ -71,11 +105,14 @@
    });
   }
   var d=x.doc||{},order=(d.order||[]).filter(function(c){return c.id!=='refs';}),structure=d.structure||{};
+  var evidence=sourceEvidence(list),links=bibliographyLinks((structure.refs||{}).text,evidence.cards);
   order.forEach(function(c){
    var text=String((structure[c.id]||{}).text||''),refs=[];
-   (text.match(/\[S\s*(\d{1,3})\]/gi)||[]).forEach(function(m){
-    var n=Number(String(m).replace(/\D+/g,''));if(n&&refs.indexOf(n)<0)refs.push(n);
-    if(n&&used.indexOf(n)<0)used.push(n);
+   citationTokens(text).forEach(function(token){
+    var n=token.explicit?token.number:links[token.number];
+    if(!n){errors.push('Раздел «'+c.name+'»: ссылка ['+token.number+'] не сопоставлена с карточкой источника по библиографии. Проверьте номер и реквизиты.');return;}
+    if(refs.indexOf(n)<0)refs.push(n);
+    if(used.indexOf(n)<0)used.push(n);
    });
    refs.forEach(function(n){
     if(inList.length&&inList.indexOf(n)<0)errors.push('Раздел «'+c.name+'»: ссылка [S'+n+'] ведёт к источнику, которого нет в списке.');
@@ -86,7 +123,6 @@
   inList.forEach(function(n){
    if(used.indexOf(n)<0)errors.push('Источник [S'+n+'] есть в списке, но ни разу не использован в тексте.');
   });
-  var evidence=sourceEvidence(list);
   inList.forEach(function(n){if(!evidence.cards[n])errors.push('Источник [S'+n+']: отсутствует карточка доказательства.');});
   errors=errors.concat(evidence.errors);
   var passport=Array.isArray(x.passports)&&x.passports[0],required=[];
@@ -186,8 +222,8 @@
   (d.order||[]).forEach(function(c){var t=(d.structure[c.id]||{}).text||'';if(!t.trim()||c.id==='refs')return;
    var prose=t;if(c.id==='ch2'&&financial(x)){try{var prefix=finance(inputs(x).finance).text;if(prose.startsWith(prefix))prose=prose.slice(prefix.length).trim();}catch(e){}}
    sectionNotes(x,c,prose).forEach(function(n){notes.push('«'+c.name+'»: '+n);});
-   var b=budget(c);if(prose.length>b.max)notes.push('«'+c.name+'»: текст длиннее ориентира ('+prose.length+' знаков; ориентир '+b.target+').');
-   if(prose.length<b.min)notes.push('«'+c.name+'»: текст короче ориентира ('+prose.length+' знаков; ориентир '+b.target+'). Не дополняйте его неподтверждёнными сведениями ради объёма.');
+   var b=budget(c);if(Number(c.pages)>0&&prose.length>b.max)notes.push('«'+c.name+'»: текст длиннее ориентира ('+prose.length+' знаков; ориентир '+b.target+').');
+   if(Number(c.pages)>0&&prose.length<b.min)notes.push('«'+c.name+'»: текст короче ориентира ('+prose.length+' знаков; ориентир '+b.target+'). Не дополняйте его неподтверждёнными сведениями ради объёма.');
    prose.split(/\n\s*\n/).forEach(function(p){var norm=p.toLowerCase().replace(/\s+/g,' ').trim();if(norm.length<180||/^\|/.test(norm))return;if(seen.has(norm)&&seen.get(norm)!==c.id)notes.push('«'+c.name+'»: есть абзац, полностью повторяющий другой раздел.');else seen.set(norm,c.id);});
   });return Array.from(new Set(notes));
  }
@@ -253,7 +289,7 @@
    {title:'Требования и комплектность',errors:preflight(x).concat(issues(x.doc||{}),acceptance.errors)},
    {title:'Источники и ссылки',errors:sourceCheck(x).errors},
    {title:'Согласованность текста',errors:consistency(x).errors.concat(proseIntegrity(x).errors)},
-   {title:'Расчёты контрольного профиля',errors:finAcceptance(x).errors}
+   {title:extended(x)?'Расчёты контрольного профиля':'Объём текста по ориентирам разделов',errors:finAcceptance(x).errors}
   ];
   if(x.doc&&x.doc.basis){var basis=JSON.stringify([x.topic,inputs(x),x.doc.order]);if(basis!==x.doc.basis)groups[0].errors.push('Материалы или структура изменились после подготовки');}
   groups.forEach(function(g){g.errors=Array.from(new Set(g.errors));});
@@ -376,6 +412,6 @@
  }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={riskReport:riskReport,sourceMinima:sourceMinima,sourceRequirements:sourceRequirements,consistency:consistency,sourceEvidence:sourceEvidence,sourceCheck:sourceCheck,proseIntegrity:proseIntegrity,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={citationTokens:citationTokens,bibliographyLinks:bibliographyLinks,riskReport:riskReport,sourceMinima:sourceMinima,sourceRequirements:sourceRequirements,consistency:consistency,sourceEvidence:sourceEvidence,sourceCheck:sourceCheck,proseIntegrity:proseIntegrity,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);
