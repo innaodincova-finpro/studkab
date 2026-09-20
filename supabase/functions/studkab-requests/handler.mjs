@@ -63,6 +63,18 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     const r=await attachmentAction(input,user,{db,config,upload,download,remove});return json(r.data,r.status||200);
    }
    if(raw.length>16000)return json({error:'Заявка слишком большая'},413);
+   if(input.action==='delete-request'){
+    const cfg=await config();
+    if(user.email.toLowerCase()!==cfg.executor_email.toLowerCase())return json({error:'Удаление доступно только исполнителю'},403);
+    const id=typeof input.id==='string'&&/^[a-f0-9-]{36}$/.test(input.id)?input.id:null;
+    const reason=typeof input.reason==='string'?input.reason.trim():'';
+    if(!id||input.confirmId!==id||reason.length<10||reason.length>500)return json({error:'Не подтверждено удаление заявки'},400);
+    const plan=await db('rpc/prepare_studkab_request_delete','POST',{p_request:id});
+    if(plan.absent)return json({deleted:true,absent:true,id});
+    for(const path of plan.paths||[])await remove(path);
+    const result=await db('rpc/delete_studkab_request','POST',{p_request:id,p_actor:user.id,p_reason:reason});
+    return json(result);
+   }
    if(input.action==='submit'){
     // C-054: заявку подаёт только студент, которому исполнитель выдал доступ.
     if(typeof isMember!=='function'||(await isMember(user.id))!==true)return json({error:'Подача заявок открывается после приглашения исполнителя. Попросите у исполнителя приглашение.'},403);
@@ -94,7 +106,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     if(id!=null&&!/^[a-f0-9-]{36}$/.test(id))return json({error:'Неверный номер'},400);
     const after=input.after??0;
     if(!Number.isSafeInteger(after)||after<0)return json({error:'Неверная страница'},400);
-    const rows=await db('studkab_requests?select=id,number,payload,created_at&order=number.asc&limit=100'+(id?'&id=eq.'+id:'&number=gt.'+after));
+    const rows=await db('studkab_requests?select=id,number,payload,created_at&deleting_at=is.null&order=number.asc&limit=100'+(id?'&id=eq.'+id:'&number=gt.'+after));
     if(input.includeDeliveryState===true){
      // Bounded per-request reads avoid silently truncating history across requests.
      for(let i=0;i<rows.length;i+=10)await Promise.all(rows.slice(i,i+10).map(async row=>{

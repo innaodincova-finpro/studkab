@@ -2530,8 +2530,17 @@ document.addEventListener("click", function(ev){
   }
   if (act === "save-note"){ var x4 = item(id); if (!x4) return; x4.note = document.getElementById("note").value; saved("Заметка сохранена"); return; }
   if (act === "delete"){
-    if (!confirm("Удалить заявку? Восстановить будет нельзя.")) return;
-    D.items = D.items.filter(function(y){ return y.id !== id }); recountRefs(); var okd = save(); openId = null; render(); toast(okd ? "Заявка удалена" : "Не сохранено: браузер не разрешает хранение"); return;
+    var doomed=item(id);if(!doomed)return;
+    var modal=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Удалить заявку без возможности восстановления?</h3>'+
+      '<div class="mut" style="margin-top:10px">Будут удалены карточка, серверная заявка, вложения, паспорт, результаты и история подготовки. Финансовая история должна быть предварительно сверена.</div>'+
+      '<div class="rowbtns"><button type="button" class="btn ghost" data-x="1">Отмена</button><button type="button" class="btn danger" data-delete-confirm="1">Удалить заявку</button></div>');
+    modal.addEventListener('click',async function(ev){var button=ev.target.closest('[data-delete-confirm]');if(!button)return;button.disabled=true;
+      try{
+        if(/^[a-f0-9-]{36}$/.test(id))await Oblako.requestApi({action:'delete-request',id:id,confirmId:id,reason:'Удаление неверной заявки исполнителем'});
+        D.items=D.items.filter(function(y){return y.id!==id;});recountRefs();if(!save())throw Error('Не удалось сохранить реестр на устройстве');
+        openId=null;modal.remove();render();toast('Заявка удалена полностью');
+      }catch(err){button.disabled=false;toast(err.message||'Удаление не завершено. Данные сохранены для повторной попытки.');}
+    });return;
   }
   if (act === "paste"){
     var wrap = openModal('<button type="button" class="close" data-x="1">✕</button><h3>Вставить заявку из текста</h3>' +
