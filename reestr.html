@@ -1448,16 +1448,18 @@ function openDocBuilder(id){
       if(from>=0&&to>=0&&to<doc.order.length){doc.order.splice(to,0,doc.order.splice(from,1)[0]);save();}
       wrap.querySelector('#docSecs').innerHTML=doc.order.map(sec).join('');
       var moved=Array.from(wrap.querySelectorAll('[data-sec]')).find(function(el){return el.getAttribute('data-sec')===movedId;});
-      if(moved){moved.open=true;moved.querySelector('summary').focus();}return;
+      if(moved){moved.open=true;moved.querySelector('summary').focus();}preview();return;
     }
     if(t.closest('[data-appadd]')){
       readBack();var aid=uid('app');
       doc.order.push({id:aid,name:'Приложение',pages:0});doc.structure[aid]={text:''};
-      save();wrap.querySelector('#docSecs').innerHTML=doc.order.map(sec).join('');return;
+      save();wrap.querySelector('#docSecs').innerHTML=doc.order.map(sec).join('');preview();return;
     }
     if (t.closest("[data-secadd]")){
       readBack();
-      var nid = uid("sec"); doc.order.splice(doc.order.length - 1, 0, { id:nid, name:"Новый раздел", pages:3 }); doc.structure[nid] = { text:"" };
+      var nid = uid("sec"),before=doc.order.findIndex(function(c){return c.id==='refs';});
+      if(before<0)before=doc.order.findIndex(function(c){return /^приложени/i.test(c.name)||/^app/.test(c.id);});
+      doc.order.splice(before<0?doc.order.length:before, 0, { id:nid, name:"Новый раздел", pages:3 }); doc.structure[nid] = { text:"" };
       wrap.querySelector("#docSecs").innerHTML = doc.order.map(sec).join(""); return;
     }
     var del = t.closest("[data-secdel]");
