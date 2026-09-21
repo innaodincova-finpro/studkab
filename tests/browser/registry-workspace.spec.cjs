@@ -130,3 +130,28 @@ test('C072 account change while inbox is pending cannot merge old history',async
  expect(await page.evaluate(()=>JSON.stringify(D))).toBe(before);
  expect(await page.evaluate(()=>oldWorkspace.items[0].deliveryState)).toBeUndefined();
 });
+
+for(const width of [390,1440])test('C081 compact passport preserves full requirements at '+width,async({page})=>{
+ await seed(page);await page.setViewportSize({width,height:1000});
+ await page.evaluate(()=>{
+  const x=D.items[0];x.requirements='Полный исходный текст заявки. '.repeat(25);x.methodNotes='Методические пояснения. '.repeat(20);
+  x.passports=[{id:'draft',revision:2,status:'draft',items:[
+   {id:'VOLUME',text:'Объём: 25–30 страниц основного текста',required:true},
+   {id:'SOURCES',text:'Источники: учебные фрагменты S1–S5; не выдавать за реальные публикации',required:true},
+   {id:'METHODOLOGY',text:'Методология: '+x.methodNotes,required:true},
+   {id:'ANTIPLAGIARISM',text:'Система и порог оригинальности: Не указано — требуется уточнить',required:true}
+  ]}];openId=x.id;window.c081Before=JSON.stringify(x);render();
+ });
+ await page.getByRole('tab',{name:'Требования',exact:true}).click();
+ const panel=page.locator('#request-panel-requirements');
+ await expect(panel.getByText('25–30 страниц основного текста',{exact:true})).toBeVisible();
+ await expect(panel.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
+ const originals=panel.locator('.requirement-original');await expect(originals).not.toHaveAttribute('open','');
+ await originals.locator('summary').click();await expect(originals).toHaveAttribute('open','');
+ await expect(originals).toContainText('Полный исходный текст заявки. '.repeat(25).trim());
+ const details=panel.locator('.requirement-detail').filter({has:page.locator('summary', {hasText:'Подробнее'})}).first();
+ await details.locator('summary').focus();await page.keyboard.press('Enter');await expect(details).toHaveAttribute('open','');
+ expect(await page.evaluate(()=>JSON.stringify(D.items[0])===c081Before)).toBe(true);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.screenshot({path:'/tmp/c081-'+width+'.png',fullPage:true});
+});
