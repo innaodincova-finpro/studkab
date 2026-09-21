@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=12"></script><script src="draft-editor.js?v=8"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=11"></script><script src="request-workflow.js?v=2"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=12"></script><script src="draft-editor.js?v=8"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=12"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1943,7 +1943,7 @@ function deliveryHistory(x){
 function requestWorkflow(x){
  var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[],hasDocument=!!(x.doc&&(x.doc.order||[]).some(function(c){var part=(x.doc.structure||{})[c.id]||{};return String(part.text||'').trim()||(Array.isArray(part.figures)&&part.figures.length);})),reviewCurrent=false;
  if(hasDocument&&x.doc&&x.doc.review)try{reviewCurrent=x.doc.review===DraftQuality.stamp(x);}catch(e){reviewCurrent=false;}
- return RequestWorkflow.derive({cancelled:x.status==='off',delivered:!!(window.StudResults&&StudResults.isCurrentDelivery&&StudResults.isCurrentDelivery(x)),hasPassport:!!p,passportUnresolved:!!unresolved.length,passportBlocker:unresolved.length?'Требует уточнения: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '):'',passportApproved:!!p&&p.status==='approved',hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
+ return RequestWorkflow.derive({cancelled:x.status==='off',delivered:!!(window.StudResults&&StudResults.isCurrentDelivery&&StudResults.isCurrentDelivery(x)),hasPassport:!!p,passportUnresolved:!!unresolved.length,passportBlocker:unresolved.length?'Требует уточнения: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '):'',passportApproved:!!p&&p.status==='approved',hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasExternalWord:!!x.externalResult,hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
 }
 function workflowSteps(w){return '<ol class="workflow-steps" aria-label="Этапы заявки">'+w.steps.map(function(s,n){var step=n+1,state=w.complete||step<w.step?'done':step===w.step?'current':'';return '<li class="'+state+'"><span>'+step+'.</span> '+esc(s.label)+'</li>';}).join('')+'</ol>';}
 function workflowCard(x){var w=requestWorkflow(x);return card(workflowSteps(w)+lab(w.complete?'Маршрут завершён':'Следующее действие · этап '+w.step+' из 5')+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p>'+(w.blocker?'<div class="warnbar workflow-blocker">'+esc(w.blocker)+'</div>':'')+(w.action?'<button type="button" class="btn" data-act="'+w.action+'" data-id="'+esc(x.id)+'">'+esc(w.label)+'</button>':''),'workflow-next');}
@@ -2090,6 +2090,7 @@ function viewItem(id){
       ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков' + (x.doc.updated ? ' · правка ' + ruDate(x.doc.updated) : '') + '</div>'
       : '<div class="mut">Черновик ещё не собирался.</div>') +
     '<div class="chips"><button type="button" class="chip warn" data-act="doc-open" data-id="' + esc(x.id) + '">' + (hasDoc ? "Открыть документ" : "Собрать документ") + '</button></div>';
+  if(x.requestNumber)result+='<div class="chips"><button type="button" class="chip" data-act="attach-word" data-id="'+esc(x.id)+'">Прикрепить готовый Word</button>'+(x.externalResult?'<button type="button" class="chip" data-act="review-word" data-id="'+esc(x.id)+'">Проверить прикреплённый Word</button>':'')+'</div>'+(x.externalResult?'<p class="hint">Прикреплён: '+esc(x.externalResult.name)+'. Передача требует отдельной проверки.</p>':'');
   h += group("result",hasDoc?"Документ":"Подготовка документа",result,defaultGroup==="result");
 
   h += group("delivery","Итоговая проверка и передача",x.requestNumber?'<p class="hint">Итоговая проверка относится к точной версии Word. Наличие текста и автоматическая проверка сами по себе не означают одобрение. Передача доступна только без блокирующих критериев.</p>'+(workflow.key==='delivery'?'':workflow.key==='delivered'?'<p>Результат передан. Для следующей версии сначала откройте документ и повторите проверки.</p><button type="button" class="chip" data-act="deliver-result" data-id="'+esc(x.id)+'">Проверить новую версию</button>':'<p>Следуйте действию в панели заявки. Итоговая проверка станет следующим шагом после проверки документа.</p>'):'<p class="hint">Серверная передача недоступна: заявка добавлена вручную.</p>');
@@ -2509,6 +2510,8 @@ document.addEventListener("click", function(ev){
   if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
   if (act === "attachment-download") {var aid=el.getAttribute('data-attachment');el.disabled=true;Oblako.requestApi({action:'attachment-download',id:id,attachmentId:aid}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Не удалось скачать файл');}).finally(function(){el.disabled=false;});return;}
+  if (act === "attach-word") return StudResults.attach(item(id));
+  if (act === "review-word") return StudResults.deliver(item(id),true);
   if (act === "deliver-result") return StudResults.deliver(item(id));
   if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
   if (act === "passport-edit" || act === "passport-revise") {var pe=item(id);if(pe)editPassport(pe,act === "passport-revise");return;}

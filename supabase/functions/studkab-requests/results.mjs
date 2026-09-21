@@ -1,3 +1,4 @@
+import {inspectWord} from '../_shared/external-word.mjs';
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export function validateResult(value) {
@@ -36,6 +37,12 @@ export function validateResult(value) {
   const c=value.reviewContext;
   if(!c||!uuid.test(c.passportId||'')||!hash.test(c.sourceFingerprint||'')||!hash.test(c.fingerprint||''))throw Error('Не подтверждён паспорт проверки');
   out.reviewContext={passportId:c.passportId,sourceFingerprint:c.sourceFingerprint,fingerprint:c.fingerprint};
+ }
+ if(value.uploadedWord!==undefined){
+  const u=value.uploadedWord;
+  if(!u||!hash.test(u.fileHash||'')||!out.reviewContext)throw Error('Не подтверждены файл и паспорт проверки');
+  out.uploadedWord={name:text(u.name,200),fileHash:u.fileHash};
+  if(!/\.docx$/i.test(out.uploadedWord.name))throw Error('Выберите Word .docx');
  }
  return out;
 }
@@ -98,6 +105,12 @@ export async function resultAction(input,user,{db,config}) {
   if(document.reviewContext&&!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
   const file=input.docxBase64;
   if(typeof file!=='string'||file.length>4194304||file.length<8||!/^UEsDB[A-Za-z0-9+/]*={0,2}$/.test(file))return {status:400,data:{error:errors.file}};
+  if(document.uploadedWord){
+   try{
+    const bytes=Uint8Array.from(atob(file),c=>c.charCodeAt(0)),inspected=await inspectWord(bytes);
+    if(inspected.fileHash!==document.uploadedWord.fileHash||document.chapters.map(c=>document.structure[c.id].text).join('')!==inspected.text)throw Error('Выбранный Word и его текст не совпадают. Прикрепите файл заново.');
+   }catch(e){return {status:400,data:{error:e.message}};}
+  }
   result=await db('rpc/prepare_studkab_result','POST',{request:input.id,version:input.versionId,recipient:request.student_id,content:document,file_base64:file});
  }else{
   if(!uuid.test(input.recipientId||'')||!hash.test(input.fileHash||'')||!hash.test(input.documentHash||'')||!uuid.test(input.reviewId||''))return {status:400,data:{error:'Не хватает данных сохранённой проверки'}};

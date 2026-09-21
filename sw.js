@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v71-passport-meaning";
+const CACHE = "studkab-v72-external-word";
 const SHELL = [
   "./desktop.css?v=7",
   "./",
@@ -18,8 +18,9 @@ const SHELL = [
   "./draft-quality.js?v=12",
   "./draft-editor.js?v=8",
   "./result-docx.js?v=7",
-  "./results-ui.js?v=11",
-  "./request-workflow.js?v=2",
+  "./results-ui.js?v=12",
+  "./external-word.mjs?v=1",
+  "./request-workflow.js?v=3",
   "./onboarding.js?v=2",
   "./oblako-config.js",
   "./vendor/supabase-2.57.4.js"
