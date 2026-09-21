@@ -22,3 +22,11 @@ test('a saved job does not hide quality review when document text exists',()=>{
  assert.equal(result.key,'quality');
  assert.equal(result.action,'doc-open');
 });
+
+test('external Word requires review and never bypasses passport or cancellation',()=>{
+ const facts={hasExternalWord:true,hasPassport:true,passportApproved:true};
+ assert.equal(workflow.derive(facts).action,'review-word');
+ assert.equal(workflow.derive({...facts,passportUnresolved:true}).action,'passport-edit');
+ assert.equal(workflow.derive({...facts,cancelled:true}).key,'cancelled');
+ assert.equal(workflow.derive({...facts,delivered:true}).key,'delivered');
+});

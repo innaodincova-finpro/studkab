@@ -1,6 +1,7 @@
 (function(global){
  'use strict';
- function snapshot(x){
+ function snapshot(x,external){
+  if(external){var e=x.externalResult;if(!e)throw Error("Сначала прикрепите Word");return {topic:x.topic,student:x.student||"",group:x.group||"",format:{},chapters:e.chapters,structure:e.structure,uploadedWord:{name:e.name,fileHash:e.fileHash}};}
   var doc=x.doc;if(!doc||!doc.order||!doc.order.length)throw Error('Сначала подготовьте и сохраните документ');
   var format=Object.assign({toc:true,year:String(new Date().getFullYear())},x.format||{});
   ['univ','faculty','kafedra','program','form','course','city','supervisor','workType','discipline'].forEach(function(k){format[k]=x[k]||'';});
@@ -15,30 +16,32 @@
   documentDummy(a);setTimeout(function(){URL.revokeObjectURL(url);},10000);
  }
  function documentDummy(a){global.document.body.appendChild(a);a.click();a.remove();}
- function contextKey(x){
+ function contextKey(x,external){
   var p=(x.passports||[])[0];
   if(!p||p.status!=='approved'||!p.source_fingerprint)throw Error('Обновите и утвердите паспорт требований перед итоговой проверкой.');
-  return JSON.stringify([DraftQuality.stamp(x),p.id,p.revision,p.status,p.source_fingerprint,p.title,p.summary,p.items]);
+  return JSON.stringify([external?JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.externalResult,DraftQuality.inputs(x)]):DraftQuality.stamp(x),p.id,p.revision,p.status,p.source_fingerprint,p.title,p.summary,p.items]);
  }
  async function sha(bytes){var d=await crypto.subtle.digest('SHA-256',bytes);return Array.from(new Uint8Array(d)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');}
- async function reviewDocument(x,key){var out=snapshot(x),p=x.passports[0];out.reviewContext={passportId:p.id,sourceFingerprint:p.source_fingerprint,fingerprint:await sha(new TextEncoder().encode(key))};return out;}
- function deliver(x){
+ async function reviewDocument(x,key,external){var out=snapshot(x,external),p=x.passports[0];out.reviewContext={passportId:p.id,sourceFingerprint:p.source_fingerprint,fingerprint:await sha(new TextEncoder().encode(key))};return out;}
+ function deliver(x,external){
   if(!x||!x.requestNumber)return toast('Эта запись получена вне кабинета. Передайте документ через согласованный мессенджер.');
   var key;
   try{
+   if(!external){
    var problems=DraftQuality.issues(x.doc||{}).concat(DraftQuality.documentAcceptance(x).errors,DraftQuality.finAcceptance(x).errors);
    if(problems.length)throw Error('Передача недоступна: '+problems.join('; '));
    if(!x.doc||x.doc.review!==DraftQuality.stamp(x))throw Error('Откройте документ и нажмите «Проверить готовность» перед передачей');
-   key=contextKey(x);
+   }
+   key=contextKey(x,external);
   }catch(e){return toast(e.message);}
   var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),reviewed=false,previewed=false,delivered=false,known=false;
   var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;}),profile=DraftQuality.requirementProfile(x);
-  var methodology='<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
+  var methodology=(external?'<p class="hint">Проверяется прикреплённый Word. Автоматические проверки текста редактора к нему не применялись. Проверьте все 16 пунктов по этому файлу, включая объём, расчёты и условия оригинальности.</p>':'')+'<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
   var checklist=methodology+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
   var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'Студент не указан')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Сначала сохраните проверку точного Word. Передача студенту выполняется отдельной кнопкой.</p><button type="button" class="chip" data-preview disabled>Открыть точный Word</button>'+checklist+'<p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="btn" data-save-review disabled>Сохранить итоговую проверку</button><button type="button" class="btn" data-deliver hidden disabled style="display:none">Передать студенту</button><p role="status" data-result-status>Проверяем сохранённое состояние…</p><button type="button" class="chip" data-result-refresh disabled>Обновить состояние</button>');
   wrap.dataset.accountIdentity=String(identity);
   var msg=wrap.querySelector('[data-result-status]'),saveButton=wrap.querySelector('[data-save-review]'),sendButton=wrap.querySelector('[data-deliver]'),refreshButton=wrap.querySelector('[data-result-refresh]');
-  function guard(){try{if(!wrap.isConnected||!same(data,identity))throw Error('Аккаунт изменился или окно закрыто. Откройте проверку заново.');if(key!==contextKey(x)||x.doc.review!==DraftQuality.stamp(x))throw Error('Документ, требования или получатель изменились. Повторите проверку.');}catch(e){known=false;throw e;}}
+  function guard(){try{if(!wrap.isConnected||!same(data,identity))throw Error('Аккаунт изменился или окно закрыто. Откройте проверку заново.');if(key!==contextKey(x,external)||(!external&&x.doc.review!==DraftQuality.stamp(x)))throw Error('Документ, требования или получатель изменились. Повторите проверку.');}catch(e){known=false;throw e;}}
   function controls(){
    saveButton.hidden=reviewed||delivered;saveButton.disabled=busy||!known;
    sendButton.hidden=!reviewed&&!delivered;sendButton.style.display=sendButton.hidden?'none':'';saveButton.style.display=saveButton.hidden?'none':'';sendButton.disabled=busy||!known||delivered;
@@ -63,7 +66,7 @@
     var bytes=Uint8Array.from(atob(state.docxBase64),function(c){return c.charCodeAt(0);});
     if(bytes.length>3145728||await sha(bytes)!==r.fileHash)throw Error('Контрольная сумма сохранённого Word не совпала.');
     guard();
-    if(await sha(await captured.arrayBuffer())!==r.fileHash)previewed=false;
+    if(!captured||await sha(await captured.arrayBuffer())!==r.fileHash)previewed=false;
     guard();captured=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});receipt=r;versionId=r.versionId;
     reviewed=state.state==='reviewed'||state.state==='delivered';delivered=state.state==='delivered';
     if(reviewed){
@@ -74,8 +77,9 @@
     }
     if(delivered&&(!state.delivery||!state.delivery.deliveryId))throw Error('Передача не подтверждена.');
    }
+   if(external&&!receipt)throw Error('Прикреплённая версия не найдена в текущем состоянии. Прикрепите Word заново.');
    guard();known=true;status();
-   if(delivered){x.deliveryConfirmation={context:key,versionId:versionId};x.deliveryState={checkedAt:new Date().toISOString(),last:{deliveryId:state.delivery.deliveryId,versionId:versionId,createdAt:state.delivery.createdAt}};x.status='sent';if(typeof save==='function')save();if(typeof render==='function')render();}
+   if(delivered){x.deliveryConfirmation={context:key,versionId:versionId,external:!!external};x.deliveryState={checkedAt:new Date().toISOString(),last:{deliveryId:state.delivery.deliveryId,versionId:versionId,createdAt:state.delivery.createdAt}};x.status='sent';if(typeof save==='function')save();if(typeof render==='function')render();}
   }
   function binding(){return {id:requestId,versionId:versionId,reviewId:reviewId,recipientId:receipt.recipientId,fileHash:receipt.fileHash,documentHash:receipt.documentHash,document:payload};}
   async function run(action){if(busy)return;busy=true;controls();try{guard();await action();}catch(e){msg.textContent=e.message||'Не удалось подтвердить состояние. Нажмите «Обновить состояние».';}finally{busy=false;controls();}}
@@ -103,11 +107,54 @@
   });};
   refreshButton.onclick=function(){return run(loadState);};
   (async function(){try{
-   payload=await reviewDocument(x,key);guard();captured=ResultDocx(payload,payload.chapters);
-   if(captured.size>3145728)throw Error('Word больше 3 МБ. Передача этой версии пока недоступна.');
+   payload=await reviewDocument(x,key,external);guard();captured=external?null:ResultDocx(payload,payload.chapters);
+   if(captured&&captured.size>3145728)throw Error('Word больше 3 МБ. Передача этой версии пока недоступна.');
    await loadState();
   }catch(e){known=false;msg.textContent=e.message||'Состояние проверки недоступно.';}finally{busy=false;controls();}})();
  }
+ async function attach(x){
+  if(!x||!x.requestNumber)return toast('Прикрепление доступно для заявки из кабинета студента.');
+  try{var p=(x.passports||[])[0];if(!p||p.status!=='approved')throw Error('Сначала уточните и утвердите требования заявки. Прикрепление не отменяет эту проверку.');}catch(e){return toast(e.message);}
+  var data=D,identity=Oblako.identity(),initial=JSON.stringify([x.id,x.topic,x.student,x.group,x.passports,DraftQuality.inputs(x)]);
+  var w=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Прикрепить готовый Word</h3><p>'+esc(x.student||'')+' · заявка №'+esc(x.requestNumber)+'</p><p class="hint">Выберите .docx до 3 МБ. Файл сохранится как отдельная версия результата. Текст редактора и материалы студента сохранятся. Передача — только после итоговой проверки.</p><label>Готовый Word<input type="file" data-word-file accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label><p role="status" data-word-status>Файл не выбран.</p><button type="button" class="btn" data-word-save disabled>Сохранить файл в заявке</button>');
+  w.dataset.accountIdentity=String(identity);
+  var input=w.querySelector('[data-word-file]'),button=w.querySelector('[data-word-save]'),msg=w.querySelector('[data-word-status]'),selection=null,busy=false,versionId=null;
+  function guard(){if(!w.isConnected||!same(data,identity)||initial!==JSON.stringify([x.id,x.topic,x.student,x.group,x.passports,DraftQuality.inputs(x)]))throw Error('Аккаунт, заявка или требования изменились. Откройте прикрепление заново.');}
+  input.onchange=async function(){
+   if(busy)return;selection=null;button.textContent='Сохранить файл в заявке';button.disabled=true;busy=true;input.disabled=true;
+   try{
+    guard();var file=input.files[0];if(!file)return;
+    if(!/\.docx$/i.test(file.name)||file.size>3145728||!file.size)throw Error('Выберите непустой .docx до 3 МБ.');
+    msg.textContent='Проверяем файл…';
+    var bytes=new Uint8Array(await file.arrayBuffer()),module=await import('./external-word.mjs?v=1'),info=await module.inspectWord(bytes);guard();
+    var chapters=[],structure={};
+    for(var at=0,i=0;at<info.text.length;at+=90000,i++){var id='file_'+i;chapters.push({id:id,name:'Текст прикреплённого Word · '+(i+1)});structure[id]={text:info.text.slice(at,at+90000)};}
+    var metadata={name:file.name.slice(0,200),fileHash:info.fileHash,chapters:chapters,structure:structure};
+    var proposed=Object.assign({},x,{externalResult:metadata}),payload=await reviewDocument(proposed,contextKey(proposed,true),true);guard();
+    selection={bytes:bytes,metadata:metadata,payload:payload};versionId=crypto.randomUUID();
+    msg.textContent=file.name+' · '+Math.ceil(file.size/1024)+' КБ. Файл выбран, ещё не сохранён.';
+   }catch(e){msg.textContent=e.message||'Файл не удалось прочитать.';}
+   finally{busy=false;input.disabled=false;button.disabled=!selection;}
+  };
+  button.onclick=async function(){
+   if(busy||!selection)return;busy=true;button.disabled=true;input.disabled=true;
+   try{
+    guard();var bin='';for(var j=0;j<selection.bytes.length;j+=8192)bin+=String.fromCharCode.apply(null,selection.bytes.subarray(j,j+8192));
+    msg.textContent='Сохраняем файл…';
+    await Oblako.requestApi({action:'prepare-result',id:x.id,versionId:versionId,document:selection.payload,docxBase64:btoa(bin)});guard();
+    var state=await Oblako.requestApi({action:'result-review-state',id:x.id,document:selection.payload,includeFile:true});guard();
+    if(!state.receipt||state.receipt.versionId!==versionId||state.receipt.fileHash!==selection.metadata.fileHash||!state.docxBase64)throw Error('Сохранение файла не подтверждено. Повторите сохранение.');
+    var returned=Uint8Array.from(atob(state.docxBase64),function(c){return c.charCodeAt(0);});
+    if(await sha(returned)!==selection.metadata.fileHash)throw Error('Сохранённый файл не совпал с выбранным.');
+    guard();x.externalResult=selection.metadata;delete x.deliveryConfirmation;
+    if(typeof save==='function')save();if(typeof render==='function')render();
+    msg.textContent='Word сохранён в заявке. Студенту ещё не передан. Следующий шаг — проверка прикреплённого Word.';
+    selection=null;button.textContent='Файл сохранён';
+   }catch(e){msg.textContent=e.message||'Сохранение не подтверждено. Повтор использует тот же номер операции.';}
+   finally{busy=false;button.disabled=!selection;input.disabled=false;}
+  };
+ }
+
  async function receive(w){
   var data=D,identity=Oblako.identity();
   var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Черновик от исполнителя</h3><p role="status" data-result-status>Проверяем готовность…</p><button type="button" class="btn" data-download hidden style="display:none">Скачать черновик Word</button><p class="hint">Прочитайте документ, проверьте факты, источники и требования преподавателя. При необходимости доработайте его перед сдачей.</p>');
@@ -130,5 +177,5 @@
    button.onclick=function(){if(!same(data,identity)){button.hidden=true;button.style.display='none';msg.textContent='Аккаунт изменился. Откройте результат заново.';return;}try{download(result.document,receivedBlob);}catch(e){msg.textContent='Не удалось собрать файл. Откройте результат повторно.';}};
   }catch(e){msg.textContent=e.message||'Не удалось проверить результат. Откройте его повторно.';}
  }
- global.StudResults={deliver:deliver,receive:receive,isCurrentDelivery:function(x){try{return !!x.deliveryConfirmation&&x.deliveryConfirmation.context===contextKey(x)&&!!x.deliveryState&&!!x.deliveryState.last&&x.deliveryState.last.versionId===x.deliveryConfirmation.versionId;}catch(e){return false;}}};
+ global.StudResults={attach:attach,deliver:deliver,receive:receive,isCurrentDelivery:function(x){try{return !!x.deliveryConfirmation&&x.deliveryConfirmation.context===contextKey(x,!!x.deliveryConfirmation.external)&&!!x.deliveryState&&!!x.deliveryState.last&&x.deliveryState.last.versionId===x.deliveryConfirmation.versionId;}catch(e){return false;}}};
 })(window);

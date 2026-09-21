@@ -133,3 +133,73 @@ test('C-071 changed saved document and corrupt saved bytes cannot reuse review',
  await expect(page.locator('[data-save-review]')).toBeEnabled();await expect(page.locator('[data-deliver]')).toBeHidden();
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(0);
 });
+
+async function externalFixture(page,text='Проверяемый учебный документ с таблицами и выводами'){
+ const b64=await page.evaluate(async text=>{
+  const d={topic:'Учебный файл',chapters:[{id:'intro',name:'Введение'}],structure:{intro:{text}}};
+  const bytes=new Uint8Array(await ResultDocx(d,d.chapters).arrayBuffer());return btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''));
+ },text);return Buffer.from(b64,'base64');
+}
+async function attachExternal(page,buffer){
+ await page.evaluate(()=>StudResults.attach(candidate));
+ await page.locator('[data-word-file]').setInputFiles({name:'reviewed.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer});
+ await expect(page.locator('[data-word-save]')).toBeEnabled();
+ await page.locator('[data-word-save]').click();
+ await expect(page.locator('[data-word-status]')).toContainText('Word сохранён');
+ await page.locator('.sheet .close').click();
+}
+test('C083 external Word saves without delivery, reviews independently, student gets identical bytes',async({page})=>{
+ await setupReview(page);await page.locator('.sheet .close').click();
+ const original=await page.evaluate(()=>JSON.stringify(candidate.doc)),bytes=await externalFixture(page);
+ await attachExternal(page,bytes);
+ expect(await page.evaluate(()=>JSON.stringify(candidate.doc))).toBe(original);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver'||c.action==='review-result').length)).toBe(0);
+ await page.evaluate(()=>StudResults.deliver(candidate,true));
+ await expect(page.locator('[data-result-status]')).toContainText('Проверьте точный Word');
+ const preview=await fillReview(page);
+ const fs=require('node:fs');expect(fs.readFileSync(await preview.path())).toEqual(bytes);
+ await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ await page.locator('[data-deliver]').click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
+ const stored=await page.evaluate(()=>JSON.parse(JSON.stringify(remote)));
+ await page.locator('.sheet .close').click();
+ await page.evaluate(stored=>{
+  Oblako.requestApi=async()=>({result:{version_id:stored.receipt.versionId,created_at:'2026-09-21',document:stored.document,docxBase64:stored.docxBase64,fileHash:stored.receipt.fileHash}});
+  StudResults.receive({req:{serverId:candidate.id}});
+ },stored);
+ const wait=page.waitForEvent('download');await page.locator('[data-download]').click();expect(fs.readFileSync(await (await wait).path())).toEqual(bytes);
+});
+test('C083 replacement requires new review and failed criterion prevents transmission',async({page})=>{
+ await setupReview(page);await page.locator('.sheet .close').click();
+ await attachExternal(page,await externalFixture(page));
+ await page.evaluate(()=>StudResults.deliver(candidate,true));await fillReview(page);
+ await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ await page.locator('.sheet .close').click();
+ await attachExternal(page,await externalFixture(page,'Новая версия — другие выводы.'));
+ await page.evaluate(()=>StudResults.deliver(candidate,true));
+ await expect(page.locator('[data-deliver]')).toBeHidden();await expect(page.locator('[data-reviewed]')).not.toBeChecked();
+ await fillReview(page);await page.locator('[data-criterion-status="C01"]').selectOption('fail');
+ await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('заблокирована');
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(0);
+});
+test('C083 invalid file and unapproved passport never write a result',async({page})=>{
+ await setupReview(page);await page.locator('.sheet .close').click();
+ await page.evaluate(()=>StudResults.attach(candidate));
+ await page.locator('[data-word-file]').setInputFiles({name:'fake.docx',mimeType:'application/octet-stream',buffer:Buffer.from('This is not a Word document')});
+ await expect(page.locator('[data-word-status]')).toContainText('Не удалось прочитать');
+ await expect(page.locator('[data-word-save]')).toBeDisabled();
+ await page.locator('.sheet .close').click();
+ await page.evaluate(()=>{candidate.passports[0].status='draft';StudResults.attach(candidate);});
+ await expect(page.locator('[data-word-file]')).toHaveCount(0);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='prepare-result').length)).toBe(0);
+});
+test('C083 account or passport change while selecting prevents saving',async({page})=>{
+ await setupReview(page);await page.locator('.sheet .close').click();
+ const buffer=await externalFixture(page);
+ await page.evaluate(()=>StudResults.attach(candidate));
+ await page.locator('[data-word-file]').setInputFiles({name:'test.docx',mimeType:'application/octet-stream',buffer});
+ await expect(page.locator('[data-word-save]')).toBeEnabled();
+ await page.evaluate(()=>candidate.passports[0].revision++);
+ await page.locator('[data-word-save]').click();
+ await expect(page.locator('[data-word-status]')).toContainText('изменились');
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='prepare-result').length)).toBe(0);
+});
