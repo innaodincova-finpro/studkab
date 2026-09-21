@@ -1,3 +1,4 @@
+import {currentAttachments} from '../_shared/current-attachments.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash=/^[a-f0-9]{64}$/;
 const types=new Set(['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain']);
@@ -19,13 +20,13 @@ async function access(id,user,{db,config}){
 export async function attachmentAction(input,user,deps){
  const permit=await access(input.id,user,deps);if(!permit)return denied;
  if(input.action==='attachment-list'){
-  const rows=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,category,file_name,content_type,size_bytes,file_hash,created_at&order=created_at.asc');
-  return {status:200,data:{attachments:rows}};
+  const rows=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,supersedes,category,file_name,content_type,size_bytes,file_hash,created_at&order=created_at.asc');
+  return {status:200,data:{attachments:currentAttachments(rows)}};
  }
  if(input.action==='attachment-context'){
   if(!permit.executor)return {status:403,data:{error:'Материалы доступны исполнителю'}};
-  const rows=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,category,file_name,size_bytes,file_hash,extracted_text,created_at&order=created_at.asc');
-  return {status:200,data:{attachments:rows}};
+  const rows=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,supersedes,category,file_name,size_bytes,file_hash,extracted_text,created_at&order=created_at.asc');
+  return {status:200,data:{attachments:currentAttachments(rows)}};
  }
  if(input.action==='attachment-download'){
   if(!uuid.test(String(input.attachmentId||'')))return {status:400,data:{error:'Неверный файл'}};
@@ -39,14 +40,34 @@ export async function attachmentAction(input,user,deps){
  const encoded=String(input.base64||'');
  if(!name||!types.has(type)||!categories.has(category)||!Number.isSafeInteger(size)||size<1||size>5242880||!hash.test(fileHash)||encoded.length!==4*Math.ceil(size/3)||!base64.test(encoded))
   return {status:400,data:{error:'Проверьте файл, его тип и размер'}};
- const current=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,file_hash');
+ const all=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,supersedes,category,file_hash');
+ const current=currentAttachments(all);
+ const supersedes=input.replacesId??null;
+ if(supersedes!==null&&!uuid.test(String(supersedes)))return {status:400,data:{error:'Неверная версия файла'}};
+ if(all.some(x=>x.file_hash===fileHash)&&!current.some(x=>x.file_hash===fileHash))return {status:409,data:{error:'Этот файл есть в истории. Выберите новую редакцию'}};
+ const same=current.find(x=>x.file_hash===fileHash);
+ if(same&&same.category===category)return {status:200,data:{attachment:same,duplicate:true}};
+ const previous=current.filter(x=>x.category===category);
+ if(supersedes?!previous.some(x=>x.id===supersedes):previous.length>0)return {status:409,data:{error:'Файл изменился. Откройте заявку заново'}};
+ const passports=await deps.db('studkab_requirement_passports?request_id=eq.'+input.id+'&select=id&limit=1');
+ if(passports.length)return {status:409,data:{error:'Подготовка уже началась. Согласуйте изменения с исполнителем'}};
  if(current.some(x=>x.file_hash===fileHash))return {status:409,data:{error:'Этот файл уже приложен'}};
- if(current.length>=8)return {status:429,data:{error:'К одной заявке можно приложить не более 8 файлов'}};
+ if(!supersedes&&current.length>=8)return {status:429,data:{error:'К одной заявке можно приложить не более 8 файлов'}};
  const attachmentId=crypto.randomUUID();
  const path=user.id+'/'+input.id+'/'+attachmentId;
  const extractedText=await deps.upload(path,type,encoded,size,fileHash);
  if(typeof extractedText!=='string'||!extractedText.trim()||extractedText.length>500000)throw Error('Extraction unavailable');
- let row;try{[row]=await deps.db('studkab_request_attachments','POST',{id:attachmentId,request_id:input.id,student_id:user.id,category,file_name:name,content_type:type,size_bytes:size,file_hash:fileHash,storage_path:path,extracted_text:extractedText});}
- catch(error){await deps.remove(path).catch(()=>{});throw error;}
+ let row;try{[row]=await deps.db('studkab_request_attachments','POST',{id:attachmentId,request_id:input.id,student_id:user.id,category,supersedes,file_name:name,content_type:type,size_bytes:size,file_hash:fileHash,storage_path:path,extracted_text:extractedText});}
+ catch(error){
+  // The insert may have committed before its response was lost. Never delete
+  // bytes until a successful read proves that no metadata references them.
+  let saved;
+  try{saved=await deps.db('studkab_request_attachments?id=eq.'+attachmentId+'&request_id=eq.'+input.id+'&select=id,category,file_name,size_bytes,file_hash,storage_path');}
+  catch{throw error;}
+  if(!Array.isArray(saved))throw error;
+  if(!saved.length){await deps.remove(path).catch(()=>{});throw error;}
+  row=saved[0];
+  if(row.storage_path!==path||row.file_hash!==fileHash)throw error;
+ }
  return {status:200,data:{attachment:{id:row.id,category:row.category,file_name:row.file_name,size_bytes:row.size_bytes,file_hash:row.file_hash}}};
 }

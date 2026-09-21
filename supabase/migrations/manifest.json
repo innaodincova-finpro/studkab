@@ -190,6 +190,12 @@
       "name": "c079_request_deletion",
       "file": "20260920111220_c079_request_deletion.sql",
       "sha256": "07b5d3208cc334b44f71db62c1d642ea62317f23becd7669c73f3c53e3f453d6"
+    },
+    {
+      "version": "20260921050532",
+      "name": "c080_request_resubmission",
+      "file": "20260921050532_c080_request_resubmission.sql",
+      "sha256": "4e9d6204a6844f451dd735acb1bc4b78606794a4fe0ffa66388f8e58e7e50cd9"
     }
   ]
 }

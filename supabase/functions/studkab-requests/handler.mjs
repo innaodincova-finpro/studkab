@@ -75,6 +75,20 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     const result=await db('rpc/delete_studkab_request','POST',{p_request:id,p_actor:user.id,p_reason:reason});
     return json(result);
    }
+   if(input.action==='request-state'||input.action==='update-request'){
+    if(typeof isMember!=='function'||await isMember(user.id)!==true)return json({error:'Нет доступа'},403);
+    if(!/^[a-f0-9-]{36}$/i.test(String(input.id||'')))return json({error:'Неверная заявка'},400);
+    const [row]=await db('studkab_requests?select=id,number,payload&deleting_at=is.null&id=eq.'+input.id+'&student_id=eq.'+user.id);
+    if(!row)return json({error:'Заявка не найдена'},404);
+    if(input.action==='request-state')return json({payload:row.payload});
+    let payload;try{payload=validatePayload(input.payload);}catch(e){return json({error:e.message},400);}
+    if(!input.expectedPayload||typeof input.expectedPayload!=='object')return json({error:'Откройте заявку заново'},400);
+    const result=await db('rpc/update_studkab_request','POST',{p_request:input.id,p_student:user.id,p_expected:input.expectedPayload,p_content:payload});
+    if(result.missing)return json({error:'Заявка не найдена'},404);
+    if(result.conflict)return json({error:'Заявка изменена в другом окне. Откройте её заново'},409);
+    if(result.locked)return json({error:'Подготовка уже началась. Согласуйте изменения с исполнителем'},409);
+    return json({...result,saved:true});
+   }
    if(input.action==='submit'){
     // C-054: заявку подаёт только студент, которому исполнитель выдал доступ.
     if(typeof isMember!=='function'||(await isMember(user.id))!==true)return json({error:'Подача заявок открывается после приглашения исполнителя. Попросите у исполнителя приглашение.'},403);
@@ -106,7 +120,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     if(id!=null&&!/^[a-f0-9-]{36}$/.test(id))return json({error:'Неверный номер'},400);
     const after=input.after??0;
     if(!Number.isSafeInteger(after)||after<0)return json({error:'Неверная страница'},400);
-    const rows=await db('studkab_requests?select=id,number,payload,created_at&deleting_at=is.null&order=number.asc&limit=100'+(id?'&id=eq.'+id:'&number=gt.'+after));
+    const rows=await db('studkab_requests?select=id,number,payload,created_at,revision&deleting_at=is.null&order=number.asc&limit=100'+(id?'&id=eq.'+id:'&number=gt.'+after));
     if(input.includeDeliveryState===true){
      // Bounded per-request reads avoid silently truncating history across requests.
      for(let i=0;i<rows.length;i+=10)await Promise.all(rows.slice(i,i+10).map(async row=>{

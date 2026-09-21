@@ -972,19 +972,26 @@ async function requestFilePayload(file){
 async function uploadRequestFiles(wrap,requestId,button){
   var fields=Array.from(wrap.querySelectorAll('[data-request-file]')).filter(function(x){return x.files&&x.files[0];});
   var listed=await Oblako.requestApi({action:'attachment-list',id:requestId});
-  var existing=new Set((listed.attachments||[]).map(function(x){return x.file_hash;}));
+  var active=listed.attachments||[];
+  var existing=new Set(active.map(function(x){return x.file_hash;}));
   var saved=existing.size;
   for(var i=0;i<fields.length;i++){
     button.textContent='Загружаем файл '+(i+1)+' из '+fields.length+'…';
-    var payload=await requestFilePayload(fields[i].files[0]);if(existing.has(payload.fileHash))continue;payload.action='attachment-upload';payload.id=requestId;payload.category=fields[i].dataset.requestFile;
+    var payload=await requestFilePayload(fields[i].files[0]);payload.category=fields[i].dataset.requestFile;
+    if(active.some(function(x){return x.file_hash===payload.fileHash&&x.category===payload.category;}))continue;
+    var prior=active.filter(function(x){return x.category===payload.category;});
+    if(prior.length>1)throw Error('В этой категории несколько старых файлов. Согласуйте замену с исполнителем');
+    if(prior.length)payload.replacesId=prior[0].id;
+    payload.action='attachment-upload';payload.id=requestId;
     await Oblako.requestApi(payload);
-    existing.add(payload.fileHash);saved++;
+    existing.add(payload.fileHash);if(!prior.length)saved++;
   }
   return saved;
 }
 function openRequest(workId){
   var w = work(workId); if (!w) return;
   var r = w.req;
+  var originalState=r.serverId?Oblako.requestApi({action:'request-state',id:r.serverId}).then(function(x){return x;},function(e){return {error:e};}):null;
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>'+
     '<h2>Заявка на черновик</h2>'+
@@ -995,13 +1002,13 @@ function openRequest(workId){
       '<textarea id="rqOrg" style="min-height:90px" placeholder="Название, сфера деятельности, что известно">'+esc(r.org||"")+'</textarea></div>'+
     '<div class="field"><label>Особенности методички</label>'+
       '<textarea id="rqNotes" style="min-height:90px" placeholder="Чем требования кафедры отличаются от обычных">'+esc(r.notes||"")+'</textarea></div>'+
-    '<div class="field"><label>Материалы к заявке</label><p class="hint">DOCX, PDF или TXT, до 5 МБ каждый. Файлы сохраняются в закрытом хранилище и доступны только вам и исполнителю.</p>'+
+    '<div class="field"><label>Материалы к заявке</label><p class="hint">DOCX, PDF или TXT, до 5 МБ каждый. Новый файл в заполненной категории заменяет текущую редакцию; прежняя сохраняется в истории. Файлы доступны только вам и исполнителю.</p>'+
       '<label class="mini">Задание<input type="file" data-request-file="assignment" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
       '<label class="mini">Методические указания<input type="file" data-request-file="methodology" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
       '<label class="mini">Исходные данные<input type="file" data-request-file="data" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
       '<label class="mini">Источники<input type="file" data-request-file="sources" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label></div>'+
     '<div class="infobox">Вуз и кафедра берутся из «Профиль → Данные студента». Дисциплина и руководитель указываются внутри работы: «Оформление документа → Изменить».</div>'+
-    '<div class="hint">Заявка сохранится в реестре исполнителя. Уведомление поступит ему через Telegram. Почтовые уведомления пока не подключены.</div>'+
+    '<div class="hint">Заявка сохранится в реестре исполнителя. О новой заявке он получит уведомление в Telegram. Изменения существующей заявки появятся при обновлении реестра. Почтовые уведомления пока не подключены.</div>'+
     '<div class="rowbtns">'+
       '<button type="button" class="b b-main" data-send="direct">Отправить заявку исполнителю</button>'+
       '<button type="button" class="b b-alt" data-send="copy">Скопировать текст</button>'+
@@ -1034,12 +1041,14 @@ function openRequest(workId){
       if (!window.Oblako || !Oblako.requestApi) { toast("Вход временно недоступен"); return; }
       var expectedData = D;
       btn.disabled = true; btn.textContent = "Отправляем…";
-      var submitPromise=r.serverId?Promise.resolve({saved:true,id:r.serverId,number:r.number}):Oblako.requestApi({action:"submit",payload:requestPayload(probe)});
+      var submitPromise=r.serverId?originalState.then(function(state){if(state.error)throw state.error;return Oblako.requestApi({action:'update-request',id:r.serverId,expectedPayload:state.payload,payload:requestPayload(probe)});}):Oblako.requestApi({action:'submit',payload:requestPayload(probe)});
       submitPromise.then(async function(result){
         if (D !== expectedData) throw new Error("Кабинет изменился. Откройте заявку заново");
         if (!result.saved || !result.id || !result.number) throw new Error("Сохранение не подтверждено. Повторите отправку");
         if(!r.serverId)change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.serverId=result.id;r.number=result.number;});
+        originalState=Promise.resolve({payload:requestPayload(probe)});
         var uploaded=await uploadRequestFiles(wrap,result.id,btn);
+        if(D!==expectedData)throw Error("Кабинет изменился. Проверьте отправку после входа");
         change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.sent=today();r.sentBy="direct";r.attachments=uploaded;});
         wrap.remove();render();toast("Заявка передана исполнителю. Номер заявки: " + result.number);
       }).catch(function(e){toast(e.message || "Не удалось отправить. Повторите попытку");})

@@ -62,7 +62,7 @@ test('direct request confirms only server acknowledgement and keeps retry ID',as
  await page.evaluate(()=>{Oblako.requestApi=async body=>{requestsSeen.push(body);throw Error('Сеть недоступна');};openRequest('w-direct');});
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
  await expect(page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true})).toBeEnabled();
- expect(await page.evaluate(()=>requestsSeen.map(x=>x.action))).toEqual(['submit','attachment-list','attachment-list']);
+ expect(await page.evaluate(()=>requestsSeen.map(x=>x.action))).toEqual(['submit','attachment-list','request-state']);
  expect(await page.evaluate(()=>requestsSeen.filter(x=>x.action==='submit').map(x=>x.payload.id))).toEqual(['rq-direct']);
  expect(await page.evaluate(()=>D.works[0].req.number)).toBe(42);
 });
@@ -74,10 +74,11 @@ test('cloud inbox repeated load preserves executor document and notes',async({pa
   Oblako.requestApi=async()=>({rows:[{id,number:42,payload:{id:'student-request',t:'Тема',cn:'test'}}],next:null});
   await receiveInbox();
   item(id).note='Заметка исполнителя';item(id).doc={marker:'doc'};item(id).status='done';
+  Oblako.requestApi=async()=>({rows:[{id,number:42,revision:1,payload:{id:'student-request',t:'Новая тема',cn:'test'}}],next:null});
   await receiveInbox();
   return {count:D.items.length,item:item(id)};
  });
- expect(result.count).toBe(1);expect(result.item.note).toBe('Заметка исполнителя');
+ expect(result.item.topic).toBe('Новая тема');expect(result.count).toBe(1);expect(result.item.note).toBe('Заметка исполнителя');
  expect(result.item.doc.marker).toBe('doc');expect(result.item.status).toBe('done');
 });
 test('password entry and logged-out notifications are usable on a narrow screen',async({page})=>{
@@ -113,4 +114,27 @@ test('storage mode remains consistent when reopening profile after cloud login',
   await page.evaluate(()=>{Oblako.mode='local';Oblako.statusText=()=> 'только на этом устройстве';render();});
   await expect(page.locator('#cloudBadge')).toHaveText('Хранение на устройстве');
  }
+});
+test('existing request updates server fields and explicitly replaces assignment',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  D.works=[{id:'w-revise',topic:'Исправленная тема',format:{univ:'Тестовый вуз'},req:{id:'rq-revise',serverId:'11111111-1111-4111-8111-111111111111',number:9,contact:'test'}}];
+  window.requestsSeen=[];
+  Oblako.requestApi=async body=>{
+   requestsSeen.push(body);
+   if(body.action==='request-state')return {payload:{id:'rq-revise',t:'Старая тема'}};
+   if(body.action==='attachment-list')return {attachments:[{id:'22222222-2222-4222-8222-222222222222',category:'assignment',file_hash:'a'.repeat(64)}]};
+   if(body.action==='update-request')return {saved:true,id:body.id,number:9};
+   return {attachment:{id:'33333333-3333-4333-8333-333333333333'}};
+  };
+  openRequest('w-revise');
+ });
+ await page.locator('[data-request-file="assignment"]').setInputFiles({name:'assignment.txt',mimeType:'text/plain',buffer:Buffer.from('New assignment')});
+ await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>D.works[0].req.sentBy)).toBe('direct');
+ const calls=await page.evaluate(()=>requestsSeen);
+ expect(calls.map(x=>x.action)).toEqual(['request-state','update-request','attachment-list','attachment-upload']);
+ expect(calls[1].payload.t).toBe('Исправленная тема');expect(calls[1].payload.u).toBe('Тестовый вуз');
+ expect(calls[3].replacesId).toBe('22222222-2222-4222-8222-222222222222');
+ expect(await page.evaluate(()=>D.works[0].req.attachments)).toBe(1);
 });

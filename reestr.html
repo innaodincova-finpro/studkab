@@ -1888,14 +1888,14 @@ async function receiveInbox() {
       if(!Array.isArray(result.rows))throw new Error("Не удалось прочитать входящие");
       result.rows.forEach(function(row){
         var rec=fromPayload(Object.assign({},row.payload,{id:row.id}));
-        rec.requestNumber=row.number;
+        rec.requestNumber=row.number;rec.submissionRevision=row.revision||0;
         if(row.deliveryState&&typeof row.deliveryState.checkedAt==='string'&&Object.prototype.hasOwnProperty.call(row.deliveryState,'last'))rec.deliveryState=row.deliveryState;
         received.push(rec);
       });
       cursor=result.next;
     } while(cursor && !match);
     var count=0;
-    received.forEach(function(rec){var existing=item(rec.id);if(!existing){D.items.unshift(rec);refIntake(rec);count++;}else if(rec.deliveryState){existing.deliveryState=rec.deliveryState;}});
+    received.forEach(function(rec){var existing=item(rec.id);if(!existing){D.items.unshift(rec);refIntake(rec);count++;}else{if(rec.submissionRevision>(existing.submissionRevision||0))mergeInto(existing,rec);if(rec.deliveryState)existing.deliveryState=rec.deliveryState;}});
     var stored=save();
     if(match && item(match[1])){openId=match[1];tab="list";}
     if(stored && match)history.replaceState(null,"",location.pathname+location.search);
