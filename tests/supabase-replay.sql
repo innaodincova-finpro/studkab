@@ -18,6 +18,7 @@ begin
     'studkab_push_deliveries',
     'studkab_push_subscriptions',
     'studkab_request_config',
+    'studkab_request_payload_history',
     'studkab_requirement_passports',
     'studkab_requests',
     'studkab_result_reviews',
@@ -46,11 +47,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 22 then
-    raise exception 'Expected 22 STUDKAB tables, found %', table_count;
+  if table_count <> 23 then
+    raise exception 'Expected 23 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 22 then
-    raise exception 'RLS enabled on only % of 22 STUDKAB tables', rls_count;
+  if rls_count <> 23 then
+    raise exception 'RLS enabled on only % of 23 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';
@@ -182,3 +183,16 @@ end
 $c054$;
 
 select 'PASS: clean migration replay, schema inventory, RLS and cron isolation verified' as result;
+
+-- C-080: the new updater must remain service-only after complete replay.
+do $$
+begin
+ if to_regprocedure('public.update_studkab_request(uuid,uuid,jsonb,jsonb)') is null then
+  raise exception 'C-080 update function missing';
+ end if;
+ if has_function_privilege('anon','public.update_studkab_request(uuid,uuid,jsonb,jsonb)','EXECUTE')
+ or has_function_privilege('authenticated','public.update_studkab_request(uuid,uuid,jsonb,jsonb)','EXECUTE')
+ or not has_function_privilege('service_role','public.update_studkab_request(uuid,uuid,jsonb,jsonb)','EXECUTE') then
+  raise exception 'C-080 update privileges incorrect';
+ end if;
+end $$;

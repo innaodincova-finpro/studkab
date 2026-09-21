@@ -58,6 +58,16 @@ export async function attachmentAction(input,user,deps){
  const extractedText=await deps.upload(path,type,encoded,size,fileHash);
  if(typeof extractedText!=='string'||!extractedText.trim()||extractedText.length>500000)throw Error('Extraction unavailable');
  let row;try{[row]=await deps.db('studkab_request_attachments','POST',{id:attachmentId,request_id:input.id,student_id:user.id,category,supersedes,file_name:name,content_type:type,size_bytes:size,file_hash:fileHash,storage_path:path,extracted_text:extractedText});}
- catch(error){await deps.remove(path).catch(()=>{});throw error;}
+ catch(error){
+  // The insert may have committed before its response was lost. Never delete
+  // bytes until a successful read proves that no metadata references them.
+  let saved;
+  try{saved=await deps.db('studkab_request_attachments?id=eq.'+attachmentId+'&request_id=eq.'+input.id+'&select=id,category,file_name,size_bytes,file_hash,storage_path');}
+  catch{throw error;}
+  if(!Array.isArray(saved))throw error;
+  if(!saved.length){await deps.remove(path).catch(()=>{});throw error;}
+  row=saved[0];
+  if(row.storage_path!==path||row.file_hash!==fileHash)throw error;
+ }
  return {status:200,data:{attachment:{id:row.id,category:row.category,file_name:row.file_name,size_bytes:row.size_bytes,file_hash:row.file_hash}}};
 }

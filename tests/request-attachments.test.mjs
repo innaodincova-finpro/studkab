@@ -8,6 +8,7 @@ function deps(){let uploaded=0,removed=[];let inserted=[];return {get uploaded()
  if(path.startsWith('studkab_requirement_passports?'))return [];
  if(path==='studkab_request_attachments'&&method==='POST'){inserted.push(body);return [body];}
  if(path.startsWith('studkab_request_attachments?request_id='))return [];
+ if(path.startsWith('studkab_request_attachments?id=')&&path.includes('&select=id,'))return [];
  if(path.startsWith('studkab_request_attachments?id='))return [{storage_path:student.id+'/'+request+'/file',file_name:'a.txt'}];
  throw Error('unexpected '+path);
 }}}
@@ -23,3 +24,23 @@ test('migration keeps files private, metadata service-only and concurrent count 
 test('passport fingerprint initializes a document before DraftEditor reads its order',()=>{const html=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');assert.match(html,/async function passportFingerprint\(x\)\{\s*docOf\(x\);\s*var bytes=new TextEncoder\(\)\.encode\(DraftEditor\.basis\(x\)\)/);});
 test('editor keeps immutable student attachments out of manual input fields',()=>{const js=fs.readFileSync(new URL('../draft-editor.js',import.meta.url),'utf8');assert.match(js,/function editableInputs\(x\)/);assert.match(js,/function form\(x\)\{\s*var p=editableInputs\(x\)/);assert.match(js,/function read\(w,x\)\{var p=editableInputs\(x\)/);assert.match(js,/if\(fin\)fin\.value=editableInputs\(x\)\.finance/);});
 test('editor removes legacy attachment copies from manual fields before rendering',()=>{const js=fs.readFileSync(new URL('../draft-editor.js',import.meta.url),'utf8'),context={window:{},esc:s=>String(s),DraftQuality:{inputs:()=>({}),financial:()=>false,extended:()=>false,headers:[]}};vm.runInNewContext(js,context);const attachment='immutable attachment text',separator='\n\n--- ФАЙЛЫ СТУДЕНТА ---\n\n',x={org:'Test',requirements:'Requirement',doc:{inputs:{materials:attachment+separator+attachment,sources:attachment},attachmentMaterials:attachment,attachmentSources:attachment}};const html=context.window.DraftEditor.form(x);assert.doesNotMatch(html,/immutable attachment text/);assert.equal(x.doc.inputs.materials,attachment+separator+attachment);assert.equal(x.doc.inputs.sources,attachment);});
+
+test('lost insert response keeps a committed attachment and confirms the saved row',async()=>{
+ const d=deps(),original=d.db;let saved;
+ d.db=async(path,method,body)=>{
+  if(path==='studkab_request_attachments'&&method==='POST'){saved=body;throw Error('response lost');}
+  if(path.startsWith('studkab_request_attachments?id=')&&path.includes('&select=id,'))return [saved];
+  return original(path,method,body);
+ };
+ const result=await attachmentAction(valid,student,d);
+ assert.equal(result.status,200);assert.equal(result.data.attachment.id,saved.id);assert.equal(d.removed.length,0);
+});
+test('unknown metadata outcome leaves uploaded bytes intact for reconciliation',async()=>{
+ const d=deps(),original=d.db;
+ d.db=async(path,method,body)=>{
+  if(path==='studkab_request_attachments'&&method==='POST')throw Error('response lost');
+  if(path.startsWith('studkab_request_attachments?id=')&&path.includes('&select=id,'))throw Error('read unavailable');
+  return original(path,method,body);
+ };
+ await assert.rejects(()=>attachmentAction(valid,student,d),/response lost/);assert.equal(d.removed.length,0);
+});
