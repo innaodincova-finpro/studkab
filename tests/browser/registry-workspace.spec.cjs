@@ -146,6 +146,7 @@ for(const width of [390,1440])test('C081 compact passport preserves full require
  const panel=page.locator('#request-panel-requirements');
  await expect(panel.getByText('25–30 страниц основного текста',{exact:true})).toBeVisible();
  await expect(panel.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
+ await page.screenshot({path:'test-results/c081-compact-'+width+'.png',fullPage:true});
  const originals=panel.locator('.requirement-original');await expect(originals).not.toHaveAttribute('open','');
  await originals.locator('summary').click();await expect(originals).toHaveAttribute('open','');
  await expect(originals).toContainText('Полный исходный текст заявки. '.repeat(25).trim());
@@ -153,5 +154,5 @@ for(const width of [390,1440])test('C081 compact passport preserves full require
  await details.locator('summary').focus();await page.keyboard.press('Enter');await expect(details).toHaveAttribute('open','');
  expect(await page.evaluate(()=>JSON.stringify(D.items[0])===c081Before)).toBe(true);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- await page.screenshot({path:'/tmp/c081-'+width+'.png',fullPage:true});
+ await page.screenshot({path:'test-results/c081-expanded-'+width+'.png',fullPage:true});
 });
