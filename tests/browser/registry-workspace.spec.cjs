@@ -156,3 +156,23 @@ for(const width of [390,1440])test('C081 compact passport preserves full require
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:'test-results/c081-expanded-'+width+'.png',fullPage:true});
 });
+
+for(const width of [390,1440])test('C082 semantic passport has distinct labels and keeps originality unresolved at '+width,async({page})=>{
+ const {defaultPassport}=await import('../../supabase/functions/studkab-requests/requirements.mjs');
+ const payload={k:'Курсовая работа',d:'Управление проектами',org:'Учебная организация',
+  rq:'Учебный тест. 25–30 страниц основного текста: введение 2, теория 6–7, анализ 8–10, рекомендации 7–8, заключение 2. Источники: фрагменты S1–S5. Оригинальность не проверена, порог не задан.',
+  mn:'MGMT-02, редакция 2. Использовать обновлённое задание: разделы 2 / 6–7 / 8–10 / 7–8 / 2 страницы (25–29, в пределах 25–30). Корпус: S1–S5 и данные организации. Без платной генерации.',fm:{fn:'Times New Roman',sz:14}};
+ await seed(page);await page.setViewportSize({width,height:1000});
+ await page.evaluate(({passport,payload})=>{const x=D.items[0];x.requirements=payload.rq;x.methodNotes=payload.mn;x.passports=[{...passport,id:'semantic',revision:3,status:'draft'}];openId=x.id;render();},{passport:defaultPassport(payload),payload});
+ await page.getByRole('tab',{name:'Требования',exact:true}).click();
+ const panel=page.locator('#request-panel-requirements');
+ await expect(panel.getByText('Методические указания',{exact:true})).toBeVisible();
+ await expect(panel.getByText('введение 2, теория 6–7, анализ 8–10, рекомендации 7–8, заключение 2',{exact:true})).toBeVisible();
+ await expect(panel.getByText(/Порог в заявке не задан\. Проверка не проводилась/)).toBeVisible();
+ await expect(panel.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.evaluate(()=>{document.getElementById('toast').style.display='none';});
+ await page.screenshot({path:'test-results/c082-passport-'+width+'.png',fullPage:true});
+ await panel.locator('.requirement-original summary').click();
+ await expect(panel.locator('.requirement-original')).toContainText(payload.mn);
+});

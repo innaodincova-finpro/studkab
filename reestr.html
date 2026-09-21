@@ -1943,7 +1943,7 @@ function deliveryHistory(x){
 function requestWorkflow(x){
  var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[],hasDocument=!!(x.doc&&(x.doc.order||[]).some(function(c){var part=(x.doc.structure||{})[c.id]||{};return String(part.text||'').trim()||(Array.isArray(part.figures)&&part.figures.length);})),reviewCurrent=false;
  if(hasDocument&&x.doc&&x.doc.review)try{reviewCurrent=x.doc.review===DraftQuality.stamp(x);}catch(e){reviewCurrent=false;}
- return RequestWorkflow.derive({cancelled:x.status==='off',delivered:!!(window.StudResults&&StudResults.isCurrentDelivery&&StudResults.isCurrentDelivery(x)),hasPassport:!!p,passportUnresolved:!!unresolved.length,passportBlocker:unresolved.length?'Не указано: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '):'',passportApproved:!!p&&p.status==='approved',hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
+ return RequestWorkflow.derive({cancelled:x.status==='off',delivered:!!(window.StudResults&&StudResults.isCurrentDelivery&&StudResults.isCurrentDelivery(x)),hasPassport:!!p,passportUnresolved:!!unresolved.length,passportBlocker:unresolved.length?'Требует уточнения: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '):'',passportApproved:!!p&&p.status==='approved',hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
 }
 function workflowSteps(w){return '<ol class="workflow-steps" aria-label="Этапы заявки">'+w.steps.map(function(s,n){var step=n+1,state=w.complete||step<w.step?'done':step===w.step?'current':'';return '<li class="'+state+'"><span>'+step+'.</span> '+esc(s.label)+'</li>';}).join('')+'</ol>';}
 function workflowCard(x){var w=requestWorkflow(x);return card(workflowSteps(w)+lab(w.complete?'Маршрут завершён':'Следующее действие · этап '+w.step+' из 5')+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p>'+(w.blocker?'<div class="warnbar workflow-blocker">'+esc(w.blocker)+'</div>':'')+(w.action?'<button type="button" class="btn" data-act="'+w.action+'" data-id="'+esc(x.id)+'">'+esc(w.label)+'</button>':''),'workflow-next');}
@@ -1981,6 +1981,7 @@ async function loadAttachmentContext(x){
 }
 function passportItemView(q){
  var label=PASSPORT_ITEM_LABEL[q.id]||PASSPORT_CATEGORY[q.category]||q.category;
+ if(q.id==='METHODOLOGY'&&/^Методические указания:/.test(q.text||''))label='Методические указания';
  var full=passportItemText(q),value=full.replace(/^[^:]+:\s*/,''),missing=/не указано|требуется уточнить/i.test(full);
  var long=value.length>210;
  return '<div class="passport-item'+(missing?' passport-missing':'')+'"><span>'+esc(label)+'</span>'+

@@ -60,10 +60,14 @@ export function statedRequirements(payload={}){
 
 export function fillMissingDraft(passport,payload){
  if(passport.status!=='draft')return passport;
- const facts=statedRequirements(payload);
+ const facts=statedRequirements(payload),semantic=semanticRequirements(payload);
  let changed=false;
  const labels={VOLUME:'Объём',SOURCES:'Источники'};
  const items=passport.items.map(item=>{
+  const replacement=semantic[item.id];
+  if(replacement&&item.text===replacement.previous){
+   changed=true;return {...item,text:replacement.text,source:replacement.source};
+  }
   const label=labels[item.id],fact=facts[item.id];
   if(!label||!fact||item.text!==label+': Не указано — требуется уточнить')return item;
   changed=true;return {...item,text:label+': '+fact.text,source:fact.source};
@@ -71,12 +75,38 @@ export function fillMissingDraft(passport,payload){
  return changed?{...passport,items}:passport;
 }
 
+// Interpret only explicit section lists. Never infer research methods or waive checks.
+export function semanticRequirements(payload={}){
+ const rq=typeof payload.rq==='string'?payload.rq.trim():'';
+ const mn=typeof payload.mn==='string'?payload.mn.trim():'';
+ const candidates=[...rq.matchAll(/страниц[а-я]*\s+основного\s+текста\s*:\s*([^.!?\n]+)/giu)];
+ const result={};
+ if(candidates.length===1&&/^введение\s+\d/iu.test(candidates[0][1])&&/заключение\s+\d/iu.test(candidates[0][1])){
+  const list=candidates[0][1].trim();
+  // A separately labelled structure may contradict the extracted list.
+  const sectionNumbers=list.match(/\d+\s*(?:[–—-]\s*\d+)?/gu)||[];
+  const noteSections=mn.match(/разделы\s+([\d\s/–—-]+)страницы?/iu);
+  const normalize=value=>value.replace(/\s/g,'').replace(/[–—]/g,'-');
+  const consistent=!noteSections||JSON.stringify(sectionNumbers.map(normalize))===JSON.stringify(noteSections[1].split('/').map(normalize));
+  if(consistent&&!/(?:^|[.!?\n]\s*)Структура\s*:/iu.test(mn)){
+   result.STRUCTURE={previous:'Структура: '+(mn||'Не указано — требуется уточнить'),text:'Структура: '+list,source:'Заявка студента'};
+   const notes=mn.replace(/Использовать обновл[её]нное задание:\s*разделы\s+[\d\s/–—-]+страницы?\s*\([^)]*\)\./iu,'Использовать обновлённое задание.');
+   if(notes&&notes!==mn)result.METHODOLOGY={previous:'Методология: '+mn,text:'Методические указания: '+notes,source:'Методические требования'};
+  }
+ }
+ // Keep the unresolved marker: a test label is never an approval exemption.
+ if(/Оригинальность не проверена, порог не задан\./u.test(rq)&&!/(?:\d\s*%|оригинальност[ьи]\s*(?:не менее|от|выше|>=|≥)\s*\d)/iu.test(rq+' '+mn)){
+  result.ANTIPLAGIARISM={previous:'Система и порог оригинальности: Не указано — требуется уточнить',text:'Оригинальность: Порог в заявке не задан. Проверка не проводилась. Требуется уточнить условие оригинальности перед утверждением паспорта. Это не подтверждение прохождения проверки.',source:'Заявка студента'};
+ }
+ return result;
+}
+
 export function defaultPassport(payload={}){
  const value=(v,missing='Не указано — требуется уточнить')=>typeof v==='string'&&v.trim()?v.trim():missing;
  const format=payload.fm&&typeof payload.fm==='object'?payload.fm:{};
  const formatting=formatRequirement(format);
  const facts=statedRequirements(payload);
- return {title:'Паспорт требований к работе',summary:'Автоматически создан по заявке. Перед запуском проверьте, дополните и утвердите каждый пункт.',items:[
+ const passport={title:'Паспорт требований к работе',summary:'Автоматически создан по заявке. Перед запуском проверьте, дополните и утвердите каждый пункт.',items:[
   {id:'WORK_TYPE',category:'method',required:true,text:'Вид работы: '+value(payload.k),source:'Заявка студента'},
   {id:'DISCIPLINE',category:'method',required:true,text:'Дисциплина: '+value(payload.d),source:'Заявка студента'},
   {id:'STRUCTURE',category:'method',required:true,text:'Структура: '+value(payload.mn),source:'Методические требования'},
@@ -88,6 +118,9 @@ export function defaultPassport(payload={}){
   {id:'ANTIPLAGIARISM',category:'measurable',required:true,text:'Система и порог оригинальности: Не указано — требуется уточнить',source:'Требования вуза'},
   {id:'TEACHER',category:'method',required:true,text:'Условия преподавателя: '+value(payload.rq),source:'Заявка студента'}
  ]};
+ const semantic=semanticRequirements(payload);
+ passport.items=passport.items.map(item=>semantic[item.id]?{...item,text:semantic[item.id].text,source:semantic[item.id].source}:item);
+ return passport;
 }
 
 export async function requirementAction(input,user,{db,config}){
@@ -106,7 +139,7 @@ export async function requirementAction(input,user,{db,config}){
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
   if(rows.length&&rows[0].source_fingerprint===input.sourceFingerprint&&filled===rows[0])return {status:200,data:{passports:rows,created:false}};
-  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Заполнены объём и/или источники из исходной заявки. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:filled.items}:defaultPassport(row.payload);
+  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Требования уточнены по исходной заявке без изменения исходных сведений. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:filled.items}:defaultPassport(row.payload);
   const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_source_fingerprint:input.sourceFingerprint});
   return {status:200,data:{passports:[created].concat(rows),created:true}};
  }
