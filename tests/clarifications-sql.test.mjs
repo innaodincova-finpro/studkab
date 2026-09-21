@@ -6,13 +6,18 @@ const migration=fs.readFileSync(new URL('../supabase/migrations/20260921165603_c
 const student='11111111-1111-4111-8111-111111111111',executor='22222222-2222-4222-8222-222222222222',stranger='33333333-3333-4333-8333-333333333333',request='44444444-4444-4444-8444-444444444444',question='55555555-5555-4555-8555-555555555555';
 const ids=['WORK_TYPE','DISCIPLINE','STRUCTURE','VOLUME','METHODOLOGY','FORMATTING','SOURCES','CALCULATIONS','ANTIPLAGIARISM','TEACHER'];
 const complete=()=>ids.map(id=>({id,category:'method',required:true,verified:true,text:'Условие из задания',source:'Методичка, с. 2',answer_ids:[]}));
-async function fixture(){const db=new PGlite();await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
- create table auth.users(id uuid primary key,email text);create table studkab_request_config(executor_email text);
+async function fixture(applyFix=true){const db=new PGlite();await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;
+ create table auth.users(id uuid primary key,email text,encrypted_password text);create table studkab_request_config(executor_email text);
  create table studkab_members(user_id uuid primary key);create table studkab_requests(id uuid primary key,student_id uuid,deleting_at timestamptz);
- insert into auth.users values('${student}','student@example.test'),('${executor}','executor@example.test'),('${stranger}','stranger@example.test');
+ insert into auth.users values('${student}','student@example.test',null),('${executor}','executor@example.test',null),('${stranger}','stranger@example.test',null);
  insert into studkab_request_config values('executor@example.test');insert into studkab_members values('${student}'),('${stranger}');
  insert into studkab_requests values('${request}','${student}',null);
- `);await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260914105509_studkab_requirement_passports.sql',import.meta.url),'utf8'));await db.exec(migration);return db;}
+ `);await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260914105509_studkab_requirement_passports.sql',import.meta.url),'utf8'));await db.exec(migration);
+ await db.exec(`grant usage on schema auth to service_role;
+ grant select,update on studkab_requests to service_role;
+ grant select on studkab_request_config,studkab_members to service_role;`);
+ if(applyFix)await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260921181451_c085_clarification_actor_permissions.sql',import.meta.url),'utf8'));
+ await db.exec('set role service_role');return db;}
 async function save(db,items=complete()){return (await db.query("select studkab_requirement_passport_save($1,$2,'Требования','Проверка',$3,$4) p",[request,executor,JSON.stringify(items),'a'.repeat(64)])).rows[0].p;}
 async function approve(db,p,actor=executor){return (await db.query('select studkab_requirement_passport_approve($1,$2,$3,$4,$5) p',[request,p.id,actor,JSON.stringify(p.items),'a'.repeat(64)])).rows[0].p;}
 const ask=(db,id=question)=>db.query('select studkab_clarification_ask($1,$2,$3,$4,$5) q',[request,executor,id,'ANTIPLAGIARISM','Какой порог указан преподавателем?']);
@@ -47,3 +52,21 @@ test('C084 SQL: absence, false required flag, unknown wording, missing source an
  }
  let p=await save(db);const old=await save(db);await assert.rejects(approve(db,p),/passport_changed/);assert.equal((await approve(db,old)).status,'approved');
  }finally{await db.close();}});
+
+test('C085: reproduce production denial, then grant only actor columns',async()=>{
+ const db=await fixture(false);try{
+  const p=await save(db);
+  await assert.rejects(ask(db),/permission denied for table users/);
+  await assert.rejects(approve(db,p),/permission denied for table users/);
+  assert.equal((await db.query('select count(*)::int n from studkab_clarifications')).rows[0].n,0);
+  await db.exec('reset role');
+  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260921181451_c085_clarification_actor_permissions.sql',import.meta.url),'utf8'));
+  await db.exec('set role service_role');
+  assert.equal((await approve(db,p)).status,'approved');await ask(db);await answer(db);
+  await assert.rejects(db.query('select encrypted_password from auth.users'),/permission denied/);
+  await assert.rejects(db.query("update auth.users set email='changed@example.test'"),/permission denied/);
+  for(const role of ['anon','authenticated']){
+   assert.equal((await db.query("select has_column_privilege($1,'auth.users','email','SELECT') p",[role])).rows[0].p,false);
+  }
+ }finally{await db.close();}
+});
