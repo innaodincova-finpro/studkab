@@ -5,6 +5,7 @@ const executor={id:'22222222-2222-4222-8222-222222222222',email:'executor@exampl
 const request='33333333-3333-4333-8333-333333333333';
 function deps(){let uploaded=0,removed=[];let inserted=[];return {get uploaded(){return uploaded},get inserted(){return inserted},get removed(){return removed},config:async()=>({executor_email:executor.email}),upload:async()=>{uploaded++;return 'trusted extracted text'},remove:async path=>removed.push(path),download:async()=>({url:'https://signed.example/file',expiresIn:300}),db:async(path,method,body)=>{
  if(path.startsWith('studkab_requests?'))return [{id:request,student_id:student.id}];
+ if(path.startsWith('studkab_requirement_passports?'))return [];
  if(path==='studkab_request_attachments'&&method==='POST'){inserted.push(body);return [body];}
  if(path.startsWith('studkab_request_attachments?request_id='))return [];
  if(path.startsWith('studkab_request_attachments?id='))return [{storage_path:student.id+'/'+request+'/file',file_name:'a.txt'}];

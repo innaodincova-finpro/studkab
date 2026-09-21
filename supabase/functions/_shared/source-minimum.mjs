@@ -1,3 +1,4 @@
+import {currentAttachments} from './current-attachments.mjs';
 // Deliberately narrow evidence extraction; unmatched prose is NOT verified.
 export function explicitMinima(text='') {
  const value=String(text).replace(/\r/g,'');
@@ -25,9 +26,9 @@ export function findings({attachments=[],items=[]}={}) {
 }
 export async function sourceMinimumGuard(db,request,items) {
  if(!Array.isArray(items)||items.some(item=>!item||typeof item.text!=='string'))throw Error('Не удалось прочитать требования паспорта');
- const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=category,file_name,file_hash,extracted_text');
+ const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
  if(!Array.isArray(attachments))throw Error('Не удалось проверить исходные требования');
- const result=findings({attachments,items});
+ const result=findings({attachments:currentAttachments(attachments),items});
  if(!result.conflicts.length)return null;
  const {source,passport}=result.conflicts[0];
  return {error:'Исходное задание требует минимум '+source.minimum+' источников, а паспорт — '+passport.minimum+'. Проверьте требования: '+(source.fileName||'приложенный документ')+'.',code:'SOURCE_MINIMUM_CONFLICT',findings:result.conflicts};

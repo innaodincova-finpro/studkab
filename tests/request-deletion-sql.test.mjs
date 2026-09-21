@@ -46,3 +46,29 @@ test('C079 SQL deletion is service-only, blocks unreconciled cost and removes th
  assert.equal((await db.query('select count(*)::int n from studkab_request_deletion_audit')).rows[0].n,1);
  await db.close();
 });
+
+test('C080 history is removed by the existing graph deletion, with triggers disabled',async()=>{
+ const db=new PGlite();
+ try{
+ await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create table auth.users(id uuid primary key);
+ create table studkab_requests(id uuid primary key,number bigint,payload jsonb,student_id uuid,client_id text);
+ create table studkab_request_attachments(id uuid primary key,request_id uuid,storage_path text,student_id uuid,category text);
+ create table studkab_requirement_passports(id uuid primary key,request_id uuid);
+ create table studkab_result_versions(id uuid primary key,request_id uuid);
+ create table studkab_result_reviews(id uuid primary key,version_id uuid);
+ create table studkab_results(id uuid primary key,request_id uuid,version_id uuid,review_id uuid);
+ create table studkab_gen_jobs(id uuid primary key,request_id text);
+ create table studkab_gen_parts(job_id uuid);
+ create table studkab_gen_attempts(request_id uuid,job_id uuid);
+ create table studkab_gen_recoveries(job_id uuid);
+ create table studkab_gen_reconciliations(request_ids uuid[]);`);
+ for(const file of ['20260920111220_c079_request_deletion.sql','20260921050532_c080_request_resubmission.sql'])await db.exec(fs.readFileSync(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
+ const r='11111111-1111-4111-8111-111111111111',actor='22222222-2222-4222-8222-222222222222';
+ await db.exec(`insert into auth.users values('${actor}'); insert into studkab_requests(id,student_id) values('${r}','${actor}'); insert into studkab_request_payload_history(request_id,payload) values('${r}','{}');`);
+ await db.query(`select set_config('request.jwt.claims','{"role":"service_role"}',false)`);
+ await db.query('select prepare_studkab_request_delete($1)',[r]);
+ const result=(await db.query('select delete_studkab_request($1,$2,$3) value',[r,actor,'Удаление тестовой заявки'])).rows[0].value;
+ assert.equal(result.counts.payload_history,1);
+ assert.equal((await db.query('select count(*)::int n from studkab_request_payload_history')).rows[0].n,0);
+ }finally{await db.close();}
+});
