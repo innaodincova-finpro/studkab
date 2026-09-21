@@ -196,6 +196,12 @@
       "name": "c080_request_resubmission",
       "file": "20260921050532_c080_request_resubmission.sql",
       "sha256": "4e9d6204a6844f451dd735acb1bc4b78606794a4fe0ffa66388f8e58e7e50cd9"
+    },
+    {
+      "version": "20260921165603",
+      "name": "c084_requirement_clarifications",
+      "file": "20260921165603_c084_requirement_clarifications.sql",
+      "sha256": "f3d7810346774b5dc2c6bf037a333370867134b0ce5a63c9f3accf5d81fb5920"
     }
   ]
 }

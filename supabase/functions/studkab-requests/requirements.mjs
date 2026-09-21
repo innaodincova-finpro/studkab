@@ -21,7 +21,9 @@ export function validatePassport(input){
    const id=text(item.id,80,'номер пункта',true);
    if(!/^[A-Za-z0-9_-]+$/.test(id)||seen.has(id))throw Error('Проверьте номер пункта '+(index+1));seen.add(id);
    if(!categories.has(item.category))throw Error('Проверьте категорию пункта '+(index+1));
-   return {id,category:item.category,required:item.required!==false,text:text(item.text,2000,'текст пункта',true),source:text(item.source,1000,'источник')};
+   const answer_ids=Array.isArray(item.answer_ids)?item.answer_ids:[];
+   if(answer_ids.length>100||answer_ids.some(x=>typeof x!=='string'||!/^[a-f0-9-]{36}$/i.test(x)))throw Error('Проверьте ответы студента');
+   return {verified:item.verified===true,answer_ids,id,category:item.category,required:item.required!==false,text:text(item.text,2000,'текст пункта',true),source:text(item.source,1000,'источник')};
   })
  };
 }
@@ -66,11 +68,11 @@ export function fillMissingDraft(passport,payload){
  const items=passport.items.map(item=>{
   const replacement=semantic[item.id];
   if(replacement&&item.text===replacement.previous){
-   changed=true;return {...item,text:replacement.text,source:replacement.source};
+   changed=true;return {...item,verified:false,answer_ids:[],text:replacement.text,source:replacement.source};
   }
   const label=labels[item.id],fact=facts[item.id];
   if(!label||!fact||item.text!==label+': Не указано — требуется уточнить')return item;
-  changed=true;return {...item,text:label+': '+fact.text,source:fact.source};
+  changed=true;return {...item,verified:false,answer_ids:[],text:label+': '+fact.text,source:fact.source};
  });
  return changed?{...passport,items}:passport;
 }
@@ -139,7 +141,7 @@ export async function requirementAction(input,user,{db,config}){
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
   if(rows.length&&rows[0].source_fingerprint===input.sourceFingerprint&&filled===rows[0])return {status:200,data:{passports:rows,created:false}};
-  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Требования уточнены по исходной заявке без изменения исходных сведений. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:filled.items}:defaultPassport(row.payload);
+  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Требования уточнены по исходной заявке без изменения исходных сведений. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:rows[0].source_fingerprint!==input.sourceFingerprint?filled.items.map(item=>({...item,verified:false,answer_ids:[]})):filled.items}:defaultPassport(row.payload);
   const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_source_fingerprint:input.sourceFingerprint});
   return {status:200,data:{passports:[created].concat(rows),created:true}};
  }
@@ -152,7 +154,8 @@ export async function requirementAction(input,user,{db,config}){
  if(input.action==='passport-approve'){
   const version=typeof input.passportId==='string'&&/^[a-f0-9-]{36}$/.test(input.passportId)?input.passportId:null;
   if(!version)return {status:400,data:{error:'Выберите версию паспорта'}};
-  if(passport.items.some(item=>item.required&&/не указано|требуется уточнить/i.test(item.text)))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
+  const required=['WORK_TYPE','DISCIPLINE','STRUCTURE','VOLUME','METHODOLOGY','FORMATTING','SOURCES','CALCULATIONS','ANTIPLAGIARISM','TEACHER'];
+  if(required.some(id=>!passport.items.some(q=>q.id===id))||passport.items.some(item=>(item.required||required.includes(item.id))&&(!item.verified||!item.source||/не указано|требуется уточнить|порог не задан|ожидается ответ/i.test(item.text))))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
   const [saved]=await db('studkab_requirement_passports?request_id=eq.'+request+'&id=eq.'+version+'&select=items&limit=1');
   if(!saved)return {status:409,data:{error:'Версия паспорта не найдена'}};
   const conflict=await sourceMinimumGuard(db,request,saved.items);

@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=12"></script><script src="draft-editor.js?v=8"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=12"></script><script src="request-workflow.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=1"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=12"></script><script src="draft-editor.js?v=8"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=12"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1933,7 +1933,7 @@ function viewList(){
 
 var PASSPORT_CATEGORY={method:'Требование методички',measurable:'Измеримая проверка',expert:'Предметная рекомендация',assumption:'Предположение'};
 var PASSPORT_ITEM_LABEL={WORK_TYPE:'Вид работы',DISCIPLINE:'Дисциплина',STRUCTURE:'Структура',VOLUME:'Объём',METHODOLOGY:'Методология',FORMATTING:'Оформление',SOURCES:'Источники',CALCULATIONS:'Расчёты',ANTIPLAGIARISM:'Оригинальность',TEACHER:'Условия преподавателя'};
-function passportUnresolved(p){return ((p&&p.items)||[]).filter(function(q){return q.required!==false&&/не указано|требуется уточнить/i.test(q.text||'');});}
+function passportUnresolved(p){return StudClarifications.unresolved(p&&p.items);}
 function deliveryHistory(x){
  var state=x.deliveryState,last=state&&state.last;
  if(!state)return '<p class="hint" data-delivery-history>Сведения о прежней передаче ещё не загружены. Нажмите «Получить заявки из кабинетов».</p>';
@@ -1990,19 +1990,20 @@ function passportItemView(q){
 function passportContent(x){
   var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
   if(!p)return lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>';
-  var items=Array.isArray(p.items)?p.items:[],unresolved=passportUnresolved(p),canApprove=p.status==='draft'&&!unresolved.length;
+  var items=Array.isArray(p.items)?p.items:[],unresolved=passportUnresolved(p),pending=(x.clarifications||[]).some(function(q){return !q.answer||!items.some(function(i){return i.id===q.item_id&&i.verified&&(i.answer_ids||[]).indexOf(q.id)>=0;});}),canApprove=p.status==='draft'&&!unresolved.length&&!pending;
   return lab('Паспорт требований · версия '+Number(p.revision||1))+
     '<div class="row" style="margin-bottom:8px"><span class="pill '+(p.status==='approved'?'p-ok':'p-och')+'">'+(p.status==='approved'?'утверждён':p.status==='stale'?'устарел':'проект')+'</span></div>'+
+    (pending?'<p class="hint">Есть вопросы без ответа или ответы, ещё не учтённые в этой версии требований.</p>':'')+
     (p.summary?'<details class="requirement-detail"><summary>О версии паспорта</summary><p>'+esc(p.summary)+'</p></details>':'')+
     (items.length?'<div class="passport-list">'+items.map(passportItemView).join('')+'</div>':'<p class="hint">Пункты пока не добавлены.</p>')+
     (p.status!=='approved'?'<p class="hint passport-warning">Паспорт не утверждён — платная подготовка запрещена.</p>':'')+
-    '<div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-revise" data-id="'+esc(x.id)+'">Новая версия</button>'+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'"'+(canApprove?'':' disabled title="Сначала заполните обязательные требования"')+'>Утвердить</button>':'')+'</div>';
+    '<div class="chips"><button type="button" class="chip" data-act="executor-clarifications" data-id="'+esc(x.id)+'">Вопросы студенту</button><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-revise" data-id="'+esc(x.id)+'">Новая версия</button>'+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'"'+(canApprove?'':' disabled title="Сначала заполните обязательные требования"')+'>Утвердить</button>':'')+'</div>';
 }
 function passportCard(x){ return card(passportContent(x)); }
 async function loadPassports(x){
  if(!window.Oblako||!Oblako.requestApi)throw Error('Войдите в аккаунт реестра');
  await loadAttachmentContext(x);
- var result=await Oblako.requestApi({action:'passport-ensure',id:x.id,sourceFingerprint:await passportFingerprint(x)});x.passports=result.passports||[];render();return x.passports;
+ var result=await Oblako.requestApi({action:'passport-ensure',id:x.id,sourceFingerprint:await passportFingerprint(x)});x.passports=result.passports||[];x.clarifications=(await Oblako.requestApi({action:'clarification-list',id:x.id})).questions||[];render();return x.passports;
 }
 async function requireApprovedPassport(x){
  if(!window.Oblako||!Oblako.requestApi)throw Error('UNAUTHORIZED');
@@ -2014,14 +2015,29 @@ async function requireApprovedPassport(x){
  if(!current||current.status!=='approved'||current.source_fingerprint!==sourceFingerprint)throw Error('PASSPORT_REQUIRED');
  return sourceFingerprint;
 }
-function editPassport(x,fullRevision){
+async function editPassport(x,fullRevision){
+ var identity=Oblako.identity();
  var p=(x.passports||[])[0]||{},items=Array.isArray(p.items)?p.items:[];
- function lines(category){return items.filter(function(q){return q.category===category;}).map(function(q){return q.text;}).join('\n');}
- var editable=items.map(function(q,n){return {item:q,index:n};}).filter(function(entry){return /не указано|требуется уточнить/i.test(entry.item.text||'');});
- if(fullRevision)editable=items.map(function(q,n){return {item:q,index:n};});
- var fields=items.length?editable.map(function(entry){var q=entry.item,n=entry.index;return '<div class="fld"><label>'+esc(PASSPORT_ITEM_LABEL[q.id]||PASSPORT_CATEGORY[q.category]||'Требование')+(q.source?' · '+esc(q.source):'')+'</label><textarea data-pp-item="'+n+'" class="needs-value">'+esc(q.text||'')+'</textarea><small>Замените слова «не указано» конкретным требованием. Если требования нет, так и напишите: «не требуется».</small></div>';}).join(''):Object.keys(PASSPORT_CATEGORY).map(function(k){return '<div class="fld"><label>'+PASSPORT_CATEGORY[k]+'</label><textarea data-pp="'+k+'">'+esc(lines(k))+'</textarea></div>';}).join('');
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>'+(fullRevision?'Новая версия требований':'Уточнить требования')+'</h3><p class="hint">'+(fullRevision?'Исправьте требования по исходным материалам. Сохранение создаст новую версию для отдельного утверждения.':'Исправьте только пункты, выделенные как неуточнённые. Повторно вводить остальные данные не нужно.')+'</p>'+fields+(fullRevision?'<div class="fld"><label for="passport-revision-reason">Основание изменения</label><textarea id="passport-revision-reason"></textarea></div>':'')+'<button type="button" class="btn" data-pp-save="1">Сохранить уточнения</button>');
- wrap.addEventListener('click',async function(e){if(!e.target.closest('[data-pp-save]'))return;var button=e.target.closest('[data-pp-save]'),all=items.map(function(q){return Object.assign({},q);});if(items.length){wrap.querySelectorAll('[data-pp-item]').forEach(function(area){var index=Number(area.dataset.ppItem),original=items[index]||{};all[index]=Object.assign({},original,{text:area.value.trim()});});}else{var n=0;wrap.querySelectorAll('[data-pp]').forEach(function(area){area.value.split(/\n+/).map(function(s){return s.trim();}).filter(Boolean).forEach(function(value){n++;all.push({id:'P'+n,category:area.dataset.pp,required:area.dataset.pp!=='assumption',text:value,source:''});});});}if(fullRevision&&!wrap.querySelector('#passport-revision-reason').value.trim())return toast('Укажите основание изменения требований');if(!all.length||all.some(function(q){return !q.text;}))return toast('Заполните все обязательные пункты');button.disabled=true;try{var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:p.title||'Требования к работе',summary:fullRevision?wrap.querySelector('#passport-revision-reason').value.trim():(p.summary||''),items:all},sourceFingerprint:await passportFingerprint(x)});x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));wrap.remove();render();toast('Уточнения сохранены. Проверьте следующий шаг.');}catch(err){toast(err.message||'Не удалось сохранить требования');}finally{button.disabled=false;}});
+ if(!items.length){try{await loadPassports(x);p=x.passports[0];items=p.items;}catch(e){toast(e.message);return;}}
+ var questions;
+ try{questions=(await Oblako.requestApi({action:'clarification-list',id:x.id})).questions||[];}catch(e){toast(e.message||'Не удалось прочитать уточнения');return;}
+ if(identity!==Oblako.identity())return toast('Аккаунт изменился. Откройте требования заново.');
+ var fields=items.map(function(q,n){
+  var related=questions.filter(function(a){return a.item_id===q.id;}),answers=related.filter(function(a){return a.answer;});
+  return '<details class="fold"'+(!q.verified?' open':'')+'><summary>'+esc(PASSPORT_ITEM_LABEL[q.id]||q.id)+'</summary><div class="in"><div class="fld"><label>Требование<textarea data-pp-item="'+n+'">'+esc(q.text||'')+'</textarea></label></div>'+related.map(function(a){return '<p style="white-space:pre-wrap;overflow-wrap:anywhere"><b>Вопрос:</b> '+esc(a.question)+'<br><b>Ответ:</b> '+esc(a.answer||'Ожидается ответ студента')+(a.answer?'<br><b>Основание ответа:</b> '+esc(a.answer_source):'')+'</p>';}).join('')+'<div class="fld"><label>Основание требования<textarea data-pp-source="'+n+'" placeholder="Документ, страница или проверенный ответ студента">'+esc(q.source||'')+'</textarea></label></div><label><input type="checkbox" data-pp-verified="'+n+'"'+(q.verified&&answers.every(function(a){return (q.answer_ids||[]).indexOf(a.id)>=0;})?' checked':'')+'> Проверено по указанному основанию'+(answers.length?' и ответам выше':'')+'</label></div></details>';
+ }).join('');
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Проверка требований</h3><p class="hint">Проверьте содержание и основание каждого пункта. Сохранение создаёт новую версию для отдельного утверждения. Повторно вводить остальные данные не нужно. Если сведений нет, оставьте пункт неподтверждённым и задайте вопрос студенту.</p>'+fields+'<div class="fld"><label>Основание новой версии<textarea id="passport-revision-reason" placeholder="Что уточнено и на основании чего"></textarea></label></div><button type="button" class="btn" data-pp-save="1">Сохранить уточнения</button>');
+ wrap.addEventListener('input',function(e){var n=e.target.getAttribute('data-pp-item');if(n===null)n=e.target.getAttribute('data-pp-source');if(n!==null)wrap.querySelector('[data-pp-verified="'+n+'"]').checked=false;});
+ wrap.addEventListener('click',async function(e){
+  var button=e.target.closest('[data-pp-save]');if(!button||button.disabled)return;
+  if(identity!==Oblako.identity()){wrap.remove();return toast('Аккаунт изменился. Откройте требования заново.');}
+  var reason=wrap.querySelector('#passport-revision-reason').value.trim();if(!reason)return toast('Укажите основание изменения требований');
+  var all=items.map(function(q,n){var verified=wrap.querySelector('[data-pp-verified="'+n+'"]').checked;return Object.assign({},q,{text:wrap.querySelector('[data-pp-item="'+n+'"]').value.trim(),source:wrap.querySelector('[data-pp-source="'+n+'"]').value.trim(),verified:verified,answer_ids:verified?questions.filter(function(a){return a.item_id===q.id&&a.answer;}).map(function(a){return a.id;}):[]});});
+  if(all.some(function(q){return !q.text||(q.verified&&!q.source);}))return toast('Заполните текст и основание проверенных пунктов');
+  button.disabled=true;
+  try{var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:p.title||'Требования к работе',summary:reason,items:all},sourceFingerprint:await passportFingerprint(x)});x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));wrap.remove();render();toast('Новая версия сохранена. Утверждение выполняется отдельно.');}
+  catch(err){toast(err.message||'Не удалось сохранить требования');}finally{button.disabled=false;}
+ });
 }
 
 function viewItem(id){
@@ -2514,6 +2530,7 @@ document.addEventListener("click", function(ev){
   if (act === "review-word") return StudResults.deliver(item(id),true);
   if (act === "deliver-result") return StudResults.deliver(item(id));
   if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
+  if(act==='executor-clarifications'){var cq=item(id);if(cq)StudClarifications.show({requestId:cq.id,executor:true,items:((cq.passports||[])[0]||{}).items||[],labels:PASSPORT_ITEM_LABEL,api:Oblako.requestApi,esc:esc,openModal:openModal,onChange:function(){return loadPassports(cq);}});return;}
   if (act === "passport-edit" || act === "passport-revise") {var pe=item(id);if(pe)editPassport(pe,act === "passport-revise");return;}
   if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;var unresolved=passportUnresolved(pv);if(unresolved.length){toast('Сначала уточните: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '));return;}passportFingerprint(pa).then(function(sourceFingerprint){return Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items},sourceFingerprint:sourceFingerprint});}).then(function(r){pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){toast(e.message||'Не удалось утвердить паспорт');});return;}
   if (act === "doc-open") return openDocBuilder(id);
