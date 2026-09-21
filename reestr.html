@@ -1984,7 +1984,7 @@ function passportItemView(q){
  var full=passportItemText(q),value=full.replace(/^[^:]+:\s*/,''),missing=/не указано|требуется уточнить/i.test(full);
  var long=value.length>210;
  return '<div class="passport-item'+(missing?' passport-missing':'')+'"><span>'+esc(label)+'</span>'+
-  (long?'<b>'+esc(value.slice(0,130))+'…</b><details class="requirement-detail"><summary>Подробнее</summary><p>'+esc(full)+'</p>'+(q.source?'<small>Основание: '+esc(q.source)+'</small>':'')+'</details>':'<b>'+esc(value)+'</b>');
+  (long?'<b>'+esc(value.slice(0,130))+'…</b><details class="requirement-detail"><summary>Подробнее</summary><p>'+esc(full)+'</p>'+(q.source?'<small>Основание: '+esc(q.source)+'</small>':'')+'</details>':'<b>'+esc(value)+'</b>')+'</div>';
 }
 function passportContent(x){
   var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
