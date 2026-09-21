@@ -61,7 +61,7 @@ test('explicit total and source restrictions survive extraction without invented
  const items=defaultPassport(inputFacts).items;
  assert.equal(items.find(x=>x.id==='VOLUME').text,'Объём: 25–30 страниц основного текста');
  assert.equal(items.find(x=>x.id==='SOURCES').text,'Источники: пять предоставленных учебных фрагментов S1–S5 и исходные данные; не выдавать за реальные публикации.');
- assert.match(items.find(x=>x.id==='ANTIPLAGIARISM').text,/Не указано/);
+ assert.match(items.find(x=>x.id==='ANTIPLAGIARISM').text,/Требуется уточнить/);
  assert.equal(statedRequirements({mn:'Введение 2 страницы; глава 8 страниц'}).VOLUME,null);
  assert.equal(statedRequirements({...inputFacts,mn:'Объём: 40 страниц'}).VOLUME,null);
  assert.equal(statedRequirements({...inputFacts,mn:'Источники: минимум 10 публикаций'}).SOURCES,null);
@@ -88,4 +88,40 @@ test('ensure persists repaired draft as a separate version and subsequent reads 
  const first=await requirementAction(request,user,deps);assert.equal(first.data.created,true);assert.equal(rows[1].items.find(x=>x.id==='VOLUME').text,'Объём: Не указано — требуется уточнить');
  assert.equal((await requirementAction(request,user,deps)).data.created,false);assert.equal(writes,1);
  assert.equal((await requirementAction(request,{...user,email:'student@example.test'},deps)).status,403);
+});
+
+const semanticInput={
+ rq:'Учебный тест MGMT-02. 25–30 страниц основного текста: введение 2, теория 6–7, анализ 8–10, рекомендации 7–8, заключение 2. Источники: пять учебных фрагментов S1–S5. Оригинальность не проверена, порог не задан.',
+ mn:'MGMT-02, редакция 2. Использовать обновлённое задание: разделы 2 / 6–7 / 8–10 / 7–8 / 2 страницы (25–29, в пределах 25–30). Корпус: S1–S5 и данные организации. Руководитель, город, кафедра и группа не заданы; не выдумывать. Без платной генерации.'
+};
+test('C082 separates stated structure and instructions without inventing research methods',()=>{
+ const snapshot=JSON.stringify(semanticInput),p=defaultPassport(semanticInput);
+ const structure=p.items.find(x=>x.id==='STRUCTURE'),method=p.items.find(x=>x.id==='METHODOLOGY');
+ assert.equal(structure.text,'Структура: введение 2, теория 6–7, анализ 8–10, рекомендации 7–8, заключение 2');
+ assert.equal(method.text,'Методические указания: MGMT-02, редакция 2. Использовать обновлённое задание. Корпус: S1–S5 и данные организации. Руководитель, город, кафедра и группа не заданы; не выдумывать. Без платной генерации.');
+ assert.equal(JSON.stringify(semanticInput),snapshot);
+ const conflict=defaultPassport({...semanticInput,mn:semanticInput.mn.replace('6–7','9–10')});
+ assert.equal(conflict.items.find(x=>x.id==='STRUCTURE').text,'Структура: '+semanticInput.mn.replace('6–7','9–10'));
+});
+test('C082 repairs legacy draft copies once and retains manual and approved versions',()=>{
+ const original={...defaultPassport({}),status:'draft'};
+ original.items=original.items.map(x=>x.id==='STRUCTURE'?{...x,text:'Структура: '+semanticInput.mn}:x.id==='METHODOLOGY'?{...x,text:'Методология: '+semanticInput.mn}:x);
+ const snapshot=JSON.stringify(original),fixed=fillMissingDraft(original,semanticInput);
+ assert.equal(JSON.stringify(original),snapshot);assert.notEqual(fixed,original);
+ assert.equal(fillMissingDraft(fixed,semanticInput),fixed);
+ assert.equal(fillMissingDraft({...original,status:'approved'},semanticInput).status,'approved');
+ const manual={...original,items:[{id:'STRUCTURE',text:'Структура: три главы'},{id:'METHODOLOGY',text:'Методология: интервью и анализ данных'}]};
+ assert.equal(fillMissingDraft(manual,semanticInput),manual);
+});
+test('C082 absence of originality threshold remains blocked even for a test',async()=>{
+ const p=defaultPassport(semanticInput),originality=p.items.find(x=>x.id==='ANTIPLAGIARISM');
+ assert.match(originality.text,/Порог в заявке не задан\. Проверка не проводилась/);
+ assert.equal(originality.required,true);assert.doesNotMatch(originality.text,/[0-9]+\s*%/);
+ let saved=false;
+ const result=await requirementAction({action:'passport-approve',id:'33333333-3333-4333-8333-333333333333',passportId:'44444444-4444-4444-8444-444444444444',passport:p},
+  {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async(path)=>{if(path.startsWith('studkab_requests?'))return [{payload:semanticInput}];saved=true;return [];}});
+ assert.equal(result.status,409);assert.equal(saved,false);
+ const conflicting=defaultPassport({...semanticInput,mn:semanticInput.mn+' Оригинальность не менее 70%.'});
+ assert.match(conflicting.items.find(x=>x.id==='ANTIPLAGIARISM').text,/Не указано/);
 });
