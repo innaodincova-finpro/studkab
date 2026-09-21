@@ -49,7 +49,7 @@ export function statedRequirements(payload={}){
    const raw=match[0].replace(/^Об[ъь][её]м\s*:\s*/iu,'');
    volumes.push({text:raw,source,key:raw.match(/\d+/g).join('-')});
   }
-  for(const match of body.matchAll(/(?:^|[.\n;]\s*)Источники\s*:\s*([^\n]+?)(?=\s*Оригинальность\b|\n|$)/giu)){
+  for(const match of body.matchAll(/(?:^|[.\n;]\s*)Источники\s*:\s*([^\n]+?)(?=\s*Оригинальность(?=\s|[:.,;]|$)|\n|$)/giu)){
    const raw=match[1].trim();
    if(raw&&raw.length<1900&&!/не указано|требуется уточнить|не заданы/i.test(raw))sources.push({text:raw,source,key:raw.toLowerCase().replace(/\s+/g,' ').replace(/[.\s]+$/,'')});
   }

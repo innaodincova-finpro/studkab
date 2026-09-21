@@ -60,7 +60,7 @@ const inputFacts={rq:'Учебный тест. 25–30 страниц основ
 test('explicit total and source restrictions survive extraction without invented originality',()=>{
  const items=defaultPassport(inputFacts).items;
  assert.equal(items.find(x=>x.id==='VOLUME').text,'Объём: 25–30 страниц основного текста');
- assert.match(items.find(x=>x.id==='SOURCES').text,/не выдавать за реальные публикации/);
+ assert.equal(items.find(x=>x.id==='SOURCES').text,'Источники: пять предоставленных учебных фрагментов S1–S5 и исходные данные; не выдавать за реальные публикации.');
  assert.match(items.find(x=>x.id==='ANTIPLAGIARISM').text,/Не указано/);
  assert.equal(statedRequirements({mn:'Введение 2 страницы; глава 8 страниц'}).VOLUME,null);
  assert.equal(statedRequirements({...inputFacts,mn:'Объём: 40 страниц'}).VOLUME,null);
