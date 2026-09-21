@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {findings,explicitMinima,sourceMinimumGuard} from '../supabase/functions/_shared/source-minimum.mjs';
-import {requirementAction} from '../supabase/functions/studkab-requests/requirements.mjs';
+import {requirementAction,defaultPassport} from '../supabase/functions/studkab-requests/requirements.mjs';
 import {resultAction} from '../supabase/functions/studkab-requests/results.mjs';
 import {handler} from '../supabase/functions/studkab-generation-api/handler.mjs';
 const id='11111111-1111-4111-8111-111111111111',hash='a'.repeat(64);
@@ -30,7 +30,7 @@ test('only explicit minimums count; availability, maximum, dates and unrelated p
  assert.equal(findings({attachments,items:[{text:'Не менее 10 источников'}]}).status,'no_detected_conflict');
 });
 test('approval uses persisted passport and blocks before mutation despite summary agreement',async()=>{
- const deps=setup();const result=await requirementAction({action:'passport-approve',id,passportId:id,sourceFingerprint:hash,passport:{summary:'Согласовано',items:[{...items[0],text:'Не менее 10 источников'}]}},user,deps);
+ const deps=setup();const result=await requirementAction({action:'passport-approve',id,passportId:id,sourceFingerprint:hash,passport:{summary:'Согласовано',items:defaultPassport({}).items.map(q=>({...q,text:q.id==='SOURCES'?'Не менее 10 источников':'Конкретное условие',source:'Задание, с. 2',verified:true}))}},user,deps);
  assert.equal(result.status,409);assert.equal(result.data.code,'SOURCE_MINIMUM_CONFLICT');assert.deepEqual(deps.writes,[]);
 });
 test('generation estimate and start block existing approved conflicting passport without reservation',async()=>{

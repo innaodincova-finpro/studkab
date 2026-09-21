@@ -1,3 +1,4 @@
+import {clarificationAction} from './clarifications.mjs';
 import {sameSecret} from '../_shared/secret-equal.mjs';
 import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
@@ -55,6 +56,9 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
    if(['deliver','result','prepare-result','review-result','result-review-state'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
+   }
+   if(['clarification-list','clarification-ask','clarification-answer'].includes(input.action)){
+    const r=await clarificationAction(input,user,{db,config,isMember});return json(r.data,r.status||200);
    }
    if(['passport-get','passport-ensure','passport-save','passport-approve'].includes(input.action)){
     const r=await requirementAction(input,user,{db,config});return json(r.data,r.status||200);

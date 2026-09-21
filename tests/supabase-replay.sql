@@ -20,6 +20,7 @@ begin
     'studkab_request_config',
     'studkab_request_payload_history',
     'studkab_requirement_passports',
+    'studkab_clarifications',
     'studkab_requests',
     'studkab_result_reviews',
     'studkab_result_versions',
@@ -47,11 +48,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 23 then
-    raise exception 'Expected 23 STUDKAB tables, found %', table_count;
+  if table_count <> 24 then
+    raise exception 'Expected 24 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 23 then
-    raise exception 'RLS enabled on only % of 23 STUDKAB tables', rls_count;
+  if rls_count <> 24 then
+    raise exception 'RLS enabled on only % of 24 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';
