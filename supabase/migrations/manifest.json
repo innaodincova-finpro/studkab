@@ -202,6 +202,10 @@
       "name": "c084_requirement_clarifications",
       "file": "20260921165603_c084_requirement_clarifications.sql",
       "sha256": "f3d7810346774b5dc2c6bf037a333370867134b0ce5a63c9f3accf5d81fb5920"
+    },
+    {
+      "file": "20260921181451_c085_clarification_actor_permissions.sql",
+      "sha256": "7d1f18e7b6b25d458e7c726ae3e2b6ba00efbf364cd9e0c90d1a6031f7f415b1"
     }
   ]
 }
