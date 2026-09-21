@@ -185,6 +185,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .passport-item span{color:var(--mut);font-size:11px}
 .passport-item b{margin-top:5px;font-weight:500;line-height:1.45}
 .passport-warning{margin:12px 0 0}
+.requirement-detail summary,.requirement-original summary{cursor:pointer;color:var(--blue);padding:10px 0;font-weight:600}
+.requirement-detail p{white-space:pre-wrap;line-height:1.55;overflow-wrap:anywhere;margin:6px 0 12px}
+.requirement-original{border-top:1px solid var(--line);margin-top:22px;padding-top:8px}
+.passport-missing{border-left:3px solid #b78137;padding-left:12px}
+.requirement-detail summary:focus-visible,.requirement-original summary:focus-visible{outline:2px solid currentColor;outline-offset:3px}
 .workflow-next{border-color:var(--accent);padding:16px}
 .workflow-next .workflow-title{font-size:17px;font-weight:600;margin:0 0 5px}
 .workflow-next .workflow-copy{color:var(--mut);font-size:13px;line-height:1.45;margin:0 0 12px}
@@ -1974,15 +1979,22 @@ async function loadAttachmentContext(x){
  x.attachments=rows.map(function(a){return {id:a.id,category:a.category,file_name:a.file_name,size_bytes:a.size_bytes,file_hash:a.file_hash,created_at:a.created_at};});
  x._attachmentsLoaded=true;return x.attachments;
 }
+function passportItemView(q){
+ var label=PASSPORT_ITEM_LABEL[q.id]||PASSPORT_CATEGORY[q.category]||q.category;
+ var full=passportItemText(q),value=full.replace(/^[^:]+:\s*/,''),missing=/не указано|требуется уточнить/i.test(full);
+ var long=value.length>210;
+ return '<div class="passport-item'+(missing?' passport-missing':'')+'"><span>'+esc(label)+'</span>'+
+  (long?'<b>'+esc(value.slice(0,130))+'…</b><details class="requirement-detail"><summary>Подробнее</summary><p>'+esc(full)+'</p>'+(q.source?'<small>Основание: '+esc(q.source)+'</small>':'')+'</details>':'<b>'+esc(value)+'</b>')+'</div>';
+}
 function passportContent(x){
   var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
   if(!p)return lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>';
   var items=Array.isArray(p.items)?p.items:[],unresolved=passportUnresolved(p),canApprove=p.status==='draft'&&!unresolved.length;
   return lab('Паспорт требований · версия '+Number(p.revision||1))+
     '<div class="row" style="margin-bottom:8px"><span class="pill '+(p.status==='approved'?'p-ok':'p-och')+'">'+(p.status==='approved'?'утверждён':p.status==='stale'?'устарел':'проект')+'</span></div>'+
-    (p.summary?'<p class="hint">'+esc(p.summary)+'</p>':'')+
-    (items.length?'<div class="passport-list">'+items.map(function(q){return '<div class="passport-item"><span>'+esc(PASSPORT_ITEM_LABEL[q.id]||PASSPORT_CATEGORY[q.category]||q.category)+(q.source?' · '+esc(q.source):'')+'</span><b>'+esc(passportItemText(q))+'</b></div>';}).join('')+'</div>':'<p class="hint">Пункты пока не добавлены.</p>')+
-    (p.status!=='approved'?'<div class="warnbar passport-warning">Паспорт не утверждён — платная подготовка запрещена.'+(unresolved.length?'<br>Уточните: '+esc(unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '))+'.':'')+'</div>':'')+
+    (p.summary?'<details class="requirement-detail"><summary>О версии паспорта</summary><p>'+esc(p.summary)+'</p></details>':'')+
+    (items.length?'<div class="passport-list">'+items.map(passportItemView).join('')+'</div>':'<p class="hint">Пункты пока не добавлены.</p>')+
+    (p.status!=='approved'?'<p class="hint passport-warning">Паспорт не утверждён — платная подготовка запрещена.</p>':'')+
     '<div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-revise" data-id="'+esc(x.id)+'">Новая версия</button>'+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'"'+(canApprove?'':' disabled title="Сначала заполните обязательные требования"')+'>Утвердить</button>':'')+'</div>';
 }
 function passportCard(x){ return card(passportContent(x)); }
@@ -2040,7 +2052,7 @@ function viewItem(id){
 
   var overview=lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
     row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group);
-  var panel=x.requestNumber?workflowCard(x)+card(deliveryHistory(x)):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
+  var panel=x.requestNumber?workflowCard(x)+(x.deliveryState&&x.deliveryState.last?card(deliveryHistory(x)):''):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
   h+='<div class="request-workspace"><aside class="request-action" aria-label="Следующее действие">'+panel+'</aside><div class="request-content"><div class="request-tabs" role="tablist" aria-label="Разделы заявки">'+[['overview','Обзор'],['requirements','Требования'],['materials','Материалы'],['result','Документ'],['delivery','Проверка'],['history','Версии и история']].map(function(t){return '<button type="button" role="tab" id="request-tab-'+t[0]+'" aria-controls="request-panel-'+t[0]+'" aria-selected="'+(defaultGroup===t[0])+'" tabindex="'+(defaultGroup===t[0]?'0':'-1')+'" data-act="request-tab" data-key="'+t[0]+'" data-id="'+esc(x.id)+'">'+t[1]+'</button>';}).join('')+'</div>';
 
   var requirements = row("Требования", x.requirements) + row("Организация", x.org) + row("Методичка", x.methodNotes) +
@@ -2063,7 +2075,7 @@ function viewItem(id){
   else materials+='<p class="hint">'+(x.requestNumber?'Список файлов ещё не получен. Обновите материалы.':'У этой ручной заявки нет файлов из кабинета студента.')+'</p>';
   if(x.requestNumber)materials+='<button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить материалы</button>';
   h+=group('materials','Материалы',materials);
-  if(x.requestNumber) requirements += '<div class="section-separator">'+passportContent(x)+'</div>';
+  if(x.requestNumber) requirements = passportContent(x)+'<details class="requirement-original"><summary>Исходные сведения заявки и требования вуза</summary>'+requirements+'</details>';
   h += group("requirements","Требования и материалы",requirements,defaultGroup==="requirements");
 
   var progress = lab("Служебные действия") +

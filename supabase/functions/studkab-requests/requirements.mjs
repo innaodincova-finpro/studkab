@@ -39,18 +39,51 @@ export function formatRequirement(format={}){
  return parts.join('; ')||'Не указано — требуется уточнить';
 }
 
+// Only explicit statements in the submission are candidates; ambiguity stays unresolved.
+export function statedRequirements(payload={}){
+ const entries=[['rq','Заявка студента'],['mn','Методические требования']];
+ const volumes=[],sources=[];
+ for(const [key,source] of entries){
+  const body=typeof payload[key]==='string'?payload[key]:'';
+  for(const match of body.matchAll(/(?:Об[ъь][её]м\s*:\s*\d+\s*(?:[–—-]\s*\d+\s*)?(?:страниц[а-я]*|стр\.)|\d+\s*(?:[–—-]\s*\d+\s*)?страниц[а-я]*\s+основного\s+текста)/giu)){
+   const raw=match[0].replace(/^Об[ъь][её]м\s*:\s*/iu,'');
+   volumes.push({text:raw,source,key:raw.match(/\d+/g).join('-')});
+  }
+  for(const match of body.matchAll(/(?:^|[.\n;]\s*)Источники\s*:\s*([^\n]+?)(?=\s*Оригинальность(?=\s|[:.,;]|$)|\n|$)/giu)){
+   const raw=match[1].trim();
+   if(raw&&raw.length<1900&&!/не указано|требуется уточнить|не заданы/i.test(raw))sources.push({text:raw,source,key:raw.toLowerCase().replace(/\s+/g,' ').replace(/[.\s]+$/,'')});
+  }
+ }
+ const unique=rows=>rows.length&&new Set(rows.map(row=>row.key)).size===1?rows[0]:null;
+ return {VOLUME:unique(volumes),SOURCES:unique(sources)};
+}
+
+export function fillMissingDraft(passport,payload){
+ if(passport.status!=='draft')return passport;
+ const facts=statedRequirements(payload);
+ let changed=false;
+ const labels={VOLUME:'Объём',SOURCES:'Источники'};
+ const items=passport.items.map(item=>{
+  const label=labels[item.id],fact=facts[item.id];
+  if(!label||!fact||item.text!==label+': Не указано — требуется уточнить')return item;
+  changed=true;return {...item,text:label+': '+fact.text,source:fact.source};
+ });
+ return changed?{...passport,items}:passport;
+}
+
 export function defaultPassport(payload={}){
  const value=(v,missing='Не указано — требуется уточнить')=>typeof v==='string'&&v.trim()?v.trim():missing;
  const format=payload.fm&&typeof payload.fm==='object'?payload.fm:{};
  const formatting=formatRequirement(format);
+ const facts=statedRequirements(payload);
  return {title:'Паспорт требований к работе',summary:'Автоматически создан по заявке. Перед запуском проверьте, дополните и утвердите каждый пункт.',items:[
   {id:'WORK_TYPE',category:'method',required:true,text:'Вид работы: '+value(payload.k),source:'Заявка студента'},
   {id:'DISCIPLINE',category:'method',required:true,text:'Дисциплина: '+value(payload.d),source:'Заявка студента'},
   {id:'STRUCTURE',category:'method',required:true,text:'Структура: '+value(payload.mn),source:'Методические требования'},
-  {id:'VOLUME',category:'measurable',required:true,text:'Объём: Не указано — требуется уточнить',source:'Методические требования'},
+  {id:'VOLUME',category:'measurable',required:true,text:'Объём: '+(facts.VOLUME?.text||'Не указано — требуется уточнить'),source:facts.VOLUME?.source||'Методические требования'},
   {id:'METHODOLOGY',category:'expert',required:true,text:'Методология: '+value(payload.mn),source:'Методические требования'},
   {id:'FORMATTING',category:'measurable',required:true,text:'Оформление: '+formatting,source:'Заявка студента'},
-  {id:'SOURCES',category:'method',required:true,text:'Источники: Не указано — требуется уточнить',source:'Методические требования'},
+  {id:'SOURCES',category:'method',required:true,text:'Источники: '+(facts.SOURCES?.text||'Не указано — требуется уточнить'),source:facts.SOURCES?.source||'Методические требования'},
   {id:'CALCULATIONS',category:'expert',required:true,text:'Расчёты: '+value(payload.org),source:'Заявка и материалы'},
   {id:'ANTIPLAGIARISM',category:'measurable',required:true,text:'Система и порог оригинальности: Не указано — требуется уточнить',source:'Требования вуза'},
   {id:'TEACHER',category:'method',required:true,text:'Условия преподавателя: '+value(payload.rq),source:'Заявка студента'}
@@ -71,8 +104,9 @@ export async function requirementAction(input,user,{db,config}){
  if(input.action==='passport-ensure'){
   if(!/^[a-f0-9]{64}$/.test(input.sourceFingerprint||''))return {status:400,data:{error:'Сначала сохраните актуальные материалы'}};
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
-  if(rows.length&&rows[0].source_fingerprint===input.sourceFingerprint)return {status:200,data:{passports:rows,created:false}};
-  const passport=rows.length?{title:rows[0].title,summary:'Материалы изменились. Проверьте новую версию перед утверждением.',items:rows[0].items}:defaultPassport(row.payload);
+  const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
+  if(rows.length&&rows[0].source_fingerprint===input.sourceFingerprint&&filled===rows[0])return {status:200,data:{passports:rows,created:false}};
+  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Заполнены объём и/или источники из исходной заявки. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:filled.items}:defaultPassport(row.payload);
   const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_source_fingerprint:input.sourceFingerprint});
   return {status:200,data:{passports:[created].concat(rows),created:true}};
  }

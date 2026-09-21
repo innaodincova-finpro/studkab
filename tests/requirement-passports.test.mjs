@@ -54,3 +54,38 @@ test('passport UI blocks approval and paid preparation while required facts are 
  assert.match(ui,/data-act="passport-approve"[\s\S]+disabled title="Сначала заполните обязательные требования"/);
  assert.match(ui,/return requireApprovedPassport\(x\)\.then/);
 });
+
+const {statedRequirements,fillMissingDraft,requirementAction}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+const inputFacts={rq:'Учебный тест. 25–30 страниц основного текста: введение 2, теория 6–7, анализ 8–10. Источники: пять предоставленных учебных фрагментов S1–S5 и исходные данные; не выдавать за реальные публикации. Оригинальность не проверена, порог не задан.',mn:'Разделы 2 / 6–7 / 8–10 / 7–8 / 2 страницы (25–29, в пределах 25–30).'};
+test('explicit total and source restrictions survive extraction without invented originality',()=>{
+ const items=defaultPassport(inputFacts).items;
+ assert.equal(items.find(x=>x.id==='VOLUME').text,'Объём: 25–30 страниц основного текста');
+ assert.equal(items.find(x=>x.id==='SOURCES').text,'Источники: пять предоставленных учебных фрагментов S1–S5 и исходные данные; не выдавать за реальные публикации.');
+ assert.match(items.find(x=>x.id==='ANTIPLAGIARISM').text,/Не указано/);
+ assert.equal(statedRequirements({mn:'Введение 2 страницы; глава 8 страниц'}).VOLUME,null);
+ assert.equal(statedRequirements({...inputFacts,mn:'Объём: 40 страниц'}).VOLUME,null);
+ assert.equal(statedRequirements({...inputFacts,mn:'Источники: минимум 10 публикаций'}).SOURCES,null);
+});
+test('repair only fills standard placeholders of a draft without mutating historical or manual text',()=>{
+ const before={...defaultPassport({}),status:'draft'};const snapshot=JSON.stringify(before);
+ const repaired=fillMissingDraft(before,inputFacts);
+ assert.notEqual(repaired,before);assert.equal(JSON.stringify(before),snapshot);
+ assert.equal(fillMissingDraft(repaired,inputFacts),repaired);
+ const approved={...before,status:'approved'};assert.equal(fillMissingDraft(approved,inputFacts),approved);
+ const manual={...before,items:[{id:'VOLUME',text:'Объём: 33 страницы'},{id:'SOURCES',text:'Источники: уточнить у преподавателя'}]};
+ assert.equal(fillMissingDraft(manual,inputFacts),manual);
+});
+test('ensure persists repaired draft as a separate version and subsequent reads do not resave',async()=>{
+ let rows=[{...defaultPassport({}),id:'old',revision:1,status:'draft',source_fingerprint:'a'.repeat(64)}],writes=0;
+ const deps={config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
+  if(path.startsWith('studkab_requests?'))return [{payload:inputFacts}];
+  if(path.startsWith('studkab_requirement_passports?'))return rows;
+  assert.equal(path,'rpc/studkab_requirement_passport_save');writes++;
+  const next={id:'new',revision:2,status:'draft',items:body.p_items,source_fingerprint:body.p_source_fingerprint};rows=[next,...rows];return next;
+ }};
+ const request={action:'passport-ensure',id:'33333333-3333-4333-8333-333333333333',sourceFingerprint:'a'.repeat(64)};
+ const user={id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'};
+ const first=await requirementAction(request,user,deps);assert.equal(first.data.created,true);assert.equal(rows[1].items.find(x=>x.id==='VOLUME').text,'Объём: Не указано — требуется уточнить');
+ assert.equal((await requirementAction(request,user,deps)).data.created,false);assert.equal(writes,1);
+ assert.equal((await requirementAction(request,{...user,email:'student@example.test'},deps)).status,403);
+});
