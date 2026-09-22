@@ -4,15 +4,17 @@ async function account(page,file){await page.goto(base+file);await page.evaluate
 async function setupReview(page){
  await account(page,'reestr.html');
  await page.evaluate(()=>{
-  window.calls=[];window.remote={state:'none'};window.failRead=false;window.loseReview=false;window.loseDelivery=false;
+  window.calls=[];window.reviewHistory=[];window.remote={state:'none'};window.failRead=false;window.loseReview=false;window.loseDelivery=false;
   Oblako.requestApi=async body=>{
    calls.push(body);
+   if(body.action==='result-review-history')return {reviews:reviewHistory,limit:100};
    if(body.action==='result-review-state'){if(failRead)throw Error('Сервер недоступен');if(remote.document&&JSON.stringify(remote.document)!==JSON.stringify(body.document))return {state:'stale'};return JSON.parse(JSON.stringify(remote));}
    if(body.action==='prepare-result'){
     const bytes=Uint8Array.from(atob(body.docxBase64),c=>c.charCodeAt(0));
     const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(b=>b.toString(16).padStart(2,'0')).join('');
     remote={state:'prepared',document:body.document,docxBase64:body.docxBase64,receipt:{versionId:body.versionId,recipientId:'55555555-5555-4555-8555-555555555555',fileHash:hash,documentHash:'b'.repeat(64)}};return remote.receipt;
    }
+   if(body.action==='review-notes'){remote.state='changes_requested';remote.review={reviewId:body.reviewId,versionId:body.versionId,criteria:body.criteria};reviewHistory.push({id:body.reviewId,version_id:body.versionId,criteria:body.criteria,created_at:'2026-09-22',studkab_result_versions:{revision:1,file_hash:remote.receipt.fileHash}});return remote.review;}
    if(body.action==='review-result'){remote.state='reviewed';remote.review={reviewId:body.reviewId,versionId:body.versionId,criteria:body.criteria};if(loseReview){loseReview=false;throw Error('Ответ на сохранение потерян');}return remote.review;}
    if(body.action==='deliver'){remote.state='delivered';remote.delivery={deliveryId:body.deliveryId,createdAt:'2026-09-19'};if(loseDelivery){loseDelivery=false;throw Error('Ответ на передачу потерян');}return {saved:true,deliveryId:body.deliveryId};}
    throw Error('Unexpected action '+body.action);
@@ -245,4 +247,40 @@ test('C088 arithmetic blocks review; source meaning requires C10 evidence',async
   await expect(page.locator('[data-result-status]')).toContainText('заблокирована');
   expect(await page.evaluate(()=>calls.filter(c=>c.action==='review-result'||c.action==='deliver').length)).toBe(0);
  }
+});
+
+test('C089 negative notes reopen on exact Word and cannot deliver; correction needs new review',async({page})=>{
+ await setupReview(page);
+ const download=page.waitForEvent('download');await page.locator('[data-preview]').click();await download;
+ await page.locator('details').filter({has:page.locator('[data-criterion]')}).evaluate(el=>el.open=true);
+ await page.locator('[data-criterion-status="C12"]').selectOption('manual');
+ await page.locator('[data-criterion="C12"]').fill('Нужно сверить основной объём по методичке');
+ await page.locator('[data-criterion-section="C12"]').fill('Основная часть, страницы 4–30');
+ await page.locator('[data-save-notes]').click();await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
+ await expect(page.locator('[data-deliver]')).toBeHidden();
+ await page.locator('.sheet .close').click();await page.evaluate(()=>StudResults.deliver(candidate));
+ await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
+ await expect(page.locator('[data-criterion="C12"]')).toHaveValue('Нужно сверить основной объём по методичке');
+ await expect(page.locator('[data-criterion-section="C12"]')).toHaveValue('Основная часть, страницы 4–30');
+ await expect(page.locator('[data-reviewed]')).not.toBeChecked();
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(0);
+ await fillReview(page);await page.locator('[data-save-review]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='review-notes')[0].reviewId!==remote.review.reviewId)).toBe(true);
+});
+
+test('C089 replacing Word keeps old notes in history without approving new version',async({page})=>{
+ await setupReview(page);await fillReview(page);
+ await page.locator('[data-criterion-status="C10"]').selectOption('fail');
+ await page.locator('[data-criterion-section="C10"]').fill('Глава 1, источник 3');
+ await page.locator('[data-save-notes]').click();await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
+ await page.locator('.sheet .close').click();
+ await page.evaluate(()=>{candidate.doc.structure.intro.text+=' Исправленная версия.';candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);});
+ await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await expect(page.locator('[data-criterion="C10"]')).toHaveValue('');
+ await expect(page.locator('[data-deliver]')).toBeHidden();
+ await page.locator('[data-review-history] > summary').click();
+ await expect(page.locator('[data-review-history-body]')).toContainText('Последние 1 проверок');
+ await expect(page.locator('[data-review-history-body]')).toContainText('Глава 1, источник 3');
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(0);
 });
