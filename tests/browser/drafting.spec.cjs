@@ -40,6 +40,38 @@ test('one preparation control starts a saved server job',async({page})=>{
  expect(await page.evaluate(()=>draftItem.doc.serverJob.id)).toBe('22222222-2222-4222-8222-222222222222');
 });
 
+test('ChatGPT route copies the selected request without calling the paid API',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  draftItem.requestNumber='42';
+  window.copiedChatgptPrompt='';window.openedChatgptUrl='';window.generationCalls=0;window.manualNetworkCalls=0;
+  copyText=async value=>{copiedChatgptPrompt=value;return true;};
+  window.open=url=>{openedChatgptUrl=url;return {};};
+  Oblako.generationApi=async()=>{generationCalls++;throw Error('Paid API must not be called');};
+  window.fetch=async()=>{manualNetworkCalls++;throw Error('Manual route must not fetch');};
+  window.XMLHttpRequest=function(){manualNetworkCalls++;throw Error('Manual route must not use XHR');};
+  navigator.sendBeacon=()=>{manualNetworkCalls++;return false;};
+ });
+ await expect(page.locator('[data-chatgpt-preparation]')).toContainText('без API приложения');
+ await page.getByRole('button',{name:'Подготовить с ChatGPT/Codex',exact:true}).click();
+ const state=await page.evaluate(()=>({prompt:copiedChatgptPrompt,url:openedChatgptUrl,calls:generationCalls,network:manualNetworkCalls}));
+  expect(state.url).toBe('https://chatgpt.com/');
+  expect(state.calls).toBe(0);
+  expect(state.network).toBe(0);
+ expect(state.prompt).toContain('ЗАЯВКА: 42');
+ expect(state.prompt).toContain('Тема: Анализ финансового состояния предприятия');
+ await expect(page.locator('[data-chatgpt-message]')).toContainText('приложите нужные материалы вручную');
+ await expect(page.locator('[data-api-preparation]')).toContainText('Подписка ChatGPT Pro не оплачивает OpenAI API');
+ await expect(page.locator('[data-api-preparation] [data-prepare]')).toHaveCount(1);
+});
+
+test('ChatGPT route reports a clipboard failure honestly',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{copyText=async()=>false;window.open=()=>({});Oblako.generationApi=async()=>{throw Error('Paid API must not be called');};});
+ await page.getByRole('button',{name:'Подготовить с ChatGPT/Codex',exact:true}).click();
+ await expect(page.locator('[data-chatgpt-message]')).toContainText('Не удалось скопировать запрос');
+});
+
 test('mobile passport is readable and blocks preparation before checking filled sections',async({page})=>{
  await setup(page);await page.setViewportSize({width:390,height:844});
  await page.keyboard.press('Escape');
@@ -83,8 +115,8 @@ test('request card shows one next action for an approved passport',async({page})
  await page.evaluate(()=>{draftItem.requestNumber=draftItem.id;openId=draftItem.id;render();});
  await expect(page.locator('#fab')).toBeHidden();
  await expect(page.locator('.workflow-next')).toContainText('Требования утверждены');
- await expect(page.locator('.workflow-next').getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
- await page.locator('.workflow-next').getByRole('button',{name:'Начать подготовку',exact:true}).click();
+ await expect(page.locator('.workflow-next').getByRole('button',{name:'Выбрать способ подготовки',exact:true})).toBeVisible();
+ await page.locator('.workflow-next').getByRole('button',{name:'Выбрать способ подготовки',exact:true}).click();
  await expect(page.getByRole('dialog').getByRole('button',{name:'Начать подготовку',exact:true})).toBeVisible();
 });
 

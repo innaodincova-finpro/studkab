@@ -7,7 +7,7 @@ test('request workflow has one ordered stage and action',()=>{
   [{},['intake','Проверить комплект']],
   [{hasPassport:true,passportUnresolved:true,passportBlocker:'Не указано: объём'},['passport','Уточнить требования']],
   [{hasPassport:true},['passport','Утвердить паспорт']],
-  [{hasPassport:true,passportApproved:true},['preparation','Начать подготовку']],
+  [{hasPassport:true,passportApproved:true},['preparation','Выбрать способ подготовки']],
   [{hasPassport:true,passportApproved:true,hasServerJob:true},['preparation','Продолжить подготовку']],
   [{hasPassport:true,passportApproved:true,hasServerJob:true,hasDocument:true},['quality','Проверить готовность документа']],
   [{hasPassport:true,passportApproved:true,hasDocument:true,automaticReviewCurrent:true},['delivery','Провести итоговую проверку']],

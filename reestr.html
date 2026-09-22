@@ -690,6 +690,12 @@ function buildPrompt(x){
   L.push("Только текст работы по разделам. Без вступлений и комментариев. Заголовки — точно как в структуре.");
   return L.join("\n");
 }
+function buildChatgptPrompt(x){
+  var number=x.requestNumber||x.num||x.number||x.id||"не указан";
+  return "ЗАЯВКА: "+number+"\n\n"+buildPrompt(x)+
+    "\n\nВАЖНО: сначала проверь приложенные мной в этом чате материалы. "+
+    "Не считай, что приложение STUDKAB передало их автоматически.";
+}
 
 /* ---------- ПОСТАВЩИКИ НЕЙРОСЕТЕЙ ---------- */
 var PROVIDERS = [
@@ -776,14 +782,14 @@ function diagLine(r){
 }
 function aiErrorText(e){
   var m = (e && e.message) || "", who = m.split(":")[1] || "";
-  if (m === "DIRECT_AI_DISABLED") return "Прямые платные запросы отключены. Используйте «Начать подготовку»: там расход проверяется серверным лимитом до отправки.";
+  if (m === "DIRECT_AI_DISABLED") return "Прямые платные запросы отключены. Используйте блок «Автоматически через API»: там расход проверяется серверным лимитом до отправки.";
   var nm = who ? providerName(who) : "";
   if (/^(CLIENT_TIMEOUT|NETWORK):/.test(m)) {
     var parts=m.split(':');
     return (parts[0]==='CLIENT_TIMEOUT'?'Истекло время ожидания ответа':'Соединение прервалось')+' через '+parts[2]+' с. '+(parts[1]==='body'?'Посредник ответил, но полный результат не получен.':'Ответ посредника не получен.')+' Причина записана в копию данных. Автоматического повторного запроса не было.';
   }
-  if (m === "NOPROVIDER") return "Не выбран поставщик: «Ещё» → «Нейросети», отметьте хотя бы одного.";
-  if (m === "NOPROXY") return "Посредник не настроен: Ещё → Нейросети.";
+  if (m === "NOPROVIDER") return "Не выбран поставщик: «Ещё» → «Автоматическая генерация через API», отметьте хотя бы одного.";
+  if (m === "NOPROXY") return "Посредник не настроен: Ещё → Автоматическая генерация через API.";
   if (m === "CONTEXT_TOO_BIG" || m === "TOO_BIG") return "Материалы и предыдущие разделы превышают допустимый объём запроса. Ничего не обрезано. Сократите материалы, сохранив нужные факты, и повторите подготовку.";
   if (m.indexOf("INCOMPLETE:") === 0) return "Нейросеть не завершила раздел. Незавершённый ответ не заменил сохранённый текст. Уменьшите объём раздела или разделите его на подразделы и повторите подготовку.";
   if (m.indexOf("TIMEOUT:") === 0) return "Нейросеть не ответила за три минуты. Сохранённые разделы доступны; повторный запуск продолжит подготовку с остановленного раздела.";
@@ -869,20 +875,26 @@ function openDocBuilder(id){
     '<button type="button" class="close" data-x="1">✕</button>' +
     '<h3>Документ</h3><div class="mut" style="margin-bottom:10px">' + esc(x.topic||"") + '</div>' +
     '<div id="docPreview" style="overflow-wrap:anywhere"></div>' +
-    '<details><summary>Настройки подготовки</summary>' +
+    '<details><summary>Настройки автоматической генерации через API</summary>' +
     (aiReady()
       ? '<div class="fld"><label>Кем писать</label><select id="docProv">' +
           activeProviders().map(function(pv){
             return '<option value="' + pv.id + '"' + (pv.id === D.settings.defaultProvider ? " selected" : "") + '>' + pv.name + ' · ' + esc((D.settings.providers[pv.id]||{}).model || pv.model) + '</option>';
           }).join("") + '</select></div>'
       : '<div class="warnbar">' +
-          'Не отмечен ни один поставщик — откройте «Ещё» → «Нейросети».' +
+          'Не отмечен ни один поставщик — откройте «Ещё» → «Автоматическая генерация через API».' +
           ' Пока разделы можно писать вручную или копировать запрос кнопкой «запрос» — сохранение и Word работают без нейросети.</div>') +
     '</details>' + DraftEditor.form(x) +
-    '<p class="mut" style="margin:14px 0 6px;font-weight:600">Шаг 1. Подготовка текста</p>' +
-    '<div class="card" data-preparation style="padding:12px;margin-bottom:10px"><p class="hint" style="margin-top:0">Один процесс: проверяем требования, собираем структуру, формируем разделы, показываем список доработок и создаём Word после вашей проверки. Подготовка сохраняется на сервере — окно можно закрыть и продолжить позже.</p>' +
+    '<p class="mut" style="margin:14px 0 6px;font-weight:600">Шаг 1. Выберите способ подготовки</p>' +
+    '<div class="card" data-chatgpt-preparation style="padding:12px;margin-bottom:10px"><b>С ChatGPT/Codex — без API приложения</b>' +
+    '<p class="hint">Кнопка скопирует номер, тему, сведения о вузе, требования и организацию, если они заполнены, и откроет ChatGPT. Материалы, источники и файлы не копируются: приложите их самостоятельно. Приложение ничего не отправляет во внешний чат и не списывает деньги за API.</p>' +
+    '<button type="button" class="btn" data-chatgpt-open>Подготовить с ChatGPT/Codex</button>' +
+    '<p class="hint" data-chatgpt-message role="status">После подготовки сохраните Word и прикрепите его в карточке заявки кнопкой «Прикрепить готовый Word».</p></div>' +
+    '<details class="card" data-api-preparation open style="padding:12px;margin-bottom:10px"><summary><b>Автоматически через API</b></summary>' +
+    '<p class="warnbar">Это отдельная платная услуга поставщика. Подписка ChatGPT Pro не оплачивает OpenAI API. Перед запуском приложение покажет расчёт и запросит подтверждение.</p>' +
+    '<div data-preparation><p class="hint">Сервер проверит требования, сформирует разделы и сохранит процесс; окно можно закрыть и продолжить позже.</p>' +
     '<button type="button" class="btn" data-prepare>' + (doc.serverJob&&doc.serverJob.id?'Продолжить подготовку':'Начать подготовку') + '</button>' +
-    '<p data-prepare-message role="status">' + (doc.serverJob&&doc.serverJob.id?'Есть сохранённая подготовка. Нажмите кнопку, чтобы получить её текущее состояние.':'Запуск выполняется только после нажатия кнопки. Ручное редактирование, сохранение и Word доступны независимо.') + '</p><div data-prepare-result></div></div>' +
+    '<p data-prepare-message role="status">' + (doc.serverJob&&doc.serverJob.id?'Есть сохранённая автоматическая подготовка. Нажмите кнопку, чтобы получить её текущее состояние.':'API-вызов начнётся только после проверки стоимости и вашего подтверждения. Ручное редактирование, сохранение и Word доступны независимо.') + '</p><div data-prepare-result></div></div></details>' +
     '<div id="docStatus" class="infobox" style="margin:0 0 10px;display:none"></div>' +
     '<details><summary>Редактировать разделы</summary><p class="hint">Число рядом с названием — ориентир объёма текста: 1 соответствует 1800 знакам с пробелами. Число страниц Word зависит от таблиц и оформления.</p><div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
     '<div class="chips" style="margin-top:4px">' +
@@ -1006,6 +1018,19 @@ function openDocBuilder(id){
   });
   wrap.addEventListener("click", function(ev){
     var t = ev.target;
+    var chatgpt=t.closest('[data-chatgpt-open]');
+    if(chatgpt){
+      var chatMessage=wrap.querySelector('[data-chatgpt-message]');
+      var opened=window.open('https://chatgpt.com/','_blank','noopener,noreferrer');
+      chatMessage.textContent='Копирую запрос…';
+      Promise.resolve(copyText(buildChatgptPrompt(x))).then(function(copied){
+        if(!copied){chatMessage.textContent='Не удалось скопировать запрос. Используйте кнопки «запрос» у разделов или разрешите доступ к буферу обмена.';return;}
+        chatMessage.textContent=opened===null
+          ? 'Запрос скопирован. Браузер заблокировал новое окно — откройте chatgpt.com и вставьте запрос вручную.'
+          : 'Запрос скопирован, ChatGPT открыт в новой вкладке. Вставьте запрос и приложите нужные материалы вручную.';
+      }).catch(function(){chatMessage.textContent='Не удалось скопировать запрос. Разрешите доступ к буферу обмена и повторите.';});
+      return;
+    }
     var figdel=t.closest('[data-figdel]');
     if(figdel){
       var section=figdel.closest('[data-sec]'),cid=section&&section.getAttribute('data-sec'),entry=cid&&(doc.structure[cid]||{}),figures=entry&&entry.figures;
@@ -1149,7 +1174,7 @@ function openDocBuilder(id){
             jobControl.onclick=function(){
               current();doc.serverJob=null;save();
               wrap.querySelector('[data-prepare]').textContent='Начать подготовку';
-              message.textContent='Проверьте паспорт требований и нажмите «Начать подготовку».';
+              message.textContent='Проверьте паспорт требований и нажмите «Начать подготовку» в блоке API.';
               jobControl.remove();
             };
             target.appendChild(jobControl);
@@ -2210,7 +2235,7 @@ function viewMore(){
   var c = counts(), st = D.settings || {};
   var pvs = st.providers || {};
   var configured = aiReady();
-  var nets = '<p class="hint">Подготовка идёт только через сервер. Пароль посредника на устройстве не хранится и не вводится.</p>' +
+  var nets = '<p class="hint">Здесь настраивается только автоматическая генерация через API. Это отдельная оплата поставщику; подписка ChatGPT Pro не включает OpenAI API. Ручная кнопка ChatGPT/Codex работает без этих настроек. Пароль посредника на устройстве не хранится и не вводится.</p>' +
       PROVIDERS.map(function(pv){
         var c2 = pvs[pv.id] || {};
         return '<div class="item" style="align-items:flex-start">' +
@@ -2226,7 +2251,7 @@ function viewMore(){
 
   function moreFold(title, body){ return '<details class="fold"><summary>' + title + '</summary><div class="in">' + body + '</div></details>'; }
 
-  return '<details class="fold"><summary>Нейросети' + (configured ? ' <span class="pill p-ok">настройки сохранены</span>'
+  return '<details class="fold"><summary>Автоматическая генерация через API' + (configured ? ' <span class="pill p-ok">настройки сохранены</span>'
       : ' <span class="pill p-och">' + 'нет поставщика' + '</span>') + '</summary><div class="in">' + nets + '</div></details>' +
     moreFold("Хранение записей", CloudUI.panel()) +
     moreFold("Доступ студентов", '<p class="hint">Для первого входа без Google создайте персональную ссылку и отправьте её только этому студенту. Пароль он задаст сам.</p><button class="chip" onclick="openInvitation()">Создать приглашение</button><button class="chip" onclick="openInvitation(true)">Восстановить доступ</button>') +
@@ -2256,7 +2281,7 @@ function viewMore(){
     '<details class="fold"><summary>Как это работает</summary><div class="in">' +
       '<div class="item"><div class="ic">1</div><div class="txt"><b>Студент отправляет заявку</b><small>Заявка сохраняется в облаке и попадает в реестр</small></div></div>' +
       '<div class="item"><div class="ic">2</div><div class="txt"><b>Вы открываете заявку</b><small>Обновите список и откройте нужную строку</small></div></div>' +
-      '<div class="item"><div class="ic">3</div><div class="txt"><b>Готовите документ</b><small>Добавьте материалы и проверенные источники один раз, затем нажмите «Начать подготовку». Процесс сохранится на сервере: окно можно закрыть и продолжить позже. Проверьте факты, расчёты и оформление перед передачей студенту.</small></div></div>' +
+      '<div class="item"><div class="ic">3</div><div class="txt"><b>Готовите документ</b><small>Откройте документ и выберите ChatGPT/Codex без API приложения или автоматическую подготовку через API. Проверьте факты, расчёты и оформление перед передачей студенту.</small></div></div>' +
       '<div class="item"><div class="ic">4</div><div class="txt"><b>Передаёте проверенную версию</b><small>После проверки Word появляется в кабинете студента</small></div></div>' +
       '<div class="item"><div class="ic">5</div><div class="txt"><b>Справочник вузов</b><small>Наполняется из заявок сам. «Проверено» ставите вы, когда сверили с методичкой</small></div></div>' +
       '<div class="item"><div class="ic">6</div><div class="txt"><b>Ключи нейросетей</b><small>Хранятся у посредника на Cloudflare. Подключение — по инструкции</small></div></div>' +
