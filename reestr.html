@@ -2077,6 +2077,7 @@ async function editPassport(x,fullRevision){
  var questions;
  try{questions=(await Oblako.requestApi({action:'clarification-list',id:x.id})).questions||[];}catch(e){toast(e.message||'Не удалось прочитать уточнения');return;}
  if(identity!==Oblako.identity())return toast('Аккаунт изменился. Откройте требования заново.');
+ x.clarifications=questions;
  var fields=items.map(function(q,n){
   var related=questions.filter(function(a){return a.item_id===q.id;}),answers=related.filter(function(a){return a.answer;});
   return '<details class="fold"'+(!q.verified?' open':'')+'><summary>'+esc(PASSPORT_ITEM_LABEL[q.id]||q.id)+'</summary><div class="in"><div class="fld"><label>Требование<textarea data-pp-item="'+n+'">'+esc(q.text||'')+'</textarea></label></div>'+related.map(function(a){return '<p style="white-space:pre-wrap;overflow-wrap:anywhere"><b>Вопрос:</b> '+esc(a.question)+'<br><b>Ответ:</b> '+esc(a.answer||'Ожидается ответ студента')+(a.answer?'<br><b>Основание ответа:</b> '+esc(a.answer_source):'')+'</p>';}).join('')+'<div class="fld"><label>Основание требования<textarea data-pp-source="'+n+'" placeholder="Документ, страница или проверенный ответ студента">'+esc(q.source||'')+'</textarea></label></div><label><input type="checkbox" data-pp-verified="'+n+'"'+(q.verified&&answers.every(function(a){return (q.answer_ids||[]).indexOf(a.id)>=0;})?' checked':'')+'> Проверено по указанному основанию'+(answers.length?' и ответам выше':'')+'</label></div></details>';
