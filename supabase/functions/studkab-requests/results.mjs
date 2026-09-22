@@ -52,6 +52,17 @@ export function validateReview(criteria){
  for(const code of reviewCodes){const c=criteria[code];if(!['pass','not_applicable'].includes(c?.status)||typeof c.evidence!=='string'||c.evidence.trim().length<10||c.evidence.length>2000)throw Error('Не подтверждён пункт '+code+': нужен результат без блокера и доказательство');}
  return Object.fromEntries(reviewCodes.map(code=>[code,{status:criteria[code].status,evidence:criteria[code].evidence.trim()}]));
 }
+export function validateReviewNotes(criteria){
+ if(!criteria||typeof criteria!=='object'||Array.isArray(criteria)||!Object.keys(criteria).length||Object.keys(criteria).some(c=>!reviewCodes.includes(c)))throw Error('Выберите пункты замечаний');
+ const out={};let blocked=false;
+ for(const [code,c] of Object.entries(criteria)){
+  if(!['pass','not_applicable','fail','manual'].includes(c?.status)||typeof c.evidence!=='string'||c.evidence.trim().length<10||c.evidence.length>2000||typeof c.section!=='string'||!c.section.trim()||c.section.length>300)throw Error('Укажите результат, место и замечание: '+code);
+  blocked ||= ['fail','manual'].includes(c.status);
+  out[code]={status:c.status,evidence:c.evidence.trim(),section:c.section.trim()};
+ }
+ if(!blocked)throw Error('Для замечаний нужен пункт «Не пройден» или «Нужна ручная проверка»');
+ return out;
+}
 const hash=/^[a-f0-9]{64}$/;
 const errors={recipient:'Получатель не совпадает с автором заявки',file:'Некорректный или слишком большой Word',conflict:'Номер операции уже использован. Откройте проверку заново.',stale:'Версия документа или получатель изменились. Повторите проверку.',criteria:'Не все пункты проверки подтверждены',review_required:'Требуется сохранённая проверка этой версии Word. Обновите приложение и повторите проверку.'};
 function canonical(value){
@@ -74,9 +85,11 @@ async function readReviewState(input,request,db){
  const [delivery]=await db('studkab_results?select=delivery_id,review_id,created_at&request_id=eq.'+input.id+'&version_id=eq.'+version.id+'&order=created_at.desc,id.desc&limit=1');
  const reviews=await db('studkab_result_reviews?select=id,version_id,criteria,created_at&version_id=eq.'+version.id+(delivery?'&id=eq.'+delivery.review_id:'&order=created_at.desc,id.desc')+'&limit=1');
  const review=reviews[0];
- if(review){try{validateReview(review.criteria);}catch{return {status:409,data:{error:errors.criteria}};}}
+ let changes=false;
+ if(review){try{validateReview(review.criteria);}catch{try{validateReviewNotes(review.criteria);changes=true;}catch{return {status:409,data:{error:errors.criteria}};}}}
+ if(delivery&&changes)return {status:409,data:{error:errors.criteria}};
  if(delivery&&!review)return {status:409,data:{error:errors.review_required}};
- return {data:{state:delivery?'delivered':review?'reviewed':'prepared',receipt:{versionId:version.id,recipientId:version.recipient_id,fileHash:version.file_hash,documentHash:version.document_hash,revision:version.revision},docxBase64:version.docx_base64,review:review?{reviewId:review.id,versionId:review.version_id,criteria:review.criteria,reviewedAt:review.created_at}:null,delivery:delivery?{deliveryId:delivery.delivery_id,createdAt:delivery.created_at}:null}};
+ return {data:{state:delivery?'delivered':changes?'changes_requested':review?'reviewed':'prepared',receipt:{versionId:version.id,recipientId:version.recipient_id,fileHash:version.file_hash,documentHash:version.document_hash,revision:version.revision},docxBase64:version.docx_base64,review:review?{reviewId:review.id,versionId:review.version_id,criteria:review.criteria,reviewedAt:review.created_at}:null,delivery:delivery?{deliveryId:delivery.delivery_id,createdAt:delivery.created_at}:null}};
 }
 export async function resultAction(input,user,{db,config}) {
  if(input.action!=='result'){
@@ -95,6 +108,10 @@ export async function resultAction(input,user,{db,config}) {
    result.docxBase64=version.docx_base64;result.fileHash=version.file_hash;
   }
   return {data:{result:result||null}};
+ }
+ if(input.action==='result-review-history'){
+  const reviews=await db('studkab_result_reviews?select=id,version_id,criteria,created_at,studkab_result_versions!inner(request_id,revision,file_hash)&studkab_result_versions.request_id=eq.'+input.id+'&order=created_at.desc,id.desc&limit=100');
+  return {data:{reviews,limit:100}};
  }
  if(input.action==='result-review-state')return readReviewState(input,request,db);
  if(!uuid.test(input.versionId||''))return {status:428,data:{error:errors.review_required}};
@@ -121,10 +138,13 @@ export async function resultAction(input,user,{db,config}) {
    if(!v||canonical(v.document)!==canonical(document)||!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
   }
   const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.id+'&select=id,status,items&order=revision.desc&limit=1');
-  const conflict=await sourceMinimumGuard(db,input.id,passport?.items);
+  const conflict=input.action==='review-notes'?null:await sourceMinimumGuard(db,input.id,passport?.items);
   if(conflict)return {status:409,data:conflict};
   const args={request:input.id,version:input.versionId,review:input.reviewId,recipient:request.student_id,file_hash:input.fileHash,document_hash:input.documentHash};
-  if(input.action==='review-result'){
+  if(input.action==='review-notes'){
+   let criteria;try{criteria=validateReviewNotes(input.criteria);}catch(e){return {status:400,data:{error:e.message}};}
+   result=await db('rpc/record_studkab_review_notes','POST',{...args,reviewer:user.id,criteria});
+  }else if(input.action==='review-result'){
    let criteria;try{criteria=validateReview(input.criteria);}catch(e){return {status:400,data:{error:e.message}};}
    result=await db('rpc/review_studkab_result','POST',{...args,reviewer:user.id,criteria});
   }else{

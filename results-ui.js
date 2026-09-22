@@ -34,32 +34,36 @@
    }
    key=contextKey(x,external);
   }catch(e){return toast(e.message);}
-  var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),reviewed=false,previewed=false,delivered=false,known=false;
+  var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),notesId=crypto.randomUUID(),amend=false,changes=false,reviewed=false,previewed=false,delivered=false,known=false;
   var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;}),profile=DraftQuality.requirementProfile(x);
   var methodology=(external?'<p class="hint">Проверяется прикреплённый Word. Автоматические проверки текста редактора к нему не применялись. Проверьте все 16 пунктов по этому файлу, включая объём, расчёты и условия оригинальности.</p>':'')+'<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
-  var checklist=methodology+(external?'':DraftEditor.sourceReview(x))+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
-  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'Студент не указан')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Сначала сохраните проверку точного Word. Передача студенту выполняется отдельной кнопкой.</p><button type="button" class="chip" data-preview disabled>Открыть точный Word</button>'+checklist+'<p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="btn" data-save-review disabled>Сохранить итоговую проверку</button><button type="button" class="btn" data-deliver hidden disabled style="display:none">Передать студенту</button><p role="status" data-result-status>Проверяем сохранённое состояние…</p><button type="button" class="chip" data-result-refresh disabled>Обновить состояние</button>');
+  var checklist=methodology+(external?'':DraftEditor.sourceReview(x))+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><input data-criterion-section="'+code+'" maxlength="300" placeholder="Место: страница, раздел или весь документ"><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
+  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'Студент не указан')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Сначала сохраните проверку точного Word. Передача студенту выполняется отдельной кнопкой.</p><button type="button" class="chip" data-preview disabled>Открыть точный Word</button>'+checklist+'<details data-review-history><summary>История проверок всех версий Word</summary><div data-review-history-body style="overflow-wrap:anywhere">Откройте, чтобы загрузить историю.</div></details><p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="chip" data-save-notes disabled>Сохранить замечания</button><button type="button" class="btn" data-save-review disabled>Сохранить итоговую проверку</button><button type="button" class="btn" data-deliver hidden disabled style="display:none">Передать студенту</button><p role="status" data-result-status>Проверяем сохранённое состояние…</p><button type="button" class="chip" data-result-refresh disabled>Обновить состояние</button>');
   wrap.dataset.accountIdentity=String(identity);
+  var notesButton=wrap.querySelector('[data-save-notes]');
   var msg=wrap.querySelector('[data-result-status]'),saveButton=wrap.querySelector('[data-save-review]'),sendButton=wrap.querySelector('[data-deliver]'),refreshButton=wrap.querySelector('[data-result-refresh]');
   function guard(){try{if(!wrap.isConnected||!same(data,identity))throw Error('Аккаунт изменился или окно закрыто. Откройте проверку заново.');if(key!==contextKey(x,external)||(!external&&x.doc.review!==DraftQuality.stamp(x)))throw Error('Документ, требования или получатель изменились. Повторите проверку.');}catch(e){known=false;throw e;}}
   function controls(){
+   notesButton.textContent=reviewed&&!amend?'Добавить замечания к проверке':'Сохранить замечания';notesButton.hidden=delivered;notesButton.disabled=busy||!known;
    saveButton.hidden=reviewed||delivered;saveButton.disabled=busy||!known;
-   sendButton.hidden=!reviewed&&!delivered;sendButton.style.display=sendButton.hidden?'none':'';saveButton.style.display=saveButton.hidden?'none':'';sendButton.disabled=busy||!known||delivered;
+   sendButton.hidden=!reviewed&&!delivered;sendButton.style.display=sendButton.hidden?'none':'';saveButton.style.display=saveButton.hidden?'none':'';sendButton.disabled=busy||!known||delivered||amend;
    sendButton.textContent=delivered?'Результат передан':'Передать студенту';
    refreshButton.disabled=busy;wrap.querySelector('[data-preview]').disabled=busy||!known;
-   wrap.querySelectorAll('[data-criterion],[data-criterion-status],[data-reviewed]').forEach(function(el){el.disabled=busy||reviewed||delivered;});
+   wrap.querySelectorAll('[data-criterion],[data-criterion-status],[data-criterion-section],[data-reviewed]').forEach(function(el){el.disabled=busy||(reviewed&&!amend)||delivered;});
   }
-  function status(){msg.textContent=delivered?'Проверенная версия доступна студенту. Уведомление в мессенджер не отправлялось.':reviewed?'Проверка сохранена. Результат ещё не передан студенту.':'Проверьте точный Word и заполните все пункты. Сохранение проверки не передаёт результат.';}
+  function status(){msg.textContent=delivered?'Проверенная версия доступна студенту. Уведомление в мессенджер не отправлялось.':reviewed?'Проверка сохранена. Результат ещё не передан студенту.':changes?'Замечания сохранены к этой версии Word. Передача заблокирована до новой положительной проверки.':'Проверьте точный Word и заполните все пункты. Сохранение проверки не передаёт результат.';}
   function criteriaValues(){var criteria={};for(var i=0;i<codes.length;i++){
    var field=wrap.querySelector('[data-criterion="'+codes[i]+'"]'),value=wrap.querySelector('[data-criterion-status="'+codes[i]+'"]').value,evidence=field.value.trim();
    if(!value||evidence.length<10){field.closest('details').open=true;field.focus();throw Error(!value?'Выберите результат: '+labels[i]:'Добавьте доказательство: '+labels[i]);}
    if(value==='fail'||value==='manual')throw Error(value==='fail'?'Передача заблокирована: не пройден пункт «'+labels[i]+'».':'Передача заблокирована: завершите ручную проверку «'+labels[i]+'».');
    criteria[codes[i]]={status:value,evidence:evidence};
   }return criteria;}
-  async function loadState(){
+  async function loadState(restore){
    guard();known=false;
    var state=await Oblako.requestApi({action:'result-review-state',id:requestId,document:payload,includeFile:true});guard();
-   if(!state||['none','stale','prepared','reviewed','delivered'].indexOf(state.state)<0)throw Error('Сервер не подтвердил состояние проверки. Передача недоступна.');
+   if(!state||['none','stale','prepared','changes_requested','reviewed','delivered'].indexOf(state.state)<0)throw Error('Сервер не подтвердил состояние проверки. Передача недоступна.');
+   if(state.state==='changes_requested'&&reviewed)reviewId=crypto.randomUUID();
+   changes=state.state==='changes_requested';
    if(state.state==='none'||state.state==='stale'){if(receipt){versionId=crypto.randomUUID();reviewId=crypto.randomUUID();}receipt=null;reviewed=false;delivered=false;}
    else{
     var r=state.receipt;if(!r||!r.versionId||!r.recipientId||!r.documentHash||!r.fileHash||!state.docxBase64)throw Error('Не хватает данных сохранённой версии.');
@@ -69,6 +73,13 @@
     if(!captured||await sha(await captured.arrayBuffer())!==r.fileHash)previewed=false;
     guard();captured=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});receipt=r;versionId=r.versionId;
     reviewed=state.state==='reviewed'||state.state==='delivered';delivered=state.state==='delivered';
+    if(changes&&state.review&&state.review.reviewId===notesId)notesId=crypto.randomUUID();
+    if(changes&&restore!==false){
+     amend=false;
+     if(!state.review||state.review.versionId!==versionId)throw Error("Версия замечаний не подтверждена");
+     codes.forEach(function(code){var c=state.review.criteria[code]||{};wrap.querySelector('[data-criterion-status="'+code+'"]').value=c.status||"";wrap.querySelector('[data-criterion="'+code+'"]').value=c.evidence||"";wrap.querySelector('[data-criterion-section="'+code+'"]').value=c.section||"";});
+     wrap.querySelector("[data-reviewed]").checked=false;
+    }
     if(reviewed){
      if(!state.review||state.review.versionId!==versionId||!state.review.reviewId)throw Error('Проверка версии не подтверждена.');
      reviewId=state.review.reviewId;
@@ -84,16 +95,38 @@
   function binding(){return {id:requestId,versionId:versionId,reviewId:reviewId,recipientId:receipt.recipientId,fileHash:receipt.fileHash,documentHash:receipt.documentHash,document:payload};}
   async function run(action){if(busy)return;busy=true;controls();try{guard();await action();}catch(e){msg.textContent=e.message||'Не удалось подтвердить состояние. Нажмите «Обновить состояние».';}finally{busy=false;controls();}}
   wrap.querySelector('[data-preview]').onclick=function(){try{guard();download(payload,captured);previewed=true;}catch(e){known=false;msg.textContent=e.message;controls();}};
-  saveButton.onclick=function(){return run(async function(){
-   if(!previewed||!wrap.querySelector('[data-reviewed]').checked)throw Error('Проверьте документ Word и подтвердите получателя.');
-   var criteria=criteriaValues();msg.textContent='Сохраняем проверку…';
-   await loadState();if(reviewed||delivered)return;
-   if(!previewed)throw Error('На сервере другая версия Word. Откройте точный Word и повторите проверку.');
+  async function prepareVersion(){
    if(!receipt){
     var bytes=new Uint8Array(await captured.arrayBuffer()),binary='';for(var j=0;j<bytes.length;j+=8192)binary+=String.fromCharCode.apply(null,bytes.subarray(j,j+8192));
     guard();known=false;var prepared=await Oblako.requestApi({action:'prepare-result',id:requestId,versionId:versionId,document:payload,docxBase64:btoa(binary)});guard();
     if(prepared.versionId!==versionId||prepared.fileHash!==await sha(bytes))throw Error('Сохранённый файл не совпал с проверенным');guard();receipt=prepared;
    }
+  }
+  notesButton.onclick=function(){if(reviewed&&!amend&&!busy){amend=true;controls();msg.textContent='Укажите замечания и сохраните их. До сохранения действует предыдущая проверка.';return;}return run(async function(){
+   if(!previewed)throw Error('Откройте точный Word перед сохранением замечаний.');
+   var criteria={},blocked=false;
+   codes.forEach(function(code){
+    var value=wrap.querySelector('[data-criterion-status="'+code+'"]').value,evidence=wrap.querySelector('[data-criterion="'+code+'"]').value.trim(),section=wrap.querySelector('[data-criterion-section="'+code+'"]').value.trim();
+    if(value!=='fail'&&value!=='manual')return;
+    if(!value||evidence.length<10||!section)throw Error('Укажите результат, место и замечание: '+code);
+    criteria[code]={status:value,evidence:evidence,section:section};if(value==='fail'||value==='manual')blocked=true;
+   });
+   if(!blocked)throw Error('Выберите «Не пройден» или «Нужна ручная проверка» для замечания.');
+   await loadState(false);if(delivered)throw Error('Эта версия уже передана. Прикрепите новую версию Word.');
+   if(!previewed)throw Error('Word изменился. Откройте точный файл и повторите проверку.');
+   await prepareVersion();
+   known=false;
+   var ack=await Oblako.requestApi(Object.assign({},binding(),{action:'review-notes',reviewId:notesId,criteria:criteria}));guard();
+   if(ack.reviewId!==notesId||ack.versionId!==versionId)throw Error('Сохранение замечаний не подтверждено. Обновите состояние.');
+   notesId=crypto.randomUUID();reviewId=crypto.randomUUID();
+   await loadState();if(!changes)throw Error('Замечания не подтверждены сервером.');
+  });};
+  saveButton.onclick=function(){return run(async function(){
+   if(!previewed||!wrap.querySelector('[data-reviewed]').checked)throw Error('Проверьте документ Word и подтвердите получателя.');
+   var criteria=criteriaValues();msg.textContent='Сохраняем проверку…';
+   await loadState(false);if(reviewed||delivered)return;
+   if(!previewed)throw Error('На сервере другая версия Word. Откройте точный Word и повторите проверку.');
+   await prepareVersion();
    known=false;var ack=await Oblako.requestApi(Object.assign({action:'review-result',criteria:criteria},binding()));guard();
    if(ack.reviewId!==reviewId||ack.versionId!==versionId)throw Error('Проверка не подтверждена');
    await loadState();if(!reviewed)throw Error('Сохранение проверки не подтверждено сервером. Обновите состояние.');
@@ -105,6 +138,17 @@
    if(!result.saved||result.deliveryId!==versionId)throw Error('Передача не подтверждена. Обновите состояние.');
    await loadState();if(!delivered)throw Error('Передача не подтверждена. Обновите состояние.');
   });};
+  wrap.querySelector('[data-review-history]').ontoggle=async function(){
+   if(!this.open)return;
+   var target=wrap.querySelector('[data-review-history-body]');target.textContent='Загружаем историю…';
+   try{guard();var result=await Oblako.requestApi({action:'result-review-history',id:requestId});guard();
+    if(!Array.isArray(result.reviews))throw Error('История не подтверждена');
+    target.innerHTML='<p class="hint">Последние '+result.reviews.length+' проверок (не более 100). Замечания старой версии не подтверждают новую.</p>'+result.reviews.map(function(r){
+     var v=r.studkab_result_versions||{};
+     return '<details><summary>Версия '+esc(v.revision)+' · '+esc(new Date(r.created_at).toLocaleString('ru-RU'))+'</summary><p>Word: '+esc(v.file_hash)+'</p>'+Object.keys(r.criteria||{}).map(function(code){var c=r.criteria[code];return '<p><b>'+esc(code)+' · '+esc({pass:'Пройден',fail:'Не пройден',manual:'Нужна ручная проверка',not_applicable:'Не применимо'}[c.status]||c.status)+'</b><br>'+esc(c.section||'')+'<br>'+esc(c.evidence||'')+'</p>';}).join('')+'</details>';
+    }).join('');
+   }catch(e){target.textContent=e.message||'Не удалось загрузить историю.';}
+  };
   refreshButton.onclick=function(){return run(loadState);};
   (async function(){try{
    payload=await reviewDocument(x,key,external);guard();captured=external?null:ResultDocx(payload,payload.chapters);

@@ -206,6 +206,10 @@
     {
       "file": "20260921181451_c085_clarification_actor_permissions.sql",
       "sha256": "7d1f18e7b6b25d458e7c726ae3e2b6ba00efbf364cd9e0c90d1a6031f7f415b1"
+    },
+    {
+      "file": "20260922032858_c089_review_notes.sql",
+      "sha256": "4587a2984f0fcb7fbb5f0a4f02e7852bc10d8ba411297fa11f865cc7663284dc"
     }
   ]
 }
