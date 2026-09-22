@@ -39,6 +39,11 @@
   if(!save()){x.doc=d;toast('Не удалось сохранить восстановление');return false;}return true;
  }
  function lock(w,on){w.querySelectorAll('button,input,textarea,select').forEach(function(el){el.disabled=on;});}
+ function sourceReview(x){
+  var review=DraftQuality.sourceReview(x);
+  if(!review.rows.length)return '<p class="hint">Связи утверждений с источниками автоматически не распознаны. Проверьте ссылки и основания вручную.</p>';
+  return '<details data-source-review><summary>Сопоставить утверждения и источники · '+review.rows.length+'</summary><p>Для каждой связи сравните текст работы с фрагментом. Наличие ссылки и заполненной карточки не подтверждает смысл или подлинность источника. Результат фиксируется в пункте итоговой проверки об источниках.</p>'+review.rows.map(function(r){return '<section style="border-top:1px solid #cbd9e5;padding:12px 0;white-space:pre-wrap;overflow-wrap:anywhere"><b>'+esc(r.section)+' · '+esc(r.citation)+'</b><p><b>Контекст ссылки:</b> '+esc(r.context)+'</p><p><b>Реквизиты:</b> '+esc(r.details||'Не найдены')+'</p><p><b>Фрагмент:</b> '+esc(r.fragment||'Не найден')+'</p><p><b>В карточке заявлено:</b> '+esc(r.declaredClaim||'Не указано')+'</p><p>Требует ручной проверки смысла.</p></section>';}).join('')+(review.omitted?'<p>Не показано связей: '+review.omitted+'. Проверьте также оставшиеся ссылки в точном Word.</p>':'')+'</details>';
+ }
  function check(x){
   var report=DraftQuality.riskReport(x),errors=report.blockers;
   function list(values){return '<ul>'+values.map(function(v){return '<li>'+esc(v)+'</li>';}).join('')+'</ul>';}
@@ -46,9 +51,9 @@
   var notes=report.notes.length?'<details><summary>Замечания к объёму и повторам · '+report.notes.length+'</summary>'+list(report.notes)+'</details>':'';
   var facts='<p class="hint">Найдено в тексте: разделов — '+report.facts.sections.length+', таблиц — '+report.facts.tables+', рисунков — '+report.facts.figures+', приложений — '+report.facts.appendices+'. Это автоматический подсчёт, не подтверждение качества.</p>';
   var requirements=report.sources.evidence.length?'<details><summary>Распознанные требования к источникам</summary>'+list(report.sources.evidence.map(function(e){return e.quote;}))+'</details>':'<p class="hint">Минимальное число источников в исходных требованиях автоматически не распознано. Сверьте его вручную.</p>';
-  var w=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Отчёт проверки документа</h3><p data-risk-summary>'+ (errors.length?'Передача пока недоступна. Блокирующих замечаний: '+errors.length+'.':'Автоматических блокеров не найдено. Соответствие всем требованиям ещё не подтверждено.')+'</p>'+facts+groups+requirements+notes+'<details><summary>Обязательная ручная проверка</summary>'+list(report.manual)+'</details>'+(errors.length?'':'<p>Следующий шаг — итоговая проверка точного Word с доказательством по каждому пункту.</p><label><input type="checkbox" data-review> Автоматические замечания просмотрены</label><button type="button" class="btn" data-approve>Перейти к итоговой проверке</button>')+'<p data-review-status role="status"></p>');
+  var w=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Отчёт проверки документа</h3><p data-risk-summary>'+ (errors.length?'Передача пока недоступна. Блокирующих замечаний: '+errors.length+'.':'Автоматических блокеров не найдено. Соответствие всем требованиям ещё не подтверждено.')+'</p>'+facts+groups+requirements+notes+sourceReview(x)+'<details><summary>Обязательная ручная проверка</summary>'+list(report.manual)+'</details>'+(errors.length?'':'<p>Следующий шаг — итоговая проверка точного Word с доказательством по каждому пункту.</p><label><input type="checkbox" data-review> Автоматические замечания просмотрены</label><button type="button" class="btn" data-approve>Перейти к итоговой проверке</button>')+'<p data-review-status role="status"></p>');
   var data=D,identity=Oblako.identity(),stamp=DraftQuality.stamp(x);w.dataset.accountIdentity=String(identity);
   var b=w.querySelector('[data-approve]');if(b)b.onclick=function(){if(D!==data||Oblako.identity()!==identity||stamp!==DraftQuality.stamp(x))return toast('Документ изменился. Повторите проверку.');if(!w.querySelector('[data-review]').checked)return toast('Подтвердите, что автоматические замечания просмотрены');x.doc.review=stamp;if(save()){w.remove();toast('Можно открыть итоговую проверку Word перед передачей.');}else{delete x.doc.review;toast('Подтверждение не сохранено');}};
  }
- global.DraftEditor={form:form,read:read,bind:bind,basis:basis,backup:backup,restore:restore,lock:lock,check:check};
+ global.DraftEditor={sourceReview:sourceReview,form:form,read:read,bind:bind,basis:basis,backup:backup,restore:restore,lock:lock,check:check};
 })(window);

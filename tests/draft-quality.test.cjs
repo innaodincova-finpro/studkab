@@ -235,3 +235,28 @@ test('C087 approximate word ranges warn but never certify or reject Word paginat
  const fin={doc:{inputs:{requirements:'УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.'},order:[{id:'intro',name:'Введение',pages:2}],structure:{intro:{text:'слово '.repeat(30)}}}};
  assert(q.finAcceptance(fin).errors.some(n=>n.includes('требуется 500–700')));
 });
+
+test('C088 explicit percentage arithmetic catches errors and accepts rounding without evaluating prose',()=>{
+ const work=text=>({doc:{order:[{id:'body',name:'Анализ'}],structure:{body:{text}}}});
+ for(const expr of ['9 / 18 × 100 = 50%','8/13*100=61,54%','1:3·100=33%','-1/4×100=-25%','1,5 / 3 × 100 = 50,0%']){
+  const r=q.percentageCheck(work(expr));assert.equal(r.checks.length,1,expr);assert.deepEqual(r.errors,[],expr);
+ }
+ for(const expr of ['9 / 18 × 100 = 60%','8/13*100=61,55%','1/0×100=0%','Доля: 9/18×100=60%','Доля:9/18×100=60%']){
+  const x=work(expr),r=q.percentageCheck(x);assert.equal(r.errors.length,1,expr);assert(q.riskReport(x).blockers.some(e=>e.includes(expr.replace(/^Доля:\s*/,''))));
+ }
+ for(const expr of ['9/18','9 / n × 100 = 50%','2 + 9/18×100=60%','10e9/18×100=60%','1 000/18×100=60%','(9/18×100=60%)','9/18×100=60% + 1','2 : 9/18×100=60%','−9/18×100=60%'])assert.equal(q.percentageCheck(work(expr)).checks.length,0,expr);
+ assert.equal(q.percentageCheck(work('Большинство: 9 из 18 человек.')).checks.length,0);
+});
+test('C088 source comparisons expose actual citation context and never infer semantic truth',()=>{
+ const x={doc:{inputs:{sources:'[S1]\nРеквизиты: Учебный источник, 2026, с. 1.\nФрагмент: Протокол совещания содержит решения и ответственных.\nПодтверждает: Протокол должен фиксировать решения.'},order:[{id:'body',name:'Анализ'},{id:'refs',name:'Источники'}],structure:{body:{text:'Совещания увеличивают прибыль на 30% [1].'},refs:{text:'1. Учебный источник, 2026, с. 1.'}}}};
+ const before=JSON.stringify(x),r=q.sourceReview(x);
+ assert.equal(r.rows.length,1);assert.equal(r.rows[0].citation,'S1');assert(r.rows[0].context.includes('прибыль на 30%'));assert(r.rows[0].fragment.includes('решения и ответственных'));assert.equal(r.rows[0].status,'manual');assert.equal(JSON.stringify(x),before);
+ x.doc.structure.body.text='Протокол должен фиксировать решения [S1].';assert.equal(q.sourceReview(x).rows[0].status,'manual');
+ x.doc.structure.body.text='Контекст с неизвестной ссылкой [99].';assert.equal(q.sourceReview(x).rows[0].fragment,'');assert.equal(q.sourceReview(x).rows[0].status,'manual');
+});
+test('C088 evidence panel escapes source text and says semantic verification remains manual',()=>{
+ const fs=require('node:fs'),vm=require('node:vm');
+ const context={window:{},DraftQuality:q,esc:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')};vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../draft-editor.js'),'utf8'),context);
+ const x={doc:{inputs:{sources:'[S1]\nРеквизиты: <img src=x onerror=alert(1)>\nФрагмент: Источник содержит произвольный учебный текст.\nПодтверждает: Заявленное подтверждение.'},order:[{id:'body',name:'Текст'}],structure:{body:{text:'Утверждение документа [S1].'}}}};
+ const html=context.window.DraftEditor.sourceReview(x);assert(!html.includes('<img'));assert(html.includes('&lt;img'));assert(html.includes('Требует ручной проверки смысла'));
+});
