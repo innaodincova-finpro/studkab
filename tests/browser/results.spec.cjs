@@ -223,3 +223,26 @@ test('C087 approximate volume permits review but manual or failed C12 cannot sav
   expect(await page.evaluate(()=>calls.filter(c=>c.action==='review-result'||c.action==='deliver').length)).toBe(0);
  }
 });
+
+test('C088 arithmetic blocks review; source meaning requires C10 evidence',async({page})=>{
+ await setupReview(page);await page.locator('.sheet .close').click();
+ await page.evaluate(()=>{candidate.doc.structure.intro.text='Доля: 9/18×100=60%.';candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);});
+ await expect(page.locator('[data-save-review]')).toHaveCount(0);
+ await expect(page.getByText(/арифметическая ошибка/)).toBeVisible();
+ await page.evaluate(()=>{
+  candidate.doc.inputs.sources='[S1]\nРеквизиты: Учебный источник, 2026, с. 1.\nФрагмент: Протокол содержит решения и ответственных.\nПодтверждает: Фиксация решений совещания.';
+  candidate.doc.structure.intro.text='Прибыль выросла на 30% благодаря совещаниям [S1]. Доля: 9/18×100=50%.';
+  candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);
+ });
+ await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await page.locator('[data-source-review] summary').click();
+ await expect(page.locator('[data-source-review]')).toContainText('Прибыль выросла на 30%');
+ await expect(page.locator('[data-source-review]')).toContainText('Протокол содержит решения и ответственных');
+ await expect(page.locator('[data-source-review]')).toContainText('Требует ручной проверки смысла');
+ await fillReview(page);
+ for(const state of ['manual','fail']){
+  await page.locator('[data-criterion-status="C10"]').selectOption(state);await page.locator('[data-save-review]').click();
+  await expect(page.locator('[data-result-status]')).toContainText('заблокирована');
+  expect(await page.evaluate(()=>calls.filter(c=>c.action==='review-result'||c.action==='deliver').length)).toBe(0);
+ }
+});

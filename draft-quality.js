@@ -135,6 +135,42 @@
   required.forEach(function(label){var keys=sourceKey(label),matches=keys.filter(function(key){return available.indexOf(key)>=0;});if(keys.length&&matches.length<Math.min(2,keys.length))errors.push('Источник из утверждённого паспорта не найден в списке литературы: '+label+'.');});
   return {inList:inList,used:used,cards:evidence.cards,errors:Array.from(new Set(errors))};
  }
+ // Narrow arithmetic check; no evaluation of arbitrary expressions or inferred data.
+ function percentageCheck(x){
+  var d=x.doc||{},errors=[],checks=[];
+  (d.order||[]).filter(function(c){return c.id!=='refs';}).forEach(function(c){
+   var text=String(((d.structure||{})[c.id]||{}).text||'');
+   var re=/(?<![\p{L}\p{N}.,+*/×÷:−\-])(-?\d{1,12}(?:[.,]\d{1,6})?)\s*[/÷:]\s*(-?\d{1,12}(?:[.,]\d{1,6})?)\s*[*×·]\s*100\s*=\s*(-?\d{1,12}(?:[.,]\d{1,6})?)\s*%/gu;
+   for(var m of text.matchAll(re)){
+    // Do not validate a suffix of a compound/grouped expression.
+    if(/[\d.,+*/×÷:−\-(]\s*$/.test(text.slice(0,m.index))||/^\s*(?:[+*/×÷=]|-\s*\d)/.test(text.slice(m.index+m[0].length)))continue;
+    var a=Number(m[1].replace(',','.')),b=Number(m[2].replace(',','.')),actual=Number(m[3].replace(',','.'));
+    var precision=(m[3].split(/[.,]/)[1]||'').length,expected=b===0?null:a/b*100;
+    var tolerance=0.5*Math.pow(10,-precision)+Number.EPSILON*Math.max(1,Math.abs(expected||0),Math.abs(actual))*8;
+    var valid=b!==0&&Number.isFinite(expected)&&Math.abs(actual-expected)<=tolerance;
+    checks.push({section:c.id,expression:m[0],expected:expected,actual:actual,valid:valid});
+    if(!valid)errors.push('Раздел «'+c.name+'»: '+m[0]+(b===0?' — деление на ноль.':' — арифметическая ошибка; результат '+String(Number(expected.toFixed(6))).replace('.',',')+'%.'));
+   }
+  });
+  return {checks:checks,errors:errors};
+ }
+ function sourceReview(x){
+  var d=x.doc||{},cards=sourceEvidence(inputs(x).sources).cards,rows=[],omitted=0;
+  var links=bibliographyLinks(((d.structure||{}).refs||{}).text,cards);
+  (d.order||[]).filter(function(c){return c.id!=='refs';}).forEach(function(c){
+   String(((d.structure||{})[c.id]||{}).text||'').split(/\n\s*\n/).forEach(function(paragraph){
+    var tokens=citationTokens(paragraph),seen=new Set();
+    tokens.forEach(function(token){
+     var id=token.explicit?token.number:links[token.number],key=id?'S'+id:'?'+token.number;
+     if(seen.has(key))return;seen.add(key);
+     if(rows.length>=200){omitted++;return;}
+     var card=cards[id];
+     rows.push({section:c.name,citation:key,context:paragraph,details:card&&card.details||'',fragment:card&&card.fragment||'',declaredClaim:card&&card.claim||'',status:'manual'});
+    });
+   });
+  });
+  return {rows:rows,omitted:omitted};
+ }
  function proseIntegrity(x){
   var d=x.doc||{},errors=[];
   (d.order||[]).forEach(function(c){
@@ -297,6 +333,7 @@
    {title:'Требования и комплектность',errors:preflight(x).concat(issues(x.doc||{}),acceptance.errors)},
    {title:'Источники и ссылки',errors:sourceCheck(x).errors},
    {title:'Согласованность текста',errors:consistency(x).errors.concat(proseIntegrity(x).errors)},
+   {title:'Явные процентные расчёты',errors:percentageCheck(x).errors},
    {title:extended(x)?'Расчёты контрольного профиля':'Объём текста по ориентирам разделов',errors:volume.errors}
   ];
   if(x.doc&&x.doc.basis){var basis=JSON.stringify([x.topic,inputs(x),x.doc.order]);if(basis!==x.doc.basis)groups[0].errors.push('Материалы или структура изменились после подготовки');}
@@ -390,7 +427,7 @@
    'Обязательные таблицы, рисунки и приложения присутствуют',
    'Расчёты проверены либо обоснованно неприменимы к этой работе',
    'Рекомендации и итоговые утверждения обоснованы материалами',
-   'Источники существуют и подтверждают соседние утверждения',
+   'Источники существуют; контекст каждой ссылки сопоставлен с фрагментом, смысл подтверждён',
    'Файл открывается и редактируется в Microsoft Word',
    'Объём и комплектность: фактические страницы точного Word сверены с заданием',
    'Проверенный файл относится к нужному получателю и версии',
@@ -420,6 +457,6 @@
  }
  function stamp(x){var d=x.doc;return JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.format,[x.univ,x.faculty,x.kafedra,x.program,x.form,x.course,x.city,x.supervisor,x.workType,x.discipline],inputs(x),d.order,d.structure]);}
  function sequence(doc){var a=doc.order.filter(function(c){return !/^(intro|concl|refs)$/.test(c.id);});return a.concat(doc.order.filter(function(c){return c.id==='intro';}),doc.order.filter(function(c){return c.id==='concl';}),doc.order.filter(function(c){return c.id==='refs';}));}
- var api={citationTokens:citationTokens,bibliographyLinks:bibliographyLinks,riskReport:riskReport,sourceMinima:sourceMinima,sourceRequirements:sourceRequirements,consistency:consistency,sourceEvidence:sourceEvidence,sourceCheck:sourceCheck,proseIntegrity:proseIntegrity,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
+ var api={percentageCheck:percentageCheck,sourceReview:sourceReview,citationTokens:citationTokens,bibliographyLinks:bibliographyLinks,riskReport:riskReport,sourceMinima:sourceMinima,sourceRequirements:sourceRequirements,consistency:consistency,sourceEvidence:sourceEvidence,sourceCheck:sourceCheck,proseIntegrity:proseIntegrity,extended:extended,analysis:analysis,finAcceptance:finAcceptance,requirementProfile:requirementProfile,documentAcceptance:documentAcceptance,reviewCriteria:reviewCriteria,cloudDraft:cloudDraft,wordCount:wordCount,cloudReport:cloudReport,financial:financial,inputs:inputs,finance:finance,preflight:preflight,issues:issues,context:context,stamp:stamp,sequence:sequence,headers:names,budget:budget,cleanSection:cleanSection,sectionRules:sectionRules,editorialNotes:editorialNotes,sectionNotes:sectionNotes};
  if(typeof module==='object'&&module.exports)module.exports=api;else root.DraftQuality=api;
 })(typeof window==='object'?window:globalThis);
