@@ -975,27 +975,87 @@ async function prepareRequestFiles(wrap){
   for(var field of fields){var payload=await requestFilePayload(field.files[0]);payload.category=field.dataset.requestFile;prepared.push(payload);}
   return prepared;
 }
-async function uploadRequestFiles(wrap,requestId,button,prepared,required){
+async function uploadRequestFiles(wrap,requestId,button,prepared,required,assertCurrent,cycleId){
+  var check=assertCurrent||function(){};check();
   var fields=Array.from(wrap.querySelectorAll('[data-request-file]')).filter(function(x){return x.files&&x.files[0];});
   var listed=await Oblako.requestApi({action:'attachment-list',id:requestId});
+  check();
   var active=listed.attachments||[];
   var existing=new Set(active.map(function(x){return x.file_hash;}));
   var saved=existing.size;
   var count=prepared?prepared.length:fields.length;
   for(var i=0;i<count;i++){
+    check();
     button.textContent='Загружаем файл '+(i+1)+' из '+count+'…';
     var payload=prepared?Object.assign({},prepared[i]):await requestFilePayload(fields[i].files[0]);if(!prepared)payload.category=fields[i].dataset.requestFile;
+    check();
     if(active.some(function(x){return x.file_hash===payload.fileHash&&x.category===payload.category;}))continue;
     var prior=active.filter(function(x){return x.category===payload.category;});
     if(prior.length>1)throw Error('В этой категории несколько старых файлов. Согласуйте замену с исполнителем');
     if(prior.length)payload.replacesId=prior[0].id;
     payload.action='attachment-upload';payload.id=requestId;
+    if(cycleId)payload.cycleId=cycleId;
     await Oblako.requestApi(payload);
+    check();
     existing.add(payload.fileHash);if(!prior.length)saved++;
     active=active.filter(function(x){return x.category!==payload.category;});active.push({file_hash:payload.fileHash,category:payload.category});
   }
   if((required||[]).some(function(p){return !active.some(function(x){return x.file_hash===p.fileHash&&x.category===p.category;});}))throw Error('Не все выбранные ранее материалы загружены. Выберите оставшиеся файлы повторно.');
   return saved;
+}
+async function openStudentMaterials(workId){
+ var w=work(workId);if(!w||!w.req||!w.req.serverId)return;
+ var r=w.req,identity=Oblako.identity(),expectedData=D,busy=false,state;
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Материалы заявки</h3><p role="status">Проверяем состояние материалов…</p>');
+ function current(){if(identity!==Oblako.identity()||D!==expectedData||!wrap.isConnected)throw Error('Кабинет или окно изменились. Откройте материалы заново.');}
+ async function readState(){var result=await Oblako.requestApi({action:'material-revision-state',id:r.serverId});current();if(!result.materials||!['initial','locked','open'].includes(result.materials.state)||!Number.isSafeInteger(result.materials.requestRevision))throw Error('Не удалось подтвердить состояние материалов');return result.materials;}
+ try{
+  state=await readState();
+  var listed=await Oblako.requestApi({action:'attachment-list',id:r.serverId});current();
+  var checked=await readState();if(checked.requestRevision!==state.requestRevision||checked.cycleId!==state.cycleId)throw Error('Материалы изменились во время загрузки. Откройте их заново.');
+  var pane=wrap.querySelector('.sheet-in'),titleId=wrap.getAttribute('aria-labelledby');
+  var names={assignment:'Задание',methodology:'Методические указания',data:'Исходные данные',sources:'Источники'};
+  function fileList(rows){return rows.map(function(a){return '<li>'+esc(names[a.category]||a.category)+': '+esc(a.file_name)+'</li>';}).join('');}
+  var files=fileList(listed.attachments||[]);
+  pane.innerHTML='<button type="button" class="close" data-x="1">✕</button><h3 id="'+esc(titleId)+'">Материалы заявки</h3>'+(state.state==='open'?'<p><b>Нужно дополнить материалы</b></p><p style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(state.reason||'')+'</p>':'<p>'+esc(state.blockingReason||'Изменения закрыты. Если нужно добавить файл, попросите исполнителя открыть дополнение материалов.')+'</p>')+'<ul data-material-files>'+(files||'<li>Приложенных файлов пока нет.</li>')+'</ul>'+(state.state==='open'&&state.canUpload?'<p class="hint">Один актуальный файл в каждой категории, DOCX, PDF или TXT до 5 МБ. Новый файл заменяет текущую редакцию; прежняя сохраняется в истории.</p>'+Object.keys(names).map(function(key){return '<div class="field"><label>'+esc(names[key])+'<input type="file" data-request-file="'+key+'" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label></div>';}).join('')+'<div class="rowbtns"><button type="button" class="btn" data-material-upload>Сохранить выбранные файлы</button><button type="button" class="btn" data-material-complete>Завершить дополнение</button></div><p class="hint">Сначала сохраните все нужные файлы. Затем завершите дополнение: исполнитель проверит комплект и новый паспорт.</p>':'')+'<p role="status" data-material-status></p>';
+  if(state.state!=='open'||!state.canUpload)return;
+  if(r.materialRevisionCycleId!==state.cycleId)change(function(){r.materialRevisionCycleId=state.cycleId;r.materialRevisionPendingFiles=[];});
+  var upload=wrap.querySelector('[data-material-upload]'),complete=wrap.querySelector('[data-material-complete]'),status=wrap.querySelector('[data-material-status]');
+  function pending(){return (r.materialRevisionPendingFiles||[]).length>0;}
+  function selected(){return Array.from(wrap.querySelectorAll('[data-request-file]')).some(function(field){return field.files&&field.files.length;});}
+  function buttons(){upload.disabled=busy;complete.disabled=busy||pending()||selected()||!state.canComplete;}
+  if(pending())status.textContent='Загрузка не завершена. Выберите несохранённые файлы повторно; уже сохранённые не дублируются.';
+  wrap.addEventListener('change',buttons);buttons();
+  upload.addEventListener('click',async function(){
+   if(busy)return;busy=true;buttons();
+   try{
+    current();var prepared=await prepareRequestFiles(wrap);current();
+    if(!prepared.length&&!pending())throw Error('Выберите файлы для сохранения.');
+    change(function(){r.materialRevisionPendingFiles=(r.materialRevisionPendingFiles||[]).filter(function(p){return !prepared.some(function(f){return f.category===p.category;});}).concat(prepared.map(function(f){return {category:f.category,fileHash:f.fileHash,fileName:f.fileName};}));});
+    await uploadRequestFiles(wrap,r.serverId,upload,prepared,r.materialRevisionPendingFiles,current,state.cycleId);current();
+    change(function(){r.materialRevisionPendingFiles=[];});
+    wrap.querySelectorAll('[data-request-file]').forEach(function(field){field.value='';});
+    var beforeList=await readState();var savedList=await Oblako.requestApi({action:'attachment-list',id:r.serverId});current();var afterList=await readState();
+    if(beforeList.requestRevision!==afterList.requestRevision||afterList.cycleId!==state.cycleId)throw Error('Материалы изменились в другом окне. Откройте их заново и проверьте комплект.');
+    state=afterList;wrap.querySelector('[data-material-files]').innerHTML=fileList(savedList.attachments||[]);status.textContent='Файлы сохранены. Если комплект готов, нажмите «Завершить дополнение».';
+   }catch(e){if(wrap.isConnected&&D===expectedData&&identity===Oblako.identity())status.textContent=(e.message||'Не удалось подтвердить загрузку')+(pending()?' Загрузка не завершена. Выберите несохранённые файлы повторно.':'');}
+   finally{busy=false;upload.textContent='Сохранить выбранные файлы';buttons();}
+  });
+  complete.addEventListener('click',async function(){
+   if(busy||pending()||selected())return;busy=true;buttons();
+   try{
+    current();var latest=await readState();
+    if(latest.cycleId===state.cycleId&&latest.state==='locked'){wrap.remove();render();toast('Дополнение уже завершено. Исполнитель проверит материалы.');return;}
+    if(latest.cycleId!==state.cycleId||latest.state!=='open')throw Error('Состояние материалов изменилось. Откройте их заново.');
+    if(latest.requestRevision!==state.requestRevision)throw Error('Состав материалов изменился в другом окне. Откройте материалы заново и проверьте комплект перед завершением.');
+    var completed=await Oblako.requestApi({action:'material-revision-complete',id:r.serverId,cycleId:state.cycleId,expectedRevision:latest.requestRevision});current();
+    if(!completed.materials||completed.materials.state!=='locked'||completed.materials.cycleId!==state.cycleId)throw Error('Состояние материалов изменилось. Откройте материалы заново.');
+    change(function(){r.materialRevisionPendingFiles=[];});
+    wrap.remove();render();toast('Дополнение завершено. Исполнитель проверит материалы и новую версию требований.');
+   }catch(e){if(wrap.isConnected&&D===expectedData&&identity===Oblako.identity())status.textContent=e.message||'Не удалось подтвердить завершение. Повторите действие.';}
+   finally{busy=false;buttons();}
+  });
+ }catch(e){if(wrap.isConnected&&D===expectedData&&identity===Oblako.identity())wrap.querySelector('[role=status]').textContent=e.message||'Не удалось загрузить материалы';}
 }
 function openRequest(workId){
   var w = work(workId); if (!w) return;
@@ -1883,6 +1943,7 @@ function viewWork(id){
       (w.deadline ? ' · срок ' + ruDate(w.deadline) : '') + ' · ' + pill(st) + '</div>';
 
   if(w.req && w.req.serverId){
+    h += card(lab('Материалы заявки')+'<p class="hint">Проверьте, запросил ли исполнитель дополнительные документы. Загрузите файлы и отдельно завершите дополнение.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Проверить и дополнить материалы</button>');
     h += card(lab("Вопросы исполнителя")+'<p class="hint">Посмотрите, нужны ли уточнения по вашей работе, и сохраните ответ.</p><button type="button" class="btn" data-act="student-clarifications" data-id="'+esc(w.id)+'">Открыть вопросы и ответы</button>');
     h += card(lab("Черновик от исполнителя") + '<p class="hint">Откройте результат заявки, чтобы проверить готовность и скачать документ Word.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
     h += '<details class="fold"><summary>Мои разделы и доработка</summary><div class="in"><p class="hint">Здесь текст, который вы редактируете в кабинете. Процент ниже относится только к этим разделам. Документ исполнителя доступен отдельно, в результате заявки.</p>';
@@ -2506,6 +2567,7 @@ document.addEventListener("click", function(ev){
   if (act === "edit-work") return openWorkEditor(id);
   if (act === "edit-format") return openFormatEditor(id);
   if (act === "edit-chapter") return openChapterEditor(id, el.getAttribute("data-ch"));
+  if(act==='student-materials'){openStudentMaterials(id);return;}
   if(act==='student-clarifications'){var cw=work(id);if(cw&&cw.req&&cw.req.serverId)StudClarifications.show({requestId:cw.req.serverId,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal});return;}
   if (act === "receive-result") return StudResults.receive(work(id));
   if (act === "export-word") return exportWord(id);

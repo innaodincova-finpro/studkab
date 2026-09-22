@@ -1,4 +1,5 @@
 import {clarificationAction} from './clarifications.mjs';
+import {materialRevisionAction} from './material-revision.mjs';
 import {sameSecret} from '../_shared/secret-equal.mjs';
 import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
@@ -59,6 +60,9 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    }
    if(['clarification-list','clarification-ask','clarification-answer'].includes(input.action)){
     const r=await clarificationAction(input,user,{db,config,isMember});return json(r.data,r.status||200);
+   }
+   if(['material-revision-state','material-revision-open','material-revision-complete'].includes(input.action)){
+    const r=await materialRevisionAction(input,user,{db,config,isMember});return json(r.data,r.status||200);
    }
    if(['passport-get','passport-ensure','passport-save','passport-approve'].includes(input.action)){
     const r=await requirementAction(input,user,{db,config});return json(r.data,r.status||200);

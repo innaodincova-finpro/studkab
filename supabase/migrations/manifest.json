@@ -278,6 +278,13 @@
       "comparison": "exact"
     }
   ],
-  "pending_migrations": [],
+  "pending_migrations": [
+    {
+      "file": "20260922181317_c096_material_revision.sql",
+      "sha256": "c56d757dc7b01daac90e8ca8902ee0b16e5feedb4882d4166fc276fc5174bc4f",
+      "version": "20260922181317",
+      "name": "c096_material_revision"
+    }
+  ],
   "production_reconciled_at": "2026-09-22"
 }
