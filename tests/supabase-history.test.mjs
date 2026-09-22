@@ -12,7 +12,14 @@ test("migration files match the production snapshot plus explicit pending change
   const tracked = manifest.migrations.concat(manifest.pending_migrations || []);
   const expected = tracked.map((item) => item.file).sort();
   assert.deepEqual(files, expected);
-  assert.equal(manifest.migrations.length, 24);
+  assert.equal(new Set(tracked.map(item => item.version)).size, tracked.length);
+  for (const item of manifest.migrations) {
+    if (item.production_verified_at) {
+      assert.match(item.production_version, /^\d{14}$/);
+      assert.match(item.production_sha256, /^[a-f0-9]{64}$/);
+      assert.ok(["exact", "equal_ignoring_comments_and_whitespace"].includes(item.comparison));
+    }
+  }
 
   for (const item of tracked) {
     const sql = await readFile(new URL(item.file, migrationsDir));
