@@ -196,7 +196,7 @@ test('C078 absent volume guidance does not invent an appendix target',()=>{
 test('C086 section prompts carry latest approved requirements without mutating source basis',()=>{
  const fs=require('node:fs'),vm=require('node:vm');
  const html=fs.readFileSync(require.resolve('../reestr.html'),'utf8');
- const build=html.slice(html.indexOf('function buildPrompt(x){'),html.indexOf('/* ---------- ПОСТАВЩИКИ'));
+ const build=html.slice(html.indexOf('function approvedStructure(x){'),html.indexOf('/* ---------- ПОСТАВЩИКИ'));
  const section=html.slice(html.indexOf('function sectionPrompt(x, c){'),html.indexOf('function ruPages('));
  const ctx={DraftQuality:q,docOf:x=>x.doc};vm.createContext(ctx);vm.runInContext(build+'\n'+section,ctx);
  for(const [topic,condition] of [['Педагогика','Сравнить пять подходов; сформулировать пять рекомендаций.'],['Менеджмент','Предложить четыре мероприятия с затратами.'],['История','Сравнить три трактовки; расчёты не предусмотрены.']]){
