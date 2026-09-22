@@ -73,7 +73,9 @@
     if(!captured||await sha(await captured.arrayBuffer())!==r.fileHash)previewed=false;
     guard();captured=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});receipt=r;versionId=r.versionId;
     reviewed=state.state==='reviewed'||state.state==='delivered';delivered=state.state==='delivered';
+    if(changes&&state.review&&state.review.reviewId===notesId)notesId=crypto.randomUUID();
     if(changes&&restore!==false){
+     amend=false;
      if(!state.review||state.review.versionId!==versionId)throw Error("Версия замечаний не подтверждена");
      codes.forEach(function(code){var c=state.review.criteria[code]||{};wrap.querySelector('[data-criterion-status="'+code+'"]').value=c.status||"";wrap.querySelector('[data-criterion="'+code+'"]').value=c.evidence||"";wrap.querySelector('[data-criterion-section="'+code+'"]').value=c.section||"";});
      wrap.querySelector("[data-reviewed]").checked=false;
