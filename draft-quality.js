@@ -140,10 +140,10 @@
   var d=x.doc||{},errors=[],checks=[];
   (d.order||[]).filter(function(c){return c.id!=='refs';}).forEach(function(c){
    var text=String(((d.structure||{})[c.id]||{}).text||'');
-   var re=/(?<![\p{L}\p{N}.,+*/×÷:−\-])(-?\d{1,12}(?:[.,]\d{1,6})?)\s*[/÷:]\s*(-?\d{1,12}(?:[.,]\d{1,6})?)\s*[*×·]\s*100\s*=\s*(-?\d{1,12}(?:[.,]\d{1,6})?)\s*%/gu;
+   var re=/(?<![\p{L}\p{N}.,+*/×÷−\-])(-?\d{1,12}(?:[.,]\d{1,6})?)\s*[/÷:]\s*(-?\d{1,12}(?:[.,]\d{1,6})?)\s*[*×·]\s*100\s*=\s*(-?\d{1,12}(?:[.,]\d{1,6})?)\s*%/gu;
    for(var m of text.matchAll(re)){
     // Do not validate a suffix of a compound/grouped expression.
-    if(/[\d.,+*/×÷:−\-(]\s*$/.test(text.slice(0,m.index))||/^\s*(?:[+*/×÷=]|-\s*\d)/.test(text.slice(m.index+m[0].length)))continue;
+    if(/(?:[\d.,+*/×÷−\-(]|\d\s*:)\s*$/.test(text.slice(0,m.index))||/^\s*(?:[+*/×÷=]|-\s*\d)/.test(text.slice(m.index+m[0].length)))continue;
     var a=Number(m[1].replace(',','.')),b=Number(m[2].replace(',','.')),actual=Number(m[3].replace(',','.'));
     var precision=(m[3].split(/[.,]/)[1]||'').length,expected=b===0?null:a/b*100;
     var tolerance=0.5*Math.pow(10,-precision)+Number.EPSILON*Math.max(1,Math.abs(expected||0),Math.abs(actual))*8;

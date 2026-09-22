@@ -241,10 +241,10 @@ test('C088 explicit percentage arithmetic catches errors and accepts rounding wi
  for(const expr of ['9 / 18 × 100 = 50%','8/13*100=61,54%','1:3·100=33%','-1/4×100=-25%','1,5 / 3 × 100 = 50,0%']){
   const r=q.percentageCheck(work(expr));assert.equal(r.checks.length,1,expr);assert.deepEqual(r.errors,[],expr);
  }
- for(const expr of ['9 / 18 × 100 = 60%','8/13*100=61,55%','1/0×100=0%']){
-  const x=work(expr),r=q.percentageCheck(x);assert.equal(r.errors.length,1,expr);assert(q.riskReport(x).blockers.some(e=>e.includes(expr)));
+ for(const expr of ['9 / 18 × 100 = 60%','8/13*100=61,55%','1/0×100=0%','Доля: 9/18×100=60%','Доля:9/18×100=60%']){
+  const x=work(expr),r=q.percentageCheck(x);assert.equal(r.errors.length,1,expr);assert(q.riskReport(x).blockers.some(e=>e.includes(expr.replace(/^Доля:\s*/,''))));
  }
- for(const expr of ['9/18','9 / n × 100 = 50%','2 + 9/18×100=60%','10e9/18×100=60%','1 000/18×100=60%','(9/18×100=60%)','9/18×100=60% + 1'])assert.equal(q.percentageCheck(work(expr)).checks.length,0,expr);
+ for(const expr of ['9/18','9 / n × 100 = 50%','2 + 9/18×100=60%','10e9/18×100=60%','1 000/18×100=60%','(9/18×100=60%)','9/18×100=60% + 1','2 : 9/18×100=60%','−9/18×100=60%'])assert.equal(q.percentageCheck(work(expr)).checks.length,0,expr);
  assert.equal(q.percentageCheck(work('Большинство: 9 из 18 человек.')).checks.length,0);
 });
 test('C088 source comparisons expose actual citation context and never infer semantic truth',()=>{
