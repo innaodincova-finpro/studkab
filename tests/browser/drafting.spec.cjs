@@ -113,7 +113,7 @@ test('mobile passport is readable and blocks preparation before checking filled 
  });
  await page.getByRole('tab',{name:'Требования',exact:true}).click();
  await expect(page.getByText('Паспорт не утверждён — платная подготовка запрещена.',{exact:false})).toBeVisible();
- expect(await page.evaluate(()=>draftItem.passports[0].status)).toBe('draft');
+ await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
  await expect(page.getByText(/шрифт Times New Roman, 14 пт/)).toBeVisible();
  await expect(page.getByText(/\{"fn"/)).toHaveCount(0);
  const passportItem=page.locator('.passport-item').first();
