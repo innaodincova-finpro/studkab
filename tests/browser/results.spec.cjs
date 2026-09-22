@@ -203,3 +203,23 @@ test('C083 account or passport change while selecting prevents saving',async({pa
  await expect(page.locator('[data-word-status]')).toContainText('изменились');
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='prepare-result').length)).toBe(0);
 });
+
+test('C087 approximate volume permits review but manual or failed C12 cannot save',async({page})=>{
+ await setupReview(page);
+ await page.locator('.sheet .close').click();
+ await page.evaluate(()=>{
+  candidate.doc.order[0].pages=1;
+  candidate.doc.structure.intro.text='слово '.repeat(300);
+  candidate.doc.review=DraftQuality.stamp(candidate);
+  StudResults.deliver(candidate);
+ });
+ await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await fillReview(page);
+ await expect(page.locator('[data-criterion="C12"]').locator('..')).toContainText('фактические страницы точного Word');
+ for(const state of ['manual','fail']){
+  await page.locator('[data-criterion-status="C12"]').selectOption(state);
+  await page.locator('[data-save-review]').click();
+  await expect(page.locator('[data-result-status]')).toContainText('заблокирована');
+  expect(await page.evaluate(()=>calls.filter(c=>c.action==='review-result'||c.action==='deliver').length)).toBe(0);
+ }
+});

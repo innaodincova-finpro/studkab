@@ -292,16 +292,16 @@
   return {minimum:minimum,passportMinimum:passportMinimum,bibliographyEntries:ids.size,evidence:requirements,errors:errors};
  }
  function riskReport(x){
-  var acceptance=documentAcceptance(x),requirements=sourceRequirements(x);
+  var acceptance=documentAcceptance(x),requirements=sourceRequirements(x),volume=finAcceptance(x);
   var groups=[
    {title:'Требования и комплектность',errors:preflight(x).concat(issues(x.doc||{}),acceptance.errors)},
    {title:'Источники и ссылки',errors:sourceCheck(x).errors},
    {title:'Согласованность текста',errors:consistency(x).errors.concat(proseIntegrity(x).errors)},
-   {title:extended(x)?'Расчёты контрольного профиля':'Объём текста по ориентирам разделов',errors:finAcceptance(x).errors}
+   {title:extended(x)?'Расчёты контрольного профиля':'Объём текста по ориентирам разделов',errors:volume.errors}
   ];
   if(x.doc&&x.doc.basis){var basis=JSON.stringify([x.topic,inputs(x),x.doc.order]);if(basis!==x.doc.basis)groups[0].errors.push('Материалы или структура изменились после подготовки');}
   groups.forEach(function(g){g.errors=Array.from(new Set(g.errors));});
-  return {groups:groups,blockers:Array.from(new Set(groups.flatMap(function(g){return g.errors;}))),notes:editorialNotes(x),facts:acceptance.facts,sources:requirements,manual:[
+  return {groups:groups,blockers:Array.from(new Set(groups.flatMap(function(g){return g.errors;}))),notes:Array.from(new Set(editorialNotes(x).concat(volume.notes||[]))),facts:acceptance.facts,sources:requirements,manual:[
    'Сопоставить каждое требование исходного задания и методички с точным Word, включая требования, которые программа не распознала.',
    'Проверить подлинность источников и то, что приведённый фрагмент действительно подтверждает утверждение.',
    'Проверить смысл выводов, основания чисел и расчётов, реализуемость рекомендаций и затрат.',
@@ -355,16 +355,16 @@
     var label=String(c.id||'')+' '+String(c.name||'');
     return Number(c.pages)>0&&!/(?:^|\s)(?:refs?|app(?:endix)?)(?:[_\s-]|$)|список.{0,25}(?:источник|литератур)|библиограф|приложени/i.test(label);
    });
-   if(!ord0.length)return {applicable:false,errors:[],sections:[]};
+   if(!ord0.length)return {applicable:false,errors:[],notes:[],sections:[]};
    var er0=[],sum0=0,lo0=0,hi0=0;
    var sec0=ord0.map(function(c){
     var b=budget(c),mn=Math.round(b.min/7),mx=Math.round(b.max/7),w=wordCount((st0[c.id]||{}).text);
     sum0+=w;lo0+=mn;hi0+=mx;
-    if(w<mn||w>mx)er0.push(c.name+': '+w+' слов; требуется '+mn+'–'+mx+' по заданному объёму в страницах.');
+    if(w<mn||w>mx)er0.push(c.name+': '+w+' слов; приблизительный ориентир '+mn+'–'+mx+'. Это не подсчёт страниц Word.');
     return {id:c.id,name:c.name,words:w,min:mn,max:mx};
    });
-   if(sum0<lo0||sum0>hi0)er0.push('Весь документ: '+sum0+' слов; требуется '+lo0+'–'+hi0+' по заданному объёму в страницах.');
-   return {applicable:true,errors:er0,sections:sec0,total:sum0};
+   if(sum0<lo0||sum0>hi0)er0.push('Весь документ: '+sum0+' слов; приблизительный ориентир '+lo0+'–'+hi0+'. Фактический объём проверьте в точном Word.');
+   return {applicable:true,errors:[],notes:er0,sections:sec0,total:sum0};
   }
   if(!req.includes('УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01')||!req.includes('Авторские критерии приёмки версии 1.0.'))return {applicable:true,errors:['Требования FIN-UAT-01 отличаются от контрольной версии 1.0. Нужна сверка критериев.'],sections:[]};
   var limits=[['intro','Введение',500,700],['ch1','Глава 1',1400,2000],['ch2','Глава 2',2800,3700],['ch3','Глава 3',900,1400],['concl','Заключение',400,700]],errors=[],total=0;
@@ -392,7 +392,7 @@
    'Рекомендации и итоговые утверждения обоснованы материалами',
    'Источники существуют и подтверждают соседние утверждения',
    'Файл открывается и редактируется в Microsoft Word',
-   'Объём и комплектность соответствуют требованиям',
+   'Объём и комплектность: фактические страницы точного Word сверены с заданием',
    'Проверенный файл относится к нужному получателю и версии',
    'Недостающие данные и ограничения явно указаны',
    'Оформление и расположение элементов проверены визуально',

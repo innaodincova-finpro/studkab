@@ -218,3 +218,20 @@ test('C086 section prompts carry latest approved requirements without mutating s
  assert(!q.sectionRules({id:'ch2'}).includes('числитель и знаменатель'));
  assert(q.sectionRules({id:'custom'}).includes('утверждённом паспорте'));
 });
+
+test('C087 approximate word ranges warn but never certify or reject Word pagination',()=>{
+ for(const words of [30,300,1000]){
+  const x={topic:'Педагогика',doc:{inputs:{requirements:'Основной текст: 1 страница'},order:[{id:'intro',name:'Введение',pages:1}],structure:{intro:{text:'слово '.repeat(words)}}}};
+  const before=JSON.stringify(x),volume=q.finAcceptance(x),report=q.riskReport(x);
+  assert.deepEqual(volume.errors,[]);assert(volume.notes.some(n=>n.includes('приблизительный ориентир')));
+  assert(report.notes.some(n=>n.includes('приблизительный ориентир')));
+  assert(!report.blockers.some(n=>n.includes('приблизительный ориентир')));
+  assert(report.manual.some(n=>n.includes('страницы точного Word')));
+  assert(q.reviewCriteria(x).find(c=>c.code==='C12').label.includes('фактические страницы'));
+  assert.equal(JSON.stringify(x),before);
+  x.doc.structure.intro.text='';
+  assert(q.riskReport(x).blockers.some(n=>/Не заполнен раздел|отсутствует раздел/.test(n)));
+ }
+ const fin={doc:{inputs:{requirements:'УЧЕБНАЯ МЕТОДИЧКА FIN-UAT-01\nАвторские критерии приёмки версии 1.0.'},order:[{id:'intro',name:'Введение',pages:2}],structure:{intro:{text:'слово '.repeat(30)}}}};
+ assert(q.finAcceptance(fin).errors.some(n=>n.includes('требуется 500–700')));
+});
