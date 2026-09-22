@@ -1,7 +1,7 @@
 {
   "captured_at": "2026-09-16",
   "production_project_ref": "dcpthwmuiodrjepifzsd",
-  "note": "SQL SHA-256 is calculated from the exact statement text stored in supabase_migrations.schema_migrations. Later Tochka-only migrations are tracked in PRODUCTION_INVENTORY.md and intentionally not copied into the STUDKAB repository.",
+  "note": "sha256 hashes the local SQL file. version is the local migration identifier; production_version records a different installed identifier where verified. production_sha256 hashes stored SQL statements joined by newline. The original snapshot date remains captured_at; this reconciliation verifies the formerly pending entries and the explicitly annotated existing entries. Installation history does not certify current end-to-end behavior. Do not reapply installed entries. Tochka-only migrations are excluded.",
   "migrations": [
     {
       "version": "20260904195115",
@@ -121,95 +121,163 @@
       "version": "20260917120817",
       "name": "c054_service_role_grants",
       "file": "20260917120817_c054_service_role_grants.sql",
-      "sha256": "3e40910e336b4a702eab48fd034907fbeb923544bda2d30b33659f660b6a9767"
+      "sha256": "3e40910e336b4a702eab48fd034907fbeb923544bda2d30b33659f660b6a9767",
+      "production_version": "20260917120817",
+      "production_sha256": "ec07f1807d7130c7b0efff8dd8477a483a1afa40d7daf48adb89609821700a1b",
+      "production_verified_at": "2026-09-22",
+      "comparison": "equal_ignoring_comments_and_whitespace"
     },
     {
       "version": "20260918083808",
       "name": "align_generation_reserve_context",
       "file": "20260918083808_align_generation_reserve_context.sql",
-      "sha256": "f5dbd7db52a6cb2ec30e58e5f23aa47bb5eb68b78a0c46469353dca3f9adfcc2"
+      "sha256": "f5dbd7db52a6cb2ec30e58e5f23aa47bb5eb68b78a0c46469353dca3f9adfcc2",
+      "production_version": "20260918084049",
+      "production_sha256": "16b50ba041ef6bb970c9a439a399e3af708be99899d52b3f99faf5a7410386fd",
+      "production_verified_at": "2026-09-22",
+      "comparison": "equal_ignoring_comments_and_whitespace"
     },
     {
       "version": "20260918090944",
       "name": "repair_generation_ledger_invariant",
       "file": "20260918090944_repair_generation_ledger_invariant.sql",
-      "sha256": "8520c97404f4c429e83feab73fda2aa2e11f739bb570780b7a53863d9977acfa"
+      "sha256": "8520c97404f4c429e83feab73fda2aa2e11f739bb570780b7a53863d9977acfa",
+      "production_version": "20260918091446",
+      "production_sha256": "8520c97404f4c429e83feab73fda2aa2e11f739bb570780b7a53863d9977acfa",
+      "production_verified_at": "2026-09-22",
+      "comparison": "exact"
     },
     {
       "version": "20260918091938",
       "name": "fix_generation_reconciliation_alias",
       "file": "20260918091938_fix_generation_reconciliation_alias.sql",
-      "sha256": "8fe69f24f33268994c41246799ab468c13551d02ca8392c9e77fcee2420f34e4"
+      "sha256": "8fe69f24f33268994c41246799ab468c13551d02ca8392c9e77fcee2420f34e4",
+      "production_version": "20260918092125",
+      "production_sha256": "8fe69f24f33268994c41246799ab468c13551d02ca8392c9e77fcee2420f34e4",
+      "production_verified_at": "2026-09-22",
+      "comparison": "exact"
     },
     {
       "version": "20260918092405",
       "name": "expose_bounded_job_release_total",
       "file": "20260918092405_expose_bounded_job_release_total.sql",
-      "sha256": "c270bd9172efffb6e855ad7b8dba65415ca20e6e364e961aef6692a2fe4f8e63"
-    }
-  ],
-  "pending_migrations": [
+      "sha256": "c270bd9172efffb6e855ad7b8dba65415ca20e6e364e961aef6692a2fe4f8e63",
+      "production_version": "20260918092641",
+      "production_sha256": "c270bd9172efffb6e855ad7b8dba65415ca20e6e364e961aef6692a2fe4f8e63",
+      "production_verified_at": "2026-09-22",
+      "comparison": "exact"
+    },
     {
       "version": "20260916100000",
       "name": "studkab_cloud_write_guard",
       "file": "20260916100000_studkab_cloud_write_guard.sql",
-      "sha256": "14694fee56c1970a02455631e19098ca65a70748b384e097c7fc3f388489b9e1"
+      "sha256": "14694fee56c1970a02455631e19098ca65a70748b384e097c7fc3f388489b9e1",
+      "production_version": "20260916135700",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "14694fee56c1970a02455631e19098ca65a70748b384e097c7fc3f388489b9e1",
+      "comparison": "exact"
     },
     {
       "version": "20260916100100",
       "name": "studkab_members",
       "file": "20260916100100_studkab_members.sql",
-      "sha256": "707f4f8f83ab8a531039b66a13b5a1c8ced26846d1468c68da166a21ee340329"
+      "sha256": "707f4f8f83ab8a531039b66a13b5a1c8ced26846d1468c68da166a21ee340329",
+      "production_version": "20260916135724",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "707f4f8f83ab8a531039b66a13b5a1c8ced26846d1468c68da166a21ee340329",
+      "comparison": "exact"
     },
     {
       "version": "20260917150000",
       "name": "studkab_preparation_diagnostics",
       "file": "20260917150000_studkab_preparation_diagnostics.sql",
-      "sha256": "9c694f7f842c5053857de78ab178ce5c0db53b1c6f2e17a72b68e5192421d7da"
+      "sha256": "9c694f7f842c5053857de78ab178ce5c0db53b1c6f2e17a72b68e5192421d7da",
+      "production_version": "20260917135115",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "8ff1962b342405dce9ffd91160b6ebe4366c34cb818eee825b91acefad30291a",
+      "comparison": "equal_ignoring_comments_and_whitespace"
     },
     {
       "version": "20260917144051",
       "name": "studkab_request_attachments",
       "file": "20260917144051_studkab_request_attachments.sql",
-      "sha256": "897ecc59c32d364da939699d271157b55ad06fdc4f784cac4fac7d8e181e3de1"
+      "sha256": "897ecc59c32d364da939699d271157b55ad06fdc4f784cac4fac7d8e181e3de1",
+      "production_version": "20260917164741",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "897ecc59c32d364da939699d271157b55ad06fdc4f784cac4fac7d8e181e3de1",
+      "comparison": "exact"
     },
     {
       "version": "20260918130000",
       "name": "review_statuses",
       "file": "20260918130000_review_statuses.sql",
-      "sha256": "875ab2f8744d213c1c695364677c112b8eeb2461fe678e1f3a510696030644da"
+      "sha256": "875ab2f8744d213c1c695364677c112b8eeb2461fe678e1f3a510696030644da",
+      "production_version": "20260918133148",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "875ab2f8744d213c1c695364677c112b8eeb2461fe678e1f3a510696030644da",
+      "comparison": "exact"
     },
     {
       "version": "20260919124300",
       "name": "result_review_context_guard",
       "file": "20260919124300_result_review_context_guard.sql",
-      "sha256": "7c0279620d2cc348b12561dfe2bce4794d4a046722d3b755a84268eee3acb4fd"
+      "sha256": "7c0279620d2cc348b12561dfe2bce4794d4a046722d3b755a84268eee3acb4fd",
+      "production_version": "20260919133155",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "7c0279620d2cc348b12561dfe2bce4794d4a046722d3b755a84268eee3acb4fd",
+      "comparison": "exact"
     },
     {
       "version": "20260920111220",
       "name": "c079_request_deletion",
       "file": "20260920111220_c079_request_deletion.sql",
-      "sha256": "07b5d3208cc334b44f71db62c1d642ea62317f23becd7669c73f3c53e3f453d6"
+      "sha256": "07b5d3208cc334b44f71db62c1d642ea62317f23becd7669c73f3c53e3f453d6",
+      "production_version": "20260920140030",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "07b5d3208cc334b44f71db62c1d642ea62317f23becd7669c73f3c53e3f453d6",
+      "comparison": "exact"
     },
     {
       "version": "20260921050532",
       "name": "c080_request_resubmission",
       "file": "20260921050532_c080_request_resubmission.sql",
-      "sha256": "4e9d6204a6844f451dd735acb1bc4b78606794a4fe0ffa66388f8e58e7e50cd9"
+      "sha256": "4e9d6204a6844f451dd735acb1bc4b78606794a4fe0ffa66388f8e58e7e50cd9",
+      "production_version": "20260921054931",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "4e9d6204a6844f451dd735acb1bc4b78606794a4fe0ffa66388f8e58e7e50cd9",
+      "comparison": "exact"
     },
     {
       "version": "20260921165603",
       "name": "c084_requirement_clarifications",
       "file": "20260921165603_c084_requirement_clarifications.sql",
-      "sha256": "f3d7810346774b5dc2c6bf037a333370867134b0ce5a63c9f3accf5d81fb5920"
+      "sha256": "f3d7810346774b5dc2c6bf037a333370867134b0ce5a63c9f3accf5d81fb5920",
+      "production_version": "20260921174630",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "f3d7810346774b5dc2c6bf037a333370867134b0ce5a63c9f3accf5d81fb5920",
+      "comparison": "exact"
     },
     {
       "file": "20260921181451_c085_clarification_actor_permissions.sql",
-      "sha256": "7d1f18e7b6b25d458e7c726ae3e2b6ba00efbf364cd9e0c90d1a6031f7f415b1"
+      "sha256": "7d1f18e7b6b25d458e7c726ae3e2b6ba00efbf364cd9e0c90d1a6031f7f415b1",
+      "version": "20260921181451",
+      "name": "c085_clarification_actor_permissions",
+      "production_version": "20260921182546",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "7d1f18e7b6b25d458e7c726ae3e2b6ba00efbf364cd9e0c90d1a6031f7f415b1",
+      "comparison": "exact"
     },
     {
       "file": "20260922032858_c089_review_notes.sql",
-      "sha256": "4587a2984f0fcb7fbb5f0a4f02e7852bc10d8ba411297fa11f865cc7663284dc"
+      "sha256": "4587a2984f0fcb7fbb5f0a4f02e7852bc10d8ba411297fa11f865cc7663284dc",
+      "version": "20260922032858",
+      "name": "c089_review_notes",
+      "production_version": "20260922034556",
+      "production_verified_at": "2026-09-22",
+      "production_sha256": "4587a2984f0fcb7fbb5f0a4f02e7852bc10d8ba411297fa11f865cc7663284dc",
+      "comparison": "exact"
     }
-  ]
+  ],
+  "pending_migrations": [],
+  "production_reconciled_at": "2026-09-22"
 }
