@@ -1,5 +1,23 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
 import {attachmentAction} from '../supabase/functions/studkab-requests/attachments.mjs';
+import {attachmentDownloadUrl} from '../supabase/functions/studkab-requests/download-url.mjs';
+
+test('Storage REST signed paths download the authorized object with a safe filename',()=>{
+ const base='https://project.supabase.co',path='owner/request/file';
+ for(const prefix of ['/object/sign/','/storage/v1/object/sign/']){
+  const result=new URL(attachmentDownloadUrl(base,prefix+'studkab-request-materials/'+path+'?token=test-token',path,'Методичка & данные.txt'));
+  assert.equal(result.origin,base);
+  assert.equal(result.pathname,'/storage/v1/object/sign/studkab-request-materials/'+path);
+  assert.equal(result.searchParams.get('token'),'test-token');
+  assert.equal(result.searchParams.get('download'),'Методичка & данные.txt');
+ }
+});
+test('signed download rejects foreign hosts, objects, public paths and missing tokens',()=>{
+ const valid='/object/sign/studkab-request-materials/owner/request/file?token=test-token';
+ for(const signed of [undefined,'','https://foreign.example'+valid,'//foreign.example'+valid,valid.replace('/file?','/other?'),valid.replace('/sign/','/public/'),valid.split('?')[0],valid+'#fragment']){
+  assert.throws(()=>attachmentDownloadUrl('https://project.supabase.co',signed,'owner/request/file','a.txt'),/Storage unavailable/);
+ }
+});
 const student={id:'11111111-1111-4111-8111-111111111111',email:'student@example.test'};
 const executor={id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'};
 const request='33333333-3333-4333-8333-333333333333';

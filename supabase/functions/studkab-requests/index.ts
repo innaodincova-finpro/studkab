@@ -1,6 +1,7 @@
 import {accessLink} from './access-links.mjs';
 import {handler} from './handler.mjs';
 import {extract} from './extract.ts';
+import {attachmentDownloadUrl} from './download-url.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const bucket='studkab-request-materials';
 async function db(path:string,method='GET',body?:unknown){
@@ -41,8 +42,8 @@ async function upload(path:string,type:string,value:string,size:number,expectedH
 async function download(path:string,fileName:string){
  const r=await fetch(base+'/storage/v1/object/sign/'+bucket+'/'+path,{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:300,download:fileName}),signal:AbortSignal.timeout(10000)});
  if(!r.ok)throw Error('Storage unavailable');const data=await r.json();
- const signed=String(data.signedURL||data.signedUrl||'');if(!signed.startsWith('/storage/v1/object/sign/'))throw Error('Storage unavailable');
- return {url:base+signed,fileName,expiresIn:300};
+ const url=attachmentDownloadUrl(base,data.signedURL||data.signedUrl,path,fileName);
+ return {url,fileName,expiresIn:300};
 }
 async function remove(path:string){
  const r=await fetch(base+'/storage/v1/object/'+bucket+'/'+path,{method:'DELETE',headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000)});
