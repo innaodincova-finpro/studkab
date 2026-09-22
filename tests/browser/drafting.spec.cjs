@@ -113,7 +113,7 @@ test('mobile passport is readable and blocks preparation before checking filled 
  });
  await page.getByRole('tab',{name:'Требования',exact:true}).click();
  await expect(page.getByText('Паспорт не утверждён — платная подготовка запрещена.',{exact:false})).toBeVisible();
- await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>draftItem.passports[0].status)).toBe('draft');
  await expect(page.getByText(/шрифт Times New Roman, 14 пт/)).toBeVisible();
  await expect(page.getByText(/\{"fn"/)).toHaveCount(0);
  const passportItem=page.locator('.passport-item').first();
@@ -444,7 +444,7 @@ test('C095 answered clarification stays current through revision and approval',a
  await page.getByRole('tab',{name:'Требования',exact:true}).click();
  const warning=page.getByText('Есть вопросы без ответа или ответы, ещё не учтённые в этой версии требований.',{exact:true});
  await expect(warning).toBeVisible();
- await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>draftItem.passports[0].status)).toBe('draft');
  await page.getByRole('button',{name:'Новая версия',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Проверка требований'});
  await dialog.locator('summary').filter({hasText:'Объём'}).click();
@@ -454,8 +454,8 @@ test('C095 answered clarification stays current through revision and approval',a
  await dialog.getByRole('button',{name:'Сохранить уточнения'}).click();
  await expect(dialog).toHaveCount(0);
  await expect(warning).toHaveCount(0);
- await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeEnabled();
- await page.getByRole('button',{name:'Утвердить',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Утвердить паспорт',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Утвердить паспорт',exact:true}).click();
  await expect(page.getByText('Паспорт утверждён',{exact:true})).toBeVisible();
  await expect(warning).toHaveCount(0);
  expect(await page.evaluate(()=>draftItem.passports.map(p=>p.status))).toEqual(['approved','draft']);
