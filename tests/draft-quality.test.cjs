@@ -192,3 +192,29 @@ test('C078 absent volume guidance does not invent an appendix target',()=>{
  const x={doc:{order:[{id:'app_a',name:'Приложение А',pages:0}],structure:{app_a:{text:'Краткие данные.'}}}};
  assert.deepEqual(q.editorialNotes(x),[]);
 });
+
+test('C086 section prompts carry latest approved requirements without mutating source basis',()=>{
+ const fs=require('node:fs'),vm=require('node:vm');
+ const html=fs.readFileSync(require.resolve('../reestr.html'),'utf8');
+ const build=html.slice(html.indexOf('function buildPrompt(x){'),html.indexOf('/* ---------- ПОСТАВЩИКИ'));
+ const section=html.slice(html.indexOf('function sectionPrompt(x, c){'),html.indexOf('function ruPages('));
+ const ctx={DraftQuality:q,docOf:x=>x.doc};vm.createContext(ctx);vm.runInContext(build+'\n'+section,ctx);
+ for(const [topic,condition] of [['Педагогика','Сравнить пять подходов; сформулировать пять рекомендаций.'],['Менеджмент','Предложить четыре мероприятия с затратами.'],['История','Сравнить три трактовки; расчёты не предусмотрены.']]){
+  const x={topic,passports:[{id:'current',revision:6,status:'approved',items:[{id:'TEACHER',text:condition,source:'Ответ преподавателя от 22.09.2026'}]}],doc:{inputs:{requirements:'Исходное задание',materials:'Материалы',sources:'Источники'},order:[{id:'ch3',name:'Предложения',pages:3}],structure:{}}};
+  const before=JSON.stringify(x),basis=JSON.stringify(q.inputs(x));
+  const prompt=ctx.sectionPrompt(x,x.doc.order[0]);
+  assert(prompt.system.includes(condition));assert(prompt.system.includes('Ответ преподавателя от 22.09.2026'));assert(prompt.system.includes('"revision":6'));
+  assert(!prompt.user.includes('не более трёх'));assert(!prompt.system.includes('Автономия равна'));
+  assert.equal(JSON.stringify(x),before);
+  x.passports[0].items[0].text='Изменённое подтверждённое условие';
+  assert(ctx.sectionPrompt(x,x.doc.order[0]).system.includes('Изменённое подтверждённое условие'));
+  assert.equal(JSON.stringify(q.inputs(x)),basis);
+  for(const state of ['draft','stale']){
+   x.passports.unshift({status:state,items:[]});
+   assert(!ctx.sectionPrompt(x,x.doc.order[0]).system.includes('Изменённое подтверждённое условие'));
+   x.passports.shift();
+  }
+ }
+ assert(!q.sectionRules({id:'ch2'}).includes('числитель и знаменатель'));
+ assert(q.sectionRules({id:'custom'}).includes('утверждённом паспорте'));
+});
