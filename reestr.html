@@ -653,6 +653,34 @@ function refIntake(x){
 }
 
 /* ---------- ЗАГОТОВКА ЗАПРОСА ---------- */
+function approvedStructure(x){
+  var passport=Array.isArray(x.passports)&&x.passports[0];
+  if(!passport||passport.status!=="approved")return "";
+  var item=(passport.items||[]).filter(function(q){return q.id==="STRUCTURE";})[0];
+  if(!item||item.verified===false)return "";
+  var value=String(item.text||"").replace(/^\s*Структура\s*:\s*/i,"").trim();
+  return /не указано|требуется уточнить/i.test(value)?"":value;
+}
+function promptStructure(x){
+  var approved=approvedStructure(x);if(approved)return approved;
+  var doc=x.doc,order=doc&&Array.isArray(doc.order)?doc.order:[];
+  return order.map(function(q,i){return (i+1)+". "+q.name+(q.pages?" — примерно "+q.pages+" стр.":"");}).join("\n");
+}
+function preparationBlockers(x){
+  var passport=Array.isArray(x.passports)&&x.passports[0],packet=DraftQuality.inputs(x),
+      requirementText=[x.requirements,x.methodNotes,packet.requirements]
+        .concat(((passport||{}).items||[]).map(function(q){return q.text||"";})).join("\n");
+  var blockers=[];
+  if(x.externalResult)blockers.push("К заявке уже прикреплён Word: сначала проверьте его, а не создавайте новый черновик.");
+  if(/(?:\bAI\b|\bИИ\b|нейросет\w*)[^.\n]{0,35}(?:не\s+(?:запускать|использовать|применять)|запрещ)/i.test(requirementText)||
+     /(?:не\s+(?:запускать|использовать|применять)|запрещ)[^.\n]{0,35}(?:\bAI\b|\bИИ\b|нейросет\w*)/i.test(requirementText))
+    blockers.push("В утверждённых требованиях запрещено использовать ИИ.");
+  if(!passport||passport.status!=="approved")blockers.push("Сначала утвердите паспорт требований.");
+  else if(!approvedStructure(x))blockers.push("В утверждённом паспорте нет проверенной структуры работы.");
+  if(!(Array.isArray(x.attachments)&&x.attachments.length)&&!String(packet.materials||"").trim()&&!String(packet.sources||"").trim())
+    blockers.push("Добавьте материалы или проверенные источники для подготовки.");
+  return Array.from(new Set(blockers));
+}
 function buildPrompt(x){
   var f = x.format || {};
   var refs = "";
@@ -673,7 +701,7 @@ function buildPrompt(x){
 
   L.push("");
   L.push("СТРУКТУРА");
-  L.push("[вписать главы и параграфы из задания]");
+  L.push(promptStructure(x)||"Структура не утверждена — подготовку не начинать.");
   L.push("");
   L.push("КАК ПИСАТЬ");
   L.push("— Пиши цельным текстом, а не тезисами: каждый параграф — законченный связный фрагмент.");
@@ -825,8 +853,7 @@ function docCharacters(x){ var n = 0; docOf(x).order.forEach(function(c){ n += (
 
 function sectionPrompt(x, c){
   var doc = docOf(x);
-  var sys = buildPrompt(x).replace("[вписать главы и параграфы из задания]",
-    doc.order.map(function(q, i){ return (i+1) + ". " + q.name + (q.pages ? " — примерно " + q.pages + " стр." : ""); }).join("\n"));
+  var sys = buildPrompt(x);
   sys += "\n"+DraftQuality.context(x);
   if(DraftQuality.financial(x))sys += "\nТочность терминов: чистый оборотный капитал здесь равен оборотным активам минус краткосрочные обязательства; не называй его средствами, профинансированными исключительно собственным капиталом. Это абсолютный показатель, а не коэффициент. Автономия равна капиталу / активам. Рост общей суммы долга сам по себе не определяет направление изменения этой доли: нужны оба значения капитала и активов. Чистая переклассификация обязательств при неизменном итоге баланса не меняет автономию. Не используй оценку «положительная динамика» вместо точных слов «увеличился», «снизился», «не изменился». Оценка качества требует обоснования, сопоставимых условий и данных. Не называй все краткосрочные обязательства наиболее срочными. Не выводи платёжеспособность из одного коэффициента.";
   var previous=doc.order.filter(function(q){return q.id!==c.id && (doc.structure[q.id]||{}).text;}).map(function(q){return q.name+":\n"+doc.structure[q.id].text;}).join("\n\n");
@@ -850,7 +877,8 @@ var genBusy = false;
 function openDocBuilder(id){
   var x = item(id); if (!x) return;
   if(genBusy){toast("Подготовка уже идёт. Дождитесь её завершения.");return;}
-  var doc = docOf(x), expectedData=D, expectedIdentity=Oblako.identity();
+  var doc = docOf(x), preparationErrors=preparationBlockers(x), preparationAllowed=!preparationErrors.length,
+      preparationMessage=preparationErrors.join(" "), expectedData=D, expectedIdentity=Oblako.identity();
   function current(){if(D!==expectedData||Oblako.identity()!==expectedIdentity||!wrap.isConnected)throw Error("Подготовка остановлена: окно закрыто или аккаунт изменился. Уже сохранённые разделы доступны в прежнем аккаунте.");}
   function sec(c, i){
     var t = (doc.structure[c.id]||{}).text || "";
@@ -888,13 +916,13 @@ function openDocBuilder(id){
     '<p class="mut" style="margin:14px 0 6px;font-weight:600">Шаг 1. Выберите способ подготовки</p>' +
     '<div class="card" data-chatgpt-preparation style="padding:12px;margin-bottom:10px"><b>С ChatGPT/Codex — без API приложения</b>' +
     '<p class="hint">Кнопка скопирует номер, тему, сведения о вузе, требования и организацию, если они заполнены, и откроет ChatGPT. Материалы, источники и файлы не копируются: приложите их самостоятельно. Приложение ничего не отправляет во внешний чат и не списывает деньги за API.</p>' +
-    '<button type="button" class="btn" data-chatgpt-open>Подготовить с ChatGPT/Codex</button>' +
-    '<p class="hint" data-chatgpt-message role="status">После подготовки сохраните Word и прикрепите его в карточке заявки кнопкой «Прикрепить готовый Word».</p></div>' +
+    '<button type="button" class="btn" data-chatgpt-open'+(preparationAllowed?'':' disabled')+'>Подготовить с ChatGPT/Codex</button>' +
+    '<p class="hint" data-chatgpt-message role="status">'+esc(preparationAllowed?'После подготовки сохраните Word и прикрепите его в карточке заявки кнопкой «Прикрепить готовый Word».':preparationMessage)+'</p></div>' +
     '<details class="card" data-api-preparation open style="padding:12px;margin-bottom:10px"><summary><b>Автоматически через API</b></summary>' +
     '<p class="warnbar">Это отдельная платная услуга поставщика. Подписка ChatGPT Pro не оплачивает OpenAI API. Перед запуском приложение покажет расчёт и запросит подтверждение.</p>' +
     '<div data-preparation><p class="hint">Сервер проверит требования, сформирует разделы и сохранит процесс; окно можно закрыть и продолжить позже.</p>' +
-    '<button type="button" class="btn" data-prepare>' + (doc.serverJob&&doc.serverJob.id?'Продолжить подготовку':'Начать подготовку') + '</button>' +
-    '<p data-prepare-message role="status">' + (doc.serverJob&&doc.serverJob.id?'Есть сохранённая автоматическая подготовка. Нажмите кнопку, чтобы получить её текущее состояние.':'API-вызов начнётся только после проверки стоимости и вашего подтверждения. Ручное редактирование, сохранение и Word доступны независимо.') + '</p><div data-prepare-result></div></div></details>' +
+    '<button type="button" class="btn" data-prepare'+(preparationAllowed?'':' disabled')+'>' + (doc.serverJob&&doc.serverJob.id?'Продолжить подготовку':'Начать подготовку') + '</button>' +
+    '<p data-prepare-message role="status">' + esc(preparationAllowed?(doc.serverJob&&doc.serverJob.id?'Есть сохранённая автоматическая подготовка. Нажмите кнопку, чтобы получить её текущее состояние.':'API-вызов начнётся только после проверки стоимости и вашего подтверждения. Ручное редактирование, сохранение и Word доступны независимо.'):preparationMessage) + '</p><div data-prepare-result></div></div></details>' +
     '<div id="docStatus" class="infobox" style="margin:0 0 10px;display:none"></div>' +
     '<details><summary>Редактировать разделы</summary><p class="hint">Число рядом с названием — ориентир объёма текста: 1 соответствует 1800 знакам с пробелами. Число страниц Word зависит от таблиц и оформления.</p><div id="docSecs">' + doc.order.map(sec).join("") + '</div>' +
     '<div class="chips" style="margin-top:4px">' +
@@ -1021,6 +1049,8 @@ function openDocBuilder(id){
     var chatgpt=t.closest('[data-chatgpt-open]');
     if(chatgpt){
       var chatMessage=wrap.querySelector('[data-chatgpt-message]');
+      var currentBlockers=preparationBlockers(x);
+      if(currentBlockers.length){chatMessage.textContent=currentBlockers.join(' ');return;}
       var opened=window.open('https://chatgpt.com/','_blank','noopener,noreferrer');
       chatMessage.textContent='Копирую запрос…';
       Promise.resolve(copyText(buildChatgptPrompt(x))).then(function(copied){
