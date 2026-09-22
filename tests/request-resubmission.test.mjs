@@ -93,7 +93,7 @@ test('repeat submit waits for real server acknowledgement; error keeps form open
   let click,removed=false;const calls=[],messages=[],r={id:'client',serverId:a,number:9,sent:'before'};
   const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:()=>({value:'test'}),remove:()=>{removed=true;}};
   const api=async input=>{calls.push(input);if(input.action==='request-state')return {payload:{id:'client',t:'old'}};if(fail)throw Error('Server unavailable');return {saved:true,id:a,number:9};};
-  const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:api},requestPayload:probe=>({id:probe.req.id,t:probe.topic}),uploadRequestFiles:async()=>4,change:fn=>fn(),today:()=> 'today',render:()=>{},toast:x=>messages.push(x)};
+  const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:api},requestPayload:probe=>({id:probe.req.id,t:probe.topic}),prepareRequestFiles:async()=>[],uploadRequestFiles:async()=>4,change:fn=>fn(),today:()=> 'today',render:()=>{},toast:x=>messages.push(x)};
   vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
   const btn={disabled:false,getAttribute:()=> 'direct'};click({target:{closest:()=>btn}});
   await new Promise(resolve=>setImmediate(resolve));
@@ -111,4 +111,40 @@ test('registry applies revised submission once and keeps executor document and n
  vm.createContext(context);vm.runInContext(merge+receive,context);await context.receiveInbox();
  assert.equal(existing.topic,'New');assert.equal(existing.note,'Private note');assert.equal(existing.doc,doc);assert.equal(existing.status,'work');assert.equal(existing.added,'before');
  existing.topic='Executor local correction';await context.receiveInbox();assert.equal(existing.topic,'Executor local correction');
+});
+
+test('partial send checkpoints request, retries same id, and never reports failed files as complete',async()=>{
+ const html=read('index.html'),code=html.slice(html.indexOf('function openRequest('),html.indexOf('function icsEscape('));
+ let click,removed=false,attempt=0;const calls=[],r={id:'client'},status={};
+ const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:s=>s==='[data-request-status]'?status:{value:'test'},remove:()=>{removed=true;}};
+ const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async input=>{calls.push(input);return input.action==='request-state'?{payload:{id:'client',t:'new'}}:{saved:true,id:a,number:9};}},requestPayload:p=>({id:p.req.id,t:p.topic}),prepareRequestFiles:async()=>[{category:'assignment',fileHash:'a'.repeat(64),fileName:'test.txt'}],uploadRequestFiles:async()=>{if(++attempt===1)throw Error('Upload failed');return 1;},change:fn=>fn(),today:()=> 'today',render:()=>{},toast:()=>{}};
+ vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
+ const btn={disabled:false,getAttribute:()=> 'direct'};
+ click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(r.serverId,a);assert.equal(r.sent,undefined);assert.equal(r.filesPending,true);assert.equal(r.pendingFiles.length,1);assert.equal(removed,false);assert.match(status.textContent,/уже сохранена/);
+ click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls.filter(x=>x.action==='submit').length,1);assert.equal(calls.filter(x=>x.action==='update-request').length,1);
+ assert.equal(r.filesPending,false);assert.equal(r.pendingFiles.length,0);assert.equal(r.sent,'today');assert.equal(removed,true);
+});
+
+test('invalid selected file is rejected before submitting a new request',async()=>{
+ const html=read('index.html'),code=html.slice(html.indexOf('function openRequest('),html.indexOf('function icsEscape('));
+ let click;const calls=[],r={id:'client'},status={};
+ const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:s=>s==='[data-request-status]'?status:{value:'test'}};
+ const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async x=>calls.push(x)},prepareRequestFiles:async()=>{throw Error('Invalid file');},toast:()=>{}};
+ vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
+ const btn={disabled:false,getAttribute:()=> 'direct'};click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls.length,0);assert.equal(r.serverId,undefined);assert.equal(btn.disabled,false);assert.match(status.textContent,/Invalid file/);
+});
+
+test('retry skips acknowledged files and refuses to complete with missing pending material',async()=>{
+ const html=read('index.html'),code=html.slice(html.indexOf('async function uploadRequestFiles('),html.indexOf('function openRequest('));
+ const uploads=[],file={fileHash:'a'.repeat(64),category:'assignment'},missing={fileHash:'b'.repeat(64),category:'sources'};
+ const context={Oblako:{requestApi:async input=>{if(input.action==='attachment-list')return {attachments:[{id:a,category:'assignment',file_hash:file.fileHash}]};uploads.push(input);return{};}}};
+ vm.createContext(context);vm.runInContext(code,context);
+ const wrap={querySelectorAll:()=>[]};
+ await assert.rejects(context.uploadRequestFiles(wrap,c,{},[file],[file,missing]),/Не все/);
+ assert.equal(uploads.length,0);
+ assert.equal(await context.uploadRequestFiles(wrap,c,{},[file,missing],[file,missing]),2);
+ assert.equal(uploads.length,1);assert.equal(uploads[0].category,'sources');
 });

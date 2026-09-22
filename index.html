@@ -969,15 +969,22 @@ async function requestFilePayload(file){
   var binary='',chunk=32768;for(var i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
   return {fileName:file.name,contentType:type,sizeBytes:file.size,fileHash:fileHash,base64:btoa(binary)};
 }
-async function uploadRequestFiles(wrap,requestId,button){
+async function prepareRequestFiles(wrap){
+  var fields=Array.from(wrap.querySelectorAll('[data-request-file]')).filter(function(x){return x.files&&x.files[0];});
+  var prepared=[];
+  for(var field of fields){var payload=await requestFilePayload(field.files[0]);payload.category=field.dataset.requestFile;prepared.push(payload);}
+  return prepared;
+}
+async function uploadRequestFiles(wrap,requestId,button,prepared,required){
   var fields=Array.from(wrap.querySelectorAll('[data-request-file]')).filter(function(x){return x.files&&x.files[0];});
   var listed=await Oblako.requestApi({action:'attachment-list',id:requestId});
   var active=listed.attachments||[];
   var existing=new Set(active.map(function(x){return x.file_hash;}));
   var saved=existing.size;
-  for(var i=0;i<fields.length;i++){
-    button.textContent='Загружаем файл '+(i+1)+' из '+fields.length+'…';
-    var payload=await requestFilePayload(fields[i].files[0]);payload.category=fields[i].dataset.requestFile;
+  var count=prepared?prepared.length:fields.length;
+  for(var i=0;i<count;i++){
+    button.textContent='Загружаем файл '+(i+1)+' из '+count+'…';
+    var payload=prepared?Object.assign({},prepared[i]):await requestFilePayload(fields[i].files[0]);if(!prepared)payload.category=fields[i].dataset.requestFile;
     if(active.some(function(x){return x.file_hash===payload.fileHash&&x.category===payload.category;}))continue;
     var prior=active.filter(function(x){return x.category===payload.category;});
     if(prior.length>1)throw Error('В этой категории несколько старых файлов. Согласуйте замену с исполнителем');
@@ -985,7 +992,9 @@ async function uploadRequestFiles(wrap,requestId,button){
     payload.action='attachment-upload';payload.id=requestId;
     await Oblako.requestApi(payload);
     existing.add(payload.fileHash);if(!prior.length)saved++;
+    active=active.filter(function(x){return x.category!==payload.category;});active.push({file_hash:payload.fileHash,category:payload.category});
   }
+  if((required||[]).some(function(p){return !active.some(function(x){return x.file_hash===p.fileHash&&x.category===p.category;});}))throw Error('Не все выбранные ранее материалы загружены. Выберите оставшиеся файлы повторно.');
   return saved;
 }
 function openRequest(workId){
@@ -1009,6 +1018,7 @@ function openRequest(workId){
       '<label class="mini">Источники<input type="file" data-request-file="sources" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label></div>'+
     '<div class="infobox">Вуз и кафедра берутся из «Профиль → Данные студента». Дисциплина и руководитель указываются внутри работы: «Оформление документа → Изменить».</div>'+
     '<div class="hint">Заявка сохранится в реестре исполнителя. О новой заявке он получит уведомление в Telegram. Изменения существующей заявки появятся при обновлении реестра. Почтовые уведомления пока не подключены.</div>'+
+    '<p role="status" data-request-status>'+esc(r.filesPending?'Заявка №'+r.number+' сохранена. Загрузка материалов не завершена. Выберите незагруженные файлы повторно.':'')+'</p>'+
     '<div class="rowbtns">'+
       '<button type="button" class="b b-main" data-send="direct">Отправить заявку исполнителю</button>'+
       '<button type="button" class="b b-alt" data-send="copy">Скопировать текст</button>'+
@@ -1041,17 +1051,28 @@ function openRequest(workId){
       if (!window.Oblako || !Oblako.requestApi) { toast("Вход временно недоступен"); return; }
       var expectedData = D;
       btn.disabled = true; btn.textContent = "Отправляем…";
-      var submitPromise=r.serverId?originalState.then(function(state){if(state.error)throw state.error;return Oblako.requestApi({action:'update-request',id:r.serverId,expectedPayload:state.payload,payload:requestPayload(probe)});}):Oblako.requestApi({action:'submit',payload:requestPayload(probe)});
+      var preparedFiles;
+      var submitPromise=prepareRequestFiles(wrap).then(function(files){
+        if(D!==expectedData)throw Error('Кабинет изменился. Откройте заявку заново');
+        preparedFiles=files;
+        if(r.filesPending&&!(r.pendingFiles||[]).length&&!files.length)throw Error('Выберите незагруженные файлы повторно. Заявка уже сохранена.');
+        return r.serverId?originalState.then(function(state){if(state.error)throw state.error;return Oblako.requestApi({action:'update-request',id:r.serverId,expectedPayload:state.payload,payload:requestPayload(probe)});}):Oblako.requestApi({action:'submit',payload:requestPayload(probe)});
+      });
       submitPromise.then(async function(result){
         if (D !== expectedData) throw new Error("Кабинет изменился. Откройте заявку заново");
         if (!result.saved || !result.id || !result.number) throw new Error("Сохранение не подтверждено. Повторите отправку");
-        if(!r.serverId)change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.serverId=result.id;r.number=result.number;});
-        originalState=Promise.resolve({payload:requestPayload(probe)});
-        var uploaded=await uploadRequestFiles(wrap,result.id,btn);
+        change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.serverId=result.id;r.number=result.number;r.pendingFiles=(r.pendingFiles||[]).filter(function(p){return !preparedFiles.some(function(f){return f.category===p.category;});}).concat(preparedFiles.map(function(f){return {category:f.category,fileHash:f.fileHash,fileName:f.fileName};}));r.filesPending=r.pendingFiles.length>0;});
+        originalState=Oblako.requestApi({action:'request-state',id:result.id}).then(function(x){return x;},function(e){return {error:e};});
+        var uploaded=await uploadRequestFiles(wrap,result.id,btn,preparedFiles,r.pendingFiles);
         if(D!==expectedData)throw Error("Кабинет изменился. Проверьте отправку после входа");
-        change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.sent=today();r.sentBy="direct";r.attachments=uploaded;});
+        change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.sent=today();r.sentBy="direct";r.attachments=uploaded;r.filesPending=false;r.pendingFiles=[];});
         wrap.remove();render();toast("Заявка передана исполнителю. Номер заявки: " + result.number);
-      }).catch(function(e){toast(e.message || "Не удалось отправить. Повторите попытку");})
+      }).catch(function(e){
+        if(D!==expectedData)return;
+        var message=(r.serverId?'Заявка №'+r.number+' уже сохранена. ':'')+(e.message||'Не удалось отправить. Повторите попытку');
+        if(r.filesPending)message+=' Загрузка материалов не завершена; сохранённые файлы при повторе не дублируются.';
+        wrap.querySelector('[data-request-status]').textContent=message;toast(message);
+      })
         .finally(function(){btn.disabled=false;btn.textContent="Отправить заявку исполнителю";});
       return;
     }
@@ -1909,10 +1930,12 @@ function viewWork(id){
   if(w.req && w.req.serverId) h += '</div></details>';
 
   h += card(lab("Заявка на черновик") +
-    (w.req && w.req.sent
+    (w.req && w.req.serverId && (w.req.filesPending||!w.req.sent)
+      ? '<div class="mut">Заявка №'+esc(w.req.number)+' сохранена. Отправка материалов не завершена; откройте заявку для проверки.</div>'
+      : w.req && w.req.sent
       ? '<div class="mut">' +
         ({ direct:"Заявка передана исполнителю ", copy:"Текст скопирован ", wa:"Открыта для отправки в WhatsApp ", tg:"Открыта для отправки в Telegram " }[w.req.sentBy] || "Подготовлена ") +
-        ruDate(w.req.sent) + '. Можно отправить снова — данные обновятся.</div>' 
+        ruDate(w.req.sent) + '. Изменения доступны до начала подготовки исполнителем.</div>'
       : '<div class="mut">При отправке из кабинета черновик будет доступен здесь, в разделе «Черновик от исполнителя».</div>') +
     '<div class="chips"><button type="button" class="chip warn" data-act="send-request" data-id="' + w.id + '">Отправить заявку</button></div>');
 
