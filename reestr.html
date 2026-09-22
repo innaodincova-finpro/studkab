@@ -2145,11 +2145,12 @@ async function editPassport(x,fullRevision){
  });
 }
 
+var passportLoads=new WeakSet();
 function viewItem(id){
   var x = item(id);
   if (!x) return '<div class="empty">Заявка не найдена</div>';
-  if(x.requestNumber&&(!Array.isArray(x.passports)||!x.materialRevision)&&!x._passportLoading){
-    x._passportLoading=true;setTimeout(function(){loadPassports(x).catch(function(e){toast(e.message||'Не удалось создать паспорт');}).finally(function(){x._passportLoading=false;});},0);
+  if(x.requestNumber&&(!Array.isArray(x.passports)||!x.materialRevision)&&!passportLoads.has(x)){
+    passportLoads.add(x);setTimeout(function(){loadPassports(x).catch(function(e){toast(e.message||'Не удалось создать паспорт');}).finally(function(){passportLoads.delete(x);});},0);
   }
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
   var r = x.refId ? refById(x.refId) : findRef(x);
