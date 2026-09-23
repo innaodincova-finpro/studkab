@@ -6,6 +6,7 @@ on:
     paths:
       - supabase/functions/studkab-requests/**
       - supabase/functions/_shared/external-word.mjs
+      - supabase/functions/_shared/material-manifest.mjs
       - .github/workflows/deploy-studkab-requests.yml
 permissions:
   contents: read

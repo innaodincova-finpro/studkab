@@ -296,14 +296,24 @@
       "production_verified_at": "2026-09-23",
       "production_sha256": "e0eebce20e983e63b362a448e012eaee8e505cbcbec0601c3aa1f7f96d6aed54",
       "comparison": "exact"
-    }
-  ],
-  "pending_migrations": [
+    },
     {
       "file": "20260923023438_c096_material_revision.sql",
       "version": "20260923023438",
       "name": "c096_material_revision",
-      "sha256": "fb23f1266582747e2feda882c0188d687f5bc93e25e7f2f884f7569a6022d3f6"
+      "sha256": "fb23f1266582747e2feda882c0188d687f5bc93e25e7f2f884f7569a6022d3f6",
+      "production_version": "20260923025632",
+      "production_verified_at": "2026-09-23",
+      "production_sha256": "fb23f1266582747e2feda882c0188d687f5bc93e25e7f2f884f7569a6022d3f6",
+      "comparison": "exact"
+    }
+  ],
+  "pending_migrations": [
+    {
+      "file": "20260923082944_c098_material_manifest.sql",
+      "version": "20260923082944",
+      "name": "c098_material_manifest",
+      "sha256": "11da3d34cc79cbe795cae2f272fb0aa063365043d0535f14c77f84af2ef20757"
     }
   ],
   "production_reconciled_at": "2026-09-23"

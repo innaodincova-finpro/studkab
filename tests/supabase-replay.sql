@@ -81,8 +81,8 @@ begin
      or to_regprocedure('public.studkab_gen_claim()') is null
      or to_regprocedure('public.studkab_gen_dispatch(uuid,integer,uuid)') is null
      or to_regprocedure('public.studkab_gen_settle(uuid,integer,uuid,uuid,text,jsonb)') is null
-     or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text,integer)') is null
-     or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer)') is null
+     or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text,integer,jsonb)') is null
+     or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer,jsonb)') is null
      or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null
      or to_regprocedure('public.studkab_gen_cancel(uuid,uuid)') is null then
     raise exception 'One or more required STUDKAB functions are missing';
@@ -184,8 +184,6 @@ begin
 end
 $c054$;
 
-select 'PASS: clean migration replay, schema inventory, RLS and cron isolation verified' as result;
-
 -- C-080: the new updater must remain service-only after complete replay.
 do $$
 begin
@@ -198,3 +196,46 @@ begin
   raise exception 'C-080 update privileges incorrect';
  end if;
 end $$;
+
+-- C098: complete replay must install the evidence contract and every output guard.
+do $c098$
+declare
+  target text;
+  guarded record;
+begin
+  if not exists(select 1 from information_schema.columns
+    where table_schema='public' and table_name='studkab_requirement_passports'
+      and column_name='material_manifest' and data_type='jsonb') then
+    raise exception 'C098 material manifest column missing';
+  end if;
+  foreach target in array array[
+    'public.studkab_material_manifest_check(uuid,uuid)',
+    'public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text,integer,jsonb)',
+    'public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer,jsonb)'
+  ] loop
+    if to_regprocedure(target) is null then
+      raise exception 'C098 required function missing: %', target;
+    end if;
+    if has_function_privilege('anon',target,'EXECUTE')
+      or has_function_privilege('authenticated',target,'EXECUTE')
+      or not has_function_privilege('service_role',target,'EXECUTE') then
+      raise exception 'C098 function privileges incorrect: %', target;
+    end if;
+  end loop;
+  for guarded in select * from (values
+    ('studkab_requirement_passports','passport_manifest_guard'),
+    ('studkab_gen_jobs','gen_manifest_guard'),
+    ('studkab_result_versions','result_manifest_guard'),
+    ('studkab_results','delivery_manifest_guard'),
+    ('studkab_result_reviews','review_manifest_guard')
+  ) as guards(table_name,trigger_name) loop
+    if not exists(select 1 from pg_trigger t
+      where t.tgrelid=to_regclass('public.'||guarded.table_name)
+        and t.tgname=guarded.trigger_name and t.tgenabled='O' and not t.tgisinternal) then
+      raise exception 'C098 enabled manifest guard missing: %', guarded.trigger_name;
+    end if;
+  end loop;
+end
+$c098$;
+
+select 'PASS: clean migration replay, schema inventory, RLS, cron isolation and material manifest guards verified' as result;

@@ -1,5 +1,5 @@
 const {test,expect}=require('@playwright/test');
-async function setup(page){await page.goto('http://127.0.0.1:4173/reestr.html');await page.evaluate(()=>QA.switchUser('draft-editor'));await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);await page.evaluate(()=>{const x=fromPayload({id:'33333333-3333-4333-8333-333333333333',t:'Анализ финансового состояния предприятия',k:'Курсовая работа',n:'Тест'});x.topic='Анализ финансового состояния предприятия';x.group='Э-1';const attachment={id:'a1',file_name:'задание.pdf',category:'requirements',size_bytes:100,file_hash:'test-hash',extracted_text:'Проверенное учебное задание.'};x.attachments=[attachment];x.materialRevision={state:'locked',requestRevision:0,cycleId:null,reason:null,canUpload:false,canReopen:true,canComplete:false,blockingReason:null};x.passports=[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'approved',title:'Требования',summary:'',items:[{id:'STRUCTURE',verified:true,source:'Задание',text:'Структура: Введение\n1. Анализ исходных данных\nЗаключение'}]}];D.items.push(x);window.draftItem=x;docOf(x);aiReady=()=>true;window.calls=[];window.actualAskAI=askAI;askAI=async(p,s,u)=>{calls.push({s,u});return{text:'Содержательный текст раздела на основе предоставленных материалов.',tokens:1};};Oblako.requestApi=async body=>{if(body.action==='material-revision-state')return {materials:x.materialRevision};if(body.action==='attachment-context')return {attachments:[attachment]};if(body.action!=='passport-ensure')throw Error('Unexpected request action');x.passports[0].source_fingerprint=body.sourceFingerprint;return {passports:x.passports};};openDocBuilder(x.id);});}
+async function setup(page){await page.goto('http://127.0.0.1:4173/reestr.html');await page.evaluate(()=>QA.switchUser('draft-editor'));await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);await page.evaluate(()=>{const x=fromPayload({id:'33333333-3333-4333-8333-333333333333',t:'Анализ финансового состояния предприятия',k:'Курсовая работа',n:'Тест'});x.topic='Анализ финансового состояния предприятия';x.group='Э-1';x.requirements='Учебное задание для проверки работы';window.draftManifest={basis:'Учебное задание',requirements:[{id:'M1',label:'Задание',required:true,attachment_ids:[],answer_ids:[],payload_fields:['rq'],not_applicable_reason:''}]};const attachment={id:'a1',file_name:'задание.pdf',category:'requirements',size_bytes:100,file_hash:'test-hash',extracted_text:'Проверенное учебное задание.'};x.attachments=[attachment];x.materialRevision={state:'locked',requestRevision:0,cycleId:null,reason:null,canUpload:false,canReopen:true,canComplete:false,blockingReason:null};x.passports=[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'approved',title:'Требования',summary:'',material_manifest:draftManifest,items:[{id:'STRUCTURE',verified:true,source:'Задание',text:'Структура: Введение\n1. Анализ исходных данных\nЗаключение'}]}];D.items.push(x);window.draftItem=x;docOf(x);aiReady=()=>true;window.calls=[];window.actualAskAI=askAI;askAI=async(p,s,u)=>{calls.push({s,u});return{text:'Содержательный текст раздела на основе предоставленных материалов.',tokens:1};};Oblako.requestApi=async body=>{if(body.action==='material-revision-state')return {materials:x.materialRevision};if(body.action==='attachment-context')return {attachments:[attachment]};if(body.action!=='passport-ensure')throw Error('Unexpected request action');x.passports[0].source_fingerprint=body.sourceFingerprint;return {passports:x.passports};};openDocBuilder(x.id);});}
 async function fill(page){await page.getByText('Материалы для подготовки',{exact:true}).click();await page.locator('#draft-organization').fill('Учебная организация');await page.locator('#draft-period').fill('2024–2025');await page.locator('#draft-requirements').fill('Проанализировать ликвидность и структуру финансирования');await page.locator('#draft-materials').fill('Проверенные данные учебного примера. Ограничение: причина изменений неизвестна.');await page.locator('#draft-sources').fill('OpenStax. Financial Statement Analysis. https://openstax.org/books/principles-financial-accounting/pages/a-financial-statement-analysis');await page.locator('#draft-finance').fill('2024;100;60;40;20;40;150;15\n2025;120;70;50;30;40;180;18');}
 test('section image survives editor refresh and can be removed',async({page})=>{
  await setup(page);
@@ -105,7 +105,7 @@ test('mobile passport is readable and blocks preparation before checking filled 
    {id:'VOLUME',category:'measurable',required:true,source:'Методические требования',text:'Объём: Не указано — требуется уточнить'}
   ];
   draftItem.requestNumber=draftItem.id;
-  draftItem.passports=[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'draft',title:'Паспорт',summary:'',items}];
+  draftItem.passports=[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'draft',title:'Паспорт',summary:'',material_manifest:draftManifest,items}];
   Object.values(draftItem.doc.structure).forEach(part=>part.text='Уже заполненный раздел.');
   Oblako.requestApi=async body=>body.action==='material-revision-state'?{materials:draftItem.materialRevision}:({passports:[{id:'11111111-1111-4111-8111-111111111111',revision:1,status:'draft',source_fingerprint:body.sourceFingerprint,title:'Паспорт',summary:'',items}]});
   window.preparationActions=[];Oblako.generationApi=async body=>{preparationActions.push(body.action);if(body.action==='history')return {jobs:[]};throw Error('Paid action is forbidden');};
@@ -344,7 +344,7 @@ test('C-051: stopped and outdated runs are not offered for continuation',async({
   Oblako.generationApi=async body=>{
    if(body.action==='history')return {jobs:[{id:'22222222-2222-4222-8222-222222222222',status:'cancelled',created_at:'2026-09-15T06:00:00Z'},{id:'33333333-3333-4333-8333-333333333333',status:'stale',created_at:'2026-09-15T05:00:00Z'},{id:'44444444-4444-4444-8444-444444444444',status:'complete',created_at:'2026-09-15T04:00:00Z'}]};
    throw Error('Paid Start is forbidden here');};});
- await page.evaluate(()=>{draftItem.passports=[{id:'p',status:'approved',items:[]}];});
+ await page.evaluate(()=>{draftItem.passports=[{id:'p',status:'approved',material_manifest:draftManifest,items:[]}];});
  await page.getByRole('button',{name:'Начать подготовку',exact:true}).click();
  await expect(page.locator('[data-recover-job]')).toHaveCount(1);
  await expect(page.locator('[data-recover-job]')).toHaveAttribute('data-recover-job','44444444-4444-4444-8444-444444444444');
@@ -399,7 +399,7 @@ test('C077 new revision edits filled requirements and keeps a separate draft',as
  await page.evaluate(()=>{
   const items=[{id:'P1',category:'method',required:true,source:'Задание',text:'Не менее 5 источников'},{id:'P2',category:'measurable',required:true,source:'Методичка',text:'Объём 25–30 страниц'}];
   draftItem.requestNumber=6;
-  draftItem.passports=[{id:'old',revision:7,status:'approved',title:'Требования',summary:'Старая запись',items}];
+  draftItem.passports=[{id:'old',revision:7,status:'approved',title:'Требования',summary:'Старая запись',material_manifest:draftManifest,items}];
   window.savedPassports=[];
   Oblako.requestApi=async body=>{if(body.action==='material-revision-state')return {materials:draftItem.materialRevision};if(body.action==='clarification-list')return {questions:[]};if(body.action==='attachment-context')return {attachments:[]};if(body.action==='passport-save'){savedPassports.push(body);return {passport:{...body.passport,id:'new',revision:8,status:'draft'}};}throw Error('Unexpected '+body.action);};
   openId=draftItem.id;render();
@@ -428,7 +428,7 @@ test('C095 answered clarification stays current through revision and approval',a
   const question={id:'55555555-5555-4555-8555-555555555555',item_id:'VOLUME',question:'Сколько страниц?',answer:'25–30 страниц',answer_source:'Уточнение преподавателя'};
   const items=StudClarifications.requiredIds.map(id=>({id,category:'method',required:true,text:id==='VOLUME'?'25–30 страниц':'Подтверждённое условие',source:'Задание',verified:true,answer_ids:[]}));
   draftItem.requestNumber=3;
-  draftItem.passports=[{id:'old',revision:2,status:'draft',title:'Требования',items}];
+  draftItem.passports=[{id:'old',revision:2,status:'draft',title:'Требования',material_manifest:draftManifest,items}];
   draftItem.clarifications=[{...question,answer:null}];
   window.c095Actions=[];
   Oblako.requestApi=async body=>{

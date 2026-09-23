@@ -1,3 +1,4 @@
+import {materialManifestGuard} from '../_shared/material-manifest.mjs';
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 import {expandParts} from './plan.mjs';
 import {reserveMicrousd,MAX_OUTPUT_TOKENS} from '../_shared/deepseek-cost.mjs';
@@ -102,6 +103,8 @@ export function handler({auth,config,db,settings}){
     let prepared;try{prepared=prepare(input,Number(limit.max_cost_microusd));}catch(e){return reply({error:e.message},400);}
     const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&status=eq.approved&source_fingerprint=eq.'+input.materialFingerprint+'&select=id,revision,source_fingerprint,items&order=revision.desc&limit=1');
     if(!passport)return reply({error:'PASSPORT_REQUIRED'},409);
+    const materials=await materialManifestGuard((path,method,body)=>db(path,body),input.request,passport.id);
+    if(materials)return reply(materials,409);
     const conflict=await sourceMinimumGuard(db,input.request,passport.items);
     if(conflict)return reply(conflict,409);
     const [b]=await db('studkab_gen_budget?id=eq.true&select=limit_microusd,reserved_microusd');
