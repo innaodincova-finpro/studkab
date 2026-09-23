@@ -76,9 +76,30 @@ test('C102 unavailable state and account/version changes never keep positive rea
  await setup(page);await page.evaluate(()=>qDeferred=true);await page.locator('[data-quality-scan]').click();await page.evaluate(()=>{qBinding={...qBinding,versionId:'55555555-5555-4555-8555-555555555555'};qRelease();});await expect(page.locator('[data-quality-status]')).toContainText('изменились');expect(await page.evaluate(()=>qReady)).toBe(false);
 });
 
-test('C102 empty corpus or truncated comparison cannot offer positive internal result',async({page})=>{
- await setup(page);await page.evaluate(()=>{qScan.scope.usableSources=0;qScan.scope.providedSources=0;qScan.sources=[];qScan.matches=[];});await page.locator('[data-quality-scan]').click();
- await expect(page.locator('[data-quality-scope]')).toContainText('Нет доступных текстов источников');await expect(page.locator('[data-q="internalDisposition"] option[value="pass"]')).toBeDisabled();
- await setup(page);await page.evaluate(()=>{qScan.limits.truncated=true;qScan.limits.reasons=['document_token_limit'];});await page.locator('[data-quality-scan]').click();
- await expect(page.locator('[data-quality-scope]')).toContainText('ограничена объёмом');await expect(page.locator('[data-q="internalDisposition"] option[value="pass"]')).toBeDisabled();expect(await page.evaluate(()=>qReady)).toBe(false);
+test('C102 empty, partial or truncated corpus cannot offer positive internal result',async({page})=>{
+ for(const scenario of ['empty','partial','truncated']){
+  await setup(page);
+  const disposition=page.locator('[data-q="internalDisposition"]');
+  const pass=disposition.locator('option[value="pass"]');
+  // toBeDisabled follows the enclosing label to its select in Playwright.
+  // Inspect the option's native property so manual/fail can remain selectable.
+  await expect(pass).toHaveJSProperty('disabled',true);
+  await page.locator('[data-quality-scan]').click();
+  await expect(pass).toHaveJSProperty('disabled',false);
+  await disposition.selectOption('pass');
+  await page.evaluate(scenario=>{
+   if(scenario==='empty'){qScan.scope.usableSources=0;qScan.scope.providedSources=0;qScan.sources=[];qScan.matches=[];}
+   if(scenario==='partial'){qScan.scope.providedSources=2;}
+   if(scenario==='truncated'){qScan.limits.truncated=true;qScan.limits.reasons=['document_token_limit'];}
+  },scenario);
+  await page.locator('[data-quality-scan]').click();
+  await expect(page.locator('[data-quality-scope]')).toContainText(scenario==='empty'?'Нет доступных текстов источников':scenario==='partial'?'Часть источников не содержит':'ограничена объёмом');
+  await expect(pass).toHaveJSProperty('disabled',true);
+  await expect(disposition).toHaveValue('manual');
+  await expect(disposition).toBeEnabled();
+  await disposition.selectOption('fail');await expect(disposition).toHaveValue('fail');
+  await disposition.selectOption('manual');await expect(disposition).toHaveValue('manual');
+  expect(await page.evaluate(()=>qReady)).toBe(false);
+  expect(await page.evaluate(()=>qCalls.some(x=>x.action==='quality-save'))).toBe(false);
+ }
 });
