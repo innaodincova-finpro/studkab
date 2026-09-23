@@ -8,7 +8,8 @@ async function setup(page,{student=false,eligible=true,reset=true}={}){
   window.testBytes=btoa(String.fromCharCode(...bytes));
   if(reset)sessionStorage.removeItem('C099-test-delivery');
   window.testItem={id:'11111111-1111-4111-8111-111111111111',requestNumber:1,student:'Тестовый студент',status:'progress',req:{serverId:'11111111-1111-4111-8111-111111111111'},testDeliveryState:{eligible:true}};
-  window.testHost=document.createElement('section');testHost.hidden=true;document.body.appendChild(testHost);
+  // Product cards mount inside #page, whose layout accounts for the fixed navigation.
+  window.testHost=document.createElement('section');testHost.hidden=true;document.getElementById('page').prepend(testHost);
   Oblako.requestApi=async body=>{
    testCalls.push(body);
    if(window.deferTestRead&&body.action==='test-result'&&body.includeFile===true)await new Promise(resolve=>window.releaseTestRead=resolve);
