@@ -9,7 +9,7 @@ async function setup(page,{student=false,eligible=true,reset=true}={}){
   if(reset)sessionStorage.removeItem('C099-test-delivery');
   window.testItem={id:'11111111-1111-4111-8111-111111111111',requestNumber:1,student:'Тестовый студент',status:'progress',req:{serverId:'11111111-1111-4111-8111-111111111111'},testDeliveryState:{eligible:true}};
   // Product cards mount inside #page, whose layout accounts for the fixed navigation.
-  window.testHost=document.createElement('section');testHost.hidden=true;document.getElementById('page').prepend(testHost);
+  window.testHost=document.createElement('section');testHost.id='test-delivery-fixture';testHost.hidden=true;document.getElementById('page').prepend(testHost);
   Oblako.requestApi=async body=>{
    testCalls.push(body);
    if(window.deferTestRead&&body.action==='test-result'&&body.includeFile===true)await new Promise(resolve=>window.releaseTestRead=resolve);
@@ -49,12 +49,12 @@ test('C099 explicit separate delivery preserves ordinary status and survives reo
  expect(await page.evaluate(()=>testCalls.filter(c=>c.action==='test-deliver').length)).toBe(1);
  await setup(page,{student:true,reset:false});
  await expect(page.locator('[data-test-receive]')).toBeVisible();
- await expect(page.locator('section').filter({has:page.locator('[data-test-receive]')})).toContainText('Тестовый файл — проверка качества не завершена');
+ await expect(page.locator('#test-delivery-fixture')).toContainText('Тестовый файл — проверка качества не завершена');
  const pending=page.waitForEvent('download');await page.locator('[data-test-receive]').click();const file=await pending;
  expect(file.suggestedFilename()).toBe('Тестовый файл — качество не подтверждено.docx');
  const fs=require('node:fs');expect(fs.readFileSync(await file.path()).toString('base64')).toBe(await page.evaluate(()=>testBytes));
  await setup(page,{student:true,reset:false});await expect(page.locator('[data-test-receive]')).toBeVisible();
- await expect(page.locator('section').filter({has:page.locator('[data-test-receive]')})).toContainText('проверка качества не завершена');
+ await expect(page.locator('#test-delivery-fixture')).toContainText('проверка качества не завершена');
 });
 
 test('C099 server version change invalidates an executor confirmation',async({page})=>{
