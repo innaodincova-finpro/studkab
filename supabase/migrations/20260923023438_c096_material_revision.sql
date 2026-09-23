@@ -23,7 +23,11 @@ alter table public.studkab_request_attachments add column material_revision_id u
 create function public.studkab_material_revision_immutable() returns trigger
 language plpgsql security invoker set search_path='' as $$
 begin
- if tg_op='DELETE' then raise exception 'Immutable material revision history'; end if;
+ if tg_op='DELETE' then
+  if current_user='postgres' and exists(select 1 from public.studkab_requests where id=old.request_id and deleting_at is not null)
+  then return old; end if;
+  raise exception 'Immutable material revision history';
+ end if;
  if old.closed_at is not null or new.closed_at is null
  or (new.id,new.request_id,new.opened_by,new.reason,new.opened_revision,new.opened_at)
  is distinct from (old.id,old.request_id,old.opened_by,old.reason,old.opened_revision,old.opened_at)
@@ -46,7 +50,7 @@ begin
  blocked:=exists(select 1 from public.studkab_gen_jobs where request_id=p_request::text)
  or exists(select 1 from public.studkab_result_versions where request_id=p_request)
  or exists(select 1 from public.studkab_results where request_id=p_request);
- has_passport:=exists(select 1 from public.studkab_requirement_passports where request_id=p_request);
+ has_passport:=exists(select 1 from public.studkab_requirement_passports where request_id=p_request and status='approved');
  state:=case when c.id is not null and c.closed_at is null then 'open'
  when has_passport or blocked or c.id is not null then 'locked' else 'initial' end;
  return jsonb_build_object('materials',jsonb_build_object('state',state,'requestRevision',r.revision,
@@ -81,7 +85,8 @@ begin
  then return jsonb_build_object('error','Возврат недоступен: подготовка результата уже началась'); end if;
  if exists(select 1 from public.studkab_material_revisions where request_id=p_request and closed_at is null)
  then return jsonb_build_object('error','Дополнение материалов уже открыто'); end if;
- if not exists(select 1 from public.studkab_requirement_passports where request_id=p_request)
+ if not exists(select 1 from public.studkab_requirement_passports where request_id=p_request and status='approved')
+ and not exists(select 1 from public.studkab_material_revisions where request_id=p_request)
  then return jsonb_build_object('error','Материалы ещё доступны автору без возврата'); end if;
  if (select count(*) from public.studkab_material_revisions where request_id=p_request)>=100
  then return jsonb_build_object('error','Достигнут лимит возвратов'); end if;
@@ -169,7 +174,7 @@ begin
  if exists(select 1 from public.studkab_gen_jobs where request_id=r.id::text)
  or exists(select 1 from public.studkab_result_versions where request_id=r.id)
  or exists(select 1 from public.studkab_results where request_id=r.id)
- or ((exists(select 1 from public.studkab_requirement_passports where request_id=r.id)
+ or ((exists(select 1 from public.studkab_requirement_passports where request_id=r.id and status='approved')
       or exists(select 1 from public.studkab_material_revisions where request_id=r.id))
      and not exists(select 1 from public.studkab_material_revisions where request_id=r.id and closed_at is null))
  then raise exception 'Preparation already started'; end if;
@@ -309,9 +314,6 @@ begin
     'recoveries',(select count(*) from public.studkab_gen_recoveries where job_id=any(v_jobs))
   );
 
-  -- The three immutable-history triggers and the generation-attempt trigger are
-  -- intentionally bypassed only inside this revoked, service-role-only function.
-  perform set_config('session_replication_role','replica',true);
   delete from public.studkab_results
     where request_id=p_request or version_id=any(v_versions) or review_id=any(v_reviews);
   delete from public.studkab_result_reviews where id=any(v_reviews);
@@ -320,22 +322,22 @@ begin
   delete from public.studkab_gen_attempts where job_id=any(v_jobs);
   delete from public.studkab_gen_parts where job_id=any(v_jobs);
   delete from public.studkab_gen_jobs where id=any(v_jobs);
-  delete from public.studkab_material_revisions where request_id=p_request;
   delete from public.studkab_clarifications where request_id=p_request;
   delete from public.studkab_requirement_passports where request_id=p_request;
   delete from public.studkab_request_attachments where request_id=p_request;
+  delete from public.studkab_material_revisions where request_id=p_request;
   delete from public.studkab_request_payload_history where request_id=p_request;
   delete from public.studkab_requests where id=p_request;
-  perform set_config('session_replication_role','origin',true);
 
   insert into public.studkab_request_deletion_audit(request_id,actor_id,reason,deleted_counts)
   values(p_request,p_actor,trim(p_reason),v_counts)
   on conflict(request_id) do nothing;
   return jsonb_build_object('deleted',true,'absent',false,'id',p_request,'counts',v_counts);
-exception when others then
-  perform set_config('session_replication_role','origin',true);
-  raise;
 end $$;
+
+alter function public.delete_studkab_request(uuid,uuid,text) owner to postgres;
+revoke all on function public.delete_studkab_request(uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.delete_studkab_request(uuid,uuid,text) to service_role;
 
 
 revoke all on function public.studkab_material_revision_immutable(),public.studkab_material_revision_guard(),public.studkab_passport_material_revision_guard(),public.studkab_material_revision_state(uuid,uuid),public.studkab_material_revision_open(uuid,uuid,uuid,text,integer),public.studkab_material_revision_complete(uuid,uuid,uuid,integer) from public,anon,authenticated;
@@ -419,5 +421,29 @@ end $$;
 
 revoke all on function public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text,integer),public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer) from public,anon,authenticated;
 grant execute on function public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text,integer),public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer) to service_role;
+
+create or replace function public.update_studkab_request(
+  p_request uuid,p_student uuid,p_expected jsonb,p_content jsonb
+) returns jsonb language plpgsql security invoker set search_path='' as $$
+declare r public.studkab_requests;
+begin
+ select * into r from public.studkab_requests where id=p_request and student_id=p_student for update;
+ if not found or r.deleting_at is not null then return jsonb_build_object('missing',true); end if;
+ if p_content->>'id' is distinct from r.client_id then return jsonb_build_object('conflict',true); end if;
+ if r.payload=p_content then return jsonb_build_object('id',r.id,'number',r.number,'duplicate',true); end if;
+ if r.payload is distinct from p_expected then return jsonb_build_object('conflict',true); end if;
+ if exists(select 1 from public.studkab_requirement_passports where request_id=r.id and status='approved')
+ or exists(select 1 from public.studkab_gen_jobs where request_id=r.id::text)
+ or exists(select 1 from public.studkab_result_versions where request_id=r.id)
+ or exists(select 1 from public.studkab_results where request_id=r.id)
+ or exists(select 1 from public.studkab_material_revisions where request_id=r.id)
+ then return jsonb_build_object('locked',true); end if;
+ insert into public.studkab_request_payload_history(request_id,payload) values(r.id,r.payload);
+ update public.studkab_requests set payload=p_content,revision=revision+1 where id=r.id;
+ return jsonb_build_object('id',r.id,'number',r.number,'duplicate',false);
+end $$;
+revoke all on function public.update_studkab_request(uuid,uuid,jsonb,jsonb) from public,anon,authenticated;
+grant execute on function public.update_studkab_request(uuid,uuid,jsonb,jsonb) to service_role;
+
 
 commit;

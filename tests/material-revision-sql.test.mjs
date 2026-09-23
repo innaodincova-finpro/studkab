@@ -165,3 +165,27 @@ test('C096 independent: delayed upload from a closed cycle cannot enter a later 
  assert.equal(await one('select material_revision_id from studkab_request_attachments where id=$1',[current]),newCycle);
  assert.equal(unwrap(await state(q)).cycleId,newCycle);
 });
+
+test('C096 compatibility: draft-only initial intake still permits owner corrections without changing old passports',async()=>{
+ const {q,a,p}=await fixture({approved:false}),before=await one('select row_to_json(p) from studkab_requirement_passports p where id=$1',[p.id]);
+ const current=unwrap(await state(q,actor.student));assert.equal(current.state,'initial');assert.equal(current.canUpload,true);
+ assert.equal(unwrap(await state(q)).canReopen,false);await denied(()=>open(q));
+ const oldPayload=await one('select payload from studkab_requests where id=$1',[q]);
+ const changed={...oldPayload,t:'Revised original intake'};
+ const updated=await rpc('update_studkab_request',[q,actor.student,oldPayload,changed]);assert.equal(updated.id,q);assert.equal(updated.duplicate,false);
+ const next=await attachment(q,{supersedes:a});
+ assert.equal(await one('select supersedes from studkab_request_attachments where id=$1',[next]),a);
+ assert.equal(await one('select material_revision_id from studkab_request_attachments where id=$1',[next]),null);
+ assert.deepEqual(await one('select row_to_json(p) from studkab_requirement_passports p where id=$1',[p.id]),before);
+ assert.deepEqual(await one('select payload from studkab_request_payload_history where request_id=$1',[q]),oldPayload);
+ assert.equal(await one('select count(*)::int from studkab_material_revisions where request_id=$1',[q]),0);
+});
+
+test('C096 compatibility: existing cycle never reopens payload edits, even with no approved passport',async()=>{
+ const {q}=await fixture(),cycle=randomUUID(),old=await one('select payload from studkab_requests where id=$1',[q]);
+ await open(q,cycle);await complete(q,cycle);
+ assert.equal(await one("select count(*)::int from studkab_requirement_passports where request_id=$1 and status='approved'",[q]),0);
+ await denied(()=>rpc('update_studkab_request',[q,actor.student,old,{...old,t:'Forbidden post-cycle payload edit'}]));
+ assert.deepEqual(await one('select payload from studkab_requests where id=$1',[q]),old);
+ assert.equal(await one('select count(*)::int from studkab_request_payload_history where request_id=$1',[q]),0);
+});

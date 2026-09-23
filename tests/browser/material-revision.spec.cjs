@@ -45,6 +45,15 @@ test('C096 student retries partial files and explicitly completes the visible se
  expect(await page.evaluate(()=>materialCalls.find(x=>x.action==='material-revision-complete').expectedRevision)).toBe(7);
 });
 
+test('C096 initial draft explains that the original request can still receive files',async({page})=>{
+ await student(page);await page.locator('.sheet [data-x]').click();
+ await page.evaluate(async()=>{materialState={...materialState,state:'initial',cycleId:null,reason:null,canUpload:true,canComplete:false};await openStudentMaterials('materials-work');});
+ await expect(page.getByRole('dialog')).toContainText('Первичный комплект ещё можно дополнить');
+ await expect(page.getByRole('dialog')).toContainText('откройте «Отправить заявку»');
+ await expect(page.getByRole('dialog')).not.toContainText('Изменения закрыты');
+ await expect(page.getByRole('button',{name:'Завершить дополнение',exact:true})).toHaveCount(0);
+});
+
 test('C096 student refuses completion after another tab changes the materials',async({page})=>{
  await student(page);await page.evaluate(()=>materialState.requestRevision++);
  await page.getByRole('button',{name:'Завершить дополнение',exact:true}).click();

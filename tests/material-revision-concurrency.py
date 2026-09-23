@@ -202,13 +202,15 @@ try:
         count = int(call('select count(*) from studkab_request_attachments where request_id=' + lit(q)))
         assert count == (2 if first_kind == 'upload' else 1)
 
-    q, a, p = new_case(approved=False)
+    q, a, p = new_case()
+    p = json.loads(call(rpc('studkab_requirement_passport_save', q, EXECUTOR, 'New draft', '', ITEMS, FP)))
     cycle = str(uuid.uuid4())
     race('open before old passport approval', open_sql(q, cycle, revision(q)), approve_sql(q, p))
     assert state(q)['state'] == 'open'
     assert call('select status from studkab_requirement_passports where id=' + lit(p['id'])) == 'stale'
 
-    q, a, p = new_case(approved=False)
+    q, a, p = new_case()
+    p = json.loads(call(rpc('studkab_requirement_passport_save', q, EXECUTOR, 'New draft', '', ITEMS, FP)))
     cycle = str(uuid.uuid4())
     race('approval before open serializes and then invalidates', approve_sql(q, p),
          open_sql(q, cycle, revision(q)), expect_rejection=False)

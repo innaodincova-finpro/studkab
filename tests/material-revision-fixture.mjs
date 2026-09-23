@@ -2,7 +2,7 @@
 // No network, credentials or production data are used.
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
-export const migration='supabase/migrations/20260922181317_c096_material_revision.sql';
+export const migration='supabase/migrations/20260923023438_c096_material_revision.sql';
 const read=path=>fs.readFileSync(new URL('../'+path,import.meta.url),'utf8');
 export const actor={student:'11111111-1111-4111-8111-111111111111',executor:'22222222-2222-4222-8222-222222222222',other:'33333333-3333-4333-8333-333333333333'};
 export const fingerprint='a'.repeat(64);
@@ -27,6 +27,7 @@ export function setupSQL({withMigration=true}={}){
   'supabase/migrations/20260914105509_studkab_requirement_passports.sql',
   'supabase/migrations/20260915070508_mandatory_passport_generation_limits.sql',
   'supabase/migrations/20260915130000_studkab_generation_stop.sql',
+  'supabase/migrations/20260915130100_studkab_production_drift_recorded.sql',
   'supabase/migrations/20260917144051_studkab_request_attachments.sql',
   'supabase/migrations/20260918130000_review_statuses.sql',
   'supabase/migrations/20260919124300_result_review_context_guard.sql'
@@ -38,14 +39,17 @@ export function setupSQL({withMigration=true}={}){
    insert into studkab_requests(id,student_id,client_id,payload) values('${legacyRequest}','${actor.student}','legacy-fixture','{"id":"legacy-fixture"}');
    insert into studkab_results(request_id,delivery_id,document) values('${legacyRequest}','55555555-5555-4555-8555-555555555555','{"topic":"Preserved historical delivery"}');`);
  }
- parts.push(`alter table studkab_requests add column deleting_at timestamptz;
+ parts.push(read('supabase/migrations/20260920111220_c079_request_deletion.sql'));
+ parts.push(`
  create table studkab_members(user_id uuid primary key references auth.users(id));
  grant select on studkab_members to service_role;`);
  for(const path of [
   'supabase/migrations/20260921050532_c080_request_resubmission.sql',
   'supabase/migrations/20260921165603_c084_requirement_clarifications.sql',
   'supabase/migrations/20260921181451_c085_clarification_actor_permissions.sql',
-  'supabase/migrations/20260922032858_c089_review_notes.sql'
+  'supabase/migrations/20260922032858_c089_review_notes.sql',
+  'supabase/migrations/20260923023346_baseline_c095_request_delete_without_replica_role.sql',
+  'supabase/migrations/20260923023405_baseline_draft_passport_attachment_corrections.sql'
  ])parts.push(read(path));
  if(withMigration)parts.push(read(migration));
  parts.push(`insert into auth.users(id,email) values

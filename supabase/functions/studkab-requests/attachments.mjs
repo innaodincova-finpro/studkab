@@ -49,11 +49,12 @@ export async function attachmentAction(input,user,deps){
  if(same&&same.category===category)return {status:200,data:{attachment:same,duplicate:true}};
  const previous=current.filter(x=>x.category===category);
  if(supersedes?!previous.some(x=>x.id===supersedes):previous.length>0)return {status:409,data:{error:'Файл изменился. Откройте заявку заново'}};
- const passports=await deps.db('studkab_requirement_passports?request_id=eq.'+input.id+'&select=id&limit=1');
- const revisionOpen=(permit.row.studkab_material_revisions||[]).find(c=>c.closed_at===null);
+ const passports=await deps.db('studkab_requirement_passports?request_id=eq.'+input.id+'&status=eq.approved&select=id&limit=1');
+ const cycles=permit.row.studkab_material_revisions||[];
+ const revisionOpen=cycles.find(c=>c.closed_at===null);
  if(input.cycleId!=null&&!uuid.test(String(input.cycleId)))return {status:400,data:{error:'Неверный возврат материалов'}};
  if((input.cycleId??null)!==(revisionOpen?.id??null))return {status:409,data:{error:'Возврат материалов изменился. Откройте заявку заново'}};
- if(passports.length&&!revisionOpen)return {status:409,data:{error:'Подготовка уже началась. Согласуйте изменения с исполнителем'}};
+ if(!revisionOpen&&(passports.length||cycles.length))return {status:409,data:{error:'Подготовка уже началась. Согласуйте изменения с исполнителем'}};
  if(current.some(x=>x.file_hash===fileHash))return {status:409,data:{error:'Этот файл уже приложен'}};
  if(!supersedes&&current.length>=8)return {status:429,data:{error:'К одной заявке можно приложить не более 8 файлов'}};
  const attachmentId=crypto.randomUUID();
