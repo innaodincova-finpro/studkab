@@ -306,6 +306,16 @@
       "production_verified_at": "2026-09-23",
       "production_sha256": "fb23f1266582747e2feda882c0188d687f5bc93e25e7f2f884f7569a6022d3f6",
       "comparison": "exact"
+    },
+    {
+      "file": "20260923144056_c101_answered_reassignment.sql",
+      "version": "20260923144056",
+      "name": "c101_answered_reassignment",
+      "sha256": "f4aa89bfba8daeb7d3c9fe255c8342b3e0f4deb210a2896f51324f1f6bafdf60",
+      "production_version": "20260923145936",
+      "production_verified_at": "2026-09-23",
+      "production_sha256": "f4aa89bfba8daeb7d3c9fe255c8342b3e0f4deb210a2896f51324f1f6bafdf60",
+      "comparison": "exact"
     }
   ],
   "pending_migrations": [
@@ -326,12 +336,6 @@
       "version": "20260923132840",
       "name": "c100_request_reassignment",
       "sha256": "44f452bedc029d1add878d7e0ce59858f3a769f41d03f9388e1071ad7eab5bc6"
-    },
-    {
-      "file": "20260923144056_c101_answered_reassignment.sql",
-      "version": "20260923144056",
-      "name": "c101_answered_reassignment",
-      "sha256": "f4aa89bfba8daeb7d3c9fe255c8342b3e0f4deb210a2896f51324f1f6bafdf60"
     }
   ],
   "production_reconciled_at": "2026-09-23"
