@@ -21,6 +21,7 @@ begin
     'studkab_request_payload_history',
     'studkab_requirement_passports',
     'studkab_clarifications',
+    'studkab_material_revisions',
     'studkab_requests',
     'studkab_result_reviews',
     'studkab_result_versions',
@@ -48,11 +49,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 24 then
-    raise exception 'Expected 24 STUDKAB tables, found %', table_count;
+  if table_count <> 25 then
+    raise exception 'Expected 25 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 24 then
-    raise exception 'RLS enabled on only % of 24 STUDKAB tables', rls_count;
+  if rls_count <> 25 then
+    raise exception 'RLS enabled on only % of 25 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';
@@ -80,8 +81,8 @@ begin
      or to_regprocedure('public.studkab_gen_claim()') is null
      or to_regprocedure('public.studkab_gen_dispatch(uuid,integer,uuid)') is null
      or to_regprocedure('public.studkab_gen_settle(uuid,integer,uuid,uuid,text,jsonb)') is null
-     or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text)') is null
-     or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text)') is null
+     or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text,integer)') is null
+     or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer)') is null
      or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null
      or to_regprocedure('public.studkab_gen_cancel(uuid,uuid)') is null then
     raise exception 'One or more required STUDKAB functions are missing';

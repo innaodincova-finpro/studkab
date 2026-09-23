@@ -130,26 +130,37 @@ export async function requirementAction(input,user,{db,config}){
  if((user.email||'').toLowerCase()!==(cfg.executor_email||'').toLowerCase())return {status:403,data:{error:'Паспорт требований доступен только исполнителю'}};
  const request=typeof input.id==='string'&&/^[a-f0-9-]{36}$/.test(input.id)?input.id:null;
  if(!request)return {status:400,data:{error:'Неверный номер заявки'}};
- const [row]=await db('studkab_requests?select=id,payload&limit=1&id=eq.'+request);
+ const [row]=await db('studkab_requests?select=id,payload,revision,studkab_material_revisions(id,closed_at)&deleting_at=is.null&limit=1&id=eq.'+request);
  if(!row)return {status:404,data:{error:'Заявка не найдена'}};
+ const revisionOpen=(row.studkab_material_revisions||[]).some(c=>c.closed_at===null);
+ if(revisionOpen&&input.action!=='passport-get'){
+  if(input.action!=='passport-ensure')return {status:409,data:{error:'Завершите дополнение материалов перед изменением паспорта'}};
+  const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
+  const state=await db('rpc/studkab_material_revision_state','POST',{p_request:request,p_actor:user.id});
+  return {status:200,data:{passports:rows,created:false,materials:state.materials,materialRevision:row.revision}};
+ }
+ if(input.action!=='passport-get'&&input.expectedRevision!==undefined&&(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0))return {status:400,data:{error:'Откройте паспорт заново'}};
+ if(input.action!=='passport-get'&&(row.studkab_material_revisions||[]).length&&input.expectedRevision!==row.revision)return {status:409,data:{error:'Материалы изменились. Откройте паспорт заново'}};
  if(input.action==='passport-get'){
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
-  return {status:200,data:{passports:rows}};
+  return {status:200,data:{passports:rows,materialRevision:row.revision}};
  }
  if(input.action==='passport-ensure'){
   if(!/^[a-f0-9]{64}$/.test(input.sourceFingerprint||''))return {status:400,data:{error:'Сначала сохраните актуальные материалы'}};
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
-  if(rows.length&&rows[0].source_fingerprint===input.sourceFingerprint&&filled===rows[0])return {status:200,data:{passports:rows,created:false}};
-  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Требования уточнены по исходной заявке без изменения исходных сведений. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:rows[0].source_fingerprint!==input.sourceFingerprint?filled.items.map(item=>({...item,verified:false,answer_ids:[]})):filled.items}:defaultPassport(row.payload);
-  const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_source_fingerprint:input.sourceFingerprint});
-  return {status:200,data:{passports:[created].concat(rows),created:true}};
+  if(rows.length&&rows[0].status!=='stale'&&rows[0].source_fingerprint===input.sourceFingerprint&&filled===rows[0])return {status:200,data:{passports:rows,created:false,materialRevision:row.revision}};
+  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Требования уточнены по исходной заявке без изменения исходных сведений. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:rows[0].status==='stale'||rows[0].source_fingerprint!==input.sourceFingerprint?filled.items.map(item=>({...item,verified:false,answer_ids:[]})):filled.items}:defaultPassport(row.payload);
+  const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_source_fingerprint:input.sourceFingerprint,p_expected_revision:input.expectedRevision??null});
+  if(created.error)return {status:409,data:created};
+  return {status:200,data:{passports:[created].concat(rows),created:true,materialRevision:row.revision}};
  }
  let passport;
  try{passport=validatePassport(input.passport);}catch(e){return {status:400,data:{error:e.message}};}
  if(input.action==='passport-save'){
-  const result=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_source_fingerprint:text(input.sourceFingerprint,128,'версию материалов')});
-  return {status:200,data:{passport:result}};
+  const result=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_source_fingerprint:text(input.sourceFingerprint,128,'версию материалов'),p_expected_revision:input.expectedRevision??null});
+  if(result.error)return {status:409,data:result};
+  return {status:200,data:{passport:result,materialRevision:row.revision}};
  }
  if(input.action==='passport-approve'){
   const version=typeof input.passportId==='string'&&/^[a-f0-9-]{36}$/.test(input.passportId)?input.passportId:null;
@@ -161,8 +172,9 @@ export async function requirementAction(input,user,{db,config}){
   const conflict=await sourceMinimumGuard(db,request,saved.items);
   if(conflict)return {status:409,data:conflict};
   const expected=text(input.sourceFingerprint,128,'версию материалов',true);
-  const result=await db('rpc/studkab_requirement_passport_approve','POST',{p_request:request,p_passport:version,p_actor:user.id,p_expected_items:passport.items,p_expected_fingerprint:expected});
-  return {status:200,data:{passport:result}};
+  const result=await db('rpc/studkab_requirement_passport_approve','POST',{p_request:request,p_passport:version,p_actor:user.id,p_expected_items:passport.items,p_expected_fingerprint:expected,p_expected_revision:input.expectedRevision??null});
+  if(result.error)return {status:409,data:result};
+  return {status:200,data:{passport:result,materialRevision:row.revision}};
  }
  return {status:400,data:{error:'Неизвестное действие'}};
 }

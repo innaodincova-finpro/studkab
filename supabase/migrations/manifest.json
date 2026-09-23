@@ -276,8 +276,35 @@
       "production_verified_at": "2026-09-22",
       "production_sha256": "4587a2984f0fcb7fbb5f0a4f02e7852bc10d8ba411297fa11f865cc7663284dc",
       "comparison": "exact"
+    },
+    {
+      "file": "20260923023346_baseline_c095_request_delete_without_replica_role.sql",
+      "version": "20260923023346",
+      "name": "baseline_c095_request_delete_without_replica_role",
+      "sha256": "a3424a4614b39161def67238b77b6553880bb40ca0b5bc0d5caabfb632ab0866",
+      "production_version": "20260922151755",
+      "production_verified_at": "2026-09-23",
+      "production_sha256": "a3424a4614b39161def67238b77b6553880bb40ca0b5bc0d5caabfb632ab0866",
+      "comparison": "exact"
+    },
+    {
+      "file": "20260923023405_baseline_draft_passport_attachment_corrections.sql",
+      "version": "20260923023405",
+      "name": "baseline_draft_passport_attachment_corrections",
+      "sha256": "e0eebce20e983e63b362a448e012eaee8e505cbcbec0601c3aa1f7f96d6aed54",
+      "production_version": "20260922154241",
+      "production_verified_at": "2026-09-23",
+      "production_sha256": "e0eebce20e983e63b362a448e012eaee8e505cbcbec0601c3aa1f7f96d6aed54",
+      "comparison": "exact"
     }
   ],
-  "pending_migrations": [],
-  "production_reconciled_at": "2026-09-22"
+  "pending_migrations": [
+    {
+      "file": "20260923023438_c096_material_revision.sql",
+      "version": "20260923023438",
+      "name": "c096_material_revision",
+      "sha256": "fb23f1266582747e2feda882c0188d687f5bc93e25e7f2f884f7569a6022d3f6"
+    }
+  ],
+  "production_reconciled_at": "2026-09-23"
 }
