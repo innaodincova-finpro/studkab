@@ -1,3 +1,4 @@
+import {materialManifestGuard} from '../_shared/material-manifest.mjs';
 import {inspectWord} from '../_shared/external-word.mjs';
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -114,6 +115,10 @@ export async function resultAction(input,user,{db,config}) {
   return {data:{reviews,limit:100}};
  }
  if(input.action==='result-review-state')return readReviewState(input,request,db);
+ if(input.action!=='review-notes'){
+  const materials=await materialManifestGuard(db,input.id);
+  if(materials)return {status:409,data:materials};
+ }
  if(!uuid.test(input.versionId||''))return {status:428,data:{error:errors.review_required}};
  let result;
  if(input.action==='prepare-result'){

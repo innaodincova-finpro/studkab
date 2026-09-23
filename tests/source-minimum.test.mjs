@@ -11,6 +11,7 @@ const attachments=[{category:'assignment',file_name:'Задание.docx',file_h
 function setup({failure=false}={}){
  const writes=[];
  const db=async(path,...args)=>{
+  if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path.startsWith('rpc/')){writes.push(path);return {};}
   if(path.startsWith('studkab_request_attachments')){if(failure)throw Error('READ_FAILED');return attachments;}
   if(path.startsWith('studkab_requirement_passports'))return [{id,status:'approved',items,summary:'Согласовано',source_fingerprint:hash}];

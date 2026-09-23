@@ -71,20 +71,33 @@ def attachment(q, previous=None, cycle=None):
                                 'Synthetic immutable materials', previous, cycle])) + ');'), ident
 
 
+def material_manifest(attachment_id):
+    return {'basis': 'Synthetic lock-test assignment supplied as an attachment',
+            'requirements': [{'id': 'assignment', 'label': 'Synthetic assignment',
+                              'required': True, 'attachment_ids': [attachment_id],
+                              'answer_ids': [], 'payload_fields': []}]}
+
+
+def save_passport(q, attachment_id, title='Synthetic'):
+    return json.loads(call(rpc('studkab_requirement_passport_save', q, EXECUTOR,
+                              title, '', ITEMS, FP, revision(q), material_manifest(attachment_id))))
+
+
 def new_case(approved=True):
     q = str(uuid.uuid4())
     call('insert into studkab_requests(id,student_id,client_id,payload) values('
          + ','.join(map(lit, [q, STUDENT, q, {'id': q, 't': 'Synthetic lock test'}])) + ');')
     upload, a = attachment(q)
     call(upload)
-    p = json.loads(call(rpc('studkab_requirement_passport_save', q, EXECUTOR, 'Synthetic', '', ITEMS, FP)))
+    p = save_passport(q, a)
     if approved:
         call(approve_sql(q, p))
     return q, a, p
 
 
 def approve_sql(q, p):
-    return rpc('studkab_requirement_passport_approve', q, p['id'], EXECUTOR, p['items'], FP)
+    return rpc('studkab_requirement_passport_approve', q, p['id'], EXECUTOR,
+               p['items'], FP, revision(q), p['material_manifest'])
 
 
 def open_sql(q, cycle, expected):
@@ -177,6 +190,8 @@ try:
     setup = subprocess.check_output(['node', 'tests/material-revision-fixture.mjs', '--print-sql'],
                                     text=True, cwd=ROOT, timeout=10)
     sql(setup)
+    # Keep the shared C096 historical fixture intact, then exercise current guards.
+    sql((ROOT / 'supabase/migrations/20260923082944_c098_material_manifest.sql').read_text())
     for first_kind, second_kind in [('open', 'start'), ('start', 'open'),
                                     ('open', 'prepare'), ('prepare', 'open')]:
         q, a, p = new_case()
@@ -203,14 +218,14 @@ try:
         assert count == (2 if first_kind == 'upload' else 1)
 
     q, a, p = new_case()
-    p = json.loads(call(rpc('studkab_requirement_passport_save', q, EXECUTOR, 'New draft', '', ITEMS, FP)))
+    p = save_passport(q, a, 'New draft')
     cycle = str(uuid.uuid4())
     race('open before old passport approval', open_sql(q, cycle, revision(q)), approve_sql(q, p))
     assert state(q)['state'] == 'open'
     assert call('select status from studkab_requirement_passports where id=' + lit(p['id'])) == 'stale'
 
     q, a, p = new_case()
-    p = json.loads(call(rpc('studkab_requirement_passport_save', q, EXECUTOR, 'New draft', '', ITEMS, FP)))
+    p = save_passport(q, a, 'New draft')
     cycle = str(uuid.uuid4())
     race('approval before open serializes and then invalidates', approve_sql(q, p),
          open_sql(q, cycle, revision(q)), expect_rejection=False)

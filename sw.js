@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v82-material-revision";
+const CACHE = "studkab-v83-material-manifest";
 const SHELL = [
   "./desktop.css?v=7",
   "./",

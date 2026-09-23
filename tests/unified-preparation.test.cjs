@@ -29,7 +29,7 @@ test('a lost job is searched before a new paid start', () => {
 
 test('AI eligibility blocks explicit prohibition and an attached reviewed Word',()=>{
   const code=html.slice(html.indexOf('function approvedStructure(x){'),html.indexOf('function buildPrompt(x){'));
-  const ctx={DraftQuality:{inputs:x=>x.doc&&x.doc.inputs||{}}};vm.createContext(ctx);vm.runInContext(code,ctx);
+  const ctx={DraftQuality:{inputs:x=>x.doc&&x.doc.inputs||{}}};vm.createContext(ctx);vm.runInContext(html.slice(html.indexOf('var MATERIAL_PAYLOAD_FIELDS='),html.indexOf('function passportContent(')),ctx);vm.runInContext(code,ctx);
   const x={requirements:'Техническая проверка. AI не запускать.',externalResult:{id:'word'},attachments:[{id:'a'}],passports:[{status:'approved',items:[{id:'STRUCTURE',verified:true,text:'Структура: Один раздел'}]}]};
   const blockers=Array.from(ctx.preparationBlockers(x));
   assert.ok(blockers.some(x=>x.includes('прикреплён Word')));
@@ -38,11 +38,27 @@ test('AI eligibility blocks explicit prohibition and an attached reviewed Word',
 
 test('AI eligibility requires a verified approved structure and materials',()=>{
   const code=html.slice(html.indexOf('function approvedStructure(x){'),html.indexOf('function buildPrompt(x){'));
-  const ctx={DraftQuality:{inputs:x=>x.doc&&x.doc.inputs||{}}};vm.createContext(ctx);vm.runInContext(code,ctx);
+  const ctx={DraftQuality:{inputs:x=>x.doc&&x.doc.inputs||{}}};vm.createContext(ctx);vm.runInContext(html.slice(html.indexOf('var MATERIAL_PAYLOAD_FIELDS='),html.indexOf('function passportContent(')),ctx);vm.runInContext(code,ctx);
   const base={passports:[{status:'approved',items:[]}],attachments:[]};
   assert.ok(Array.from(ctx.preparationBlockers(base)).some(x=>x.includes('нет проверенной структуры')));
   assert.ok(Array.from(ctx.preparationBlockers(base)).some(x=>x.includes('Добавьте материалы')));
-  const ready={passports:[{status:'approved',items:[{id:'STRUCTURE',verified:true,text:'Структура: Введение\nГлава 1\nЗаключение'}]}],attachments:[{id:'a'}]};
+  const ready={passports:[{status:'approved',material_manifest:{basis:'Задание',requirements:[{id:'M1',label:'Задание',required:true,attachment_ids:['a'],answer_ids:[],payload_fields:[],not_applicable_reason:''}]},items:[{id:'STRUCTURE',verified:true,text:'Структура: Введение\nГлава 1\nЗаключение'}]}],attachments:[{id:'a'}]};
   assert.deepEqual(Array.from(ctx.preparationBlockers(ready)),[]);
   assert.equal(ctx.approvedStructure(ready),'Введение\nГлава 1\nЗаключение');
+});
+
+test('C098 legacy approval and unavailable evidence cannot enable preparation',()=>{
+  const ctx={DraftQuality:{inputs:()=>({})}};vm.createContext(ctx);
+  vm.runInContext(html.slice(html.indexOf('var MATERIAL_PAYLOAD_FIELDS='),html.indexOf('function passportContent(')),ctx);
+  vm.runInContext(html.slice(html.indexOf('function approvedStructure(x){'),html.indexOf('function buildPrompt(x){')),ctx);
+  const x={requirements:'Условие задания',attachments:[{id:'current'}],clarifications:[{id:'answered',answer:'Полученный ответ'}],passports:[{status:'approved',items:[{id:'STRUCTURE',verified:true,text:'Структура: Введение\nАнализ\nЗаключение'}]}]};
+  assert.ok(Array.from(ctx.preparationBlockers(x)).some(s=>s.includes('состав обязательных материалов')));
+  const p=x.passports[0];p.material_manifest={basis:'Задание',requirements:[{id:'M1',label:'Материал',required:true,attachment_ids:['superseded'],answer_ids:['answered'],payload_fields:['rq'],not_applicable_reason:''}]};
+  assert.ok(Array.from(ctx.preparationBlockers(x)).some(s=>s.includes('отсутствует или устарело')));
+  p.material_manifest.requirements[0].attachment_ids=['current'];
+  assert.deepEqual(Array.from(ctx.preparationBlockers(x)),[]);
+  p.material_manifest.requirements[0].required=false;p.material_manifest.requirements[0].attachment_ids=[];p.material_manifest.requirements[0].answer_ids=[];p.material_manifest.requirements[0].payload_fields=[];
+  assert.ok(Array.from(ctx.preparationBlockers(x)).some(s=>s.includes('объясните, почему')));
+  p.material_manifest.requirements[0].not_applicable_reason='Этот материал не предусмотрен заданием';
+  assert.deepEqual(Array.from(ctx.preparationBlockers(x)),[]);
 });

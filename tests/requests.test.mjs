@@ -94,7 +94,7 @@ test('passport validation separates evidence categories and strips unknown field
 
 test('saving and approving a passport use server RPC and never trust a student identity',async()=>{
  const calls=[];
- const db=async(path,method,body)=>{calls.push({path,method,body});if(path.startsWith('studkab_requests?'))return[{id:requestId}];if(path.startsWith('studkab_requirement_passports?'))return [{items:passport.items}];if(path.startsWith('studkab_request_attachments?'))return [];return{id:'66666666-6666-4666-8666-666666666666',revision:1};};
+ const db=async(path,method,body)=>{calls.push({path,method,body});if(path==='rpc/studkab_material_manifest_check')return {valid:true};if(path.startsWith('studkab_requests?'))return[{id:requestId}];if(path.startsWith('studkab_requirement_passports?'))return [{items:passport.items}];if(path.startsWith('studkab_request_attachments?'))return [];return{id:'66666666-6666-4666-8666-666666666666',revision:1};};
  const app=handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db});
  const passport={title:'Требования',summary:'',items:defaultPassport({}).items.map(q=>({...q,text:'Конкретное условие',source:'Задание, с. 2',verified:true}))};
  assert.equal((await app(request({action:'passport-save',id:requestId,student_id:'forged',passport,sourceFingerprint:'abc'}))).status,200);
@@ -187,7 +187,7 @@ const versionId='33333333-3333-4333-8333-333333333333',reviewId='44444444-4444-4
 const binding={id:requestId,versionId,reviewId,recipientId,fileHash:'a'.repeat(64),documentHash:'b'.repeat(64)};
 const codes=Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(2,'0')).concat(['S01','S02','S03']);
 const criteria=Object.fromEntries(codes.map(c=>[c,{status:'pass',evidence:'Synthetic review evidence, page 1'}]));
-function resultApp(db){return handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>path.startsWith('studkab_requests?')?[{id:requestId,student_id:recipientId,payload:{n:documentFixture.student}}]:path.startsWith('studkab_requirement_passports?')?[{id:requestId,status:'approved',items:[]}]:path.startsWith('studkab_request_attachments?')?[]:db(path,method,body)});}
+function resultApp(db){return handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>path==='rpc/studkab_material_manifest_check'?{valid:true}:path.startsWith('studkab_requests?')?[{id:requestId,student_id:recipientId,payload:{n:documentFixture.student}}]:path.startsWith('studkab_requirement_passports?')?[{id:requestId,status:'approved',items:[]}]:path.startsWith('studkab_request_attachments?')?[]:db(path,method,body)});}
 test('legacy delivery fails closed without invoking delivery RPC',async()=>{
  const app=resultApp(()=>{throw Error('must not call');});
  assert.equal((await app(request({action:'deliver',id:requestId,deliveryId,document:documentFixture}))).status,428);
@@ -229,6 +229,7 @@ async function reviewStateApp(options={}){
  const document=validateResult({...documentFixture,reviewContext});const calls=[];
  const app=handler({auth:async()=>options.student?student:owner,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>{
   calls.push({path,method,body});
+  if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:1;
   if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId}];
   if(path.startsWith('studkab_requirement_passports?'))return [{id:passportId,status:options.stalePassport?'stale':'approved',source_fingerprint:reviewContext.sourceFingerprint}];
@@ -253,12 +254,12 @@ test('C-071 stale passport and failed stored review block recovery',async()=>{
   const {app,document}=await reviewStateApp(options);assert.equal((await app(request({action:'result-review-state',id:requestId,document}))).status,409);
  }
 });
-test('C-071 changed context/document blocks send before any RPC',async()=>{
+test('C-071 changed context/document blocks send before any mutation RPC',async()=>{
  const {app,document,calls}=await reviewStateApp();
  for(const value of [{...document,topic:'Edited'}, {...document,reviewContext:{...reviewContext,fingerprint:'e'.repeat(64)}}]){
   assert.equal((await app(request({...binding,action:'deliver',deliveryId:versionId,document:value}))).status,409);
  }
- assert(calls.every(c=>!c.path.startsWith('rpc/')||c.path==='rpc/studkab_result_context_version'));
+ assert(calls.every(c=>!c.path.startsWith('rpc/')||['rpc/studkab_result_context_version','rpc/studkab_material_manifest_check'].includes(c.path)));
 });
 
 test('C-071 new recovery fails closed before guard migration is installed',async()=>{

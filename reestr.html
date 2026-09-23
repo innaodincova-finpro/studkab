@@ -678,6 +678,7 @@ function preparationBlockers(x){
     blockers.push("В утверждённых требованиях запрещено использовать ИИ.");
   if(!passport||passport.status!=="approved")blockers.push("Сначала утвердите паспорт требований.");
   else if(!approvedStructure(x))blockers.push("В утверждённом паспорте нет проверенной структуры работы.");
+  if(passport)blockers=blockers.concat(materialManifestIssues(x,passport));
   if(!(Array.isArray(x.attachments)&&x.attachments.length)&&!String(packet.materials||"").trim()&&!String(packet.sources||"").trim())
     blockers.push("Добавьте материалы или проверенные источники для подготовки.");
   return Array.from(new Set(blockers));
@@ -1999,8 +2000,9 @@ function deliveryHistory(x){
 function requestWorkflow(x){
  if(x.materialRevision&&x.materialRevision.state==='open')return {step:1,key:'intake',title:'Ожидаются дополнительные материалы',copy:'Студент завершит загрузку в своём кабинете. После этого проверьте комплект и новую версию паспорта.',action:'materials-refresh',label:'Обновить материалы',blocker:x.materialRevision.reason||'',complete:false,steps:RequestWorkflow.steps};
  var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[],hasDocument=!!(x.doc&&(x.doc.order||[]).some(function(c){var part=(x.doc.structure||{})[c.id]||{};return String(part.text||'').trim()||(Array.isArray(part.figures)&&part.figures.length);})),reviewCurrent=false;
+ var materialIssues=p?materialManifestIssues(x,p):[];
  if(hasDocument&&x.doc&&x.doc.review)try{reviewCurrent=x.doc.review===DraftQuality.stamp(x);}catch(e){reviewCurrent=false;}
- return RequestWorkflow.derive({cancelled:x.status==='off',delivered:!!(window.StudResults&&StudResults.isCurrentDelivery&&StudResults.isCurrentDelivery(x)),hasPassport:!!p,passportUnresolved:!!unresolved.length,passportBlocker:unresolved.length?'Требует уточнения: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '):'',passportApproved:!!p&&p.status==='approved',hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasExternalWord:!!x.externalResult,hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
+ return RequestWorkflow.derive({cancelled:x.status==='off',delivered:!!(window.StudResults&&StudResults.isCurrentDelivery&&StudResults.isCurrentDelivery(x)),hasPassport:!!p,passportUnresolved:!!unresolved.length||!!materialIssues.length,passportBlocker:(unresolved.length?'Требует уточнения: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', ')+'. ':'')+materialIssues.join(' '),passportApproved:!!p&&p.status==='approved'&&!materialIssues.length,hasServerJob:!!(x.doc&&x.doc.serverJob&&x.doc.serverJob.id),hasExternalWord:!!x.externalResult,hasDocument:hasDocument,automaticReviewCurrent:reviewCurrent});
 }
 function workflowSteps(w){return '<ol class="workflow-steps" aria-label="Этапы заявки">'+w.steps.map(function(s,n){var step=n+1,state=w.complete||step<w.step?'done':step===w.step?'current':'';return '<li class="'+state+'"><span>'+step+'.</span> '+esc(s.label)+'</li>';}).join('')+'</ol>';}
 function workflowCard(x){var w=requestWorkflow(x);return card(workflowSteps(w)+lab(w.complete?'Маршрут завершён':'Следующее действие · этап '+w.step+' из 5')+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p>'+(w.blocker?'<div class="warnbar workflow-blocker">'+esc(w.blocker)+'</div>':'')+(w.action?'<button type="button" class="btn" data-act="'+w.action+'" data-id="'+esc(x.id)+'">'+esc(w.label)+'</button>':''),'workflow-next');}
@@ -2047,16 +2049,65 @@ function passportItemView(q){
  return '<div class="passport-item'+(missing?' passport-missing':'')+'"><span>'+esc(label)+'</span>'+
   (long?'<b>'+esc(value.slice(0,130))+'…</b><details class="requirement-detail"><summary>Подробнее</summary><p>'+esc(full)+'</p>'+(q.source?'<small>Основание: '+esc(q.source)+'</small>':'')+'</details>':'<b>'+esc(value)+'</b>')+'</div>';
 }
+var MATERIAL_PAYLOAD_FIELDS={mn:{label:'Методические требования заявки',property:'methodNotes'},rq:{label:'Условия и требования студента',property:'requirements'},org:{label:'Исходные сведения об организации',property:'org'}};
+function materialManifestIssues(x,p){
+ var m=p&&p.material_manifest,issues=[];
+ if(!m||!String(m.basis||'').trim()||!Array.isArray(m.requirements)||!m.requirements.length)return ['Укажите состав обязательных материалов и основание этого списка.'];
+ var attachments=new Set((x.attachments||[]).map(function(a){return a.id;})),answers=new Set((x.clarifications||[]).filter(function(q){return String(q.answer||'').trim();}).map(function(q){return q.id;}));
+ var ids=new Set();
+ m.requirements.forEach(function(r){
+  var label=String(r.label||'').trim()||'Материал без названия';
+  if(!r.id||ids.has(r.id)||!String(r.label||'').trim()||typeof r.required!=='boolean'){issues.push(label+': проверьте название и обязательность.');return;}ids.add(r.id);
+  var a=Array.isArray(r.attachment_ids)?r.attachment_ids:[],q=Array.isArray(r.answer_ids)?r.answer_ids:[],f=Array.isArray(r.payload_fields)?r.payload_fields:[];
+  if(a.some(function(id){return !attachments.has(id);})||q.some(function(id){return !answers.has(id);})||f.some(function(key){return !MATERIAL_PAYLOAD_FIELDS[key]||!String(x[MATERIAL_PAYLOAD_FIELDS[key].property]||'').trim();}))issues.push(label+': выбранное основание отсутствует или устарело.');
+  if(r.required&&!a.length&&!q.length&&!f.length)issues.push(label+': обязательный материал не предоставлен.');
+  if(!r.required&&!String(r.not_applicable_reason||'').trim())issues.push(label+': объясните, почему материал не требуется.');
+ });
+ return issues;
+}
+function materialManifestContent(x,p){
+ var m=p&&p.material_manifest,issues=materialManifestIssues(x,p);
+ if(!m||!Array.isArray(m.requirements))return '<section data-material-manifest><b>Состав материалов</b><p class="hint">Состав обязательных материалов ещё не определён. Откройте новую версию паспорта.</p></section>';
+ return '<section data-material-manifest><b>Состав материалов</b><p class="hint">Основание: '+esc(m.basis||'не указано')+'</p><ul>'+m.requirements.map(function(r){
+  var refs=(r.attachment_ids||[]).map(function(id){var a=(x.attachments||[]).find(function(a){return a.id===id;});return a?a.file_name:'Файл недоступен в текущем комплекте';}).concat((r.payload_fields||[]).map(function(k){return MATERIAL_PAYLOAD_FIELDS[k]?MATERIAL_PAYLOAD_FIELDS[k].label:'Поле недоступно';})).concat((r.answer_ids||[]).map(function(id){var q=(x.clarifications||[]).find(function(q){return q.id===id&&q.answer;});return q?'Ответ студента: '+q.answer:'Ответ недоступен';}));
+  return '<li><b>'+esc(r.label||'Материал без названия')+'</b> — '+(r.required?'обязателен':'не требуется: '+esc(r.not_applicable_reason||'причина не указана'))+(refs.length?'<div class="hint">'+refs.map(esc).join('; ')+'</div>':'')+'</li>';
+ }).join('')+'</ul>'+(issues.length?'<div class="warnbar" role="status">'+issues.map(esc).join('<br>')+'</div>':'<p class="hint">Для каждого обязательного материала указано основание. Содержание проверяет исполнитель.</p>')+'</section>';
+}
+function materialManifestRows(x,manifest,questions){
+ var rows=manifest&&Array.isArray(manifest.requirements)?manifest.requirements:[];
+ return rows.map(function(r,n){
+  function choices(kind,available,selected){
+   selected=Array.isArray(selected)?selected:[];var all=available.slice();
+   selected.filter(function(id){return !all.some(function(o){return o.id===id;});}).forEach(function(id){all.push({id:id,label:'Ранее выбранное основание недоступно — снимите эту привязку'});});
+   return all.length?all.map(function(o){return '<label style="display:block;margin:8px 0;overflow-wrap:anywhere"><input type="checkbox" data-mm-evidence="'+kind+'" value="'+esc(o.id)+'"'+(selected.includes(o.id)?' checked':'')+'> '+esc(o.label)+'</label>';}).join(''):'<p class="hint">Нет доступных оснований этого вида.</p>';
+  }
+  var files=(x.attachments||[]).map(function(a){return {id:a.id,label:a.file_name};});
+  var answers=(questions||[]).filter(function(q){return String(q.answer||'').trim();}).map(function(q){return {id:q.id,label:q.question+' — '+q.answer};});
+  var fields=Object.keys(MATERIAL_PAYLOAD_FIELDS).filter(function(k){return String(x[MATERIAL_PAYLOAD_FIELDS[k].property]||'').trim();}).map(function(k){return {id:k,label:MATERIAL_PAYLOAD_FIELDS[k].label+': '+String(x[MATERIAL_PAYLOAD_FIELDS[k].property]).slice(0,240)};});
+  return '<fieldset data-mm-row="'+esc(r.id)+'" style="min-width:0;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:12px"><legend>Материал '+(n+1)+'</legend><div class="fld"><label>Название необходимого материала<input data-mm-label maxlength="2000" value="'+esc(r.label||'')+'" placeholder="Например: исходные данные для расчётов"></label></div><label><input type="checkbox" data-mm-required'+(r.required!==false?' checked':'')+'> Обязателен для этой работы</label><div class="fld" data-mm-exemption'+(r.required!==false?' hidden':'')+'><label>Почему материал не требуется<textarea data-mm-reason maxlength="2000">'+esc(r.not_applicable_reason||'')+'</textarea></label></div><details><summary>Чем подтверждён материал</summary><p class="hint">Выберите реально полученные файлы, заполненные поля заявки или ответы студента.</p><b>Файлы текущего комплекта</b>'+choices('attachment_ids',files,r.attachment_ids)+'<b>Поля заявки</b>'+choices('payload_fields',fields,r.payload_fields)+'<b>Полученные ответы студента</b>'+choices('answer_ids',answers,r.answer_ids)+'</details><button type="button" class="chip" data-mm-remove>Удалить пункт из списка</button></fieldset>';
+ }).join('')||'<p class="hint">Добавьте материалы, необходимые именно для этой работы.</p>';
+}
+function materialManifestEditor(x,p,questions){
+ var m=p.material_manifest||{basis:'',requirements:[]};
+ return '<details class="fold" open data-mm-editor><summary>Состав обязательных материалов</summary><div class="in"><p class="hint">Определите комплект по заданию. Отсутствующий материал оставьте обязательным без привязки: утвердить паспорт до его получения не получится. Исключение требует объяснения.</p><div class="fld"><label>Основание списка материалов<textarea data-mm-basis maxlength="4000" placeholder="Задание, методичка, пункт или подтверждённое уточнение">'+esc(m.basis||'')+'</textarea></label></div><div data-mm-rows>'+materialManifestRows(x,m,questions)+'</div><button type="button" class="chip" data-mm-add>Добавить материал</button></div></details>';
+}
+function readMaterialManifest(wrap){
+ return {basis:wrap.querySelector('[data-mm-basis]').value.trim(),requirements:Array.from(wrap.querySelectorAll('[data-mm-row]')).map(function(row){
+  var r={id:row.dataset.mmRow,label:row.querySelector('[data-mm-label]').value.trim(),required:row.querySelector('[data-mm-required]').checked,not_applicable_reason:row.querySelector('[data-mm-reason]').value.trim()};
+  ['attachment_ids','answer_ids','payload_fields'].forEach(function(kind){r[kind]=Array.from(row.querySelectorAll('[data-mm-evidence="'+kind+'"]:checked')).map(function(input){return input.value;});});return r;
+ })};
+}
 function passportContent(x){
   if(x.materialRevision&&x.materialRevision.state==='open')return lab('Паспорт требований')+'<p role="status">Студент дополняет материалы. Прежний паспорт больше не утверждён. Новая версия будет создана после завершения дополнения.</p><button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить состояние</button>';
   var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
   if(!p)return lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>';
-  var items=Array.isArray(p.items)?p.items:[],unresolved=passportUnresolved(p),pending=(x.clarifications||[]).some(function(q){return !q.answer||!items.some(function(i){return i.id===q.item_id&&i.verified&&(i.answer_ids||[]).indexOf(q.id)>=0;});}),canApprove=p.status==='draft'&&!unresolved.length&&!pending;
+  var items=Array.isArray(p.items)?p.items:[],unresolved=passportUnresolved(p),pending=(x.clarifications||[]).some(function(q){return !q.answer||!items.some(function(i){return i.id===q.item_id&&i.verified&&(i.answer_ids||[]).indexOf(q.id)>=0;});}),canApprove=p.status==='draft'&&!unresolved.length&&!pending&&!materialManifestIssues(x,p).length;
   return lab('Паспорт требований · версия '+Number(p.revision||1))+
     '<div class="row" style="margin-bottom:8px"><span class="pill '+(p.status==='approved'?'p-ok':'p-och')+'">'+(p.status==='approved'?'утверждён':p.status==='stale'?'устарел':'проект')+'</span></div>'+
     (pending?'<p class="hint">Есть вопросы без ответа или ответы, ещё не учтённые в этой версии требований.</p>':'')+
     (p.summary?'<details class="requirement-detail"><summary>О версии паспорта</summary><p>'+esc(p.summary)+'</p></details>':'')+
     (items.length?'<div class="passport-list">'+items.map(passportItemView).join('')+'</div>':'<p class="hint">Пункты пока не добавлены.</p>')+
+    materialManifestContent(x,p)+
     (p.status!=='approved'?'<p class="hint passport-warning">Паспорт не утверждён — платная подготовка запрещена.</p>':'')+
     '<div class="chips"><button type="button" class="chip" data-act="executor-clarifications" data-id="'+esc(x.id)+'">Вопросы студенту</button><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-revise" data-id="'+esc(x.id)+'">Новая версия</button>'+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'"'+(canApprove?'':' disabled title="Сначала заполните обязательные требования"')+'>Утвердить</button>':'')+'</div>';
 }
@@ -2115,6 +2166,7 @@ async function requireApprovedPassport(x){
  x.passports=result.passports||[];x.passportMaterialRevision=result.materialRevision;
  var current=x.passports[0];
  if(!current||current.status!=='approved'||current.source_fingerprint!==sourceFingerprint)throw Error('PASSPORT_REQUIRED');
+ var materialIssues=materialManifestIssues(x,current);if(materialIssues.length)throw Error(materialIssues.join(' '));
  return sourceFingerprint;
 }
 async function editPassport(x,fullRevision){
@@ -2123,6 +2175,7 @@ async function editPassport(x,fullRevision){
  var p=(x.passports||[])[0]||{},items=Array.isArray(p.items)?p.items:[];
  if(!items.length){try{await loadPassports(x);p=x.passports[0];items=p.items;}catch(e){toast(e.message);return;}}
  var editorMaterialRevision=x.passportMaterialRevision;
+ if(x.requestNumber)try{await loadAttachmentContext(x);}catch(e){toast(e.message||'Не удалось получить список материалов');return;}
  var questions;
  try{questions=(await Oblako.requestApi({action:'clarification-list',id:x.id})).questions||[];}catch(e){toast(e.message||'Не удалось прочитать уточнения');return;}
  if(identity!==Oblako.identity())return toast('Аккаунт изменился. Откройте требования заново.');
@@ -2131,7 +2184,16 @@ async function editPassport(x,fullRevision){
   var related=questions.filter(function(a){return a.item_id===q.id;}),answers=related.filter(function(a){return a.answer;});
   return '<details class="fold"'+(!q.verified?' open':'')+'><summary>'+esc(PASSPORT_ITEM_LABEL[q.id]||q.id)+'</summary><div class="in"><div class="fld"><label>Требование<textarea data-pp-item="'+n+'">'+esc(q.text||'')+'</textarea></label></div>'+related.map(function(a){return '<p style="white-space:pre-wrap;overflow-wrap:anywhere"><b>Вопрос:</b> '+esc(a.question)+'<br><b>Ответ:</b> '+esc(a.answer||'Ожидается ответ студента')+(a.answer?'<br><b>Основание ответа:</b> '+esc(a.answer_source):'')+'</p>';}).join('')+'<div class="fld"><label>Основание требования<textarea data-pp-source="'+n+'" placeholder="Документ, страница или проверенный ответ студента">'+esc(q.source||'')+'</textarea></label></div><label><input type="checkbox" data-pp-verified="'+n+'"'+(q.verified&&answers.every(function(a){return (q.answer_ids||[]).indexOf(a.id)>=0;})?' checked':'')+'> Проверено по указанному основанию'+(answers.length?' и ответам выше':'')+'</label></div></details>';
  }).join('');
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Проверка требований</h3><p class="hint">Проверьте содержание и основание каждого пункта. Сохранение создаёт новую версию для отдельного утверждения. Повторно вводить остальные данные не нужно. Если сведений нет, оставьте пункт неподтверждённым и задайте вопрос студенту.</p>'+fields+'<div class="fld"><label>Основание новой версии<textarea id="passport-revision-reason" placeholder="Что уточнено и на основании чего"></textarea></label></div><button type="button" class="btn" data-pp-save="1">Сохранить уточнения</button>');
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Проверка требований</h3><p class="hint">Проверьте содержание и основание каждого пункта. Сохранение создаёт новую версию для отдельного утверждения. Повторно вводить остальные данные не нужно. Если сведений нет, оставьте пункт неподтверждённым и задайте вопрос студенту.</p>'+fields+materialManifestEditor(x,p,questions)+'<div class="fld"><label>Основание новой версии<textarea id="passport-revision-reason" placeholder="Что уточнено и на основании чего"></textarea></label></div><button type="button" class="btn" data-pp-save="1">Сохранить уточнения</button>');
+ wrap.addEventListener('change',function(e){if(e.target.matches('[data-mm-required]'))e.target.closest('[data-mm-row]').querySelector('[data-mm-exemption]').hidden=e.target.checked;});
+ wrap.addEventListener('click',function(e){
+  var add=e.target.closest('[data-mm-add]'),remove=e.target.closest('[data-mm-remove]');if(!add&&!remove)return;
+  var manifest=readMaterialManifest(wrap);
+  if(add){if(manifest.requirements.length>=100){toast('В списке не может быть больше 100 материалов');return;}manifest.requirements.push({id:'M_'+crypto.randomUUID(),label:'',required:true,attachment_ids:[],answer_ids:[],payload_fields:[],not_applicable_reason:''});}
+  else{var id=remove.closest('[data-mm-row]').dataset.mmRow;manifest.requirements=manifest.requirements.filter(function(r){return r.id!==id;});}
+  wrap.querySelector('[data-mm-rows]').innerHTML=materialManifestRows(x,manifest,questions);
+  if(add)wrap.querySelector('[data-mm-row]:last-child [data-mm-label]').focus();
+ });
  wrap.addEventListener('input',function(e){var n=e.target.getAttribute('data-pp-item');if(n===null)n=e.target.getAttribute('data-pp-source');if(n!==null)wrap.querySelector('[data-pp-verified="'+n+'"]').checked=false;});
  wrap.addEventListener('click',async function(e){
   var button=e.target.closest('[data-pp-save]');if(!button||button.disabled)return;
@@ -2139,8 +2201,9 @@ async function editPassport(x,fullRevision){
   var reason=wrap.querySelector('#passport-revision-reason').value.trim();if(!reason)return toast('Укажите основание изменения требований');
   var all=items.map(function(q,n){var verified=wrap.querySelector('[data-pp-verified="'+n+'"]').checked;return Object.assign({},q,{text:wrap.querySelector('[data-pp-item="'+n+'"]').value.trim(),source:wrap.querySelector('[data-pp-source="'+n+'"]').value.trim(),verified:verified,answer_ids:verified?questions.filter(function(a){return a.item_id===q.id&&a.answer;}).map(function(a){return a.id;}):[]});});
   if(all.some(function(q){return !q.text||(q.verified&&!q.source);}))return toast('Заполните текст и основание проверенных пунктов');
+  var materialManifest=readMaterialManifest(wrap);if(materialManifest.requirements.some(function(r){return !r.label;}))return toast('Укажите название каждого материала или удалите пустой пункт.');
   button.disabled=true;
-  try{var fingerprint=await passportFingerprint(x);if(identity!==Oblako.identity()||!wrap.isConnected)throw Error('Аккаунт или окно изменились. Откройте требования заново.');var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:p.title||'Требования к работе',summary:reason,items:all},sourceFingerprint:fingerprint,expectedRevision:editorMaterialRevision});if(identity!==Oblako.identity()||!wrap.isConnected)return;x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));x.passportMaterialRevision=result.materialRevision;wrap.remove();render();toast('Новая версия сохранена. Утверждение выполняется отдельно.');}
+  try{var fingerprint=await passportFingerprint(x);if(identity!==Oblako.identity()||!wrap.isConnected)throw Error('Аккаунт или окно изменились. Откройте требования заново.');var result=await Oblako.requestApi({action:'passport-save',id:x.id,passport:{title:p.title||'Требования к работе',summary:reason,items:all,material_manifest:materialManifest},sourceFingerprint:fingerprint,expectedRevision:editorMaterialRevision});if(identity!==Oblako.identity()||!wrap.isConnected)return;x.passports=[result.passport].concat((x.passports||[]).filter(function(q){return q.id!==result.passport.id;}));x.passportMaterialRevision=result.materialRevision;wrap.remove();render();toast('Новая версия сохранена. Утверждение выполняется отдельно.');}
   catch(err){toast(err.message||'Не удалось сохранить требования');}finally{button.disabled=false;}
  });
 }
@@ -2635,13 +2698,14 @@ document.addEventListener("click", function(ev){
   if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
   if (act === "attachment-download") {var aid=el.getAttribute('data-attachment');el.disabled=true;Oblako.requestApi({action:'attachment-download',id:id,attachmentId:aid}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Не удалось скачать файл');}).finally(function(){el.disabled=false;});return;}
+  if(['attach-word','review-word','deliver-result'].includes(act)){var checked=item(id);if(checked){var missing=materialManifestIssues(checked,(checked.passports||[])[0]);if(missing.length)return toast(missing.join(' '));}}
   if (act === "attach-word") return StudResults.attach(item(id));
   if (act === "review-word") return StudResults.deliver(item(id),true);
   if (act === "deliver-result") return StudResults.deliver(item(id));
   if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
   if(act==='executor-clarifications'){var cq=item(id);if(cq)StudClarifications.show({requestId:cq.id,executor:true,items:((cq.passports||[])[0]||{}).items||[],labels:PASSPORT_ITEM_LABEL,api:Oblako.requestApi,esc:esc,openModal:openModal,onChange:function(){return loadPassports(cq);}});return;}
   if (act === "passport-edit" || act === "passport-revise") {var pe=item(id);if(pe)editPassport(pe,act === "passport-revise");return;}
-  if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;var approvalRevision=pa.passportMaterialRevision,approvalIdentity=Oblako.identity(),approvalData=D;var unresolved=passportUnresolved(pv);if(unresolved.length){toast('Сначала уточните: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '));return;}passportFingerprint(pa).then(function(sourceFingerprint){if(approvalIdentity!==Oblako.identity()||approvalData!==D)throw Error('Аккаунт изменился. Откройте заявку заново.');return Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items},sourceFingerprint:sourceFingerprint,expectedRevision:approvalRevision});}).then(function(r){if(approvalIdentity!==Oblako.identity()||approvalData!==D)return;pa.passportMaterialRevision=r.materialRevision;pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){toast(e.message||'Не удалось утвердить паспорт');});return;}
+  if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;var approvalRevision=pa.passportMaterialRevision,approvalIdentity=Oblako.identity(),approvalData=D;var materialIssues=materialManifestIssues(pa,pv);if(materialIssues.length){toast(materialIssues.join(' '));return;}var unresolved=passportUnresolved(pv);if(unresolved.length){toast('Сначала уточните: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '));return;}passportFingerprint(pa).then(function(sourceFingerprint){if(approvalIdentity!==Oblako.identity()||approvalData!==D)throw Error('Аккаунт изменился. Откройте заявку заново.');return Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items,material_manifest:pv.material_manifest},sourceFingerprint:sourceFingerprint,expectedRevision:approvalRevision});}).then(function(r){if(approvalIdentity!==Oblako.identity()||approvalData!==D)return;pa.passportMaterialRevision=r.materialRevision;pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){toast(e.message||'Не удалось утвердить паспорт');});return;}
   if (act === "doc-open") return openDocBuilder(id);
   if (act === "px-save"){ readProviderForm(); saved("Сохранено"); return; }
   if (act === "pv-toggle"){

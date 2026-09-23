@@ -12,7 +12,7 @@ test('DeepSeek reserve uses peak prices, UTF-8 bound and 25 percent margin',()=>
 function setup({user={id:uid,email:'owner@example.test',email_confirmed_at:'yes'},enabled=true,cost=250000,budget=1000000,missing=false,passport=true,workType='Курсовая работа',total=500000}={}){
  const calls=[];
  const h=handler({auth:async()=>user,config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled,cost}),
- db:async(path,args)=>{calls.push({path,args});if(path.startsWith('studkab_gen_budget'))return [{limit_microusd:budget,reserved_microusd:0}];
+ db:async(path,args)=>{calls.push({path,args});if(path==='rpc/studkab_material_manifest_check')return {valid:true};if(path.startsWith('studkab_gen_budget'))return [{limit_microusd:budget,reserved_microusd:0}];
  if(path.startsWith('studkab_gen_policy'))return [{temporary_total_microusd:total}];
  if(path.startsWith('studkab_requests'))return [{id:requestId,payload:{k:workType}}];
  if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];
@@ -24,10 +24,10 @@ function setup({user={id:uid,email:'owner@example.test',email_confirmed_at:'yes'
 }
 test('anonymous and unconfirmed users are denied',async()=>{for(const user of [null,{id:uid,email_confirmed_at:null},{id:uid,email_confirmed_at:'yes',is_anonymous:true}]){const s=setup({user});assert.equal((await s.request(valid)).status,401);assert.equal(s.calls.length,0);}});
 test('student cannot start or read executor jobs',async()=>{const s=setup({user:{id:uid,email:'student@example.test',email_confirmed_at:'yes'}});assert.equal((await s.request(valid)).status,403);assert.equal(s.calls.length,0);});
-test('zero budget blocks start before database mutation',async()=>{const s=setup({budget:0});assert.equal((await s.request(valid)).status,409);assert.ok(s.calls.every(c=>!c.path.startsWith('rpc/')));});
+test('zero budget blocks start before database mutation',async()=>{const s=setup({budget:0});assert.equal((await s.request(valid)).status,409);assert.ok(s.calls.every(c=>(!c.path.startsWith('rpc/')||c.path==='rpc/studkab_material_manifest_check')));});
 test('disabled integration does not read budget or create job',async()=>{const s=setup({enabled:false});assert.equal((await s.request(valid)).status,503);assert.equal(s.calls.length,0);});
 test('server owner and reserve override client fields',async()=>{const s=setup();const body={...valid,owner:'other',parts:[{...valid.parts[0],max_cost_microusd:1}]};assert.equal((await s.request(body)).status,200);const args=s.calls.at(-1).args;assert.equal(args.p_owner,uid);assert.equal(args.p_plan[0].max_cost_microusd,250000);});
-test('same request produces identical immutable RPC input',async()=>{const s=setup();await s.request(valid);await s.request(valid);const starts=s.calls.filter(c=>c.path.startsWith('rpc/'));assert.deepEqual(starts[0].args,starts[1].args);});
+test('same request produces identical immutable RPC input',async()=>{const s=setup();await s.request(valid);await s.request(valid);const starts=s.calls.filter(c=>c.path==='rpc/studkab_gen_start');assert.deepEqual(starts[0].args,starts[1].args);});
 test('status always filters by authenticated owner and omits secrets',async()=>{const s=setup();const r=await s.request({action:'status',job,owner:'other'});const value=await r.json();assert.ok(s.calls[0].path.includes('owner_id=eq.'+uid));assert.deepEqual(value.diagnostics,[]);assert.deepEqual(value.parts,[{ordinal:0,id:'intro',section:'intro',state:'done',text:'Сохранено',failure:null}]);});
 test('missing or foreign job returns no part data',async()=>{const s=setup({missing:true});assert.equal((await s.request({action:'status',job})).status,404);assert.equal(s.calls.length,1);});
 test('query injection cannot reach database',async()=>{const s=setup();assert.equal((await s.request({action:'status',job:'x&owner_id=neq.x'})).status,400);assert.equal(s.calls.length,0);});
@@ -67,26 +67,26 @@ test('generation recognizes only work types with an explicit paid limit',()=>{
 test('missing approved passport blocks before job creation',async()=>{
  const s=setup({passport:false});const r=await s.request(valid);
  assert.equal(r.status,409);assert.equal((await r.json()).error,'PASSPORT_REQUIRED');
- assert.ok(s.calls.every(c=>!c.path.startsWith('rpc/')));
+ assert.ok(s.calls.every(c=>(!c.path.startsWith('rpc/')||c.path==='rpc/studkab_material_manifest_check')));
 });
 test('unknown work type blocks before reading a paid limit or creating a job',async()=>{
  const s=setup({workType:'Реферат'});const r=await s.request(valid);
  assert.equal(r.status,409);assert.equal((await r.json()).error,'WORK_TYPE_REQUIRED');
- assert.ok(s.calls.every(c=>!c.path.startsWith('studkab_gen_limits')&&!c.path.startsWith('rpc/')));
+ assert.ok(s.calls.every(c=>!c.path.startsWith('studkab_gen_limits')&&(!c.path.startsWith('rpc/')||c.path==='rpc/studkab_material_manifest_check')));
 });
 test('temporary total ceiling blocks start even when operator budget is larger',async()=>{
  const s=setup({budget:1000000,total:0});const r=await s.request(valid);
  assert.equal(r.status,409);assert.equal((await r.json()).error,'BUDGET_BLOCKED');
- assert.ok(s.calls.every(c=>!c.path.startsWith('rpc/')));
+ assert.ok(s.calls.every(c=>(!c.path.startsWith('rpc/')||c.path==='rpc/studkab_material_manifest_check')));
 });
 test('estimate reports an over-limit amount without creating a job',async()=>{
  const body={...valid,action:'estimate',parts:[{id:'huge',prompt:'chapter',target_chars:50000}]};
  const estimate=setup();const er=await estimate.request(body),ev=await er.json();
  assert.equal(er.status,200);assert.equal(ev.canStart,false);assert.ok(ev.estimatedCostMicrousd>ev.maxCostMicrousd);
- assert.ok(estimate.calls.every(c=>!c.path.startsWith('rpc/')));
+ assert.ok(estimate.calls.every(c=>(!c.path.startsWith('rpc/')||c.path==='rpc/studkab_material_manifest_check')));
  const start=setup();const sr=await start.request({...body,action:'start'});
  assert.equal(sr.status,409);assert.equal((await sr.json()).error,'BUDGET_BLOCKED');
- assert.ok(start.calls.every(c=>!c.path.startsWith('rpc/')));
+ assert.ok(start.calls.every(c=>(!c.path.startsWith('rpc/')||c.path==='rpc/studkab_material_manifest_check')));
 });
 test('estimated cost is server-calculated and returned with the immutable work ceiling',async()=>{
  const s=setup();const r=await s.request({...valid,maxCostMicrousd:1});const value=await r.json();
