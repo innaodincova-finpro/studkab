@@ -398,6 +398,7 @@ function applyProfileDefaults(format, settings){
 function applyProfileToBlankWorks(data){
   var settings = data.settings || {}, changed = 0;
   (data.works || []).forEach(function(w){
+    if(w.req&&w.req.serverId&&w.req.preserveSubmittedFields===true)return;
     var before = JSON.stringify(w);
     w.format = applyProfileDefaults(w.format, settings);
     if (!w.student && settings.name) w.student = settings.name;
@@ -888,7 +889,7 @@ function requestPayload(w){
     v:1, id:r.id,
     t:w.topic, k:f.workType, d:f.discipline,
     u:f.univ, fc:f.faculty, kf:f.kafedra, ct:f.city,
-    n:w.student || D.settings.name, g:w.group || D.settings.group,
+    n:r.preserveSubmittedFields===true?(w.student||""):(w.student||D.settings.name), g:r.preserveSubmittedFields===true?(w.group||""):(w.group||D.settings.group),
     pr:f.program, fo:f.form, co:f.course,
     s:f.supervisor, dl:w.deadline, rq:w.requirements,
     org:r.org, mn:r.notes, cn:r.contact,
@@ -907,7 +908,7 @@ function tooLongFields(w){
   var f = w.format || {}, r = w.req || {}, out = [];
   var vals = { topic:w.topic, requirements:w.requirements, org:r.org, notes:r.notes, contact:r.contact,
     univ:f.univ, faculty:f.faculty, kafedra:f.kafedra, program:f.program, supervisor:f.supervisor,
-    city:f.city, discipline:f.discipline, student:w.student || D.settings.name, group:w.group || D.settings.group };
+    city:f.city, discipline:f.discipline, student:r.preserveSubmittedFields===true?(w.student||""):(w.student||D.settings.name), group:r.preserveSubmittedFields===true?(w.group||""):(w.group||D.settings.group) };
   for (var k in FIELD_LIMITS){
     if (String(vals[k] || "").length > FIELD_LIMITS[k]) out.push(FIELD_NAMES[k] || k);
   }
@@ -928,11 +929,11 @@ function requestText(w, withLink){
   add("Вуз", f.univ);
   add("Факультет", f.faculty);
   add("Кафедра", f.kafedra);
-  add("Студент", w.student || D.settings.name);
+  add("Студент", r.preserveSubmittedFields===true?(w.student||""):(w.student||D.settings.name));
   add("Направление", f.program);
   add("Форма обучения", f.form);
   add("Курс", f.course);
-  add("Группа", w.group || D.settings.group);
+  add("Группа", r.preserveSubmittedFields===true?(w.group||""):(w.group||D.settings.group));
   add("Руководитель", f.supervisor);
   add("Город", f.city);
   add("Срок", w.deadline ? ruDate(w.deadline) + " (" + w.deadline + ")" : "");
@@ -1098,7 +1099,7 @@ function openRequest(workId){
     };
     var probe = { topic:w.topic, requirements:w.requirements, student:w.student, group:w.group,
       deadline:w.deadline, format:w.format,
-      req:{ id:r.id, contact:draft.contact, org:draft.org, notes:draft.notes } };
+      req:{ id:r.id, serverId:r.serverId, preserveSubmittedFields:r.preserveSubmittedFields, contact:draft.contact, org:draft.org, notes:draft.notes } };
 
     var over = tooLongFields(probe);
     if (over.length){
