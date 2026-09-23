@@ -422,6 +422,46 @@ test('C077 new revision edits filled requirements and keeps a separate draft',as
  expect(saved.versions[1].items[0].text).toBe('Не менее 5 источников');
 });
 
+test('C095 answered clarification stays current through revision and approval',async({page})=>{
+ await setup(page);await page.keyboard.press('Escape');
+ await page.evaluate(()=>{
+  const question={id:'55555555-5555-4555-8555-555555555555',item_id:'VOLUME',question:'Сколько страниц?',answer:'25–30 страниц',answer_source:'Уточнение преподавателя'};
+  const items=StudClarifications.requiredIds.map(id=>({id,category:'method',required:true,text:id==='VOLUME'?'25–30 страниц':'Подтверждённое условие',source:'Задание',verified:true,answer_ids:[]}));
+  draftItem.requestNumber=3;
+  draftItem.passports=[{id:'old',revision:2,status:'draft',title:'Требования',items}];
+  draftItem.clarifications=[{...question,answer:null}];
+  window.c095Actions=[];
+  Oblako.requestApi=async body=>{
+   c095Actions.push(body.action);
+   if(body.action==='clarification-list')return {questions:[question]};
+   if(body.action==='attachment-context')return {attachments:[]};
+   if(body.action==='passport-save')return {passport:{...body.passport,id:'new',revision:3,status:'draft'}};
+   if(body.action==='passport-approve')return {passport:{...body.passport,id:'new',revision:3,status:'approved'}};
+   throw Error('Unexpected '+body.action);
+  };
+  openId=draftItem.id;render();
+ });
+ await page.getByRole('tab',{name:'Требования',exact:true}).click();
+ const warning=page.getByText('Есть вопросы без ответа или ответы, ещё не учтённые в этой версии требований.',{exact:true});
+ await expect(warning).toBeVisible();
+ expect(await page.evaluate(()=>draftItem.passports[0].status)).toBe('draft');
+ await page.getByRole('button',{name:'Новая версия',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Проверка требований'});
+ await dialog.locator('summary').filter({hasText:'Объём'}).click();
+ await expect(dialog.getByText('25–30 страниц',{exact:false}).first()).toBeVisible();
+ await dialog.locator('[data-pp-verified="3"]').check();
+ await dialog.getByLabel('Основание новой версии').fill('Получен и проверен ответ об объёме.');
+ await dialog.getByRole('button',{name:'Сохранить уточнения'}).click();
+ await expect(dialog).toHaveCount(0);
+ await expect(warning).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Утвердить паспорт',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Утвердить паспорт',exact:true}).click();
+ await expect(page.getByText('Паспорт утверждён',{exact:true})).toBeVisible();
+ await expect(warning).toHaveCount(0);
+ expect(await page.evaluate(()=>draftItem.passports.map(p=>p.status))).toEqual(['approved','draft']);
+ expect(await page.evaluate(()=>c095Actions.filter(a=>a==='passport-save'||a==='passport-approve'))).toEqual(['passport-save','passport-approve']);
+});
+
 test('C078 section movement and appendices preserve text, figures and saved order',async({page})=>{
  await setup(page);
  await page.getByText('Редактировать разделы',{exact:true}).click();
