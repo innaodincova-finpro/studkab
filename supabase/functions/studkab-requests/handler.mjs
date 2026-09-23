@@ -1,3 +1,4 @@
+import {qualityAction,qualityError} from './quality-evidence.mjs';
 import {testDeliveryAction} from './test-delivery.mjs';
 import {clarificationAction} from './clarifications.mjs';
 import {materialRevisionAction} from './material-revision.mjs';
@@ -56,6 +57,9 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
+   if(['quality-state','quality-scan','quality-save','quality-report'].includes(input.action)){
+    const r=await qualityAction(input,user,{db,config});return json(r.data,r.status||200);
+   }
    if(['deliver','result','prepare-result','review-result','review-notes','result-review-state','result-review-history'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
    }
@@ -143,6 +147,6 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     return json({rows,next:rows.length===100?rows.at(-1).number:null});
    }
    return json({error:'Неизвестное действие'},400);
-  }catch{return json({error:'Сервис временно недоступен. Повторите отправку — дубликат заявки не создастся.'},503);}
+  }catch(e){if(/\bQUALITY_[A-Z_]+\b/.test(String(e?.message)))return json(qualityError(/\bQUALITY_[A-Z_]+\b/.exec(String(e.message))[0]),409);return json({error:'Сервис временно недоступен. Повторите отправку — дубликат заявки не создастся.'},503);}
  };
 }

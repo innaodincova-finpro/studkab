@@ -25,6 +25,7 @@ begin
     'studkab_clarifications',
     'studkab_material_revisions',
     'studkab_requests',
+    'studkab_quality_evidence',
     'studkab_result_reviews',
     'studkab_result_versions',
     'studkab_results',
@@ -53,11 +54,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 29 then
-    raise exception 'Expected 29 STUDKAB tables, found %', table_count;
+  if table_count <> 30 then
+    raise exception 'Expected 30 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 29 then
-    raise exception 'RLS enabled on only % of 29 STUDKAB tables', rls_count;
+  if rls_count <> 30 then
+    raise exception 'RLS enabled on only % of 30 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';
@@ -268,4 +269,13 @@ begin
   then raise exception 'C100 administrative state exposed to %',role_name; end if;
  end loop;
  if (select prosecdef from pg_proc where oid=to_regprocedure(signature)) then raise exception 'C100 transfer must be invoker'; end if;
+end $$;
+
+-- C102 evidence is closed to clients; immutable review snapshot cannot be omitted.
+do $$ begin
+ if has_table_privilege('anon','public.studkab_quality_evidence','SELECT') or has_table_privilege('authenticated','public.studkab_quality_evidence','INSERT')
+ or has_table_privilege('service_role','public.studkab_quality_evidence','UPDATE') then raise exception 'C102 evidence privileges'; end if;
+ if has_function_privilege('anon','public.studkab_quality_save(uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,jsonb,text)','EXECUTE')
+ or has_function_privilege('authenticated','public.studkab_quality_save(uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,jsonb,text)','EXECUTE') then raise exception 'C102 RPC privileges'; end if;
+ if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_result_reviews' and column_name='quality_evidence_ids') then raise exception 'C102 review evidence binding'; end if;
 end $$;
