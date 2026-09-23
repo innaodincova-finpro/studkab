@@ -51,7 +51,8 @@ export const reviewCodes=Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(
 export function validateReview(criteria){
  if(!criteria||typeof criteria!=='object'||Array.isArray(criteria)||Object.keys(criteria).length!==16)throw Error('Заполните все пункты проверки');
  for(const code of reviewCodes){const c=criteria[code];if(!['pass','not_applicable'].includes(c?.status)||typeof c.evidence!=='string'||c.evidence.trim().length<10||c.evidence.length>2000)throw Error('Не подтверждён пункт '+code+': нужен результат без блокера и доказательство');}
- return Object.fromEntries(reviewCodes.map(code=>[code,{status:criteria[code].status,evidence:criteria[code].evidence.trim()}]));
+ for(const code of reviewCodes)if(criteria[code].section!==undefined&&(typeof criteria[code].section!=='string'||criteria[code].section.length>300))throw Error('Проверьте место замечания: '+code);
+ return Object.fromEntries(reviewCodes.map(code=>[code,{status:criteria[code].status,evidence:criteria[code].evidence.trim(),...(criteria[code].section!==undefined?{section:criteria[code].section}: {})}]));
 }
 export function validateReviewNotes(criteria){
  if(!criteria||typeof criteria!=='object'||Array.isArray(criteria)||!Object.keys(criteria).length||Object.keys(criteria).some(c=>!reviewCodes.includes(c)))throw Error('Выберите пункты замечаний');
@@ -84,13 +85,17 @@ async function readReviewState(input,request,db){
  if(!version)return {data:{state:'none'}};
  if(version.recipient_id!==request.student_id||canonical(version.document)!==canonical(document))return {data:{state:'stale'}};
  const [delivery]=await db('studkab_results?select=delivery_id,review_id,created_at&request_id=eq.'+input.id+'&version_id=eq.'+version.id+'&order=created_at.desc,id.desc&limit=1');
- const reviews=await db('studkab_result_reviews?select=id,version_id,criteria,created_at&version_id=eq.'+version.id+(delivery?'&id=eq.'+delivery.review_id:'&order=created_at.desc,id.desc')+'&limit=1');
- const review=reviews[0];
+ const reviews=await db('studkab_result_reviews?select=id,version_id,criteria,created_at,quality_evidence_ids&version_id=eq.'+version.id+(delivery?'&id=eq.'+delivery.review_id:'&order=created_at.desc,id.desc')+'&limit=1');
+ let review=reviews[0],qualityReviewStale=false;
  let changes=false;
  if(review){try{validateReview(review.criteria);}catch{try{validateReviewNotes(review.criteria);changes=true;}catch{return {status:409,data:{error:errors.criteria}};}}}
+ if(review&&!delivery&&!changes){
+  const quality=await db('rpc/studkab_quality_check','POST',{p_request:input.id,p_version:version.id});
+  if(quality?.eligible!==true||canonical(quality.evidenceIds)!==canonical(review.quality_evidence_ids)){qualityReviewStale=true;review=null;}
+ }
  if(delivery&&changes)return {status:409,data:{error:errors.criteria}};
  if(delivery&&!review)return {status:409,data:{error:errors.review_required}};
- return {data:{state:delivery?'delivered':changes?'changes_requested':review?'reviewed':'prepared',receipt:{versionId:version.id,recipientId:version.recipient_id,fileHash:version.file_hash,documentHash:version.document_hash,revision:version.revision},docxBase64:version.docx_base64,review:review?{reviewId:review.id,versionId:review.version_id,criteria:review.criteria,reviewedAt:review.created_at}:null,delivery:delivery?{deliveryId:delivery.delivery_id,createdAt:delivery.created_at}:null}};
+ return {data:{...(qualityReviewStale?{reason:'quality_review_stale'}:{}),state:delivery?'delivered':changes?'changes_requested':review?'reviewed':'prepared',receipt:{versionId:version.id,recipientId:version.recipient_id,fileHash:version.file_hash,documentHash:version.document_hash,revision:version.revision},docxBase64:version.docx_base64,review:review?{reviewId:review.id,versionId:review.version_id,criteria:review.criteria,reviewedAt:review.created_at}:null,delivery:delivery?{deliveryId:delivery.delivery_id,createdAt:delivery.created_at}:null}};
 }
 export async function resultAction(input,user,{db,config}) {
  if(input.action!=='result'){

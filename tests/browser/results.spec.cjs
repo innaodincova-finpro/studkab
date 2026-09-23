@@ -1,12 +1,19 @@
 const {test,expect}=require('@playwright/test');
 const base='http://127.0.0.1:4173/';
 async function account(page,file){await page.goto(base+file);await page.evaluate(()=>QA.switchUser('result-test'));await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);}
+async function readyReview(page){
+ await expect(page.locator('[data-quality-start]')).toBeEnabled();
+ await page.locator('[data-quality-panel]').evaluate(el=>el.open=true);
+ await page.locator('[data-quality-start]').click();
+ await expect(page.locator('[data-save-review]')).toBeEnabled();
+}
 async function setupReview(page){
  await account(page,'reestr.html');
  await page.evaluate(()=>{
   window.calls=[];window.reviewHistory=[];window.remote={state:'none'};window.failRead=false;window.loseNotes=false;window.loseReview=false;window.loseDelivery=false;
   Oblako.requestApi=async body=>{
    calls.push(body);
+   if(body.action==='quality-state')return {bindings:{...remote.receipt,passportId:candidate.passports[0].id,sourceFingerprint:candidate.passports[0].source_fingerprint},thresholdRequirement:{itemId:'ANTIPLAGIARISM',text:'Synthetic fixture requirement'},eligible:true,blockingCodes:[],latest:{internal_borrowing:{id:'fixture-internal',payload:{disposition:'pass',notes:'Previously reviewed fixture evidence'}},external_originality:{id:'fixture-external',payload:{disposition:'pass',notes:'Previously reviewed fixture PDF evidence'}}}};
    if(body.action==='result-review-history')return {reviews:reviewHistory,limit:100};
    if(body.action==='result-review-state'){if(failRead)throw Error('Сервер недоступен');if(remote.document&&JSON.stringify(remote.document)!==JSON.stringify(body.document))return {state:'stale'};return JSON.parse(JSON.stringify(remote));}
    if(body.action==='prepare-result'){
@@ -22,13 +29,18 @@ async function setupReview(page){
   window.candidate={id:'11111111-1111-4111-8111-111111111111',requestNumber:1,topic:'Проверка документа',student:'Тестовый студент',format:{},passports:[{id:'77777777-7777-4777-8777-777777777777',status:'approved',revision:1,source_fingerprint:'c'.repeat(64),items:[]}],doc:{inputs:{requirements:'Методические требования кафедры менеджмента'},order:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Проверенный черновик'}}}};
   candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);
  });
- await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await expect(page.locator('[data-quality-start]')).toBeEnabled();
+ await page.locator('[data-quality-panel]').evaluate(el=>el.open=true);await page.locator('[data-quality-start]').click();
+ await readyReview(page);
+ await page.evaluate(()=>{calls=[];}); // Scenario begins with a prepared version and prior quality evidence.
 }
+
 async function fillReview(page){
  const waiting=page.waitForEvent('download');await page.getByRole('button',{name:'Открыть точный Word'}).click();const download=await waiting;
  await page.locator('details').filter({has:page.locator('[data-criterion]')}).evaluate(el=>el.open=true);
  for(const status of await page.locator('[data-criterion-status]').all())await status.selectOption('pass');
  for(const field of await page.locator('[data-criterion]').all())await field.fill('Synthetic evidence at page 1');
+ await page.locator('[data-criterion-section="C01"]').fill('Страница 1, введение');
  await page.locator('[data-criterion-status="C08"]').selectOption('not_applicable');
  await page.locator('[data-reviewed]').check();return download;
 }
@@ -42,6 +54,7 @@ test('C-071 saving review never delivers; reopening restores exact bytes and sep
  await page.locator('.sheet .close').click();await page.evaluate(()=>StudResults.deliver(candidate));
  await expect(page.locator('[data-result-status]')).toContainText('Результат ещё не передан');
  await expect(page.locator('[data-criterion="C01"]')).toHaveValue('Synthetic evidence at page 1');
+ await expect(page.locator('[data-criterion-section="C01"]')).toHaveValue('Страница 1, введение');
  await expect(page.locator('[data-criterion="C01"]')).toBeDisabled();
  await page.waitForTimeout(2200); // Let the existing modal animation and sync toast settle for visual QA.
  await page.screenshot({path:'test-results/review-saved-not-delivered.png'});
@@ -132,7 +145,7 @@ test('C-071 changed saved document and corrupt saved bytes cannot reuse review',
  await expect(page.locator('[data-deliver]')).toBeDisabled();
  await page.locator('.sheet .close').click();
  await page.evaluate(()=>{candidate.doc.structure.intro.text='Другой проверенный текст';candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);});
- await expect(page.locator('[data-save-review]')).toBeEnabled();await expect(page.locator('[data-deliver]')).toBeHidden();
+ await readyReview(page);await expect(page.locator('[data-deliver]')).toBeHidden();
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(0);
 });
 
@@ -215,7 +228,7 @@ test('C087 approximate volume permits review but manual or failed C12 cannot sav
   candidate.doc.review=DraftQuality.stamp(candidate);
   StudResults.deliver(candidate);
  });
- await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await readyReview(page);
  await fillReview(page);
  await expect(page.locator('[data-criterion="C12"]').locator('..')).toContainText('фактические страницы точного Word');
  for(const state of ['manual','fail']){
@@ -236,7 +249,7 @@ test('C088 arithmetic blocks review; source meaning requires C10 evidence',async
   candidate.doc.structure.intro.text='Прибыль выросла на 30% благодаря совещаниям [S1]. Доля: 9/18×100=50%.';
   candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);
  });
- await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await readyReview(page);
  await page.locator('[data-source-review] summary').click();
  await expect(page.locator('[data-source-review]')).toContainText('Прибыль выросла на 30%');
  await expect(page.locator('[data-source-review]')).toContainText('Протокол содержит решения и ответственных');
@@ -276,7 +289,7 @@ test('C089 replacing Word keeps old notes in history without approving new versi
  await page.locator('[data-save-notes]').click();await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
  await page.locator('.sheet .close').click();
  await page.evaluate(()=>{candidate.doc.structure.intro.text+=' Исправленная версия.';candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);});
- await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await readyReview(page);
  await expect(page.locator('[data-criterion="C10"]')).toHaveValue('');
  await expect(page.locator('[data-deliver]')).toBeHidden();
  await page.locator('[data-review-history] > summary').click();
@@ -300,4 +313,36 @@ test('C089 later notes revoke approval; lost acknowledgement recovers and correc
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='review-result').map(c=>c.reviewId))).toHaveLength(2);
  expect(await page.evaluate(()=>new Set(calls.filter(c=>c.action==='review-result').map(c=>c.reviewId)).size)).toBe(2);
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(0);
+});
+
+test('C102 a changed quality record requires a fresh ordinary review of the same Word',async({page})=>{
+ await setupReview(page);await fillReview(page);await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ const original=await page.evaluate(()=>({reviewId:remote.review.reviewId,versionId:remote.receipt.versionId}));
+ await page.evaluate(()=>{
+  const previous=Oblako.requestApi;window.freshQuality=null;
+  const scan={scope:{providedSources:1,usableSources:1,documentTokens:10,scannedDocumentTokens:10},sources:[{id:'synthetic',tokenCount:10,scannedTokenCount:10}],limits:{truncated:false,reasons:[]},matches:[]};
+  Oblako.requestApi=async body=>{
+   if(body.action==='quality-scan')return {scan,scanHash:'d'.repeat(64)};
+   if(body.action==='quality-save'){freshQuality={id:body.evidenceId,payload:{...body.payload,scan},createdAt:'2026-09-23T10:00:00Z'};remote.state='prepared';remote.reason='quality_review_stale';delete remote.review;return {evidence:freshQuality};}
+   const result=await previous(body);if(body.action==='quality-state'&&freshQuality)result.latest.internal_borrowing=freshQuality;return result;
+  };
+ });
+ await page.locator('[data-quality-panel]').evaluate(el=>el.open=true);await page.locator('[data-quality-scan]').click();await page.locator('[data-q="internalDisposition"]').selectOption('pass');await page.locator('[data-q="internalNotes"]').fill('Повторно рассмотрены доступные источники этой версии.');await page.locator('[data-quality-save-internal]').click();
+ await expect(page.locator('[data-save-review]')).toBeVisible();await readyReview(page);await expect(page.locator('[data-reviewed]')).not.toBeChecked();await expect(page.locator('[data-criterion="C01"]')).toBeEnabled();
+ await page.locator('[data-reviewed]').check();await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ const current=await page.evaluate(()=>({reviewId:remote.review.reviewId,versionId:remote.receipt.versionId}));expect(current.versionId).toBe(original.versionId);expect(current.reviewId).not.toBe(original.reviewId);
+});
+
+test('C102 unavailable quality API blocks ordinary approval while review notes remain available',async({page})=>{
+ await setupReview(page);await page.evaluate(()=>{const previous=Oblako.requestApi;Oblako.requestApi=body=>body.action==='quality-state'?Promise.reject(Error('Проверки временно недоступны')):previous(body);});
+ await page.locator('[data-result-refresh]').click();await expect(page.locator('[data-save-review]')).toBeDisabled();await expect(page.locator('[data-save-notes]')).toBeEnabled();await expect(page.locator('[data-quality-status]')).toContainText('недоступны');
+ expect(await page.evaluate(()=>calls.some(x=>x.action==='review-result'||x.action==='deliver'))).toBe(false);
+});
+
+test('C102 unsaved quality observations disable ordinary delivery until explicit discard',async({page})=>{
+ await setupReview(page);await fillReview(page);await page.locator('[data-save-review]').click();await expect(page.locator('[data-deliver]')).toBeEnabled();
+ await page.locator('[data-quality-panel]').evaluate(el=>el.open=true);await page.locator('[data-q="internalNotes"]').fill('Обнаружено новое замечание, пока не сохранено.');
+ await expect(page.locator('[data-deliver]')).toBeDisabled();await expect(page.locator('[data-quality-status]')).toContainText('несохранённые изменения');
+ await page.locator('[data-quality-refresh]').click();await expect(page.locator('[data-deliver]')).toBeEnabled();await expect(page.locator('[data-q="internalNotes"]')).toHaveValue('Previously reviewed fixture evidence');
+ expect(await page.evaluate(()=>calls.some(x=>x.action==='deliver'))).toBe(false);
 });
