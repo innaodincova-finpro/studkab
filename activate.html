@@ -13,6 +13,13 @@ const status=document.getElementById('status'), button=document.getElementById('
 document.getElementById('account').textContent=invitationEmail?'Доступ для '+invitationEmail:'';
 const client=window.supabase?.createClient('https://dcpthwmuiodrjepifzsd.supabase.co','sb_publishable_OL_S1GutrvcvpaRaLzKpsQ_ExxamvKt',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:"oblako-kabinet"}});
 let accepted=false,busy=false;
+function activationFailure(error){
+ const code=error?.code, http=Number(error?.status);
+ if(code==='otp_expired'||code==='invite_not_found')return 'Ссылка истекла или уже использована. Если вы уже задавали пароль — откройте приложение и войдите. Иначе попросите исполнителя создать новую ссылку.';
+ if(http===429||code==='over_request_rate_limit')return 'Слишком много попыток. Подождите несколько минут и повторите на этой странице.';
+ if(error?.name==='AuthRetryableFetchError'||http>=500&&http<=599||code==='request_timeout')return 'Сервис временно недоступен или соединение прервано. Проверьте интернет и повторите на этой странице. Срок действия ссылки не подтверждён.';
+ return 'Не удалось подтвердить доступ. Причина не определена. Обратитесь к исполнителю; не отправляйте пароль или личную ссылку.';
+}
 if(!invitationToken||!invitationEmail||!client){button.disabled=true;status.textContent='Приглашение недоступно. Откройте полную персональную ссылку от исполнителя.';}
 document.getElementById('activate').addEventListener('submit',async event=>{
  event.preventDefault();if(busy||button.disabled)return;
@@ -25,13 +32,13 @@ document.getElementById('activate').addEventListener('submit',async event=>{
    const {data,error}=await client.auth.getSession();if(error)throw error;
    if(data.session){status.textContent='На этом устройстве уже выполнен вход. Откройте приложение. Для подключения другого человека используйте его устройство.';return;}
    const result=await client.auth.verifyOtp({token_hash:invitationToken,type:accessType});
-   if(result.error){status.textContent='Ссылка истекла или уже использована. Если вы уже задавали пароль — откройте приложение и войдите. Иначе попросите исполнителя создать новую ссылку.';return;}
+   if(result.error){status.textContent=activationFailure(result.error);return;}
    if(result.data?.user?.email?.toLowerCase()!==invitationEmail.toLowerCase()){await client.auth.signOut({scope:'local'});status.textContent='Адрес в ссылке не совпадает с аккаунтом. Запросите новое приглашение.';return;}
    accepted=true;history.replaceState(null,'',location.pathname);
   }
   const result=await client.auth.updateUser({password});if(result.error)throw result.error;
   status.textContent='Пароль сохранён. Открываем приложение…';location.replace('./');
- }catch(error){status.textContent=accepted?'Доступ подтверждён, но пароль не сохранён. Проверьте соединение и повторите на этой странице.':'Не удалось подключиться. Проверьте интернет и повторите.';}
+ }catch(error){status.textContent=accepted?'Доступ подтверждён, но пароль не сохранён. Проверьте соединение и повторите на этой странице.':activationFailure(error);}
  finally{busy=false;button.disabled=false;}
 });
 </script></body></html>
