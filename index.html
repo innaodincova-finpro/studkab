@@ -16,7 +16,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=1"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=14"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=1"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=15"></script>
 <script src="push.js?v=1"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1945,6 +1945,7 @@ function viewWork(id){
   if(w.req && w.req.serverId){
     h += card(lab('Материалы заявки')+'<p class="hint">Проверьте, запросил ли исполнитель дополнительные документы. Загрузите файлы и отдельно завершите дополнение.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Проверить и дополнить материалы</button>');
     h += card(lab("Вопросы исполнителя")+'<p class="hint">Посмотрите, нужны ли уточнения по вашей работе, и сохраните ответ.</p><button type="button" class="btn" data-act="student-clarifications" data-id="'+esc(w.id)+'">Открыть вопросы и ответы</button>');
+    h += '<section data-test-delivery-host hidden></section>';
     h += card(lab("Черновик от исполнителя") + '<p class="hint">Откройте результат заявки, чтобы проверить готовность и скачать документ Word.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
     h += '<details class="fold"><summary>Мои разделы и доработка</summary><div class="in"><p class="hint">Здесь текст, который вы редактируете в кабинете. Процент ниже относится только к этим разделам. Документ исполнителя доступен отдельно, в результате заявки.</p>';
   }
@@ -2287,6 +2288,7 @@ function render(){
   else if (tab === "cal") p.innerHTML = viewCal();
   else if (tab === "works") p.innerHTML = openWorkId ? viewWork(openWorkId) : viewWorks();
   else p.innerHTML = viewMore();
+  if(tab==="works"&&openWorkId)StudResults.mountTestDelivery(work(openWorkId),p.querySelector('[data-test-delivery-host]'),true);
   var fab = document.getElementById("fab");
   if (tab === "more"){ fab.hidden = true; }
   else if (tab === "cal"){

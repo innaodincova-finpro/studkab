@@ -26,6 +26,8 @@ begin
     'studkab_result_reviews',
     'studkab_result_versions',
     'studkab_results',
+    'studkab_test_request_grants',
+    'studkab_test_deliveries',
     'studkab_telegram_setup'
   ]) as expected(name)
   where to_regclass('public.' || name) is null;
@@ -49,11 +51,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 25 then
-    raise exception 'Expected 25 STUDKAB tables, found %', table_count;
+  if table_count <> 27 then
+    raise exception 'Expected 27 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 25 then
-    raise exception 'RLS enabled on only % of 25 STUDKAB tables', rls_count;
+  if rls_count <> 27 then
+    raise exception 'RLS enabled on only % of 27 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';
@@ -239,3 +241,15 @@ end
 $c098$;
 
 select 'PASS: clean migration replay, schema inventory, RLS, cron isolation and material manifest guards verified' as result;
+
+-- C099: private, explicit test allowance and immutable separate delivery history.
+do $$
+begin
+ if has_table_privilege('service_role','public.studkab_test_request_grants','INSERT')
+ or has_table_privilege('service_role','public.studkab_test_request_grants','UPDATE')
+ or has_table_privilege('service_role','public.studkab_test_request_grants','DELETE') then raise exception 'Test grant must remain administrative'; end if;
+ if has_function_privilege('anon','public.studkab_test_delivery_context(uuid,uuid,boolean)','EXECUTE')
+ or has_function_privilege('authenticated','public.studkab_test_result(uuid,uuid,boolean)','EXECUTE') then raise exception 'Test RPC exposed'; end if;
+ if not exists(select 1 from pg_trigger where tgname='test_delivery_guard' and not tgisinternal) then raise exception 'Test immutable guard missing'; end if;
+ if not exists(select 1 from pg_proc where oid='public.studkab_test_delivery_context(uuid,uuid,boolean)'::regprocedure and prosecdef and proconfig @> array['search_path=""']) then raise exception 'Test read-lock context must pin empty search path'; end if;
+end $$;

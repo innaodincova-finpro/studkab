@@ -1,3 +1,4 @@
+import {testDeliveryAction} from './test-delivery.mjs';
 import {clarificationAction} from './clarifications.mjs';
 import {materialRevisionAction} from './material-revision.mjs';
 import {sameSecret} from '../_shared/secret-equal.mjs';
@@ -82,6 +83,9 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     for(const path of plan.paths||[])await remove(path);
     const result=await db('rpc/delete_studkab_request','POST',{p_request:id,p_actor:user.id,p_reason:reason});
     return json(result);
+   }
+   if(['test-delivery-state','test-deliver','test-result'].includes(input.action)){
+    const r=await testDeliveryAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(input.action==='request-state'||input.action==='update-request'){
     if(typeof isMember!=='function'||await isMember(user.id)!==true)return json({error:'Нет доступа'},403);

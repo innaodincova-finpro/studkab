@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=14"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=1"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=14"></script><script src="request-workflow.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=1"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="results-ui.js?v=15"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1905,6 +1905,7 @@ function render(){
   if (tab === "more") p.innerHTML = viewMore();
   else if (tab === "refs") p.innerHTML = openRefId ? viewRef(openRefId) : viewRefs();
   else p.innerHTML = openId ? viewItem(openId) : viewList();
+  if(openId&&tab==='list')StudResults.mountTestDelivery(item(openId),p.querySelector('[data-test-delivery-host]'),false);
   if(openId&&tab==='list'){
     var primary=p.querySelector('.request-action [data-act]');
     if(primary)p.querySelectorAll('.request-content button[data-act]').forEach(function(button){if(button.dataset.act===primary.dataset.act)button.remove();});
@@ -2238,7 +2239,7 @@ function viewItem(id){
 
   var overview=lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
     row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group);
-  var panel=x.requestNumber?workflowCard(x)+(x.deliveryState&&x.deliveryState.last?card(deliveryHistory(x)):''):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
+  var panel=x.requestNumber?'<section data-test-delivery-host hidden></section>'+workflowCard(x)+(x.deliveryState&&x.deliveryState.last?card(deliveryHistory(x)):''):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
   h+='<div class="request-workspace"><aside class="request-action" aria-label="Следующее действие">'+panel+'</aside><div class="request-content"><div class="request-tabs" role="tablist" aria-label="Разделы заявки">'+[['overview','Обзор'],['requirements','Требования'],['materials','Материалы'],['result','Документ'],['delivery','Проверка'],['history','Версии и история']].map(function(t){return '<button type="button" role="tab" id="request-tab-'+t[0]+'" aria-controls="request-panel-'+t[0]+'" aria-selected="'+(defaultGroup===t[0])+'" tabindex="'+(defaultGroup===t[0]?'0':'-1')+'" data-act="request-tab" data-key="'+t[0]+'" data-id="'+esc(x.id)+'">'+t[1]+'</button>';}).join('')+'</div>';
 
   var requirements = row("Требования", x.requirements) + row("Организация", x.org) + row("Методичка", x.methodNotes) +

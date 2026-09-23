@@ -221,5 +221,73 @@
    button.onclick=function(){if(!same(data,identity)){button.hidden=true;button.style.display='none';msg.textContent='Аккаунт изменился. Откройте результат заново.';return;}try{download(result.document,receivedBlob);}catch(e){msg.textContent='Не удалось собрать файл. Откройте результат повторно.';}};
   }catch(e){msg.textContent=e.message||'Не удалось проверить результат. Откройте его повторно.';}
  }
- global.StudResults={attach:attach,deliver:deliver,receive:receive,isCurrentDelivery:function(x){try{return !!x.deliveryConfirmation&&x.deliveryConfirmation.context===contextKey(x,!!x.deliveryConfirmation.external)&&!!x.deliveryState&&!!x.deliveryState.last&&x.deliveryState.last.versionId===x.deliveryConfirmation.versionId;}catch(e){return false;}}};
+ var TEST_LABEL='Тестовый файл — проверка качества не завершена';
+ function testUnavailable(reason){return {FORBIDDEN:'Тестовая передача недоступна этому аккаунту.',TEST_ACCESS_UNAVAILABLE:'Доступ получателя не подтверждён.',TEST_NOT_ALLOWED:'Нет разрешения на тестовую передачу этой заявки.',MATERIAL_REVISION_OPEN:'Сначала завершите дополнение материалов.',MATERIAL_MANIFEST_REQUIRED:'Проверьте состав материалов и утвердите актуальный паспорт.',TEST_VERSION_CHANGED:'Сохраните актуальную версию Word перед тестовой передачей.'}[reason]||'Тестовая передача недоступна. Обновите сведения о заявке.';}
+ var TEST_BINDINGS=['versionId','recipientId','fileHash','documentHash','passportId','sourceFingerprint'];
+ function testBinding(value){var out={};if(!value)throw Error('Тестовая передача не подтверждена сервером.');TEST_BINDINGS.forEach(function(k){if(typeof value[k]!=='string'||!value[k])throw Error('Тестовая передача не подтверждена сервером.');out[k]=value[k];});return out;}
+ function sameTest(a,b){return JSON.stringify(testBinding(a))===JSON.stringify(testBinding(b));}
+ function validTest(value){return value&&value.qualityStatus==='incomplete'&&value.label===TEST_LABEL&&typeof value.deliveryId==='string';}
+ async function mountTestDelivery(x,host,student){
+  if(!host||!x)return;var data=D,identity=Oblako.identity(),id=student?x.req&&x.req.serverId:x.requestNumber&&x.id;
+  if(!id)return;
+  function current(){return host.isConnected&&same(data,identity);}
+  try{
+   var response=await Oblako.requestApi({action:student?'test-result':'test-delivery-state',id:id,includeFile:false});if(!current())return;
+   if(student){
+    var delivered=response.testDelivery;if(!validTest(delivered))return;testBinding(delivered);
+    host.innerHTML='<div class="card"><b>'+TEST_LABEL+'</b><p class="hint">Файл передан только для проверки тестового маршрута. Это не готовая работа для сдачи.</p><button type="button" class="btn" data-test-receive>Скачать тестовый Word</button><p role="status" data-test-status></p></div>';
+    host.querySelector('[data-test-receive]').onclick=function(){return receiveTest(id,delivered,host,data,identity);};
+   }else{
+    var state=response.testDeliveryState;if(!state||state.eligible!==true)return;testBinding(state);
+    host.innerHTML='<div class="card"><b>Тестовая передача</b><p class="hint">'+TEST_LABEL+'. Обычная итоговая проверка остаётся обязательной для готового результата.</p><button type="button" class="chip" data-test-open>Передать тестовый файл</button></div>';
+    host.querySelector('[data-test-open]').onclick=function(){if(current())testDeliver(x);};
+   }
+   host.hidden=false;
+  }catch(e){/* Unknown eligibility never exposes a test action. */}
+ }
+ async function receiveTest(id,expected,host,data,identity){
+  var button=host.querySelector('[data-test-receive]'),msg=host.querySelector('[data-test-status]');button.disabled=true;
+  function guard(){if(!host.isConnected||!same(data,identity))throw Error('Аккаунт или окно изменились. Откройте заявку заново.');}
+  try{
+   guard();msg.textContent='Проверяем тестовый файл…';
+   var response=await Oblako.requestApi({action:'test-result',id:id,includeFile:true});guard();var delivered=response.testDelivery;
+   if(!validTest(delivered)||!sameTest(delivered,expected)||delivered.deliveryId!==expected.deliveryId||typeof delivered.docxBase64!=='string')throw Error('Тестовый файл изменился или недоступен. Откройте заявку заново.');
+   var bytes=Uint8Array.from(atob(delivered.docxBase64),function(c){return c.charCodeAt(0);});
+   if(!bytes.length||bytes.length>3145728||await sha(bytes)!==delivered.fileHash)throw Error('Контрольная сумма тестового файла не совпала.');guard();
+   var url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'})),a=global.document.createElement('a');
+   a.href=url;a.download='Тестовый файл — качество не подтверждено.docx';documentDummy(a);setTimeout(function(){URL.revokeObjectURL(url);},10000);msg.textContent=TEST_LABEL+'. Скачивание начато.';
+  }catch(e){if(host.isConnected)msg.textContent=e.message||'Не удалось получить тестовый файл.';}
+  finally{button.disabled=!same(data,identity);}
+ }
+ function testDeliver(x){
+  if(!x||!x.requestNumber)return;var data=D,identity=Oblako.identity(),id=x.id,operation=crypto.randomUUID(),operationBinding=null,state=null,busy=true;
+  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Тестовая передача</h3><p><b>'+TEST_LABEL+'</b></p><p>'+esc(x.student||'Получатель заявки')+' · заявка №'+esc(x.requestNumber)+'</p><p class="hint">Передаётся последняя сохранённая версия Word. Файл доступен только для тестирования. Эта операция не утверждает качество, не завершает обычную проверку и не меняет статус заявки на «Передано».</p><label><input type="checkbox" data-test-confirm disabled> Я проверил получателя и подтверждаю передачу непроверенного тестового файла</label><button type="button" class="btn" data-test-send disabled>Передать тестовый файл</button><button type="button" class="chip" data-test-refresh disabled>Обновить состояние</button><p role="status" data-test-status>Проверяем разрешение сервера…</p>');
+  wrap.dataset.accountIdentity=String(identity);
+  var confirm=wrap.querySelector('[data-test-confirm]'),send=wrap.querySelector('[data-test-send]'),refresh=wrap.querySelector('[data-test-refresh]'),msg=wrap.querySelector('[data-test-status]');
+  function guard(){if(!wrap.isConnected||!same(data,identity))throw Error('Аккаунт или окно изменились. Откройте заявку заново.');}
+  function controls(){send.disabled=busy||!state||!confirm.checked;confirm.disabled=busy||!state;refresh.disabled=busy;}
+  async function load(){
+   guard();state=null;confirm.checked=false;
+   var response=await Oblako.requestApi({action:'test-delivery-state',id:id});guard();var latest=response.testDeliveryState;
+   if(!latest||latest.eligible!==true){msg.textContent=testUnavailable(latest&&latest.reason);return;}
+   testBinding(latest);
+   var found=await Oblako.requestApi({action:'test-result',id:id,includeFile:false});guard();
+   if(validTest(found.testDelivery)&&sameTest(found.testDelivery,latest)){msg.textContent=TEST_LABEL+'. Эта версия уже доступна студенту.';return;}
+   if(operationBinding&&!sameTest(operationBinding,latest)){operation=crypto.randomUUID();operationBinding=null;}
+   state=latest;msg.textContent='Разрешена отдельная тестовая передача. Подтвердите получателя.';
+  }
+  async function run(fn){if(busy)return;busy=true;controls();try{guard();await fn();}catch(e){state=null;msg.textContent=e.message||'Передача не подтверждена. Обновите состояние.';}finally{busy=false;controls();}}
+  confirm.onchange=controls;
+  refresh.onclick=function(){return run(load);};
+  send.onclick=function(){if(!confirm.checked||!state)return;var captured=testBinding(state);operationBinding=captured;return run(async function(){
+   var response=await Oblako.requestApi({action:'test-delivery-state',id:id});guard();var latest=response.testDeliveryState;
+   if(!latest||latest.eligible!==true||!sameTest(latest,captured))throw Error('Версия, получатель или разрешение изменились. Обновите состояние и подтвердите заново.');
+   await Oblako.requestApi(Object.assign({action:'test-deliver',id:id,deliveryId:operation},captured));guard();
+   var saved=await Oblako.requestApi({action:'test-result',id:id,includeFile:false});guard();
+   if(!validTest(saved.testDelivery)||!sameTest(saved.testDelivery,captured))throw Error('Тестовая передача не подтверждена. Обновите состояние.');
+   state=null;confirm.checked=false;msg.textContent=TEST_LABEL+'. Эта версия доступна студенту. Обычная итоговая проверка не завершена.';
+  });};
+  busy=false;run(load);
+ }
+ global.StudResults={mountTestDelivery:mountTestDelivery,testDeliver:testDeliver,attach:attach,deliver:deliver,receive:receive,isCurrentDelivery:function(x){try{return !!x.deliveryConfirmation&&x.deliveryConfirmation.context===contextKey(x,!!x.deliveryConfirmation.external)&&!!x.deliveryState&&!!x.deliveryState.last&&x.deliveryState.last.versionId===x.deliveryConfirmation.versionId;}catch(e){return false;}}};
 })(window);
