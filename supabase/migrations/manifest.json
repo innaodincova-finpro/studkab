@@ -320,6 +320,12 @@
       "version": "20260923120254",
       "name": "c099_test_delivery",
       "sha256": "2b1670e1de5a64f8492f1dd85032bfd64b8854e8206eee34f774cf88bd3bd5c1"
+    },
+    {
+      "file": "20260923132840_c100_request_reassignment.sql",
+      "version": "20260923132840",
+      "name": "c100_request_reassignment",
+      "sha256": "44f452bedc029d1add878d7e0ce59858f3a769f41d03f9388e1071ad7eab5bc6"
     }
   ],
   "production_reconciled_at": "2026-09-23"

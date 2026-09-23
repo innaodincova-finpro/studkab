@@ -19,6 +19,8 @@ begin
     'studkab_push_subscriptions',
     'studkab_request_config',
     'studkab_request_payload_history',
+    'studkab_request_reassignment_permissions',
+    'studkab_request_reassignments',
     'studkab_requirement_passports',
     'studkab_clarifications',
     'studkab_material_revisions',
@@ -51,11 +53,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 27 then
-    raise exception 'Expected 27 STUDKAB tables, found %', table_count;
+  if table_count <> 29 then
+    raise exception 'Expected 29 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 27 then
-    raise exception 'RLS enabled on only % of 27 STUDKAB tables', rls_count;
+  if rls_count <> 29 then
+    raise exception 'RLS enabled on only % of 29 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';
@@ -252,4 +254,18 @@ begin
  or has_function_privilege('authenticated','public.studkab_test_result(uuid,uuid,boolean)','EXECUTE') then raise exception 'Test RPC exposed'; end if;
  if not exists(select 1 from pg_trigger where tgname='test_delivery_guard' and not tgisinternal) then raise exception 'Test immutable guard missing'; end if;
  if not exists(select 1 from pg_proc where oid='public.studkab_test_delivery_context(uuid,uuid,boolean)'::regprocedure and prosecdef and proconfig @> array['search_path=""']) then raise exception 'Test read-lock context must pin empty search path'; end if;
+end $$;
+
+-- C100 administrative transfer must remain unreachable by API roles after replay.
+do $$
+declare role_name text; signature text := 'public.studkab_reassign_request(uuid,uuid,uuid,uuid,uuid,text,integer,bigint,bigint,jsonb)';
+begin
+ if to_regprocedure(signature) is null then raise exception 'C100 transfer function missing'; end if;
+ foreach role_name in array array['anon','authenticated','service_role'] loop
+  if has_function_privilege(role_name,signature,'EXECUTE') then raise exception 'C100 transfer exposed to %',role_name; end if;
+  if has_table_privilege(role_name,'public.studkab_request_reassignment_permissions','SELECT,INSERT,UPDATE,DELETE')
+  or has_table_privilege(role_name,'public.studkab_request_reassignments','INSERT,UPDATE,DELETE')
+  then raise exception 'C100 administrative state exposed to %',role_name; end if;
+ end loop;
+ if (select prosecdef from pg_proc where oid=to_regprocedure(signature)) then raise exception 'C100 transfer must be invoker'; end if;
 end $$;

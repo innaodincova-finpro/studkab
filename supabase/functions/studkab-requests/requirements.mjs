@@ -132,7 +132,7 @@ export async function requirementAction(input,user,{db,config}){
  if((user.email||'').toLowerCase()!==(cfg.executor_email||'').toLowerCase())return {status:403,data:{error:'Паспорт требований доступен только исполнителю'}};
  const request=typeof input.id==='string'&&/^[a-f0-9-]{36}$/.test(input.id)?input.id:null;
  if(!request)return {status:400,data:{error:'Неверный номер заявки'}};
- const [row]=await db('studkab_requests?select=id,payload,revision,studkab_material_revisions(id,closed_at)&deleting_at=is.null&limit=1&id=eq.'+request);
+ const [row]=await db('studkab_requests?select=id,payload,revision,studkab_material_revisions(id,closed_at),studkab_request_reassignments(operation_id)&deleting_at=is.null&limit=1&id=eq.'+request);
  if(!row)return {status:404,data:{error:'Заявка не найдена'}};
  const revisionOpen=(row.studkab_material_revisions||[]).some(c=>c.closed_at===null);
  if(revisionOpen&&input.action!=='passport-get'){
@@ -142,7 +142,7 @@ export async function requirementAction(input,user,{db,config}){
   return {status:200,data:{passports:rows,created:false,materials:state.materials,materialRevision:row.revision}};
  }
  if(input.action!=='passport-get'&&input.expectedRevision!==undefined&&(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0))return {status:400,data:{error:'Откройте паспорт заново'}};
- if(input.action!=='passport-get'&&(row.studkab_material_revisions||[]).length&&input.expectedRevision!==row.revision)return {status:409,data:{error:'Материалы изменились. Откройте паспорт заново'}};
+ if(input.action!=='passport-get'&&((row.studkab_material_revisions||[]).length||(row.studkab_request_reassignments||[]).length)&&input.expectedRevision!==row.revision)return {status:409,data:{error:'Материалы изменились. Откройте паспорт заново'}};
  if(input.action==='passport-get'){
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,material_manifest,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   return {status:200,data:{passports:rows,materialRevision:row.revision}};
