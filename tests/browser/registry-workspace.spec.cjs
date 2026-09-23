@@ -57,7 +57,8 @@ test('single primary action uses real workflow and keeps exact Word review gate'
  for(const kind of ['intake','passport','quality','delivery','cancelled','delivered']){
   await page.evaluate(kind=>{
    const x=D.items[0];x.status=kind==='cancelled'?'off':kind==='delivered'?'sent':'new';
-   x.passports=kind==='intake'?[]:[{revision:1,status:kind==='passport'?'draft':'approved',items:[]}];
+   x.requirements='Учебное задание: проверить переходы и итоговую проверку конкретного Word.';
+   x.passports=kind==='intake'?[]:[{revision:1,status:kind==='passport'?'draft':'approved',items:[],material_manifest:{basis:'Исходное учебное задание в поле требований',requirements:[{id:'assignment',label:'Учебное задание',required:true,attachment_ids:[],answer_ids:[],payload_fields:['rq'],not_applicable_reason:''}]}}];
    delete x.doc;
    if(['quality','delivery'].includes(kind)){docOf(x);const id=x.doc.order[0].id;x.doc.structure[id].text='Учебный текст';if(kind==='delivery')x.doc.review=DraftQuality.stamp(x);}
    openId=x.id;render();
