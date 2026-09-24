@@ -47,7 +47,7 @@ async function fillReview(page){
 }
 test('C-071 saving review never delivers; reopening restores exact bytes and separate delivery',async({page})=>{
  await setupReview(page);await page.setViewportSize({width:390,height:844});
- await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверьте документ');
+ await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Скачайте и проверьте Word');
  const downloaded=await fillReview(page);
  await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(0);
@@ -72,6 +72,7 @@ test('C107 downloading Word without confirming it was opened cannot save remarks
  await expect(page.locator('[data-word-opened]')).toBeDisabled();
  const waiting=page.waitForEvent('download');await page.locator('[data-preview]').click();await waiting;
  await expect(page.locator('[data-result-status]')).toContainText('Файл скачан');
+ await page.locator('details').filter({has:page.locator('[data-criterion]')}).evaluate(el=>el.open=true);
  await page.locator('[data-criterion-status="C12"]').selectOption('manual');
  await page.locator('[data-criterion="C12"]').fill('Требуется проверить пагинацию в настольном Word');
  await page.locator('[data-criterion-section="C12"]').fill('Весь документ');
