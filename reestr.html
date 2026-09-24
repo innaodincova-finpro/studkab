@@ -2155,7 +2155,18 @@ async function correctRequestKind(x){
  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Исправление вида работы</h3><p role="status">Получаем актуальное задание…</p>');
  function current(){if(identity!==Oblako.identity()||data!==D||!wrap.isConnected)throw Error('Аккаунт или окно изменились. Откройте заявку заново.');}
  try{
-  var state=await loadMaterialRevision(x);current();await loadAttachmentContext(x);current();
+  var state=await loadMaterialRevision(x);current();
+  if(state.requestRevision>(x.submissionRevision||0)){
+   var updated=await Oblako.requestApi({action:'inbox',id:x.id,includeDeliveryState:true,after:0});current();
+   var row=updated&&Array.isArray(updated.rows)&&updated.rows.filter(function(r){return r.id===x.id;})[0];
+   if(!row||row.revision!==state.requestRevision||!row.payload)throw Error('Не удалось подтвердить новую редакцию заявки. Обновите карточку.');
+   var rec=fromPayload(Object.assign({},row.payload,{id:row.id}));
+   rec.requestNumber=row.number;rec.submissionRevision=row.revision;
+   mergeInto(x,rec);x._attachmentsLoaded=false;
+   if(row.deliveryState&&typeof row.deliveryState.checkedAt==='string')x.deliveryState=row.deliveryState;
+   save();wrap.remove();render();toast('Карточка обновлена с сервера. Проверьте вид работы.');return;
+  }
+  await loadAttachmentContext(x);current();
   var assignments=(x.attachments||[]).filter(function(a){return a.category==='assignment';});
   if(!assignments.length)throw Error('Нет приложенного задания. Исправление недоступно.');
   var pane=wrap.querySelector('.sheet-in'),titleId=wrap.getAttribute('aria-labelledby');
