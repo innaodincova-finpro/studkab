@@ -96,7 +96,8 @@ test('saving and approving a passport use server RPC and never trust a student i
  const calls=[];
  const db=async(path,method,body)=>{calls.push({path,method,body});if(path==='rpc/studkab_material_manifest_check')return {valid:true};if(path.startsWith('studkab_requests?'))return[{id:requestId}];if(path.startsWith('studkab_requirement_passports?'))return [{items:passport.items}];if(path.startsWith('studkab_request_attachments?'))return [];return{id:'66666666-6666-4666-8666-666666666666',revision:1};};
  const app=handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db});
- const passport={title:'Требования',summary:'',items:defaultPassport({}).items.map(q=>({...q,text:'Конкретное условие',source:'Задание, с. 2',verified:true}))};
+ const o={mode:'university_threshold',service:'Учебная система',thresholdPercent:70};
+ const passport={title:'Требования',summary:'',items:defaultPassport({}).items.map(q=>({...q,text:q.id==='ANTIPLAGIARISM'?'Оригинальность: не менее 70% в системе Учебная система.':'Конкретное условие',source:'Задание, с. 2',verified:true,...(q.id==='ANTIPLAGIARISM'?{originality:o}:{})}))};
  assert.equal((await app(request({action:'passport-save',id:requestId,student_id:'forged',passport,sourceFingerprint:'abc'}))).status,200);
  assert.equal(calls[1].path,'rpc/studkab_requirement_passport_save');assert.equal(calls[1].body.p_request,requestId);assert.equal(calls[1].body.student_id,undefined);
  assert.equal((await app(request({action:'passport-approve',id:requestId,passportId:'bad',passport}))).status,400);

@@ -12,7 +12,7 @@ const messages={
  QUALITY_SCAN_INCOMPLETE:'Не все источники доступны для сравнения либо достигнут предел проверки. Добавьте читаемые фрагменты источников; пока сохраните результат как ручную проверку.',
  QUALITY_FINDING_UNREVIEWED:'Не все найденные совпадения рассмотрены. Для каждого укажите решение и пояснение; непроверенный результат сохраните как ручную проверку.',
  QUALITY_BELOW_THRESHOLD:'Оригинальность в отчёте ниже указанного требования. Сохраните непройденный результат и доработайте документ.',
- QUALITY_REPORT_INVALID:'Проверьте систему, номер и дату отчёта, числовые показатели, подтверждение требования и файл PDF до 5 МБ с корректным началом и окончанием.',
+ QUALITY_REPORT_INVALID:'Проверьте систему, номер и дату отчёта, основание и порог из паспорта (если установлен), результат и файл PDF до 5 МБ.',
  QUALITY_REPORT_NOT_FOUND:'Сохранённый PDF отчёта не найден. Откройте историю проверки и выберите запись с отчётом.',
  QUALITY_EVIDENCE_REQUIRED:'Для итоговой приёмки нужны сохранённые положительные внутренняя проверка и внешний отчёт для этой версии Word.',
  QUALITY_REVIEW_STALE:'Основания проверки изменились. Повторите итоговую проверку этой версии Word перед передачей.',
@@ -73,11 +73,13 @@ export async function qualityAction(input,user,{db,config}){
    payload={disposition:p.disposition,notes:p.notes.trim(),scan:computed.scan,scanHash:computed.scanHash,sourceBindings:computed.sourceBindings,scanComplete:complete,findingIds:ids,findingDecisions:decisions};
   }else if(input.kind==='external_originality'){
    for(const [k,max] of [['service',200],['checkId',300],['thresholdBasis',4000],['reportName',200]])if(typeof p[k]!=='string'||!p[k].trim()||p[k].length>max)return fail('QUALITY_REPORT_INVALID',400);
-   if(p.thresholdItemId!=='ANTIPLAGIARISM'||p.thresholdBasis!==bindings.thresholdRequirement?.text||p.requirementConfirmed!==true||p.wordBindingConfirmed!==true||!Number.isFinite(p.thresholdPercent)||p.thresholdPercent<0||p.thresholdPercent>100||!Number.isFinite(p.actualPercent)||p.actualPercent<0||p.actualPercent>100||!Number.isFinite(Date.parse(p.checkedAt))||Date.parse(p.checkedAt)>Date.now()+300000)return fail('QUALITY_REPORT_INVALID',400);
-   if(p.disposition==='pass'&&p.actualPercent<p.thresholdPercent)return fail('QUALITY_BELOW_THRESHOLD');
+   const rule=bindings.thresholdRequirement,mode=rule?.mode;
+   if(!['university_threshold','university_no_threshold','service_only'].includes(mode)||p.thresholdItemId!=='ANTIPLAGIARISM'||p.thresholdBasis!==rule.text||p.requirementConfirmed!==true||p.wordBindingConfirmed!==true||p.thresholdMode!==mode||!Number.isFinite(p.actualPercent)||p.actualPercent<0||p.actualPercent>100||!Number.isFinite(Date.parse(p.checkedAt))||Date.parse(p.checkedAt)>Date.now()+300000)return fail('QUALITY_REPORT_INVALID',400);
+   if(mode==='university_threshold'?(p.service!==rule.service||p.thresholdPercent!==rule.thresholdPercent):((mode==='university_no_threshold'&&p.service!==rule.service)||p.thresholdPercent!==null))return fail('QUALITY_REPORT_INVALID',400);
+   if(p.disposition==='pass'&&mode==='university_threshold'&&p.actualPercent<p.thresholdPercent)return fail('QUALITY_BELOW_THRESHOLD');
    if(typeof p.reportBase64!=='string'||p.reportBase64.length>6990508||!/^[A-Za-z0-9+/]*={0,2}$/.test(p.reportBase64))return fail('QUALITY_REPORT_INVALID',400);
    const bytes=Uint8Array.from(atob(p.reportBase64),c=>c.charCodeAt(0));if(bytes.length<5||bytes.length>5242880||!/^%PDF-(?:1\.[0-7]|2\.0)[\r\n]/.test(new TextDecoder().decode(bytes.slice(0,12)))||!/%%EOF\s*$/.test(new TextDecoder().decode(bytes.slice(-1024))))return fail('QUALITY_REPORT_INVALID',400);
-   report=p.reportBase64;payload=Object.fromEntries(['service','checkId','checkedAt','thresholdPercent','actualPercent','thresholdItemId','thresholdBasis','requirementConfirmed','wordBindingConfirmed','disposition','notes','reportName'].map(k=>[k,p[k]]));
+   report=p.reportBase64;payload=Object.fromEntries(['service','checkId','checkedAt','thresholdMode','thresholdPercent','actualPercent','thresholdItemId','thresholdBasis','requirementConfirmed','wordBindingConfirmed','disposition','notes','reportName'].map(k=>[k,p[k]]));
   }else return fail('QUALITY_INVALID',400);
   const e=await db('rpc/studkab_quality_save','POST',{p_request:input.id,p_version:input.versionId,p_id:input.evidenceId,p_actor:user.id,p_recipient:bindings.recipientId,p_passport:bindings.passportId,p_file_hash:bindings.fileHash,p_document_hash:bindings.documentHash,p_source_fingerprint:bindings.sourceFingerprint,p_kind:input.kind,p_payload:payload,p_report_base64:report});
   if(!uuid.test(e?.id||''))return fail('QUALITY_UNAVAILABLE');return {data:{evidence:clean(e)}};

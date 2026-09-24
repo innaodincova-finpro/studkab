@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {requirementAction,defaultPassport} from '../supabase/functions/studkab-requests/requirements.mjs';
+import {requirementAction,defaultPassport,originalityText} from '../supabase/functions/studkab-requests/requirements.mjs';
 const id='11111111-1111-4111-8111-111111111111',passportId='22222222-2222-4222-8222-222222222222';
 const user={id:'33333333-3333-4333-8333-333333333333',email:'executor@example.test'};
 const fingerprint='a'.repeat(64);
 function fixture({transferred=true,race=false}={}){
- const calls=[],passport=defaultPassport({});passport.items=passport.items.map(x=>({...x,text:'Подтверждённое условие',source:'Задание',verified:true}));
+ const calls=[],passport=defaultPassport({}),o={mode:'university_threshold',service:'Учебная система',thresholdPercent:70};passport.items=passport.items.map(x=>({...x,text:x.id==='ANTIPLAGIARISM'?originalityText(o):'Подтверждённое условие',source:'Задание',verified:true,...(x.id==='ANTIPLAGIARISM'?{originality:o}:{})}));
  passport.material_manifest={basis:'Задание',requirements:[{id:'M1',label:'Исходные данные',required:true,attachment_ids:[],answer_ids:[],payload_fields:['org'],not_applicable_reason:''}]};
  return {calls,passport,deps:{config:async()=>({executor_email:user.email}),db:async(path,method,body)=>{
   calls.push({path,method,body});
