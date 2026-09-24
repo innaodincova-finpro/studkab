@@ -74,7 +74,7 @@ function canonical(value){
 }
 async function currentPassport(document,request,db){
  const c=document?.reviewContext;if(!c)return false;
- if(await db('rpc/studkab_result_context_version')!==1)throw Error('Серверная защита проверки ещё не установлена');
+ if(await db('rpc/studkab_result_context_version')!==2)throw Error('Серверная защита проверки ещё не установлена');
  const [p]=await db('studkab_requirement_passports?select=id,status,source_fingerprint&request_id=eq.'+request+'&order=revision.desc&limit=1');
  return !!p&&p.status==='approved'&&p.id===c.passportId&&p.source_fingerprint===c.sourceFingerprint;
 }
@@ -83,10 +83,28 @@ async function readReviewState(input,request,db){
  if(!await currentPassport(document,input.id,db))return {status:409,data:{error:'Паспорт изменился или не утверждён. Повторите проверку требований.'}};
  const [version]=await db('studkab_result_versions?select=id,revision,recipient_id,document,document_hash,file_hash,docx_base64&request_id=eq.'+input.id+'&order=revision.desc&limit=1');
  if(!version)return {data:{state:'none'}};
- if(version.recipient_id!==request.student_id||canonical(version.document)!==canonical(document))return {data:{state:'stale'}};
- const [delivery]=await db('studkab_results?select=delivery_id,review_id,created_at&request_id=eq.'+input.id+'&version_id=eq.'+version.id+'&order=created_at.desc,id.desc&limit=1');
- const reviews=await db('studkab_result_reviews?select=id,version_id,criteria,created_at,quality_evidence_ids&version_id=eq.'+version.id+(delivery?'&id=eq.'+delivery.review_id:'&order=created_at.desc,id.desc')+'&limit=1');
+ if(version.recipient_id!==request.student_id)return {data:{state:'stale'}};
+ const receipt={versionId:version.id,recipientId:version.recipient_id,fileHash:version.file_hash,documentHash:version.document_hash,revision:version.revision};
+ const bindings=await db('studkab_result_passport_bindings?select=id,document_fingerprint&version_id=eq.'+version.id+'&passport_id=eq.'+document.reviewContext.passportId+'&limit=1');
+ const binding=bindings[0];
+ if(!binding&&canonical(version.document)!==canonical(document)){
+  const original={...version.document},proposed={...document};delete original.reviewContext;delete proposed.reviewContext;
+  if(canonical(original)!==canonical(proposed)||!version.document?.reviewContext)return {data:{state:'stale'}};
+  const [previous]=await db('studkab_result_passport_bindings?select=passport_id&version_id=eq.'+version.id+'&order=created_at.desc,id.desc&limit=1');
+  if(!previous)return {data:{state:'stale'}};
+  const [old]=await db('studkab_requirement_passports?select=id,items&request_id=eq.'+input.id+'&id=eq.'+previous.passport_id+'&limit=1');
+  const [current]=await db('studkab_requirement_passports?select=id,items&request_id=eq.'+input.id+'&id=eq.'+document.reviewContext.passportId+'&limit=1');
+  if(!old||!current)return {data:{state:'stale'}};
+  const byId=new Map((old.items||[]).map(i=>[i.id,i]));const after=new Map((current.items||[]).map(i=>[i.id,i]));
+  const changedItems=[...new Set([...byId.keys(),...after.keys()])].filter(id=>canonical(byId.get(id))!==canonical(after.get(id))).sort();
+  return {data:{state:'passport_changed',receipt,docxBase64:version.docx_base64,changedItems}};
+ }
+ if(!binding||binding.document_fingerprint!==document.reviewContext.fingerprint)return {data:{state:'stale'}};
+ const original={...version.document},proposed={...document};delete original.reviewContext;delete proposed.reviewContext;
+ if(canonical(original)!==canonical(proposed))return {data:{state:'stale'}};
+ const reviews=await db('studkab_result_reviews?select=id,version_id,criteria,created_at,quality_evidence_ids,studkab_result_review_bindings!inner(binding_id)&version_id=eq.'+version.id+'&studkab_result_review_bindings.binding_id=eq.'+binding.id+'&order=created_at.desc,id.desc&limit=1');
  let review=reviews[0],qualityReviewStale=false;
+ const [delivery]=review?await db('studkab_results?select=delivery_id,review_id,created_at&request_id=eq.'+input.id+'&version_id=eq.'+version.id+'&review_id=eq.'+review.id+'&order=created_at.desc,id.desc&limit=1'):[];
  let changes=false;
  if(review){try{validateReview(review.criteria);}catch{try{validateReviewNotes(review.criteria);changes=true;}catch{return {status:409,data:{error:errors.criteria}};}}}
  if(review&&!delivery&&!changes){
@@ -95,7 +113,7 @@ async function readReviewState(input,request,db){
  }
  if(delivery&&changes)return {status:409,data:{error:errors.criteria}};
  if(delivery&&!review)return {status:409,data:{error:errors.review_required}};
- return {data:{...(qualityReviewStale?{reason:'quality_review_stale'}:{}),state:delivery?'delivered':changes?'changes_requested':review?'reviewed':'prepared',receipt:{versionId:version.id,recipientId:version.recipient_id,fileHash:version.file_hash,documentHash:version.document_hash,revision:version.revision},docxBase64:version.docx_base64,review:review?{reviewId:review.id,versionId:review.version_id,criteria:review.criteria,reviewedAt:review.created_at}:null,delivery:delivery?{deliveryId:delivery.delivery_id,createdAt:delivery.created_at}:null}};
+ return {data:{...(qualityReviewStale?{reason:'quality_review_stale'}:{}),state:delivery?'delivered':changes?'changes_requested':review?'reviewed':'prepared',receipt,docxBase64:version.docx_base64,review:review?{reviewId:review.id,versionId:review.version_id,criteria:review.criteria,reviewedAt:review.created_at}:null,delivery:delivery?{deliveryId:delivery.delivery_id,createdAt:delivery.created_at}:null}};
 }
 export async function resultAction(input,user,{db,config}) {
  if(input.action!=='result'){
@@ -120,6 +138,16 @@ export async function resultAction(input,user,{db,config}) {
   return {data:{reviews,limit:100}};
  }
  if(input.action==='result-review-state')return readReviewState(input,request,db);
+ if(input.action==='rebind-result'){
+  let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
+  if(!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
+  if(!uuid.test(input.versionId||'')||!Array.isArray(input.changedItems)||input.changedItems.length>100||input.changedItems.some(x=>typeof x!=='string'||!/^[-_A-Za-z0-9]{1,80}$/.test(x))||typeof input.confirmation!=='string'||input.confirmation.trim().length<20||input.confirmation.length>2000)return {status:400,data:{error:'Подтвердите проверку изменённых требований'}};
+  const blocked=await materialManifestGuard(db,input.id);if(blocked)return {status:409,data:blocked};
+  try{
+   const bound=await db('rpc/studkab_rebind_result_passport','POST',{p_request:input.id,p_version:input.versionId,p_actor:user.id,p_document:document,p_changed_items:input.changedItems,p_confirmation:input.confirmation.trim()});
+   return {data:bound};
+  }catch(e){if(/RESULT_BINDING_(?:STALE|CONFLICT|CONFIRMATION_REQUIRED)/.test(e.message||''))return {status:409,data:{error:'Требования или Word изменились. Обновите проверку.'}};throw e;}
+ }
  if(input.action!=='review-notes'){
   const materials=await materialManifestGuard(db,input.id);
   if(materials)return {status:409,data:materials};
@@ -145,7 +173,11 @@ export async function resultAction(input,user,{db,config}) {
   if(input.document!==undefined){
    let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
    const [v]=await db('studkab_result_versions?select=document&request_id=eq.'+input.id+'&id=eq.'+input.versionId+'&limit=1');
-   if(!v||canonical(v.document)!==canonical(document)||!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
+   if(!v||!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
+   const original={...v.document},proposed={...document};delete original.reviewContext;delete proposed.reviewContext;
+   if(canonical(original)!==canonical(proposed))return {status:409,data:{error:errors.stale}};
+   const [b]=await db('studkab_result_passport_bindings?select=id,document_fingerprint&version_id=eq.'+input.versionId+'&passport_id=eq.'+document.reviewContext.passportId+'&limit=1');
+   if(!b||b.document_fingerprint!==document.reviewContext.fingerprint)return {status:409,data:{error:errors.stale}};
   }
   const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.id+'&select=id,status,items&order=revision.desc&limit=1');
   const conflict=input.action==='review-notes'?null:await sourceMinimumGuard(db,input.id,passport?.items);

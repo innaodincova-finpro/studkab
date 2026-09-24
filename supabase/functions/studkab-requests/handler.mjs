@@ -64,7 +64,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    if(['quality-state','quality-scan','quality-save','quality-report'].includes(input.action)){
     const r=await qualityAction(input,user,{db,config});return json(r.data,r.status||200);
    }
-   if(['deliver','result','prepare-result','review-result','review-notes','result-review-state','result-review-history'].includes(input.action)){
+   if(['deliver','result','prepare-result','review-result','review-notes','result-review-state','result-review-history','rebind-result'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(['clarification-list','clarification-ask','clarification-answer'].includes(input.action)){

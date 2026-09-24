@@ -233,10 +233,11 @@ async function reviewStateApp(options={}){
   calls.push({path,method,body});
   if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path==='rpc/studkab_quality_check'){assert.equal(method,'POST');assert.deepEqual(body,{p_request:requestId,p_version:versionId});if(options.qualityUnavailable)throw Error('Quality unavailable');return {eligible:!options.qualityMissing,evidenceIds:options.qualityChanged?{...qualityEvidenceIds,internal_borrowing:requestId}:qualityEvidenceIds};}
-  if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:1;
+  if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:2;
   if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId}];
   if(path.startsWith('studkab_requirement_passports?'))return [{id:passportId,status:options.stalePassport?'stale':'approved',source_fingerprint:reviewContext.sourceFingerprint}];
   if(path.startsWith('studkab_result_versions?'))return options.empty?[]:[{id:versionId,revision:1,recipient_id:options.otherRecipient?requestId:recipientId,document:options.changed?{...document,topic:'Changed'}:document,file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
+  if(path.startsWith('studkab_result_passport_bindings?'))return [{id:versionId,document_fingerprint:reviewContext.fingerprint,passport_id:passportId}];
   if(path.startsWith('studkab_results?'))return options.delivered?[{delivery_id:versionId,review_id:reviewId,created_at:'2026-09-19'}]:[];
   if(path.startsWith('studkab_result_reviews?'))return options.prepared?[]:[{id:reviewId,version_id:versionId,quality_evidence_ids:qualityEvidenceIds,criteria:options.badReview?{...criteria,C01:{status:'fail',evidence:'Failed content check'}}:criteria,created_at:'2026-09-19'}];
   throw Error('Unexpected write or query: '+path);
@@ -278,6 +279,33 @@ test('C-071 new recovery fails closed before guard migration is installed',async
  const response=await app(request({action:'result-review-state',id:requestId,document}));
  assert.equal(response.status,503);
  assert(calls.every(c=>!c.path.startsWith('studkab_result_versions?')));
+});
+
+test('C109 passport revision offers the same Word and requires an explicit server confirmation',async()=>{
+ const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
+ const oldPassport='66666666-6666-4666-8666-666666666666';
+ const original=validateResult({...documentFixture,reviewContext:{passportId:oldPassport,sourceFingerprint:'c'.repeat(64),fingerprint:'d'.repeat(64)}});
+ const updated=validateResult({...documentFixture,reviewContext:{passportId,sourceFingerprint:'c'.repeat(64),fingerprint:'e'.repeat(64)}});
+ const calls=[];let confirmed=false;
+ const app=handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>{
+  calls.push({path,body});
+  if(path==='rpc/studkab_result_context_version')return 2;
+  if(path==='rpc/studkab_material_manifest_check')return {valid:true};
+  if(path==='rpc/studkab_rebind_result_passport'){confirmed=true;assert.deepEqual(body.p_changed_items,['VOLUME']);assert.equal(body.p_version,versionId);return {bindingId:versionId,versionId,fileHash:binding.fileHash};}
+  if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId}];
+  if(path.startsWith('studkab_result_versions?'))return [{id:versionId,revision:21,recipient_id:recipientId,document:original,file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
+  if(path.startsWith('studkab_result_passport_bindings?'))return path.includes('order=created_at')?[{passport_id:oldPassport}]:confirmed?[{id:versionId,document_fingerprint:updated.reviewContext.fingerprint}]:[];
+  if(path.startsWith('studkab_requirement_passports?'))return path.includes('id=eq.'+oldPassport)?[{id:oldPassport,items:[{id:'VOLUME',text:'До 10 страниц'}]}]:[{id:passportId,status:'approved',source_fingerprint:updated.reviewContext.sourceFingerprint,items:[{id:'VOLUME',text:'До 12 страниц'}]}];
+  if(path.startsWith('studkab_result_reviews?'))return [];
+  if(path.startsWith('studkab_results?'))return [];
+  throw Error(path);
+ }});
+ const query=()=>app(request({action:'result-review-state',id:requestId,document:updated}));
+ let response=await query();assert.equal(response.status,200);let state=await response.json();assert.equal(state.state,'passport_changed');assert.equal(state.receipt.versionId,versionId);assert.equal(state.docxBase64,'UEsDBAAAAAA=');assert.deepEqual(state.changedItems,['VOLUME']);
+ assert(!calls.some(c=>c.path==='rpc/prepare_studkab_result'));
+ response=await app(request({action:'rebind-result',id:requestId,versionId,document:updated,changedItems:['VOLUME'],confirmation:'Сверил раздел объёма с сохранённым Word, исправления не нужны'}));assert.equal(response.status,200);
+ response=await query();state=await response.json();assert.equal(state.state,'prepared');assert.equal(state.receipt.versionId,versionId);
+ assert(!calls.some(c=>c.path==='rpc/prepare_studkab_result'));
 });
 
 test('C072 inbox refresh returns only server delivery metadata for existing requests',async()=>{

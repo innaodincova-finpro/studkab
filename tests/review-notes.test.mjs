@@ -53,9 +53,10 @@ test('C089 API restores negative review, returns version history only to executo
  const paths=[];
  const db=async path=>{paths.push(path);
   if(path.startsWith('studkab_requests?'))return [{id:q,student_id:u}];
-  if(path==='rpc/studkab_result_context_version')return 1;
+  if(path==='rpc/studkab_result_context_version')return 2;
   if(path.startsWith('studkab_requirement_passports?'))return [{id:p,status:'approved',source_fingerprint:'a'.repeat(64)}];
   if(path.startsWith('studkab_result_versions?'))return [{id:v,recipient_id:u,document,file_hash:'c'.repeat(64),document_hash:'d'.repeat(64),docx_base64:'UEsDBHRlc3Q='}];
+  if(path.startsWith('studkab_result_passport_bindings?'))return [{id:v,document_fingerprint:'b'.repeat(64)}];
   if(path.startsWith('studkab_results?'))return [];
   if(path.startsWith('studkab_result_reviews?'))return [review];
   throw Error(path);

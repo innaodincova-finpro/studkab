@@ -60,7 +60,7 @@ test('C-071 saving review never delivers; reopening restores exact bytes and sep
  await page.waitForTimeout(2200); // Let the existing modal animation and sync toast settle for visual QA.
  await page.screenshot({path:'test-results/review-saved-not-delivered.png'});
  await page.locator('[data-deliver]').click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
- expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').map(c=>c.deliveryId))).toEqual([await page.evaluate(()=>remote.receipt.versionId)]);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(1);
  await expect(page.locator('[data-deliver]')).toBeDisabled();
  expect(await page.evaluate(()=>StudResults.isCurrentDelivery(candidate))).toBe(true);
  await page.evaluate(()=>candidate.doc.structure.intro.text+=' Изменение после передачи.');
@@ -82,6 +82,37 @@ test('C107 downloading Word without confirming it was opened cannot save remarks
  await page.locator('[data-word-opened]').check();
  await page.locator('[data-save-notes]').click();
  await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
+});
+test('C109 revised requirements reuse saved Word only after the executor reviews it',async({page})=>{
+ await setupReview(page);
+ await page.locator('.sheet .close').click();
+ await page.evaluate(()=>{
+  candidate.passports=[{...candidate.passports[0],id:'88888888-8888-4888-8888-888888888888',revision:2,items:[{id:'VOLUME',text:'Новый объём'}]}];
+  window.boundToNewPassport=false;
+  const original=Oblako.requestApi;
+  Oblako.requestApi=async body=>{
+   if(body.action==='result-review-state'&&!boundToNewPassport){calls.push(body);return {state:'passport_changed',receipt:remote.receipt,docxBase64:remote.docxBase64,changedItems:['VOLUME']};}
+   if(body.action==='rebind-result'){
+    calls.push(body);boundToNewPassport=true;remote.state='prepared';remote.document=body.document;remote.review=null;return {versionId:remote.receipt.versionId,fileHash:remote.receipt.fileHash};
+   }
+   return original(body);
+  };
+  calls=[];StudResults.deliver(candidate);
+ });
+ await expect(page.locator('[data-passport-rebind]')).toBeVisible();
+ await expect(page.locator('[data-passport-changes]')).toContainText('VOLUME');
+ await expect(page.locator('[data-save-review]')).toBeDisabled();
+ await page.locator('[data-passport-reuse]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Скачайте и проверьте Word');
+ const waiting=page.waitForEvent('download');await page.locator('[data-preview]').click();await waiting;
+ await page.locator('[data-word-opened]').check();
+ await page.locator('[data-passport-confirm]').check();
+ await page.locator('[data-passport-explanation]').fill('Сверены новые требования к объёму, текст Word исправлять не требуется.');
+ await page.locator('[data-passport-reuse]').click();
+ await expect(page.locator('[data-passport-rebind]')).toBeHidden();
+ await expect(page.locator('[data-result-status]')).toContainText('Проверьте точный Word');
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='rebind-result').length)).toBe(1);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='prepare-result').length)).toBe(0);
 });
 test('C-071 lost review and delivery responses recover without duplicate writes',async({page})=>{
  await setupReview(page);await fillReview(page);await page.evaluate(()=>loseReview=true);

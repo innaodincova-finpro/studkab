@@ -27,7 +27,7 @@ test('C083 server binds uploaded text and hash to exact Word and requires passpo
  const calls=[],db=async(path,method,args)=>{
   if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path.startsWith('studkab_requests?'))return[{student_id:'student',payload:{n:'Тестовый студент'}}];
-  if(path==='rpc/studkab_result_context_version')return 1;
+  if(path==='rpc/studkab_result_context_version')return 2;
   if(path.startsWith('studkab_requirement_passports?'))return[{id:pid,status:'approved',source_fingerprint:'c'.repeat(64)}];
   if(path==='rpc/prepare_studkab_result'){calls.push(args);return{versionId:args.version};}
   throw Error(path);

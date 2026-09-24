@@ -360,6 +360,12 @@
       "version": "20260924150100",
       "name": "originality_threshold_without_service",
       "sha256": "5c4c88a350149bac9d260a1a1cc4c6f3f41580d3c8292becf1a4368443c5372f"
+    },
+    {
+      "file": "20260924170000_c109_result_passport_binding.sql",
+      "version": "20260924170000",
+      "name": "c109_result_passport_binding",
+      "sha256": "7d9da920f7dce5fea51dc1f94c8da4f61796ddbf7ed1ce49a56c9ea4804cf1cf"
     }
   ],
   "production_reconciled_at": "2026-09-23"
