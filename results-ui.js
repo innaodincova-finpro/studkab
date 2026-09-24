@@ -82,7 +82,7 @@
    if(!state||['none','stale','passport_changed','prepared','changes_requested','reviewed','delivered'].indexOf(state.state)<0)throw Error('Сервер не подтвердил состояние проверки. Передача недоступна.');
    var priorVersionId=receipt&&receipt.versionId,priorDelivered=delivered,previousState=lastState;
    passportChanged=state.state==='passport_changed';changedItems=passportChanged?state.changedItems:[];
-   if((['none','stale','passport_changed'].includes(state.state)&&previousState!==state.state)
+   if((previousState!==null&&['none','stale','passport_changed'].includes(state.state)&&previousState!==state.state)
     ||(state.receipt&&priorVersionId&&state.receipt.versionId!==priorVersionId)
     ||(priorDelivered&&state.state!=='delivered'))resetCycle();
    if(passportChanged){if(!Array.isArray(changedItems)||changedItems.some(function(id){return typeof id!=='string';}))throw Error('Список изменённых требований не подтверждён.');wrap.querySelector('[data-passport-changes]').textContent=changedItems.length?'Изменены пункты: '+changedItems.join(', '):'Изменён паспорт или его источники. Проверьте все требования.';}
