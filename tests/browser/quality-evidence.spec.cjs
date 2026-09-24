@@ -13,7 +13,7 @@ async function setup(page,{reset=true,unavailable=false}={}){
    qCalls.push(body);
    if(qUnavailable)throw Error('Проверки временно недоступны');
    let latest=JSON.parse(sessionStorage.getItem('quality-fixture')||'{}');
-   if(body.action==='quality-state')return {bindings:qBinding,thresholdRequirement:{itemId:'ANTIPLAGIARISM',text:'Оригинальность не менее 70 процентов'},latest,eligible:['internal_borrowing','external_originality'].every(k=>latest[k]?.payload.disposition==='pass'),blockingCodes:['internal_borrowing','external_originality'].filter(k=>latest[k]?.payload.disposition!=='pass')};
+   if(body.action==='quality-state')return {bindings:qBinding,thresholdRequirement:{itemId:'ANTIPLAGIARISM',text:'Оригинальность не менее 70 процентов',mode:'university_threshold',service:'Учебная система',thresholdPercent:70},latest,eligible:['internal_borrowing','external_originality'].every(k=>latest[k]?.payload.disposition==='pass'),blockingCodes:['internal_borrowing','external_originality'].filter(k=>latest[k]?.payload.disposition!=='pass')};
    if(body.action==='quality-scan'){if(window.qDeferred)await new Promise(resolve=>window.qRelease=resolve);return {scan:qScan,scanHash:'d'.repeat(64)};}
    if(body.action==='quality-save'){
     if(body.versionId!==qBinding.versionId||body.fileHash!==qBinding.fileHash)throw Error('QUALITY_STALE');
@@ -38,8 +38,8 @@ async function internal(page){
 }
 async function externalForm(page){
  await page.locator('details').filter({has:page.locator('[data-q="service"]')}).last().evaluate(el=>el.open=true);
- await page.locator('[data-q="service"]').fill('Учебная система');await page.locator('[data-q="checkId"]').fill('SYNTHETIC-REPORT');await page.locator('[data-q="checkedAt"]').fill('2026-09-23');
- await page.locator('[data-q="thresholdPercent"]').fill('70');await page.locator('[data-q="actualPercent"]').fill('75');await page.locator('[data-q="externalNotes"]').fill('Сверены данные учебного PDF и точный Word.');
+ await expect(page.locator('[data-q="service"]')).toHaveValue('Учебная система');await page.locator('[data-q="checkId"]').fill('SYNTHETIC-REPORT');await page.locator('[data-q="checkedAt"]').fill('2026-09-23');
+ await expect(page.locator('[data-q="thresholdPercent"]')).toHaveValue('70');await page.locator('[data-q="actualPercent"]').fill('75');await page.locator('[data-q="externalNotes"]').fill('Сверены данные учебного PDF и точный Word.');
  await page.locator('[data-q="externalDisposition"]').selectOption('pass');await page.locator('[data-q="report"]').setInputFiles({name:'synthetic.pdf',mimeType:'application/pdf',buffer:PDF});
 }
 test('C102 internal scan shows limited corpus and needs individual decisions; it is not originality',async({page})=>{

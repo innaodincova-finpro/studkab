@@ -4,7 +4,15 @@ import fs from 'node:fs';
 const sql=fs.readFileSync(new URL('../supabase/migrations/20260914105509_studkab_requirement_passports.sql',import.meta.url),'utf8');
 const gate=fs.readFileSync(new URL('../supabase/migrations/20260915070508_mandatory_passport_generation_limits.sql',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');
-const {defaultPassport}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+const {defaultPassport,validatePassport,originalityText}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+test('C104 separates documented university threshold from service report without a number',()=>{
+ const source=defaultPassport({});
+ for(const o of [{mode:'university_threshold',service:'Система вуза',thresholdPercent:70},{mode:'university_no_threshold',service:'Система вуза',thresholdPercent:null},{mode:'service_only',service:'',thresholdPercent:null}]){
+  const item=source.items.find(x=>x.id==='ANTIPLAGIARISM');item.originality=o;item.text=originalityText(o);item.source=o.mode==='service_only'?'Стандарт STUDKAB и просмотренное задание':'Методичка, с. 4';item.verified=true;
+  assert.deepEqual(validatePassport(source).items.find(x=>x.id==='ANTIPLAGIARISM').originality,o);
+ }
+ const item=source.items.find(x=>x.id==='ANTIPLAGIARISM');item.originality={mode:'service_only',service:'',thresholdPercent:65};assert.throws(()=>validatePassport(source),/Порог/);
+});
 
 test('passport schema is private and callable only through the authenticated server adapter',()=>{
  assert.match(sql,/enable row level security/i);
@@ -115,6 +123,8 @@ test('C082 absence of originality threshold remains blocked even for a test',asy
  const p=defaultPassport(semanticInput),originality=p.items.find(x=>x.id==='ANTIPLAGIARISM');
  assert.match(originality.text,/Порог в заявке не задан\. Проверка не проводилась/);
  assert.equal(originality.required,true);assert.doesNotMatch(originality.text,/[0-9]+\s*%/);
+ assert.equal(originality.source,'Заявка студента');
+ assert.equal(defaultPassport({}).items.find(x=>x.id==='ANTIPLAGIARISM').source,'');
  let saved=false;
  const result=await requirementAction({action:'passport-approve',id:'33333333-3333-4333-8333-333333333333',passportId:'44444444-4444-4444-8444-444444444444',passport:p},
   {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
