@@ -2,6 +2,7 @@ import {qualityAction,qualityError} from './quality-evidence.mjs';
 import {testDeliveryAction} from './test-delivery.mjs';
 import {clarificationAction} from './clarifications.mjs';
 import {materialRevisionAction} from './material-revision.mjs';
+import {kindCorrectionAction} from './kind-correction.mjs';
 import {sameSecret} from '../_shared/secret-equal.mjs';
 import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
@@ -57,6 +58,9 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
+   if(input.action==='request-kind-correct'){
+    const r=await kindCorrectionAction(input,user,{db,config});return json(r.data,r.status||200);
+   }
    if(['quality-state','quality-scan','quality-save','quality-report'].includes(input.action)){
     const r=await qualityAction(input,user,{db,config});return json(r.data,r.status||200);
    }

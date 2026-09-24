@@ -2115,7 +2115,7 @@ function passportContent(x){
     (items.length?'<div class="passport-list">'+items.map(passportItemView).join('')+'</div>':'<p class="hint">Пункты пока не добавлены.</p>')+
     materialManifestContent(x,p)+
     (p.status!=='approved'?'<p class="hint passport-warning">Паспорт не утверждён — платная подготовка запрещена.</p>':'')+
-    '<div class="chips"><button type="button" class="chip" data-act="executor-clarifications" data-id="'+esc(x.id)+'">Вопросы студенту</button><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-revise" data-id="'+esc(x.id)+'">Новая версия</button>'+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'"'+(canApprove?'':' disabled title="Сначала заполните обязательные требования"')+'>Утвердить</button>':'')+'</div>';
+    '<div class="chips"><button type="button" class="chip" data-act="executor-clarifications" data-id="'+esc(x.id)+'">Вопросы студенту</button><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-revise" data-id="'+esc(x.id)+'">Новая версия</button>'+(x.requestNumber?'<button type="button" class="chip" data-act="request-kind-correct" data-id="'+esc(x.id)+'">Исправить вид работы по заданию</button>':'')+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'"'+(canApprove?'':' disabled title="Сначала заполните обязательные требования"')+'>Утвердить</button>':'')+'</div>';
 }
 function passportCard(x){ return card(passportContent(x)); }
 async function loadMaterialRevision(x){
@@ -2147,6 +2147,30 @@ async function openMaterialRevision(x){
    finally{busy=false;button.disabled=false;}
   });
  }catch(e){if(wrap.isConnected)wrap.querySelector('[role=status]').textContent=e.message||'Не удалось проверить состояние';}
+}
+async function correctRequestKind(x){
+ if(!x||!x.requestNumber)return;
+ var identity=Oblako.identity(),data=D,operationId=crypto.randomUUID(),busy=false;
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Исправление вида работы</h3><p role="status">Получаем актуальное задание…</p>');
+ function current(){if(identity!==Oblako.identity()||data!==D||!wrap.isConnected)throw Error('Аккаунт или окно изменились. Откройте заявку заново.');}
+ try{
+  var state=await loadMaterialRevision(x);current();await loadAttachmentContext(x);current();
+  var assignments=(x.attachments||[]).filter(function(a){return a.category==='assignment';});
+  if(!assignments.length)throw Error('Нет приложенного задания. Исправление недоступно.');
+  var pane=wrap.querySelector('.sheet-in'),titleId=wrap.getAttribute('aria-labelledby');
+  pane.innerHTML='<button type="button" class="close" data-x="1">✕</button><h3 id="'+esc(titleId)+'">Исправление вида работы</h3><p>Сейчас: <b>'+esc(x.workType||'не указан')+'</b>. Выберите действующее задание. После исправления прежний паспорт и проверку Word нужно пройти заново.</p><div class="fld"><label>Задание<select data-kind-assignment>'+assignments.map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.file_name)+'</option>';}).join('')+'</select></label></div><div class="fld"><label>Вид работы по заданию<input data-new-kind maxlength="100" autocomplete="off"></label></div><div class="fld"><label>Причина исправления<textarea data-kind-reason maxlength="500"></textarea></label></div><button type="button" class="btn" data-kind-save>Сохранить исправление</button><p role="status" data-kind-status></p>';
+  var button=wrap.querySelector('[data-kind-save]');
+  button.addEventListener('click',async function(){
+   if(busy)return;var status=wrap.querySelector('[data-kind-status]');
+   try{current();var newKind=wrap.querySelector('[data-new-kind]').value.trim(),reason=wrap.querySelector('[data-kind-reason]').value.trim();
+    if(newKind.length<2||newKind.length>100||reason.length<10){status.textContent='Проверьте вид работы и причину исправления.';return;}
+    busy=true;button.disabled=true;
+    await Oblako.requestApi({action:'request-kind-correct',id:x.id,operationId:operationId,assignmentId:wrap.querySelector('[data-kind-assignment]').value,expectedRevision:state.requestRevision,expectedKind:x.workType,newKind:newKind,reason:reason});current();
+    x._attachmentsLoaded=false;await receiveInbox();current();await loadPassports(x);current();wrap.remove();render();toast('Вид работы исправлен. Проверьте новый паспорт и новую версию Word.');
+   }catch(e){if(wrap.isConnected)status.textContent=e.message||'Не удалось подтвердить исправление.';}
+   finally{busy=false;if(wrap.isConnected)button.disabled=false;}
+  });
+ }catch(e){if(wrap.isConnected)wrap.querySelector('[role=status]').textContent=e.message||'Не удалось проверить задание';}
 }
 async function loadPassports(x){
  if(!window.Oblako||!Oblako.requestApi)throw Error('Войдите в аккаунт реестра');
@@ -2704,6 +2728,7 @@ document.addEventListener("click", function(ev){
   if(act==='list-page'){listPage=Number(el.dataset.page)||1;render();document.querySelector('.registry-pagination').setAttribute('tabindex','-1');document.querySelector('.registry-pagination').focus();return;}
   if(act==='materials-refresh'){var mx=item(id);if(!mx)return;mx._attachmentsLoaded=false;el.disabled=true;loadPassports(mx).then(function(){render();}).catch(function(err){toast(err.message||'Не удалось обновить материалы');}).finally(function(){el.disabled=false;});return;}
   if(act==='materials-reopen'){openMaterialRevision(item(id));return;}
+  if(act==='request-kind-correct'){correctRequestKind(item(id));return;}
 
   if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }

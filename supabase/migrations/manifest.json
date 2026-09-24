@@ -348,6 +348,12 @@
       "version": "20260924150000",
       "name": "c104_originality_policy",
       "sha256": "7438bd831678907213663d31136af9c67afca2aa039c54d3af844b23986cd677"
+    },
+    {
+      "file": "20260924043558_c105_request_kind_correction.sql",
+      "version": "20260924043558",
+      "name": "c105_request_kind_correction",
+      "sha256": "0708145bb1f533ccff687bea09855291f02f903155ce4b0952ac556a0726acd6"
     }
   ],
   "production_reconciled_at": "2026-09-23"
