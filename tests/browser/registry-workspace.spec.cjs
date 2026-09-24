@@ -117,6 +117,35 @@ test('C072 an older endpoint cannot erase known delivery history',async({page})=
  await page.locator('[data-act="receive-inbox"]').click();
  expect(await page.evaluate(()=>D.items[0].deliveryState.last.versionId)).toBe('old');
 });
+test('C108 stale kind card refreshes only its own request before correction',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{
+  const x=D.items[0];x.workType='Контрольная работа';x.submissionRevision=9;x.note='Сохранённая заметка';
+  window.c108Calls=[];
+  Oblako.requestApi=async input=>{
+   c108Calls.push(input);
+   if(input.action==='material-revision-state')return {materials:{state:'locked',requestRevision:10}};
+   if(input.action==='inbox')return {rows:[{id:x.id,number:x.requestNumber,revision:10,payload:{t:x.topic,k:'Практическая работа'}}],next:null};
+   throw Error('Unexpected write');
+  };
+  correctRequestKind(x);
+ });
+ await expect.poll(()=>page.evaluate(()=>item('workspace-0').workType)).toBe('Практическая работа');
+ expect(await page.evaluate(()=>({calls:c108Calls.map(c=>({action:c.action,id:c.id})),note:item('workspace-0').note,revision:item('workspace-0').submissionRevision}))).toEqual({calls:[{action:'material-revision-state',id:'workspace-0'},{action:'inbox',id:'workspace-0'}],note:'Сохранённая заметка',revision:10});
+ await expect(page.getByRole('dialog',{name:'Исправление вида работы'})).toHaveCount(0);
+});
+test('C108 rejects a mismatched server revision without altering the card',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{
+  const x=D.items[0];x.workType='Контрольная работа';x.submissionRevision=9;
+  Oblako.requestApi=async input=>input.action==='material-revision-state'
+   ? {materials:{state:'locked',requestRevision:10}}
+   : {rows:[{id:x.id,number:x.requestNumber,revision:11,payload:{t:x.topic,k:'Практическая работа'}}],next:null};
+  correctRequestKind(x);
+ });
+ await expect(page.getByRole('dialog',{name:'Исправление вида работы'})).toContainText('Не удалось подтвердить новую редакцию');
+ expect(await page.evaluate(()=>item('workspace-0').workType)).toBe('Контрольная работа');
+});
 test('C072 account change while inbox is pending cannot merge old history',async({page})=>{
  await seed(page);
  await page.evaluate(()=>{
