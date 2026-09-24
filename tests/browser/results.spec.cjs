@@ -36,7 +36,8 @@ async function setupReview(page){
 }
 
 async function fillReview(page){
- const waiting=page.waitForEvent('download');await page.getByRole('button',{name:'Открыть точный Word'}).click();const download=await waiting;
+ const waiting=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать точный Word'}).click();const download=await waiting;
+ await expect(page.locator('[data-word-opened]')).toBeEnabled();await page.locator('[data-word-opened]').check();
  await page.locator('details').filter({has:page.locator('[data-criterion]')}).evaluate(el=>el.open=true);
  for(const status of await page.locator('[data-criterion-status]').all())await status.selectOption('pass');
  for(const field of await page.locator('[data-criterion]').all())await field.fill('Synthetic evidence at page 1');
@@ -46,7 +47,7 @@ async function fillReview(page){
 }
 test('C-071 saving review never delivers; reopening restores exact bytes and separate delivery',async({page})=>{
  await setupReview(page);await page.setViewportSize({width:390,height:844});
- await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверьте документ');
+ await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Скачайте и проверьте Word');
  const downloaded=await fillReview(page);
  await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(0);
@@ -65,6 +66,22 @@ test('C-071 saving review never delivers; reopening restores exact bytes and sep
  await page.evaluate(()=>candidate.doc.structure.intro.text+=' Изменение после передачи.');
  expect(await page.evaluate(()=>StudResults.isCurrentDelivery(candidate))).toBe(false);
  await page.screenshot({path:'test-results/separate-review-mobile.png'});
+});
+test('C107 downloading Word without confirming it was opened cannot save remarks',async({page})=>{
+ await setupReview(page);
+ await expect(page.locator('[data-word-opened]')).toBeDisabled();
+ const waiting=page.waitForEvent('download');await page.locator('[data-preview]').click();await waiting;
+ await expect(page.locator('[data-result-status]')).toContainText('Файл скачан');
+ await page.locator('details').filter({has:page.locator('[data-criterion]')}).evaluate(el=>el.open=true);
+ await page.locator('[data-criterion-status="C12"]').selectOption('manual');
+ await page.locator('[data-criterion="C12"]').fill('Требуется проверить пагинацию в настольном Word');
+ await page.locator('[data-criterion-section="C12"]').fill('Весь документ');
+ await page.locator('[data-save-notes]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('подтвердите просмотр');
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='review-notes').length)).toBe(0);
+ await page.locator('[data-word-opened]').check();
+ await page.locator('[data-save-notes]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
 });
 test('C-071 lost review and delivery responses recover without duplicate writes',async({page})=>{
  await setupReview(page);await fillReview(page);await page.evaluate(()=>loseReview=true);
@@ -264,7 +281,7 @@ test('C088 arithmetic blocks review; source meaning requires C10 evidence',async
 
 test('C089 negative notes reopen on exact Word and cannot deliver; correction needs new review',async({page})=>{
  await setupReview(page);
- const download=page.waitForEvent('download');await page.locator('[data-preview]').click();await download;
+ const download=page.waitForEvent('download');await page.locator('[data-preview]').click();await download;await page.locator('[data-word-opened]').check();
  await page.locator('details').filter({has:page.locator('[data-criterion]')}).evaluate(el=>el.open=true);
  await page.locator('[data-criterion-status="C12"]').selectOption('manual');
  await page.locator('[data-criterion="C12"]').fill('Нужно сверить основной объём по методичке');

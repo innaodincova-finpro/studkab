@@ -16,7 +16,7 @@ w.eval(fs.readFileSync(new URL('results-ui.js',root),'utf8'));
 const x={id:'11111111-1111-4111-8111-111111111111',requestNumber:1,topic:'Synthetic',student:'Synthetic',doc:{order:[{id:'intro',name:'Introduction'}],structure:{intro:{text:'Synthetic reviewed text'}}}};x.doc.review=w.DraftQuality.stamp(x);
 w.StudResults.deliver(x);const $=s=>w.document.querySelector(s),button=$('[data-deliver]');
 await button.onclick();assert.equal(calls.length,0);assert.match($('[data-result-status]').textContent,/Проверьте/);
-$('[data-preview]').onclick();$('[data-reviewed]').checked=true;await button.onclick();assert.equal(calls.length,0);assert.match($('[data-result-status]').textContent,/Выберите результат/);
+$('[data-preview]').onclick();$('[data-word-opened]').checked=true;$('[data-reviewed]').checked=true;await button.onclick();assert.equal(calls.length,0);assert.match($('[data-result-status]').textContent,/Выберите результат/);
 for(const code of codes){$('[data-criterion-status="'+code+'"]').value='pass';$('[data-criterion="'+code+'"]').value='Synthetic evidence at page 1';}
 $('[data-criterion-status="C01"]').value='fail';await button.onclick();assert.equal(calls.length,0);assert.match($('[data-result-status]').textContent,/не пройден пункт/);
 $('[data-criterion-status="C01"]').value='manual';await button.onclick();assert.equal(calls.length,0);assert.match($('[data-result-status]').textContent,/завершите ручную проверку/);
