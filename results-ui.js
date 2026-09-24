@@ -39,10 +39,12 @@
   var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;}),profile=DraftQuality.requirementProfile(x);
   var methodology=(external?'<p class="hint">Проверяется прикреплённый Word. Автоматические проверки текста редактора к нему не применялись. Проверьте все 16 пунктов по этому файлу, включая объём, расчёты и условия оригинальности.</p>':'')+'<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
   var checklist=methodology+(external?'':DraftEditor.sourceReview(x))+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><input data-criterion-section="'+code+'" maxlength="300" placeholder="Место: страница, раздел или весь документ"><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
-  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'Студент не указан')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Сначала сохраните проверку точного Word. Передача студенту выполняется отдельной кнопкой.</p><button type="button" class="chip" data-preview disabled>Открыть точный Word</button>'+checklist+'<div data-quality-evidence></div><details data-review-history><summary>История проверок всех версий Word</summary><div data-review-history-body style="overflow-wrap:anywhere">Откройте, чтобы загрузить историю.</div></details><p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="chip" data-save-notes disabled>Сохранить замечания</button><button type="button" class="btn" data-save-review disabled>Сохранить итоговую проверку</button><button type="button" class="btn" data-deliver hidden disabled style="display:none">Передать студенту</button><p role="status" data-result-status>Проверяем сохранённое состояние…</p><button type="button" class="chip" data-result-refresh disabled>Обновить состояние</button>');
+  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'Студент не указан')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Скачайте точный Word, откройте скачанный файл и подтвердите просмотр. Передача студенту выполняется отдельной кнопкой.</p><button type="button" class="chip" data-preview disabled>Скачать точный Word</button><p><label><input type="checkbox" data-word-opened disabled> Я открыл скачанный Word и проверил его содержимое</label></p>'+checklist+'<div data-quality-evidence></div><details data-review-history><summary>История проверок всех версий Word</summary><div data-review-history-body style="overflow-wrap:anywhere">Откройте, чтобы загрузить историю.</div></details><p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="chip" data-save-notes disabled>Сохранить замечания</button><button type="button" class="btn" data-save-review disabled>Сохранить итоговую проверку</button><button type="button" class="btn" data-deliver hidden disabled style="display:none">Передать студенту</button><p role="status" data-result-status>Проверяем сохранённое состояние…</p><button type="button" class="chip" data-result-refresh disabled>Обновить состояние</button>');
   wrap.dataset.accountIdentity=String(identity);
   var notesButton=wrap.querySelector('[data-save-notes]');
   var msg=wrap.querySelector('[data-result-status]'),saveButton=wrap.querySelector('[data-save-review]'),sendButton=wrap.querySelector('[data-deliver]'),refreshButton=wrap.querySelector('[data-result-refresh]');
+  var opened=wrap.querySelector('[data-word-opened]');
+  function confirmedWord(){return previewed&&opened.checked;}
   function guard(){try{if(!wrap.isConnected||!same(data,identity))throw Error('Аккаунт изменился или окно закрыто. Откройте проверку заново.');if(key!==contextKey(x,external)||(!external&&x.doc.review!==DraftQuality.stamp(x)))throw Error('Документ, требования или получатель изменились. Повторите проверку.');}catch(e){known=false;throw e;}}
   function controls(){
    notesButton.textContent=reviewed&&!amend?'Добавить замечания к проверке':'Сохранить замечания';notesButton.hidden=delivered;notesButton.disabled=busy||qualityBusy||!known;
@@ -51,6 +53,7 @@
    sendButton.textContent=delivered?'Результат передан':'Передать студенту';
    if(quality)quality.sync();
    refreshButton.disabled=busy||qualityBusy;wrap.querySelector('[data-preview]').disabled=busy||qualityBusy||!known;
+   opened.disabled=busy||!previewed||(reviewed&&!amend)||delivered;
    wrap.querySelectorAll('[data-criterion],[data-criterion-status],[data-criterion-section],[data-reviewed]').forEach(function(el){el.disabled=busy||(reviewed&&!amend)||delivered;});
   }
   function status(){msg.textContent=delivered?'Проверенная версия доступна студенту. Уведомление в мессенджер не отправлялось.':reviewed?'Проверка сохранена. Результат ещё не передан студенту.':changes?'Замечания сохранены к этой версии Word. Передача заблокирована до новой положительной проверки.':'Проверьте точный Word и заполните все пункты. Сохранение проверки не передаёт результат.';}
@@ -66,13 +69,13 @@
    if(!state||['none','stale','prepared','changes_requested','reviewed','delivered'].indexOf(state.state)<0)throw Error('Сервер не подтвердил состояние проверки. Передача недоступна.');
    if((state.state==='changes_requested'||state.state==='prepared')&&reviewed){reviewId=crypto.randomUUID();amend=false;wrap.querySelector('[data-reviewed]').checked=false;}
    changes=state.state==='changes_requested';
-   if(state.state==='none'||state.state==='stale'){if(receipt){versionId=crypto.randomUUID();reviewId=crypto.randomUUID();}receipt=null;reviewed=false;delivered=false;}
+   if(state.state==='none'||state.state==='stale'){if(receipt){versionId=crypto.randomUUID();reviewId=crypto.randomUUID();}receipt=null;reviewed=false;delivered=false;previewed=false;opened.checked=false;}
    else{
     var r=state.receipt;if(!r||!r.versionId||!r.recipientId||!r.documentHash||!r.fileHash||!state.docxBase64)throw Error('Не хватает данных сохранённой версии.');
     var bytes=Uint8Array.from(atob(state.docxBase64),function(c){return c.charCodeAt(0);});
     if(bytes.length>3145728||await sha(bytes)!==r.fileHash)throw Error('Контрольная сумма сохранённого Word не совпала.');
     guard();
-    if(!captured||await sha(await captured.arrayBuffer())!==r.fileHash)previewed=false;
+    if(!captured||await sha(await captured.arrayBuffer())!==r.fileHash){previewed=false;opened.checked=false;}
     guard();captured=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});receipt=r;versionId=r.versionId;
     reviewed=state.state==='reviewed'||state.state==='delivered';delivered=state.state==='delivered';
     if(changes&&state.review&&state.review.reviewId===notesId)notesId=crypto.randomUUID();
@@ -96,7 +99,7 @@
   }
   function binding(){return {id:requestId,versionId:versionId,reviewId:reviewId,recipientId:receipt.recipientId,fileHash:receipt.fileHash,documentHash:receipt.documentHash,document:payload};}
   async function run(action){if(busy)return;busy=true;controls();try{guard();await action();}catch(e){msg.textContent=e.message||'Не удалось подтвердить состояние. Нажмите «Обновить состояние».';}finally{busy=false;controls();}}
-  wrap.querySelector('[data-preview]').onclick=function(){try{guard();download(payload,captured);previewed=true;}catch(e){known=false;msg.textContent=e.message;controls();}};
+  wrap.querySelector('[data-preview]').onclick=function(){try{guard();download(payload,captured);previewed=true;opened.checked=false;msg.textContent='Файл скачан. Откройте его в Word, проверьте и отметьте подтверждение просмотра.';controls();}catch(e){known=false;msg.textContent=e.message;controls();}};
   async function prepareVersion(){
    if(!receipt){
     var bytes=new Uint8Array(await captured.arrayBuffer()),binary='';for(var j=0;j<bytes.length;j+=8192)binary+=String.fromCharCode.apply(null,bytes.subarray(j,j+8192));
@@ -105,7 +108,7 @@
    }
   }
   notesButton.onclick=function(){if(reviewed&&!amend&&!busy){amend=true;controls();msg.textContent='Укажите замечания и сохраните их. До сохранения действует предыдущая проверка.';return;}return run(async function(){
-   if(!previewed)throw Error('Откройте точный Word перед сохранением замечаний.');
+   if(!confirmedWord())throw Error('Скачайте точный Word, откройте файл и подтвердите просмотр перед сохранением замечаний.');
    var criteria={},blocked=false;
    codes.forEach(function(code){
     var value=wrap.querySelector('[data-criterion-status="'+code+'"]').value,evidence=wrap.querySelector('[data-criterion="'+code+'"]').value.trim(),section=wrap.querySelector('[data-criterion-section="'+code+'"]').value.trim();
@@ -115,7 +118,7 @@
    });
    if(!blocked)throw Error('Выберите «Не пройден» или «Нужна ручная проверка» для замечания.');
    await loadState(false);if(delivered)throw Error('Эта версия уже передана. Прикрепите новую версию Word.');
-   if(!previewed)throw Error('Word изменился. Откройте точный файл и повторите проверку.');
+   if(!confirmedWord())throw Error('Word изменился. Скачайте точный файл и подтвердите просмотр повторно.');
    await prepareVersion();
    known=false;
    var ack=await Oblako.requestApi(Object.assign({},binding(),{action:'review-notes',reviewId:notesId,criteria:criteria}));guard();
@@ -124,10 +127,10 @@
    await loadState();if(!changes)throw Error('Замечания не подтверждены сервером.');
   });};
   saveButton.onclick=function(){return run(async function(){
-   if(!previewed||!wrap.querySelector('[data-reviewed]').checked)throw Error('Проверьте документ Word и подтвердите получателя.');
+   if(!confirmedWord()||!wrap.querySelector('[data-reviewed]').checked)throw Error('Скачайте и проверьте Word, подтвердите просмотр файла и получателя.');
    var criteria=criteriaValues();msg.textContent='Сохраняем проверку…';
    await loadState(false);if(reviewed||delivered)return;
-   if(!previewed)throw Error('На сервере другая версия Word. Откройте точный Word и повторите проверку.');
+   if(!confirmedWord())throw Error('На сервере другая версия Word. Скачайте точный файл и подтвердите просмотр повторно.');
    await prepareVersion();
    if(!quality)throw Error('Проверки качества недоступны. Обновите приложение.');await quality.refresh();if(!quality.ready())throw Error('Завершите внутреннюю проверку заимствований и сохраните внешний отчёт об оригинальности для этого Word.');
    known=false;var ack=await Oblako.requestApi(Object.assign({action:'review-result',criteria:criteria},binding()));guard();
