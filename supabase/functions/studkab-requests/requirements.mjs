@@ -2,21 +2,24 @@ import {validateMaterialManifest,resetMaterialEvidence,materialManifestGuard} fr
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 const categories=new Set(['method','measurable','expert','assumption']);
 const statuses=new Set(['draft','approved','stale']);
-const originalityModes=new Set(['university_threshold','university_no_threshold','service_only']);
+const originalityModes=new Set(['university_threshold','university_threshold_no_service','university_no_threshold','service_only']);
 
 function originality(item){
  const o=item.originality;
  if(o==null)return null;
  if(!o||typeof o!=='object'||Array.isArray(o)||!originalityModes.has(o.mode))throw Error('Проверьте основание проверки оригинальности');
  const service=text(o.service,200,'систему оригинальности');
- const thresholdPercent=o.mode==='university_threshold'?Number(o.thresholdPercent):null;
+ const hasThreshold=['university_threshold','university_threshold_no_service'].includes(o.mode);
+ const thresholdPercent=hasThreshold?Number(o.thresholdPercent):null;
  if(o.mode==='university_threshold'&&(!service||!Number.isFinite(thresholdPercent)||thresholdPercent<0||thresholdPercent>100||typeof o.thresholdPercent!=='number'))throw Error('Подтвердите систему и порог вуза');
- if(o.mode!=='university_threshold'&&o.thresholdPercent!==null)throw Error('Порог без требования вуза указывать нельзя');
+ if(o.mode==='university_threshold_no_service'&&(service||!Number.isFinite(thresholdPercent)||thresholdPercent<0||thresholdPercent>100||typeof o.thresholdPercent!=='number'))throw Error('Подтвердите порог в задании без выдуманной системы');
+ if(!hasThreshold&&o.thresholdPercent!==null)throw Error('Порог без требования вуза указывать нельзя');
  if(o.mode==='university_no_threshold'&&!service)throw Error('Подтвердите систему проверки вуза');
  return {mode:o.mode,service,thresholdPercent};
 }
 export function originalityText(o){
  if(o.mode==='university_threshold')return 'Оригинальность: не менее '+o.thresholdPercent+'% в системе '+o.service+'.';
+ if(o.mode==='university_threshold_no_service')return 'Оригинальность: не менее '+o.thresholdPercent+'%; система проверки в задании не указана.';
  if(o.mode==='university_no_threshold')return 'Оригинальность: проверка в системе '+o.service+'; числовое условие вуза отсутствует.';
  return 'Внешний отчёт по стандарту STUDKAB; в предоставленных материалах числовое условие вуза не обнаружено.';
 }
@@ -187,9 +190,9 @@ export async function requirementAction(input,user,{db,config}){
   const version=typeof input.passportId==='string'&&/^[a-f0-9-]{36}$/.test(input.passportId)?input.passportId:null;
   if(!version)return {status:400,data:{error:'Выберите версию паспорта'}};
   const required=['WORK_TYPE','DISCIPLINE','STRUCTURE','VOLUME','METHODOLOGY','FORMATTING','SOURCES','CALCULATIONS','ANTIPLAGIARISM','TEACHER'];
-  if(required.some(id=>!passport.items.some(q=>q.id===id))||passport.items.some(item=>(item.required||required.includes(item.id))&&(!item.verified||!item.source||/не указано|требуется уточнить|порог не задан|ожидается ответ/i.test(item.text))))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
+  if(required.some(id=>!passport.items.some(q=>q.id===id))||passport.items.some(item=>(item.required||required.includes(item.id))&&(!item.verified||!item.source||(/не указано|требуется уточнить|порог не задан|ожидается ответ/i.test(item.text)&&!(item.id==='ANTIPLAGIARISM'&&item.originality?.mode==='university_threshold_no_service'&&item.text===originalityText(item.originality))))))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
   const anti=passport.items.find(item=>item.id==='ANTIPLAGIARISM');
-  if(!anti.originality||anti.text!==originalityText(anti.originality)||anti.originality.mode==='service_only'&&!/STUDKAB/i.test(anti.source)||anti.originality.mode!=='service_only'&&!anti.originality.service)return {status:409,data:{error:'Укажите подтверждённое основание проверки оригинальности'}};
+  if(!anti.originality||anti.text!==originalityText(anti.originality)||anti.originality.mode==='service_only'&&!/STUDKAB/i.test(anti.source)||['university_threshold','university_no_threshold'].includes(anti.originality.mode)&&!anti.originality.service)return {status:409,data:{error:'Укажите подтверждённое основание проверки оригинальности'}};
   const [saved]=await db('studkab_requirement_passports?request_id=eq.'+request+'&id=eq.'+version+'&select=items&limit=1');
   if(!saved)return {status:409,data:{error:'Версия паспорта не найдена'}};
   const materials=await materialManifestGuard(db,request,version);

@@ -14,6 +14,7 @@ test('C104 separates documented university threshold from service report without
  const item=source.items.find(x=>x.id==='ANTIPLAGIARISM');item.originality={mode:'service_only',service:'',thresholdPercent:65};assert.throws(()=>validatePassport(source),/Порог/);
 });
 
+test('assignment threshold without a named checker preserves the number and rejects an invented checker',()=>{const p=defaultPassport({}),item=p.items.find(x=>x.id==='ANTIPLAGIARISM');item.originality={mode:'university_threshold_no_service',service:'',thresholdPercent:65};item.text=originalityText(item.originality);item.source='01_assignment.txt, пункт оригинальности';item.verified=true;assert.match(item.text,/65%/);assert.deepEqual(validatePassport(p).items.find(x=>x.id==='ANTIPLAGIARISM').originality,item.originality);item.originality.service='Выдуманная система';assert.throws(()=>validatePassport(p),/без выдуманной системы/);});
 test('passport schema is private and callable only through the authenticated server adapter',()=>{
  assert.match(sql,/enable row level security/i);
  assert.match(sql,/revoke all on public\.studkab_requirement_passports from public, anon, authenticated/i);

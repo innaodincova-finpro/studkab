@@ -354,6 +354,12 @@
       "version": "20260924043558",
       "name": "c105_request_kind_correction",
       "sha256": "0708145bb1f533ccff687bea09855291f02f903155ce4b0952ac556a0726acd6"
+    },
+    {
+      "file": "20260924150100_originality_threshold_without_service.sql",
+      "version": "20260924150100",
+      "name": "originality_threshold_without_service",
+      "sha256": "5c4c88a350149bac9d260a1a1cc4c6f3f41580d3c8292becf1a4368443c5372f"
     }
   ],
   "production_reconciled_at": "2026-09-23"
