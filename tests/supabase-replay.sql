@@ -54,14 +54,19 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 30 then
-    raise exception 'Expected 30 STUDKAB tables, found %', table_count;
+  if table_count <> 33 then
+    raise exception 'Expected 33 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 30 then
-    raise exception 'RLS enabled on only % of 30 STUDKAB tables', rls_count;
+  if rls_count <> 33 then
+    raise exception 'RLS enabled on only % of 33 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';
+  end if;
+  if to_regclass('public.studkab_result_passport_bindings') is null
+    or to_regclass('public.studkab_result_review_bindings') is null
+    or to_regclass('public.studkab_quality_evidence_bindings') is null then
+    raise exception 'C109 binding tables are missing';
   end if;
 end
 $$;
