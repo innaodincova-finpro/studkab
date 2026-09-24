@@ -114,6 +114,44 @@ test('C109 revised requirements reuse saved Word only after the executor reviews
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='rebind-result').length)).toBe(1);
  expect(await page.evaluate(()=>calls.filter(c=>c.action==='prepare-result').length)).toBe(0);
 });
+test('C109 refreshing an open delivered review resets its confirmation, criteria and delivery operation',async({page})=>{
+ await setupReview(page);await fillReview(page);
+ await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ await page.locator('[data-deliver]').click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
+ const oldId=await page.evaluate(()=>remote.delivery.deliveryId);
+ await page.evaluate(()=>{document.querySelector('[data-passport-confirm]').checked=true;document.querySelector('[data-passport-explanation]').value='Прежнее объяснение нельзя переносить на новый паспорт.';});
+ await page.evaluate(()=>{
+  window.boundToNewPassport=false;
+  const original=Oblako.requestApi;
+  Oblako.requestApi=async body=>{
+   if(body.action==='result-review-state'&&!boundToNewPassport){calls.push(body);return {state:'passport_changed',receipt:remote.receipt,docxBase64:remote.docxBase64,changedItems:['VOLUME']};}
+   if(body.action==='rebind-result'){
+    calls.push(body);boundToNewPassport=true;remote.state='prepared';remote.review=null;remote.delivery=null;remote.document=body.document;
+    return {versionId:remote.receipt.versionId,fileHash:remote.receipt.fileHash};
+   }
+   return original(body);
+  };
+ });
+ await page.locator('[data-result-refresh]').click();
+ await expect(page.locator('[data-passport-rebind]')).toBeVisible();
+ await expect(page.locator('[data-word-opened]')).not.toBeChecked();
+ await expect(page.locator('[data-passport-confirm]')).not.toBeChecked();
+ await expect(page.locator('[data-passport-explanation]')).toHaveValue('');
+ expect(await page.locator('[data-criterion-status],[data-criterion],[data-criterion-section]').evaluateAll(fields=>fields.length===48&&fields.every(field=>field.value===''))).toBe(true);
+ await expect(page.locator('[data-reviewed]')).not.toBeChecked();
+ await page.locator('[data-passport-reuse]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Скачайте и проверьте Word');
+ const waiting=page.waitForEvent('download');await page.locator('[data-preview]').click();await waiting;
+ await page.locator('[data-word-opened]').check();await page.locator('[data-passport-confirm]').check();
+ await page.locator('[data-passport-explanation]').fill('Сверил требования новой редакции с этим Word, исправления не требуются.');
+ await page.locator('[data-passport-reuse]').click();await expect(page.locator('[data-passport-rebind]')).toBeHidden();
+ await fillReview(page);await page.locator('[data-save-review]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ await page.locator('[data-deliver]').click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
+ const deliveryIds=await page.evaluate(()=>calls.filter(c=>c.action==='deliver').map(c=>c.deliveryId));
+ expect(deliveryIds).toHaveLength(2);expect(deliveryIds[0]).toBe(oldId);expect(deliveryIds[1]).not.toBe(oldId);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='prepare-result').length)).toBe(0);
+});
 test('C-071 lost review and delivery responses recover without duplicate writes',async({page})=>{
  await setupReview(page);await fillReview(page);await page.evaluate(()=>loseReview=true);
  await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Ответ на сохранение потерян');

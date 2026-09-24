@@ -22,6 +22,7 @@
   return JSON.stringify([external?JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.externalResult,DraftQuality.inputs(x)]):DraftQuality.stamp(x),p.id,p.revision,p.status,p.source_fingerprint,p.title,p.summary,p.items]);
  }
  async function sha(bytes){var d=await crypto.subtle.digest('SHA-256',bytes);return Array.from(new Uint8Array(d)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');}
+ // The fingerprint is a client cache key, not proof that a passport or Word is valid.
  async function reviewDocument(x,key,external){var out=snapshot(x,external),p=x.passports[0];out.reviewContext={passportId:p.id,sourceFingerprint:p.source_fingerprint,fingerprint:await sha(new TextEncoder().encode(key))};return out;}
  function deliver(x,external){
   if(!x||!x.requestNumber)return toast('Эта запись получена вне кабинета. Передайте документ через согласованный мессенджер.');
@@ -35,7 +36,7 @@
    key=contextKey(x,external);
   }catch(e){return toast(e.message);}
   var quality=null,qualityBusy=false;
-  var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),deliveryId=crypto.randomUUID(),notesId=crypto.randomUUID(),amend=false,changes=false,reviewed=false,previewed=false,delivered=false,known=false,passportChanged=false,changedItems=[];
+  var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),deliveryId=crypto.randomUUID(),notesId=crypto.randomUUID(),amend=false,changes=false,reviewed=false,previewed=false,delivered=false,known=false,passportChanged=false,changedItems=[],lastState=null;
   var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;}),profile=DraftQuality.requirementProfile(x);
   var methodology=(external?'<p class="hint">Проверяется прикреплённый Word. Автоматические проверки текста редактора к нему не применялись. Проверьте все 16 пунктов по этому файлу, включая объём, расчёты и условия оригинальности.</p>':'')+'<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
   var checklist=methodology+(external?'':DraftEditor.sourceReview(x))+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><input data-criterion-section="'+code+'" maxlength="300" placeholder="Место: страница, раздел или весь документ"><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
@@ -64,15 +65,30 @@
    if(value==='fail'||value==='manual')throw Error(value==='fail'?'Передача заблокирована: не пройден пункт «'+labels[i]+'».':'Передача заблокирована: завершите ручную проверку «'+labels[i]+'».');
    criteria[codes[i]]={status:value,evidence:evidence,section:wrap.querySelector('[data-criterion-section="'+codes[i]+'"]').value.trim()};
   }return criteria;}
+  function clearReviewInputs(){
+   codes.forEach(function(code){wrap.querySelector('[data-criterion-status="'+code+'"]').value='';wrap.querySelector('[data-criterion="'+code+'"]').value='';wrap.querySelector('[data-criterion-section="'+code+'"]').value='';});
+   wrap.querySelector('[data-reviewed]').checked=false;
+   reviewId=crypto.randomUUID();notesId=crypto.randomUUID();amend=false;
+  }
+  function resetCycle(){
+   deliveryId=crypto.randomUUID();previewed=false;opened.checked=false;
+   wrap.querySelector('[data-passport-confirm]').checked=false;
+   wrap.querySelector('[data-passport-explanation]').value='';
+   clearReviewInputs();if(quality)quality.invalidate();
+  }
   async function loadState(restore){
    guard();known=false;
    var state=await Oblako.requestApi({action:'result-review-state',id:requestId,document:payload,includeFile:true});guard();
    if(!state||['none','stale','passport_changed','prepared','changes_requested','reviewed','delivered'].indexOf(state.state)<0)throw Error('Сервер не подтвердил состояние проверки. Передача недоступна.');
+   var priorVersionId=receipt&&receipt.versionId,priorDelivered=delivered,previousState=lastState;
    passportChanged=state.state==='passport_changed';changedItems=passportChanged?state.changedItems:[];
+   if((['none','stale','passport_changed'].includes(state.state)&&previousState!==state.state)
+    ||(state.receipt&&priorVersionId&&state.receipt.versionId!==priorVersionId)
+    ||(priorDelivered&&state.state!=='delivered'))resetCycle();
    if(passportChanged){if(!Array.isArray(changedItems)||changedItems.some(function(id){return typeof id!=='string';}))throw Error('Список изменённых требований не подтверждён.');wrap.querySelector('[data-passport-changes]').textContent=changedItems.length?'Изменены пункты: '+changedItems.join(', '):'Изменён паспорт или его источники. Проверьте все требования.';}
    if((state.state==='changes_requested'||state.state==='prepared')&&reviewed){reviewId=crypto.randomUUID();amend=false;wrap.querySelector('[data-reviewed]').checked=false;}
    changes=state.state==='changes_requested';
-   if(state.state==='none'||state.state==='stale'){if(receipt){versionId=crypto.randomUUID();reviewId=crypto.randomUUID();}receipt=null;reviewed=false;delivered=false;previewed=false;opened.checked=false;}
+   if(state.state==='none'||state.state==='stale'){if(receipt)versionId=crypto.randomUUID();receipt=null;reviewed=false;delivered=false;}
    else{
     var r=state.receipt;if(!r||!r.versionId||!r.recipientId||!r.documentHash||!r.fileHash||!state.docxBase64)throw Error('Не хватает данных сохранённой версии.');
     var bytes=Uint8Array.from(atob(state.docxBase64),function(c){return c.charCodeAt(0);});
@@ -81,7 +97,7 @@
     if(!captured||await sha(await captured.arrayBuffer())!==r.fileHash){previewed=false;opened.checked=false;}
     guard();captured=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});receipt=r;versionId=r.versionId;
     reviewed=state.state==='reviewed'||state.state==='delivered';delivered=state.state==='delivered';
-    if(passportChanged){reviewId=crypto.randomUUID();notesId=crypto.randomUUID();amend=false;wrap.querySelector('[data-reviewed]').checked=false;}
+    if(passportChanged){reviewed=false;delivered=false;}
     if(changes&&state.review&&state.review.reviewId===notesId)notesId=crypto.randomUUID();
     if(changes&&restore!==false){
      amend=false;
@@ -99,7 +115,7 @@
     if(delivered)deliveryId=state.delivery.deliveryId;
    }
    if(external&&!receipt)throw Error('Прикреплённая версия не найдена в текущем состоянии. Прикрепите Word заново.');
-   guard();known=true;status();if(quality&&!passportChanged)await quality.refresh();
+   guard();known=true;lastState=state.state;status();if(quality&&!passportChanged)await quality.refresh();
    if(delivered){x.deliveryConfirmation={context:key,versionId:versionId,external:!!external};x.deliveryState={checkedAt:new Date().toISOString(),last:{deliveryId:state.delivery.deliveryId,versionId:versionId,createdAt:state.delivery.createdAt}};x.status='sent';if(typeof save==='function')save();if(typeof render==='function')render();}
   }
   function binding(){return {id:requestId,versionId:versionId,reviewId:reviewId,recipientId:receipt.recipientId,fileHash:receipt.fileHash,documentHash:receipt.documentHash,document:payload};}
