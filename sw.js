@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v90-word-recovery";
+const CACHE = "studkab-v91-request-lifecycle";
 const SHELL = [
   "./desktop.css?v=7",
   "./",
@@ -12,7 +12,7 @@ const SHELL = [
   "./reestr.html",
   "./manifest-kabinet.webmanifest",
   "./manifest-reestr.webmanifest",
-  "./oblako.js?v=14",
+  "./oblako.js?v=15",
   "./cloud-ui.js?v=4",
   "./clarifications.js?v=1",
   "./financial-analysis.js?v=1",
