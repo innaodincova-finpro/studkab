@@ -36,7 +36,7 @@
    key=contextKey(x,external);
   }catch(e){return toast(e.message);}
   var quality=null,qualityBusy=false;
-  var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),deliveryId=crypto.randomUUID(),notesId=crypto.randomUUID(),amend=false,changes=false,reviewed=false,previewed=false,delivered=false,known=false,passportChanged=false,changedItems=[],lastState=null;
+  var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),deliveryId=crypto.randomUUID(),notesId=crypto.randomUUID(),amend=false,changes=false,reviewed=false,previewed=false,delivered=false,known=false,passportChanged=false,changedItems=[],lastState=null,recoveryTried=false;
   var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;}),profile=DraftQuality.requirementProfile(x);
   var methodology=(external?'<p class="hint">Проверяется прикреплённый Word. Автоматические проверки текста редактора к нему не применялись. Проверьте все 16 пунктов по этому файлу, включая объём, расчёты и условия оригинальности.</p>':'')+'<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
   var checklist=methodology+(external?'':DraftEditor.sourceReview(x))+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><input data-criterion-section="'+code+'" maxlength="300" placeholder="Место: страница, раздел или весь документ"><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
@@ -79,6 +79,17 @@
   async function loadState(restore){
    guard();known=false;
    var state=await Oblako.requestApi({action:'result-review-state',id:requestId,document:payload,includeFile:true});guard();
+   if(state&&state.state==='restore_saved'){
+    if(!external||recoveryTried||!state.document||!x.externalResult||
+      state.document.uploadedWord?.fileHash!==x.externalResult.fileHash||
+      state.document.reviewContext?.passportId!==x.passports[0]?.id||
+      state.document.reviewContext?.sourceFingerprint!==x.passports[0]?.source_fingerprint)
+     throw Error('Сохранённый Word не совпадает с заявкой. Передача недоступна.');
+    recoveryTried=true;
+    if(!global.DraftEditor||await sha(new TextEncoder().encode(DraftEditor.basis(x)))!==x.passports[0].source_fingerprint)
+     throw Error('Исходные материалы изменились. Обновите паспорт требований перед проверкой Word.');
+    guard();payload=state.document;return loadState(restore);
+   }
    if(!state||['none','stale','passport_changed','prepared','changes_requested','reviewed','delivered'].indexOf(state.state)<0)throw Error('Сервер не подтвердил состояние проверки. Передача недоступна.');
    var priorVersionId=receipt&&receipt.versionId,priorDelivered=delivered,previousState=lastState;
    passportChanged=state.state==='passport_changed';changedItems=passportChanged?state.changedItems:[];

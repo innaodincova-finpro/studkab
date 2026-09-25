@@ -100,9 +100,20 @@ async function readReviewState(input,request,db){
   const changedItems=[...new Set([...byId.keys(),...after.keys()])].filter(id=>canonical(byId.get(id))!==canonical(after.get(id))).sort();
   return {data:{state:'passport_changed',receipt,docxBase64:version.docx_base64,changedItems}};
  }
- if(!binding||binding.document_fingerprint!==document.reviewContext.fingerprint)return {data:{state:'stale'}};
+ if(!binding)return {data:{state:'stale'}};
  const original={...version.document},proposed={...document};delete original.reviewContext;delete proposed.reviewContext;
- if(canonical(original)!==canonical(proposed))return {data:{state:'stale'}};
+ if(binding.document_fingerprint!==document.reviewContext.fingerprint||canonical(original)!==canonical(proposed)){
+  // Recover the server's own immutable snapshot only for the same uploaded Word
+  // and current approved passport. Do not expose the file or accept a review
+  // based on altered local metadata; the client must recheck its source basis.
+  const saved=version.document,local=document.uploadedWord;
+  if(!saved?.uploadedWord||!local||local.fileHash!==version.file_hash||saved.uploadedWord.fileHash!==version.file_hash||
+   document.topic!==saved.topic||document.student!==saved.student||document.group!==saved.group||
+   binding.document_fingerprint!==saved.reviewContext?.fingerprint||
+   saved.reviewContext.passportId!==document.reviewContext.passportId||
+   saved.reviewContext.sourceFingerprint!==document.reviewContext.sourceFingerprint)return {data:{state:'stale'}};
+  return {data:{state:'restore_saved',document:saved}};
+ }
  const reviews=await db('studkab_result_reviews?select=id,version_id,criteria,created_at,quality_evidence_ids,studkab_result_review_bindings!inner(binding_id)&version_id=eq.'+version.id+'&studkab_result_review_bindings.binding_id=eq.'+binding.id+'&order=created_at.desc,id.desc&limit=1');
  let review=reviews[0],qualityReviewStale=false;
  const [delivery]=review?await db('studkab_results?select=delivery_id,review_id,created_at&request_id=eq.'+input.id+'&version_id=eq.'+version.id+'&review_id=eq.'+review.id+'&order=created_at.desc,id.desc&limit=1'):[];

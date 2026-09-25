@@ -236,8 +236,8 @@ async function reviewStateApp(options={}){
   if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:options.legacy?1:2;
   if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId}];
   if(path.startsWith('studkab_requirement_passports?'))return [{id:passportId,status:options.stalePassport?'stale':'approved',source_fingerprint:reviewContext.sourceFingerprint}];
-  if(path.startsWith('studkab_result_versions?'))return options.empty?[]:[{id:versionId,revision:1,recipient_id:options.otherRecipient?requestId:recipientId,document:options.changed?{...document,topic:'Changed'}:document,file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
-  if(path.startsWith('studkab_result_passport_bindings?'))return [{id:versionId,document_fingerprint:reviewContext.fingerprint,passport_id:passportId}];
+  if(path.startsWith('studkab_result_versions?'))return options.empty?[]:[{id:versionId,revision:1,recipient_id:options.otherRecipient?requestId:recipientId,document:options.storedDocument||(options.changed?{...document,topic:'Changed'}:document),file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
+  if(path.startsWith('studkab_result_passport_bindings?'))return [{id:versionId,document_fingerprint:options.storedDocument?.reviewContext?.fingerprint||reviewContext.fingerprint,passport_id:passportId}];
   if(path.startsWith('studkab_results?'))return options.delivered?[{delivery_id:versionId,review_id:reviewId,created_at:'2026-09-19'}]:[];
   if(path.startsWith('studkab_result_reviews?'))return options.prepared?[]:[{id:reviewId,version_id:versionId,quality_evidence_ids:qualityEvidenceIds,criteria:options.badReview?{...criteria,C01:{status:'fail',evidence:'Failed content check'}}:criteria,created_at:'2026-09-19'}];
   throw Error('Unexpected write or query: '+path);
@@ -263,6 +263,24 @@ test('C109 release keeps existing review readable before migration and blocks ea
  const early=await app(request({action:'rebind-result',id:requestId,versionId,document,changedItems:['C01'],confirmation:'Новый паспорт проверен полностью.'}));
  assert.equal(early.status,409);
  assert(!calls.some(c=>c.path==='rpc/studkab_rebind_result_passport'));
+});
+test('C110 restores only matching uploaded Word metadata, never the file on a stale response',async()=>{
+ const {validateResult}=await import('../supabase/functions/studkab-requests/results.mjs');
+ const uploadedWord={name:'saved.docx',fileHash:binding.fileHash};
+ const stored=validateResult({...documentFixture,uploadedWord,reviewContext});
+ const {app,document,calls}=await reviewStateApp({storedDocument:stored});
+ const local=validateResult({...document,uploadedWord,reviewContext:{...reviewContext,fingerprint:'e'.repeat(64)}});
+ const response=await app(request({action:'result-review-state',id:requestId,document:local}));
+ assert.equal(response.status,200);const state=await response.json();
+ assert.equal(state.state,'restore_saved');assert.deepEqual(state.document,stored);
+ assert.equal(state.docxBase64,undefined);
+ assert(!calls.some(c=>c.method==='POST'));
+ const repaired=await app(request({action:'result-review-state',id:requestId,document:state.document}));
+ assert.equal((await repaired.json()).state,'reviewed');
+ for(const changed of [{...local,topic:'Different'}, {...local,uploadedWord:{...uploadedWord,fileHash:'f'.repeat(64)}}]){
+  const bad=await app(request({action:'result-review-state',id:requestId,document:changed}));
+  assert.equal((await bad.json()).state,'stale');
+ }
 });
 test('C102 stale quality evidence reopens exact Word review while historical delivery remains readable',async()=>{
  for(const options of [{qualityChanged:true},{qualityMissing:true}]){

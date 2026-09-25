@@ -83,6 +83,27 @@ test('C107 downloading Word without confirming it was opened cannot save remarks
  await page.locator('[data-save-notes]').click();
  await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
 });
+test('C110 restores exact saved Word context only when current source basis matches the passport',async({page})=>{
+ await setupReview(page);await page.locator('.sheet .close').click();
+ await page.evaluate(async()=>{
+  const uploadedWord={name:'saved.docx',fileHash:remote.receipt.fileHash};
+  candidate.externalResult={...uploadedWord,chapters:remote.document.chapters,structure:remote.document.structure};
+  const basis=new TextEncoder().encode(DraftEditor.basis(candidate));
+  candidate.passports[0].source_fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',basis))).map(b=>b.toString(16).padStart(2,'0')).join('');
+  remote.document={...remote.document,uploadedWord,reviewContext:{...remote.document.reviewContext,sourceFingerprint:candidate.passports[0].source_fingerprint}};
+  window.saved=remote.document;window.recoveryCalls=0;
+  const previous=Oblako.requestApi;
+  Oblako.requestApi=async body=>{
+   if(body.action==='result-review-state'&&++recoveryCalls===1)return {state:'restore_saved',document:saved};
+   return previous(body);
+  };
+  StudResults.deliver(candidate,true);
+ });
+ await expect(page.locator('[data-preview]')).toBeEnabled();
+ await expect(page.locator('[data-result-status]')).toContainText('Проверьте точный Word');
+ expect(await page.evaluate(()=>recoveryCalls)).toBe(2);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='result-review-state').at(-1).document.reviewContext.fingerprint)).toBe(await page.evaluate(()=>saved.reviewContext.fingerprint));
+});
 test('C109 executor can resume after an idempotent passport binding reply',async({page})=>{
  await setupReview(page);
  await page.locator('.sheet .close').click();
