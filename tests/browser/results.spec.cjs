@@ -60,7 +60,7 @@ test('C-071 saving review never delivers; reopening restores exact bytes and sep
  await page.waitForTimeout(2200); // Let the existing modal animation and sync toast settle for visual QA.
  await page.screenshot({path:'test-results/review-saved-not-delivered.png'});
  await page.locator('[data-deliver]').click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
- expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').map(c=>c.deliveryId))).toEqual([await page.evaluate(()=>remote.receipt.versionId)]);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='deliver').length)).toBe(1);
  await expect(page.locator('[data-deliver]')).toBeDisabled();
  expect(await page.evaluate(()=>StudResults.isCurrentDelivery(candidate))).toBe(true);
  await page.evaluate(()=>candidate.doc.structure.intro.text+=' Изменение после передачи.');
@@ -82,6 +82,77 @@ test('C107 downloading Word without confirming it was opened cannot save remarks
  await page.locator('[data-word-opened]').check();
  await page.locator('[data-save-notes]').click();
  await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
+});
+test('C109 executor can resume after an idempotent passport binding reply',async({page})=>{
+ await setupReview(page);
+ await page.locator('.sheet .close').click();
+ await page.evaluate(()=>{
+  candidate.passports=[{...candidate.passports[0],id:'88888888-8888-4888-8888-888888888888',revision:2,items:[{id:'VOLUME',text:'Новый объём'}]}];
+  window.boundToNewPassport=false;
+  const original=Oblako.requestApi;
+  Oblako.requestApi=async body=>{
+   if(body.action==='result-review-state'&&!boundToNewPassport){calls.push(body);return {state:'passport_changed',receipt:remote.receipt,docxBase64:remote.docxBase64,changedItems:['VOLUME']};}
+   if(body.action==='rebind-result'){
+    calls.push(body);boundToNewPassport=true;remote.state='prepared';remote.document=body.document;remote.review=null;
+    // An earlier accepted request may have lost its response; the RPC then returns duplicate:true.
+    return {versionId:remote.receipt.versionId,fileHash:remote.receipt.fileHash,bindingId:'99999999-9999-4999-8999-999999999999',duplicate:true};
+   }
+   return original(body);
+  };
+  calls=[];StudResults.deliver(candidate);
+ });
+ await expect(page.locator('[data-passport-rebind]')).toBeVisible();
+ await expect(page.locator('[data-passport-changes]')).toContainText('VOLUME');
+ await expect(page.locator('[data-save-review]')).toBeDisabled();
+ await page.locator('[data-passport-reuse]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Скачайте и проверьте Word');
+ const waiting=page.waitForEvent('download');await page.locator('[data-preview]').click();await waiting;
+ await page.locator('[data-word-opened]').check();
+ await page.locator('[data-passport-confirm]').check();
+ await page.locator('[data-passport-explanation]').fill('Сверены новые требования к объёму, текст Word исправлять не требуется.');
+ await page.locator('[data-passport-reuse]').click();
+ await expect(page.locator('[data-passport-rebind]')).toBeHidden();
+ await expect(page.locator('[data-result-status]')).toContainText('Проверьте точный Word');
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='rebind-result').length)).toBe(1);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='prepare-result').length)).toBe(0);
+});
+test('C109 refreshing an open delivered review resets its confirmation, criteria and delivery operation',async({page})=>{
+ await setupReview(page);await fillReview(page);
+ await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ await page.locator('[data-deliver]').click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
+ const oldId=await page.evaluate(()=>remote.delivery.deliveryId);
+ await page.evaluate(()=>{document.querySelector('[data-passport-confirm]').checked=true;document.querySelector('[data-passport-explanation]').value='Прежнее объяснение нельзя переносить на новый паспорт.';});
+ await page.evaluate(()=>{
+  window.boundToNewPassport=false;
+  const original=Oblako.requestApi;
+  Oblako.requestApi=async body=>{
+   if(body.action==='result-review-state'&&!boundToNewPassport){calls.push(body);return {state:'passport_changed',receipt:remote.receipt,docxBase64:remote.docxBase64,changedItems:['VOLUME']};}
+   if(body.action==='rebind-result'){
+    calls.push(body);boundToNewPassport=true;remote.state='prepared';remote.review=null;remote.delivery=null;remote.document=body.document;
+    return {versionId:remote.receipt.versionId,fileHash:remote.receipt.fileHash};
+   }
+   return original(body);
+  };
+ });
+ await page.locator('[data-result-refresh]').click();
+ await expect(page.locator('[data-passport-rebind]')).toBeVisible();
+ await expect(page.locator('[data-word-opened]')).not.toBeChecked();
+ await expect(page.locator('[data-passport-confirm]')).not.toBeChecked();
+ await expect(page.locator('[data-passport-explanation]')).toHaveValue('');
+ expect(await page.locator('[data-criterion-status],[data-criterion],[data-criterion-section]').evaluateAll(fields=>fields.length===48&&fields.every(field=>field.value===''))).toBe(true);
+ await expect(page.locator('[data-reviewed]')).not.toBeChecked();
+ await page.locator('[data-passport-reuse]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Скачайте и проверьте Word');
+ const waiting=page.waitForEvent('download');await page.locator('[data-preview]').click();await waiting;
+ await page.locator('[data-word-opened]').check();await page.locator('[data-passport-confirm]').check();
+ await page.locator('[data-passport-explanation]').fill('Сверил требования новой редакции с этим Word, исправления не требуются.');
+ await page.locator('[data-passport-reuse]').click();await expect(page.locator('[data-passport-rebind]')).toBeHidden();
+ await fillReview(page);await page.locator('[data-save-review]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ await page.locator('[data-deliver]').click();await expect(page.locator('[data-result-status]')).toContainText('доступна студенту');
+ const deliveryIds=await page.evaluate(()=>calls.filter(c=>c.action==='deliver').map(c=>c.deliveryId));
+ expect(deliveryIds).toHaveLength(2);expect(deliveryIds[0]).toBe(oldId);expect(deliveryIds[1]).not.toBe(oldId);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='prepare-result').length)).toBe(0);
 });
 test('C-071 lost review and delivery responses recover without duplicate writes',async({page})=>{
  await setupReview(page);await fillReview(page);await page.evaluate(()=>loseReview=true);

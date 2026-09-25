@@ -22,6 +22,7 @@
   return JSON.stringify([external?JSON.stringify([x.id,x.requestNumber,x.topic,x.student,x.group,x.externalResult,DraftQuality.inputs(x)]):DraftQuality.stamp(x),p.id,p.revision,p.status,p.source_fingerprint,p.title,p.summary,p.items]);
  }
  async function sha(bytes){var d=await crypto.subtle.digest('SHA-256',bytes);return Array.from(new Uint8Array(d)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');}
+ // The fingerprint is a client cache key, not proof that a passport or Word is valid.
  async function reviewDocument(x,key,external){var out=snapshot(x,external),p=x.passports[0];out.reviewContext={passportId:p.id,sourceFingerprint:p.source_fingerprint,fingerprint:await sha(new TextEncoder().encode(key))};return out;}
  function deliver(x,external){
   if(!x||!x.requestNumber)return toast('Эта запись получена вне кабинета. Передайте документ через согласованный мессенджер.');
@@ -35,11 +36,11 @@
    key=contextKey(x,external);
   }catch(e){return toast(e.message);}
   var quality=null,qualityBusy=false;
-  var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),notesId=crypto.randomUUID(),amend=false,changes=false,reviewed=false,previewed=false,delivered=false,known=false;
+  var data=D,identity=Oblako.identity(),requestId=x.id,busy=true,payload,captured,receipt=null,reviewId=crypto.randomUUID(),versionId=crypto.randomUUID(),deliveryId=crypto.randomUUID(),notesId=crypto.randomUUID(),amend=false,changes=false,reviewed=false,previewed=false,delivered=false,known=false,passportChanged=false,changedItems=[],lastState=null;
   var reviewCriteria=DraftQuality.reviewCriteria(x),labels=reviewCriteria.map(function(c){return c.label;}),codes=reviewCriteria.map(function(c){return c.code;}),profile=DraftQuality.requirementProfile(x);
   var methodology=(external?'<p class="hint">Проверяется прикреплённый Word. Автоматические проверки текста редактора к нему не применялись. Проверьте все 16 пунктов по этому файлу, включая объём, расчёты и условия оригинальности.</p>':'')+'<details><summary>Требования этой заявки и методички</summary><p class="hint">Проверьте каждый предоставленный пункт. Программа автоматически проверяет только измеримые требования; смысл и специальные условия подтверждает исполнитель.</p><ul>'+profile.manual.map(function(line){return '<li>'+esc(line)+'</li>';}).join('')+'</ul></details>';
   var checklist=methodology+(external?'':DraftEditor.sourceReview(x))+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><input data-criterion-section="'+code+'" maxlength="300" placeholder="Место: страница, раздел или весь документ"><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
-  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'Студент не указан')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Скачайте точный Word, откройте скачанный файл и подтвердите просмотр. Передача студенту выполняется отдельной кнопкой.</p><button type="button" class="chip" data-preview disabled>Скачать точный Word</button><p><label><input type="checkbox" data-word-opened disabled> Я открыл скачанный Word и проверил его содержимое</label></p>'+checklist+'<div data-quality-evidence></div><details data-review-history><summary>История проверок всех версий Word</summary><div data-review-history-body style="overflow-wrap:anywhere">Откройте, чтобы загрузить историю.</div></details><p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="chip" data-save-notes disabled>Сохранить замечания</button><button type="button" class="btn" data-save-review disabled>Сохранить итоговую проверку</button><button type="button" class="btn" data-deliver hidden disabled style="display:none">Передать студенту</button><p role="status" data-result-status>Проверяем сохранённое состояние…</p><button type="button" class="chip" data-result-refresh disabled>Обновить состояние</button>');
+  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'Студент не указан')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p><p class="hint">Скачайте точный Word, откройте скачанный файл и подтвердите просмотр. Передача студенту выполняется отдельной кнопкой.</p><button type="button" class="chip" data-preview disabled>Скачать точный Word</button><p><label><input type="checkbox" data-word-opened disabled> Я открыл скачанный Word и проверил его содержимое</label></p><div data-passport-rebind hidden><p>Требования заявки изменились. Проверьте, подходит ли сохранённый Word к новым требованиям. Если текст нужно исправить, подготовьте новую версию Word.</p><p data-passport-changes></p><label><input type="checkbox" data-passport-confirm> Я сверил изменённые требования с этим Word</label><p><textarea data-passport-explanation rows="3" maxlength="2000" placeholder="Что сверено и почему исправлять Word не требуется" style="width:100%;box-sizing:border-box"></textarea></p><button type="button" class="chip" data-passport-reuse>Использовать тот же Word после проверки</button></div>'+checklist+'<div data-quality-evidence></div><details data-review-history><summary>История проверок всех версий Word</summary><div data-review-history-body style="overflow-wrap:anywhere">Откройте, чтобы загрузить историю.</div></details><p><label><input type="checkbox" data-reviewed> Я проверил документ и получателя</label></p><button type="button" class="chip" data-save-notes disabled>Сохранить замечания</button><button type="button" class="btn" data-save-review disabled>Сохранить итоговую проверку</button><button type="button" class="btn" data-deliver hidden disabled style="display:none">Передать студенту</button><p role="status" data-result-status>Проверяем сохранённое состояние…</p><button type="button" class="chip" data-result-refresh disabled>Обновить состояние</button>');
   wrap.dataset.accountIdentity=String(identity);
   var notesButton=wrap.querySelector('[data-save-notes]');
   var msg=wrap.querySelector('[data-result-status]'),saveButton=wrap.querySelector('[data-save-review]'),sendButton=wrap.querySelector('[data-deliver]'),refreshButton=wrap.querySelector('[data-result-refresh]');
@@ -47,29 +48,47 @@
   function confirmedWord(){return previewed&&opened.checked;}
   function guard(){try{if(!wrap.isConnected||!same(data,identity))throw Error('Аккаунт изменился или окно закрыто. Откройте проверку заново.');if(key!==contextKey(x,external)||(!external&&x.doc.review!==DraftQuality.stamp(x)))throw Error('Документ, требования или получатель изменились. Повторите проверку.');}catch(e){known=false;throw e;}}
   function controls(){
-   notesButton.textContent=reviewed&&!amend?'Добавить замечания к проверке':'Сохранить замечания';notesButton.hidden=delivered;notesButton.disabled=busy||qualityBusy||!known;
-   saveButton.hidden=reviewed||delivered;saveButton.disabled=busy||qualityBusy||!known||!quality||!quality.ready();
-   sendButton.hidden=!reviewed&&!delivered;sendButton.style.display=sendButton.hidden?'none':'';saveButton.style.display=saveButton.hidden?'none':'';sendButton.disabled=busy||qualityBusy||!known||delivered||amend||!quality||!quality.ready();
+   notesButton.textContent=reviewed&&!amend?'Добавить замечания к проверке':'Сохранить замечания';notesButton.hidden=delivered;notesButton.disabled=busy||qualityBusy||!known||passportChanged;
+   saveButton.hidden=reviewed||delivered;saveButton.disabled=busy||qualityBusy||!known||passportChanged||!quality||!quality.ready();
+   sendButton.hidden=!reviewed&&!delivered;sendButton.style.display=sendButton.hidden?'none':'';saveButton.style.display=saveButton.hidden?'none':'';sendButton.disabled=busy||qualityBusy||!known||passportChanged||delivered||amend||!quality||!quality.ready();
    sendButton.textContent=delivered?'Результат передан':'Передать студенту';
    if(quality)quality.sync();
    refreshButton.disabled=busy||qualityBusy;wrap.querySelector('[data-preview]').disabled=busy||qualityBusy||!known;
+   wrap.querySelector('[data-passport-rebind]').hidden=!passportChanged;wrap.querySelector('[data-passport-reuse]').disabled=busy||!known||!passportChanged;
    opened.disabled=busy||!previewed||(reviewed&&!amend)||delivered;
    wrap.querySelectorAll('[data-criterion],[data-criterion-status],[data-criterion-section],[data-reviewed]').forEach(function(el){el.disabled=busy||(reviewed&&!amend)||delivered;});
   }
-  function status(){msg.textContent=delivered?'Проверенная версия доступна студенту. Уведомление в мессенджер не отправлялось.':reviewed?'Проверка сохранена. Результат ещё не передан студенту.':changes?'Замечания сохранены к этой версии Word. Передача заблокирована до новой положительной проверки.':'Проверьте точный Word и заполните все пункты. Сохранение проверки не передаёт результат.';}
+  function status(){msg.textContent=passportChanged?'Требования изменились. Сверьте их с сохранённым Word. Прежняя проверка недействительна для новых требований.':delivered?'Проверенная версия доступна студенту. Уведомление в мессенджер не отправлялось.':reviewed?'Проверка сохранена. Результат ещё не передан студенту.':changes?'Замечания сохранены к этой версии Word. Передача заблокирована до новой положительной проверки.':'Проверьте точный Word и заполните все пункты. Сохранение проверки не передаёт результат.';}
   function criteriaValues(){var criteria={};for(var i=0;i<codes.length;i++){
    var field=wrap.querySelector('[data-criterion="'+codes[i]+'"]'),value=wrap.querySelector('[data-criterion-status="'+codes[i]+'"]').value,evidence=field.value.trim();
    if(!value||evidence.length<10){field.closest('details').open=true;field.focus();throw Error(!value?'Выберите результат: '+labels[i]:'Добавьте доказательство: '+labels[i]);}
    if(value==='fail'||value==='manual')throw Error(value==='fail'?'Передача заблокирована: не пройден пункт «'+labels[i]+'».':'Передача заблокирована: завершите ручную проверку «'+labels[i]+'».');
    criteria[codes[i]]={status:value,evidence:evidence,section:wrap.querySelector('[data-criterion-section="'+codes[i]+'"]').value.trim()};
   }return criteria;}
+  function clearReviewInputs(){
+   codes.forEach(function(code){wrap.querySelector('[data-criterion-status="'+code+'"]').value='';wrap.querySelector('[data-criterion="'+code+'"]').value='';wrap.querySelector('[data-criterion-section="'+code+'"]').value='';});
+   wrap.querySelector('[data-reviewed]').checked=false;
+   reviewId=crypto.randomUUID();notesId=crypto.randomUUID();amend=false;
+  }
+  function resetCycle(){
+   deliveryId=crypto.randomUUID();previewed=false;opened.checked=false;
+   wrap.querySelector('[data-passport-confirm]').checked=false;
+   wrap.querySelector('[data-passport-explanation]').value='';
+   clearReviewInputs();if(quality)quality.invalidate();
+  }
   async function loadState(restore){
    guard();known=false;
    var state=await Oblako.requestApi({action:'result-review-state',id:requestId,document:payload,includeFile:true});guard();
-   if(!state||['none','stale','prepared','changes_requested','reviewed','delivered'].indexOf(state.state)<0)throw Error('Сервер не подтвердил состояние проверки. Передача недоступна.');
+   if(!state||['none','stale','passport_changed','prepared','changes_requested','reviewed','delivered'].indexOf(state.state)<0)throw Error('Сервер не подтвердил состояние проверки. Передача недоступна.');
+   var priorVersionId=receipt&&receipt.versionId,priorDelivered=delivered,previousState=lastState;
+   passportChanged=state.state==='passport_changed';changedItems=passportChanged?state.changedItems:[];
+   if((previousState!==null&&['none','stale','passport_changed'].includes(state.state)&&previousState!==state.state)
+    ||(state.receipt&&priorVersionId&&state.receipt.versionId!==priorVersionId)
+    ||(priorDelivered&&state.state!=='delivered'))resetCycle();
+   if(passportChanged){if(!Array.isArray(changedItems)||changedItems.some(function(id){return typeof id!=='string';}))throw Error('Список изменённых требований не подтверждён.');wrap.querySelector('[data-passport-changes]').textContent=changedItems.length?'Изменены пункты: '+changedItems.join(', '):'Изменён паспорт или его источники. Проверьте все требования.';}
    if((state.state==='changes_requested'||state.state==='prepared')&&reviewed){reviewId=crypto.randomUUID();amend=false;wrap.querySelector('[data-reviewed]').checked=false;}
    changes=state.state==='changes_requested';
-   if(state.state==='none'||state.state==='stale'){if(receipt){versionId=crypto.randomUUID();reviewId=crypto.randomUUID();}receipt=null;reviewed=false;delivered=false;previewed=false;opened.checked=false;}
+   if(state.state==='none'||state.state==='stale'){if(receipt)versionId=crypto.randomUUID();receipt=null;reviewed=false;delivered=false;}
    else{
     var r=state.receipt;if(!r||!r.versionId||!r.recipientId||!r.documentHash||!r.fileHash||!state.docxBase64)throw Error('Не хватает данных сохранённой версии.');
     var bytes=Uint8Array.from(atob(state.docxBase64),function(c){return c.charCodeAt(0);});
@@ -78,6 +97,7 @@
     if(!captured||await sha(await captured.arrayBuffer())!==r.fileHash){previewed=false;opened.checked=false;}
     guard();captured=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});receipt=r;versionId=r.versionId;
     reviewed=state.state==='reviewed'||state.state==='delivered';delivered=state.state==='delivered';
+    if(passportChanged){reviewed=false;delivered=false;}
     if(changes&&state.review&&state.review.reviewId===notesId)notesId=crypto.randomUUID();
     if(changes&&restore!==false){
      amend=false;
@@ -92,15 +112,25 @@
      wrap.querySelector('[data-reviewed]').checked=true;
     }
     if(delivered&&(!state.delivery||!state.delivery.deliveryId))throw Error('Передача не подтверждена.');
+    if(delivered)deliveryId=state.delivery.deliveryId;
    }
    if(external&&!receipt)throw Error('Прикреплённая версия не найдена в текущем состоянии. Прикрепите Word заново.');
-   guard();known=true;status();if(quality)await quality.refresh();
+   guard();known=true;lastState=state.state;status();if(quality&&!passportChanged)await quality.refresh();
    if(delivered){x.deliveryConfirmation={context:key,versionId:versionId,external:!!external};x.deliveryState={checkedAt:new Date().toISOString(),last:{deliveryId:state.delivery.deliveryId,versionId:versionId,createdAt:state.delivery.createdAt}};x.status='sent';if(typeof save==='function')save();if(typeof render==='function')render();}
   }
   function binding(){return {id:requestId,versionId:versionId,reviewId:reviewId,recipientId:receipt.recipientId,fileHash:receipt.fileHash,documentHash:receipt.documentHash,document:payload};}
   async function run(action){if(busy)return;busy=true;controls();try{guard();await action();}catch(e){msg.textContent=e.message||'Не удалось подтвердить состояние. Нажмите «Обновить состояние».';}finally{busy=false;controls();}}
   wrap.querySelector('[data-preview]').onclick=function(){try{guard();download(payload,captured);previewed=true;opened.checked=false;msg.textContent='Файл скачан. Откройте его в Word, проверьте и отметьте подтверждение просмотра.';controls();}catch(e){known=false;msg.textContent=e.message;controls();}};
+  wrap.querySelector('[data-passport-reuse]').onclick=function(){return run(async function(){
+   if(!passportChanged||!receipt)throw Error('Нет прежнего Word для проверки.');
+   if(!confirmedWord()||!wrap.querySelector('[data-passport-confirm]').checked)throw Error('Скачайте и проверьте Word по новым требованиям, затем подтвердите сверку.');
+   var explanation=wrap.querySelector('[data-passport-explanation]').value.trim();if(explanation.length<20)throw Error('Опишите, что сверено и почему этот Word подходит.');
+   known=false;var result=await Oblako.requestApi({action:'rebind-result',id:requestId,versionId:versionId,document:payload,changedItems:changedItems,confirmation:explanation});guard();
+   if(result.versionId!==versionId||result.fileHash!==receipt.fileHash)throw Error('Повторное использование Word не подтверждено сервером.');
+   await loadState();if(passportChanged)throw Error('Новый паспорт не привязан. Обновите состояние.');
+  });};
   async function prepareVersion(){
+   if(passportChanged)throw Error('Сначала проверьте Word по новым требованиям.');
    if(!receipt){
     var bytes=new Uint8Array(await captured.arrayBuffer()),binary='';for(var j=0;j<bytes.length;j+=8192)binary+=String.fromCharCode.apply(null,bytes.subarray(j,j+8192));
     guard();known=false;var prepared=await Oblako.requestApi({action:'prepare-result',id:requestId,versionId:versionId,document:payload,docxBase64:btoa(binary)});guard();
@@ -140,8 +170,8 @@
   sendButton.onclick=function(){return run(async function(){
    await loadState();if(delivered)return;if(!reviewed||!receipt)throw Error('Нет сохранённой проверки этой версии.');if(!quality||!quality.ready())throw Error('Проверки заимствований и оригинальности не подтверждены для этой версии.');
    guard();msg.textContent='Передаём проверенную версию…';
-   known=false;var result=await Oblako.requestApi(Object.assign({action:'deliver',deliveryId:versionId},binding()));guard();
-   if(!result.saved||result.deliveryId!==versionId)throw Error('Передача не подтверждена. Обновите состояние.');
+   known=false;var result=await Oblako.requestApi(Object.assign({action:'deliver',deliveryId:deliveryId},binding()));guard();
+   if(!result.saved||result.deliveryId!==deliveryId)throw Error('Передача не подтверждена. Обновите состояние.');
    await loadState();if(!delivered)throw Error('Передача не подтверждена. Обновите состояние.');
   });};
   wrap.querySelector('[data-review-history]').ontoggle=async function(){
@@ -156,7 +186,7 @@
    }catch(e){target.textContent=e.message||'Не удалось загрузить историю.';}
   };
   if(global.QualityEvidence)quality=QualityEvidence.mount(wrap.querySelector('[data-quality-evidence]'),{
-   id:requestId,guard:guard,parentBusy:function(){return busy||!known;},getBinding:function(){if(!receipt)return null;var p=x.passports[0];return Object.assign({},receipt,{passportId:p.id,sourceFingerprint:p.source_fingerprint});},
+   id:requestId,guard:guard,parentBusy:function(){return busy||!known||passportChanged;},getBinding:function(){if(!receipt||passportChanged)return null;var p=x.passports[0];return Object.assign({},receipt,{passportId:p.id,sourceFingerprint:p.source_fingerprint});},
    ensureVersion:async function(){guard();await prepareVersion();guard();known=true;controls();},
    onChange:function(ready,pending){qualityBusy=pending;controls();},
    onSaved:async function(){await loadState(false);controls();}

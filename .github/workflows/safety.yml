@@ -75,6 +75,14 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: test-only
           PGDATABASE: safety_test
+      - name: Check C109 passport binding in isolated PostgreSQL
+        run: python3 tests/result-passport-binding-native.py
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: test-only
+          PGDATABASE: safety_test
       - name: Run isolated A1 fault injection
         run: node tests/a1-fault-injection.mjs
         env:
