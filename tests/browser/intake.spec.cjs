@@ -53,16 +53,17 @@ test('direct request confirms only server acknowledgement and keeps retry ID',as
  await page.evaluate(()=>{
   D.works=[{id:'w-direct',topic:'Тест прямой заявки',format:{},req:{id:'rq-direct',contact:'test',org:'',notes:''}}];
   window.requestsSeen=[];
-  Oblako.requestApi=async body=>{requestsSeen.push(body);if(body.action==='attachment-list')return {attachments:[]};return {saved:true,id:'11111111-1111-4111-8111-111111111111',number:42};};
+  Oblako.requestApi=async body=>{requestsSeen.push(body);if(body.action==='attachment-list')return {attachments:[]};if(body.action==='request-publish')return {ready:true,number:42};return {saved:true,id:'11111111-1111-4111-8111-111111111111',number:42};};
   openRequest('w-direct');
  });
+ for(const category of ['assignment','methodology','data','sources'])await page.locator('[data-request-file="'+category+'"]').setInputFiles({name:category+'.txt',mimeType:'text/plain',buffer:Buffer.from('Checked '+category)});
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>D.works[0].req.sentBy)).toBe('direct');
  expect(await page.evaluate(()=>D.works[0].req.number)).toBe(42);
  await page.evaluate(()=>{Oblako.requestApi=async body=>{requestsSeen.push(body);throw Error('Сеть недоступна');};openRequest('w-direct');});
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
  await expect(page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true})).toBeEnabled();
- expect(await page.evaluate(()=>requestsSeen.map(x=>x.action))).toEqual(['submit','request-state','attachment-list','request-state']);
+ expect(await page.evaluate(()=>requestsSeen.map(x=>x.action))).toEqual(['submit','request-state','attachment-list','attachment-upload','attachment-upload','attachment-upload','attachment-upload','request-publish','request-state']);
  expect(await page.evaluate(()=>requestsSeen.filter(x=>x.action==='submit').map(x=>x.payload.id))).toEqual(['rq-direct']);
  expect(await page.evaluate(()=>D.works[0].req.number)).toBe(42);
 });
@@ -125,6 +126,7 @@ test('existing request updates server fields and explicitly replaces assignment'
    if(body.action==='request-state')return {payload:{id:'rq-revise',t:'Старая тема'}};
    if(body.action==='attachment-list')return {attachments:[{id:'22222222-2222-4222-8222-222222222222',category:'assignment',file_hash:'a'.repeat(64)}]};
    if(body.action==='update-request')return {saved:true,id:body.id,number:9};
+   if(body.action==='request-publish')return {ready:true,number:9};
    return {attachment:{id:'33333333-3333-4333-8333-333333333333'}};
   };
   openRequest('w-revise');
@@ -133,7 +135,7 @@ test('existing request updates server fields and explicitly replaces assignment'
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>D.works[0].req.sentBy)).toBe('direct');
  const calls=await page.evaluate(()=>requestsSeen);
- expect(calls.map(x=>x.action)).toEqual(['request-state','update-request','request-state','attachment-list','attachment-upload']);
+ expect(calls.map(x=>x.action)).toEqual(['request-state','update-request','request-state','attachment-list','attachment-upload','request-publish']);
  expect(calls[1].payload.t).toBe('Исправленная тема');expect(calls[1].payload.u).toBe('Тестовый вуз');
  expect(calls[4].replacesId).toBe('22222222-2222-4222-8222-222222222222');
  expect(await page.evaluate(()=>D.works[0].req.attachments)).toBe(1);
@@ -150,6 +152,7 @@ test('C090 partial upload survives reopened form and retries only missing materi
    if(body.action==='request-state')return {payload:{id:'rq-recover',t:'Проверка восстановления'}};
    if(body.action==='submit'||body.action==='update-request')return {saved:true,id:'11111111-1111-4111-8111-111111111111',number:12};
    if(body.action==='attachment-list')return {attachments:savedFiles};
+   if(body.action==='request-publish')return {ready:true,number:12};
    if(body.action==='attachment-upload'){
     if(body.category==='sources'&&failUpload){failUpload=false;throw Error('Сеть недоступна');}
     savedFiles.push({id:body.category,category:body.category,file_hash:body.fileHash});return {attachment:{id:body.category}};
@@ -158,22 +161,30 @@ test('C090 partial upload survives reopened form and retries only missing materi
   openRequest('w-recover');
  });
  const assignment={name:'assignment.txt',mimeType:'text/plain',buffer:Buffer.from('Assignment')};
+ const methodology={name:'methodology.txt',mimeType:'text/plain',buffer:Buffer.from('Methodology')};
+ const data={name:'data.txt',mimeType:'text/plain',buffer:Buffer.from('Data')};
  const sources={name:'sources.txt',mimeType:'text/plain',buffer:Buffer.from('Sources')};
  await page.locator('[data-request-file="assignment"]').setInputFiles(assignment);
+ await page.locator('[data-request-file="methodology"]').setInputFiles(methodology);
+ await page.locator('[data-request-file="data"]').setInputFiles(data);
  await page.locator('[data-request-file="sources"]').setInputFiles(sources);
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
- await expect(page.locator('[data-request-status]')).toContainText('Заявка №12 уже сохранена');
+ await expect(page.locator('[data-request-status]')).toContainText('Черновик заявки №12 ожидает полный комплект');
  expect(await page.evaluate(()=>D.works[0].req.filesPending)).toBe(true);
+ expect(await page.evaluate(()=>requestsSeen.some(x=>x.action==='request-publish'))).toBe(false);
  await page.getByRole('button',{name:'Закрыть',exact:true}).last().click();
  await page.evaluate(()=>openRequest('w-recover'));
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
  await expect(page.locator('[data-request-status]')).toContainText('Не все выбранные ранее материалы загружены');
  expect(await page.evaluate(()=>D.works[0].req.sent)).toBeUndefined();
  await page.locator('[data-request-file="assignment"]').setInputFiles(assignment);
+ await page.locator('[data-request-file="methodology"]').setInputFiles(methodology);
+ await page.locator('[data-request-file="data"]').setInputFiles(data);
  await page.locator('[data-request-file="sources"]').setInputFiles(sources);
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>D.works[0].req.filesPending)).toBe(false);
  expect(await page.evaluate(()=>requestsSeen.filter(x=>x.action==='submit').length)).toBe(1);
  expect(await page.evaluate(()=>requestsSeen.filter(x=>x.action==='attachment-upload'&&x.category==='assignment').length)).toBe(1);
- expect(await page.evaluate(()=>savedFiles.length)).toBe(2);
+ expect(await page.evaluate(()=>savedFiles.length)).toBe(4);
+ expect(await page.evaluate(()=>requestsSeen.filter(x=>x.action==='request-publish').length)).toBe(1);
 });

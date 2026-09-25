@@ -366,6 +366,12 @@
       "version": "20260924170000",
       "name": "c109_result_passport_binding",
       "sha256": "7d9da920f7dce5fea51dc1f94c8da4f61796ddbf7ed1ce49a56c9ea4804cf1cf"
+    },
+    {
+      "file": "20260925194500_c114_complete_before_publish.sql",
+      "version": "20260925194500",
+      "name": "c114_complete_before_publish",
+      "sha256": "3f2db341c08a46d539fc9ad304f4a4d3b1ef21f3ff171bc20e91499d3528b715"
     }
   ],
   "production_reconciled_at": "2026-09-23"
