@@ -24,10 +24,32 @@ test('auth and inbox ownership are enforced before reading requests',async()=>{
 test('submission binds authenticated identity; conflicts and limits are explicit',async()=>{
  let result={id:'stored',number:42},seen;
  const app=handler({auth:async()=>student,isMember:async()=>true,db:async(path,method,body)=>{seen=body;return result;}});
- const r=await (await app(request({action:'submit',payload:p,student_id:'owner'}))).json();
- assert.equal(r.saved,true);assert.equal(r.number,42);assert.equal(seen.student,'student');assert.equal(r.email,'not_configured');
- result={conflict:true};assert.equal((await app(request({action:'submit',payload:p}))).status,409);
- result={limited:true};assert.equal((await app(request({action:'submit',payload:p}))).status,429);
+ assert.equal((await app(request({action:'submit',payload:p}))).status,409);
+ const r=await (await app(request({action:'submit',materialsFlow:2,payload:p,student_id:'owner'}))).json();
+ assert.equal(r.saved,true);assert.equal(r.number,42);assert.equal(r.telegram,'awaiting_materials');assert.equal(seen.student,'student');
+ result={conflict:true};assert.equal((await app(request({action:'submit',materialsFlow:2,payload:p}))).status,409);
+ result={limited:true};assert.equal((await app(request({action:'submit',materialsFlow:2,payload:p}))).status,429);
+});
+test('publishing requires server-confirmed attachments and belongs to the student',async()=>{
+ let result={incomplete:true},path='',body;
+ const app=handler({auth:async()=>student,isMember:async()=>true,db:async(p,m,b)=>{path=p;body=b;return result;}});
+ const id='6a8cbdda-833d-42fd-a34c-462cc701fa11';
+ assert.equal((await app(request({action:'request-publish',id}))).status,409);
+ assert.equal(path,'rpc/studkab_request_publish');assert.equal(body.p_student,student.id);
+ result={ready:true,number:1};
+ const published=await (await app(request({action:'request-publish',id}))).json();
+ assert.equal(published.ready,true);assert.equal(published.telegram,'queued');
+ assert.equal((await app(request({action:'request-publish',id:'invalid'}))).status,400);
+});
+test('executor cannot prepare a passport while the student is still uploading',async()=>{
+ let writes=0;
+ const app=handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async path=>{
+  if(path.startsWith('studkab_requests?'))return [{id:'request',ready_at:null,payload:{}}];
+  writes++;return [];
+ }});
+ const id='6a8cbdda-833d-42fd-a34c-462cc701fa11';
+ assert.equal((await app(request({action:'passport-ensure',id,sourceFingerprint:'a'.repeat(64)}))).status,409);
+ assert.equal(writes,0);
 });
 test('Telegram failure leaves request pending with retry, successful send marks accepted',async()=>{
  const patches=[];let fail=true;

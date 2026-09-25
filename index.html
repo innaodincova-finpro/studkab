@@ -1079,7 +1079,7 @@ function openRequest(workId){
       '<label class="mini">Источники<input type="file" data-request-file="sources" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label></div>'+
     '<div class="infobox">Вуз и кафедра берутся из «Профиль → Данные студента». Дисциплина и руководитель указываются внутри работы: «Оформление документа → Изменить».</div>'+
     '<div class="hint">Заявка сохранится в реестре исполнителя. О новой заявке он получит уведомление в Telegram. Изменения существующей заявки появятся при обновлении реестра. Почтовые уведомления пока не подключены.</div>'+
-    '<p role="status" data-request-status>'+esc(r.filesPending?'Заявка №'+r.number+' сохранена. Загрузка материалов не завершена. Выберите незагруженные файлы повторно.':'')+'</p>'+
+    '<p role="status" data-request-status>'+esc(r.filesPending?'Черновик заявки №'+r.number+' ожидает материалы. Исполнитель пока не уведомлён. Выберите незагруженные файлы повторно.':'')+'</p>'+
     '<div class="rowbtns">'+
       '<button type="button" class="b b-main" data-send="direct">Отправить заявку исполнителю</button>'+
       '<button type="button" class="b b-alt" data-send="copy">Скопировать текст</button>'+
@@ -1116,8 +1116,9 @@ function openRequest(workId){
       var submitPromise=prepareRequestFiles(wrap).then(function(files){
         if(D!==expectedData)throw Error('Кабинет изменился. Откройте заявку заново');
         preparedFiles=files;
-        if(r.filesPending&&!(r.pendingFiles||[]).length&&!files.length)throw Error('Выберите незагруженные файлы повторно. Заявка уже сохранена.');
-        return r.serverId?originalState.then(function(state){if(state.error)throw state.error;return Oblako.requestApi({action:'update-request',id:r.serverId,expectedPayload:state.payload,payload:requestPayload(probe)});}):Oblako.requestApi({action:'submit',payload:requestPayload(probe)});
+        if(!r.serverId&&new Set(files.map(function(f){return f.category;})).size!==4)throw Error('До отправки выберите задание, методичку, исходные данные и источники.');
+        if(r.filesPending&&!(r.pendingFiles||[]).length&&!files.length)throw Error('Выберите незагруженные файлы повторно. Заявка ожидает материалы.');
+        return r.serverId?originalState.then(function(state){if(state.error)throw state.error;return Oblako.requestApi({action:'update-request',id:r.serverId,expectedPayload:state.payload,payload:requestPayload(probe)});}):Oblako.requestApi({action:'submit',materialsFlow:2,payload:requestPayload(probe)});
       });
       submitPromise.then(async function(result){
         if (D !== expectedData) throw new Error("Кабинет изменился. Откройте заявку заново");
@@ -1126,13 +1127,16 @@ function openRequest(workId){
         originalState=Oblako.requestApi({action:'request-state',id:result.id}).then(function(x){return x;},function(e){return {error:e};});
         var uploaded=await uploadRequestFiles(wrap,result.id,btn,preparedFiles,r.pendingFiles);
         if(D!==expectedData)throw Error("Кабинет изменился. Проверьте отправку после входа");
+        btn.textContent='Проверяем полный комплект…';
+        var published=await Oblako.requestApi({action:'request-publish',id:result.id});
+        if(!published.ready||published.number!==result.number)throw Error('Публикация полного комплекта не подтверждена. Проверьте заявку и повторите.');
         change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.sent=today();r.sentBy="direct";r.attachments=uploaded;r.filesPending=false;r.pendingFiles=[];});
         wrap.remove();render();toast(result.email==='not_configured' ?
           'Заявка №'+result.number+' сохранена в реестре. Telegram поставлен в очередь, email исполнителю пока не настроен.' :
           'Заявка №'+result.number+' сохранена в реестре. Проверьте уведомления отдельно.');
       }).catch(function(e){
         if(D!==expectedData)return;
-        var message=(r.serverId?'Заявка №'+r.number+' уже сохранена. ':'')+(e.message||'Не удалось отправить. Повторите попытку');
+        var message=(r.serverId?'Черновик заявки №'+r.number+' ожидает полный комплект; исполнитель пока не уведомлён. ':'')+(e.message||'Не удалось отправить. Повторите попытку');
         if(r.filesPending)message+=' Загрузка материалов не завершена; сохранённые файлы при повторе не дублируются.';
         wrap.querySelector('[data-request-status]').textContent=message;toast(message);
       })

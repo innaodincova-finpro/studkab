@@ -112,11 +112,20 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    if(input.action==='submit'){
     // C-054: заявку подаёт только студент, которому исполнитель выдал доступ.
     if(typeof isMember!=='function'||(await isMember(user.id))!==true)return json({error:'Подача заявок открывается после приглашения исполнителя. Попросите у исполнителя приглашение.'},403);
+    if(input.materialsFlow!==2)return json({error:'Обновите кабинет перед отправкой заявки с материалами'},409);
     let payload;try{payload=validatePayload(input.payload);}catch(e){return json({error:e.message},400);}
     const result=await db('rpc/submit_studkab_request','POST',{student:user.id,content:payload});
     if(result.conflict)return json({error:'Эта заявка уже передана. Для изменения условий свяжитесь с исполнителем.'},409);
     if(result.limited)return json({error:'Достигнут дневной лимит заявок. Попробуйте завтра.'},429);
-    return json({...result,saved:true,telegram:'queued',email:'not_configured'});
+    return json({...result,saved:true,telegram:'awaiting_materials',email:'not_configured'});
+   }
+   if(input.action==='request-publish'){
+    if(typeof isMember!=='function'||await isMember(user.id)!==true)return json({error:'Нет доступа'},403);
+    if(!/^[a-f0-9-]{36}$/i.test(String(input.id||'')))return json({error:'Неверная заявка'},400);
+    const result=await db('rpc/studkab_request_publish','POST',{p_request:input.id,p_student:user.id});
+    if(result.missing)return json({error:'Заявка не найдена'},404);
+    if(result.incomplete)return json({error:'Сначала загрузите задание, методичку, исходные данные и источники'},409);
+    return json({...result,telegram:'queued',email:'not_configured'});
    }
    if(input.action==='invite'||input.action==='recover'){
     if(input.action==='recover'&&input.identityVerified!==true)return json({error:'Сначала подтвердите личность получателя'},400);
@@ -140,7 +149,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     if(id!=null&&!/^[a-f0-9-]{36}$/.test(id))return json({error:'Неверный номер'},400);
     const after=input.after??0;
     if(!Number.isSafeInteger(after)||after<0)return json({error:'Неверная страница'},400);
-    const rows=await db('studkab_requests?select=id,number,payload,created_at,revision&deleting_at=is.null&order=number.asc&limit=100'+(id?'&id=eq.'+id:'&number=gt.'+after));
+    const rows=await db('studkab_requests?select=id,number,payload,created_at,revision&ready_at=not.is.null&deleting_at=is.null&order=number.asc&limit=100'+(id?'&id=eq.'+id:'&number=gt.'+after));
     if(input.includeDeliveryState===true){
      // Bounded per-request reads avoid silently truncating history across requests.
      for(let i=0;i<rows.length;i+=10)await Promise.all(rows.slice(i,i+10).map(async row=>{

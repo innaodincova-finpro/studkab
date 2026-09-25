@@ -153,8 +153,9 @@ export async function requirementAction(input,user,{db,config}){
  if((user.email||'').toLowerCase()!==(cfg.executor_email||'').toLowerCase())return {status:403,data:{error:'Паспорт требований доступен только исполнителю'}};
  const request=typeof input.id==='string'&&/^[a-f0-9-]{36}$/.test(input.id)?input.id:null;
  if(!request)return {status:400,data:{error:'Неверный номер заявки'}};
- const [row]=await db('studkab_requests?select=id,payload,revision,studkab_material_revisions(id,closed_at),studkab_request_reassignments(operation_id)&deleting_at=is.null&limit=1&id=eq.'+request);
+ const [row]=await db('studkab_requests?select=id,payload,revision,ready_at,studkab_material_revisions(id,closed_at),studkab_request_reassignments(operation_id)&deleting_at=is.null&limit=1&id=eq.'+request);
  if(!row)return {status:404,data:{error:'Заявка не найдена'}};
+ if(row.ready_at===null)return {status:409,data:{error:'Заявка ожидает полный комплект материалов'}};
  const revisionOpen=(row.studkab_material_revisions||[]).some(c=>c.closed_at===null);
  if(revisionOpen&&input.action!=='passport-get'){
   if(input.action!=='passport-ensure')return {status:409,data:{error:'Завершите дополнение материалов перед изменением паспорта'}};

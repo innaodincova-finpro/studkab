@@ -22,7 +22,7 @@ test('C-054: без проверки допуска подача заявки з
 });
 test('C-054: допущенный студент подаёт заявку',async()=>{
  const app=handler({auth:async()=>stranger,config:async()=>({executor_email:owner.email}),isMember:async()=>true,db:async()=>({id:'r',number:1})});
- assert.equal((await app(call({action:'submit',payload}))).status,200);
+ assert.equal((await app(call({action:'submit',materialsFlow:2,payload}))).status,200);
 });
 test('C-054: восстановление не выдаётся аккаунту без допуска, ответ как для отсутствующего',async()=>{
  const calls=[];

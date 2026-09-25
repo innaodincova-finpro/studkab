@@ -92,8 +92,8 @@ test('repeat submit waits for real server acknowledgement; error keeps form open
  for(const fail of [false,true]){
   let click,removed=false;const calls=[],messages=[],r={id:'client',serverId:a,number:9,sent:'before'};
   const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:()=>({value:'test'}),remove:()=>{removed=true;}};
-  const api=async input=>{calls.push(input);if(input.action==='request-state')return {payload:{id:'client',t:'old'}};if(fail)throw Error('Server unavailable');return {saved:true,id:a,number:9};};
-  const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:api},requestPayload:probe=>({id:probe.req.id,t:probe.topic}),prepareRequestFiles:async()=>[],uploadRequestFiles:async()=>4,change:fn=>fn(),today:()=> 'today',render:()=>{},toast:x=>messages.push(x)};
+  const api=async input=>{calls.push(input);if(input.action==='request-state')return {payload:{id:'client',t:'old'}};if(fail)throw Error('Server unavailable');if(input.action==='request-publish')return {ready:true,number:9};return {saved:true,id:a,number:9};};
+ const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:api},requestPayload:probe=>({id:probe.req.id,t:probe.topic}),prepareRequestFiles:async()=>[],uploadRequestFiles:async()=>4,change:fn=>fn(),today:()=> 'today',render:()=>{},toast:x=>messages.push(x)};
   vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
   const btn={disabled:false,getAttribute:()=> 'direct'};click({target:{closest:()=>btn}});
   await new Promise(resolve=>setImmediate(resolve));
@@ -117,13 +117,14 @@ test('partial send checkpoints request, retries same id, and never reports faile
  const html=read('index.html'),code=html.slice(html.indexOf('function openRequest('),html.indexOf('function icsEscape('));
  let click,removed=false,attempt=0;const calls=[],r={id:'client'},status={};
  const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:s=>s==='[data-request-status]'?status:{value:'test'},remove:()=>{removed=true;}};
- const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async input=>{calls.push(input);return input.action==='request-state'?{payload:{id:'client',t:'new'}}:{saved:true,id:a,number:9};}},requestPayload:p=>({id:p.req.id,t:p.topic}),prepareRequestFiles:async()=>[{category:'assignment',fileHash:'a'.repeat(64),fileName:'test.txt'}],uploadRequestFiles:async()=>{if(++attempt===1)throw Error('Upload failed');return 1;},change:fn=>fn(),today:()=> 'today',render:()=>{},toast:()=>{}};
+ const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async input=>{calls.push(input);if(input.action==='request-state')return {payload:{id:'client',t:'new'}};if(input.action==='request-publish')return {ready:true,number:9};return {saved:true,id:a,number:9};}},requestPayload:p=>({id:p.req.id,t:p.topic}),prepareRequestFiles:async()=>['assignment','methodology','data','sources'].map(category=>({category,fileHash:'a'.repeat(64),fileName:category+'.txt'})),uploadRequestFiles:async()=>{if(++attempt===1)throw Error('Upload failed');return 4;},change:fn=>fn(),today:()=> 'today',render:()=>{},toast:()=>{}};
  vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
  const btn={disabled:false,getAttribute:()=> 'direct'};
  click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
- assert.equal(r.serverId,a);assert.equal(r.sent,undefined);assert.equal(r.filesPending,true);assert.equal(r.pendingFiles.length,1);assert.equal(removed,false);assert.match(status.textContent,/уже сохранена/);
+ assert.equal(r.serverId,a);assert.equal(r.sent,undefined);assert.equal(r.filesPending,true);assert.equal(r.pendingFiles.length,4);assert.equal(removed,false);assert.match(status.textContent,/ожидает полный комплект/);
  click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls.filter(x=>x.action==='submit').length,1);assert.equal(calls.filter(x=>x.action==='update-request').length,1);
+ assert.equal(calls.filter(x=>x.action==='request-publish').length,1);
  assert.equal(r.filesPending,false);assert.equal(r.pendingFiles.length,0);assert.equal(r.sent,'today');assert.equal(removed,true);
 });
 

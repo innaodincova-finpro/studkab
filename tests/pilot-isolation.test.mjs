@@ -13,9 +13,13 @@ test('three synthetic students remain isolated across submit, sign-in and Word r
  const db=async(path,method,body)=>{
   if(path==='rpc/submit_studkab_request'){
    const index=rows.length;
-   rows.push({id:ids[index],number:nextNumber++,student_id:body.student,payload:body.content,created_at:'2026-09-13T00:00:00Z'});
+   rows.push({id:ids[index],number:nextNumber++,student_id:body.student,payload:body.content,created_at:'2026-09-13T00:00:00Z',ready:false});
    results.set(ids[index],{delivery_id:`30000000-0000-4000-8000-00000000000${index+1}`,document:{topic:body.content.t},created_at:'2026-09-13T00:00:00Z',version_id:null});
    return {id:ids[index],number:index+1};
+  }
+  if(path==='rpc/studkab_request_publish'){
+   const row=rows.find(x=>x.id===body.p_request&&x.student_id===body.p_student);
+   if(!row)return {missing:true};row.ready=true;return {ready:true,number:row.number};
   }
   if(path.startsWith('studkab_requests?select=id,student_id,payload')){
    const id=path.match(/&id=eq\.([^&]+)/)?.[1];
@@ -26,14 +30,15 @@ test('three synthetic students remain isolated across submit, sign-in and Word r
    const id=path.match(/request_id=eq\.([^&]+)/)?.[1];
    return results.has(id)?[results.get(id)]:[];
   }
-  if(path.startsWith('studkab_requests?select=id,number,payload,created_at'))return rows;
+  if(path.startsWith('studkab_requests?select=id,number,payload,created_at'))return rows.filter(row=>row.ready);
   throw Error(`Unexpected synthetic path: ${path} ${method||''}`);
  };
  const app=handler({auth:async()=>current,config:async()=>({executor_email:executor.email}),isMember:async()=>true,db});
  for(let i=0;i<students.length;i++){
   current=students[i];
-  const response=await app(call({action:'submit',student_id:executor.id,payload:{id:`pilot-${i+1}`,t:`${current.mark}: синтетическая тема`,cn:'SYNTHETIC',fm:{sz:14}}}));
+  const response=await app(call({action:'submit',materialsFlow:2,student_id:executor.id,payload:{id:`pilot-${i+1}`,t:`${current.mark}: синтетическая тема`,cn:'SYNTHETIC',fm:{sz:14}}}));
   assert.equal(response.status,200);assert.equal(rows[i].student_id,current.id);
+  assert.equal((await app(call({action:'request-publish',id:ids[i]}))).status,200);
  }
  for(let i=0;i<students.length;i++){
   current=students[i];
@@ -63,9 +68,13 @@ test('twenty concurrent synthetic students do not mix requests or results',async
   if(path==='rpc/submit_studkab_request'){
    await Promise.resolve();
    const number=rows.length+1,id=`50000000-0000-4000-8000-${String(number).padStart(12,'0')}`;
-   rows.push({id,number,student_id:body.student,payload:body.content,created_at:'2026-09-14T00:00:00Z'});
+   rows.push({id,number,student_id:body.student,payload:body.content,created_at:'2026-09-14T00:00:00Z',ready:false});
    results.set(id,{delivery_id:`60000000-0000-4000-8000-${String(number).padStart(12,'0')}`,document:{topic:body.content.t},created_at:'2026-09-14T00:00:00Z',version_id:null});
    return {id,number};
+  }
+  if(path==='rpc/studkab_request_publish'){
+   const row=rows.find(x=>x.id===body.p_request&&x.student_id===body.p_student);
+   if(!row)return {missing:true};row.ready=true;return {ready:true,number:row.number};
   }
   if(path.startsWith('studkab_requests?select=id,student_id,payload')){
    const id=path.match(/&id=eq\.([^&]+)/)?.[1];
@@ -76,12 +85,15 @@ test('twenty concurrent synthetic students do not mix requests or results',async
    const id=path.match(/request_id=eq\.([^&]+)/)?.[1];
    return results.has(id)?[results.get(id)]:[];
   }
-  if(path.startsWith('studkab_requests?select=id,number,payload,created_at'))return [...rows].sort((a,b)=>a.number-b.number);
+  if(path.startsWith('studkab_requests?select=id,number,payload,created_at'))return rows.filter(row=>row.ready).sort((a,b)=>a.number-b.number);
   throw Error(`Unexpected load path: ${path} ${method||''}`);
  };
  const apps=loadStudents.map(student=>handler({auth:async()=>student,config:async()=>({executor_email:executor.email}),isMember:async()=>true,db}));
- const submitted=await Promise.all(apps.map((app,i)=>app(call({action:'submit',student_id:executor.id,payload:{id:`load-${i+1}`,t:`LOAD-STUDENT-${i+1}`,cn:'SYNTHETIC',fm:{sz:14}}}))));
+ const submitted=await Promise.all(apps.map((app,i)=>app(call({action:'submit',materialsFlow:2,student_id:executor.id,payload:{id:`load-${i+1}`,t:`LOAD-STUDENT-${i+1}`,cn:'SYNTHETIC',fm:{sz:14}}}))));
  assert.ok(submitted.every(response=>response.status===200));
+ assert.equal((await (await handler({auth:async()=>executor,config:async()=>({executor_email:executor.email}),db})(call({action:'inbox'}))).json()).rows.length,0);
+ const published=await Promise.all(apps.map((app,i)=>app(call({action:'request-publish',id:rows.find(row=>row.student_id===loadStudents[i].id).id}))));
+ assert.ok(published.every(response=>response.status===200));
  assert.equal(rows.length,count);assert.equal(new Set(rows.map(row=>row.id)).size,count);assert.equal(new Set(rows.map(row=>row.student_id)).size,count);
  for(let i=0;i<count;i++)assert.equal(rows.find(row=>row.payload.id===`load-${i+1}`)?.student_id,loadStudents[i].id);
 
