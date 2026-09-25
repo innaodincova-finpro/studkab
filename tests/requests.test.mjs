@@ -188,7 +188,7 @@ const versionId='33333333-3333-4333-8333-333333333333',reviewId='44444444-4444-4
 const binding={id:requestId,versionId,reviewId,recipientId,fileHash:'a'.repeat(64),documentHash:'b'.repeat(64)};
 const codes=Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(2,'0')).concat(['S01','S02','S03']);
 const criteria=Object.fromEntries(codes.map(c=>[c,{status:'pass',evidence:'Synthetic review evidence, page 1'}]));
-function resultApp(db){return handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>path==='rpc/studkab_material_manifest_check'?{valid:true}:path.startsWith('studkab_requests?')?[{id:requestId,student_id:recipientId,payload:{n:documentFixture.student}}]:path.startsWith('studkab_requirement_passports?')?[{id:requestId,status:'approved',items:[]}]:path.startsWith('studkab_request_attachments?')?[]:db(path,method,body)});}
+function resultApp(db){return handler({auth:async()=>owner,config:async()=>({executor_email:owner.email}),db:async(path,method,body)=>path==='rpc/studkab_result_context_version'?2:path==='rpc/studkab_material_manifest_check'?{valid:true}:path.startsWith('studkab_requests?')?[{id:requestId,student_id:recipientId,payload:{n:documentFixture.student}}]:path.startsWith('studkab_requirement_passports?')?[{id:requestId,status:'approved',items:[]}]:path.startsWith('studkab_request_attachments?')?[]:db(path,method,body)});}
 test('legacy delivery fails closed without invoking delivery RPC',async()=>{
  const app=resultApp(()=>{throw Error('must not call');});
  assert.equal((await app(request({action:'deliver',id:requestId,deliveryId,document:documentFixture}))).status,428);
@@ -233,7 +233,7 @@ async function reviewStateApp(options={}){
   calls.push({path,method,body});
   if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path==='rpc/studkab_quality_check'){assert.equal(method,'POST');assert.deepEqual(body,{p_request:requestId,p_version:versionId});if(options.qualityUnavailable)throw Error('Quality unavailable');return {eligible:!options.qualityMissing,evidenceIds:options.qualityChanged?{...qualityEvidenceIds,internal_borrowing:requestId}:qualityEvidenceIds};}
-  if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:2;
+  if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:options.legacy?1:2;
   if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId}];
   if(path.startsWith('studkab_requirement_passports?'))return [{id:passportId,status:options.stalePassport?'stale':'approved',source_fingerprint:reviewContext.sourceFingerprint}];
   if(path.startsWith('studkab_result_versions?'))return options.empty?[]:[{id:versionId,revision:1,recipient_id:options.otherRecipient?requestId:recipientId,document:options.changed?{...document,topic:'Changed'}:document,file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
@@ -252,6 +252,17 @@ test('C-071 review state is executor-only and never writes or exposes another re
   if(data.state==='stale')assert.equal(data.docxBase64,undefined);
   if(data.state==='reviewed'){assert.equal(data.review.reviewId,reviewId);assert.equal(data.receipt.versionId,versionId);assert.equal(data.docxBase64,'UEsDBAAAAAA=');}
  }
+});
+test('C109 release keeps existing review readable before migration and blocks early rebind',async()=>{
+ const {app,document,calls}=await reviewStateApp({legacy:true});
+ const response=await app(request({action:'result-review-state',id:requestId,document}));
+ assert.equal(response.status,200);
+ const state=await response.json();
+ assert.equal(state.state,'reviewed');assert.equal(state.receipt.versionId,versionId);
+ assert(!calls.some(c=>c.path.startsWith('studkab_result_passport_bindings?')));
+ const early=await app(request({action:'rebind-result',id:requestId,versionId,document,changedItems:['C01'],confirmation:'Новый паспорт проверен полностью.'}));
+ assert.equal(early.status,409);
+ assert(!calls.some(c=>c.path==='rpc/studkab_rebind_result_passport'));
 });
 test('C102 stale quality evidence reopens exact Word review while historical delivery remains readable',async()=>{
  for(const options of [{qualityChanged:true},{qualityMissing:true}]){
