@@ -242,7 +242,7 @@
     });
     var data = await res.json();
     if (epoch !== expectedEpoch || userId !== expected) throw new Error("Аккаунт изменился. Повторите действие");
-    if (!res.ok) throw new Error(data.error || "Не удалось передать заявку");
+    if (!res.ok) { var failure = new Error(data.error || "Не удалось передать заявку"); failure.status = res.status; throw failure; }
     return data;
   };
 
