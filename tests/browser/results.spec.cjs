@@ -83,7 +83,7 @@ test('C107 downloading Word without confirming it was opened cannot save remarks
  await page.locator('[data-save-notes]').click();
  await expect(page.locator('[data-result-status]')).toContainText('Замечания сохранены');
 });
-test('C109 revised requirements reuse saved Word only after the executor reviews it',async({page})=>{
+test('C109 executor can resume after an idempotent passport binding reply',async({page})=>{
  await setupReview(page);
  await page.locator('.sheet .close').click();
  await page.evaluate(()=>{
@@ -93,7 +93,9 @@ test('C109 revised requirements reuse saved Word only after the executor reviews
   Oblako.requestApi=async body=>{
    if(body.action==='result-review-state'&&!boundToNewPassport){calls.push(body);return {state:'passport_changed',receipt:remote.receipt,docxBase64:remote.docxBase64,changedItems:['VOLUME']};}
    if(body.action==='rebind-result'){
-    calls.push(body);boundToNewPassport=true;remote.state='prepared';remote.document=body.document;remote.review=null;return {versionId:remote.receipt.versionId,fileHash:remote.receipt.fileHash};
+    calls.push(body);boundToNewPassport=true;remote.state='prepared';remote.document=body.document;remote.review=null;
+    // An earlier accepted request may have lost its response; the RPC then returns duplicate:true.
+    return {versionId:remote.receipt.versionId,fileHash:remote.receipt.fileHash,bindingId:'99999999-9999-4999-8999-999999999999',duplicate:true};
    }
    return original(body);
   };
