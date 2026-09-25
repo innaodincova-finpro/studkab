@@ -137,6 +137,15 @@ test('invalid selected file is rejected before submitting a new request',async()
  const btn={disabled:false,getAttribute:()=> 'direct'};click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls.length,0);assert.equal(r.serverId,undefined);assert.equal(btn.disabled,false);assert.match(status.textContent,/Invalid file/);
 });
+test('three selected categories never create a visible or pending server request',async()=>{
+ const html=read('index.html'),code=html.slice(html.indexOf('function openRequest('),html.indexOf('function icsEscape('));
+ let click;const calls=[],r={id:'client'},status={};
+ const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:s=>s==='[data-request-status]'?status:{value:'test'}};
+ const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async x=>calls.push(x)},prepareRequestFiles:async()=>['assignment','methodology','data'].map(category=>({category,fileHash:'a'.repeat(64)})),toast:()=>{}};
+ vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
+ const btn={disabled:false,getAttribute:()=> 'direct'};click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls.length,0);assert.equal(r.serverId,undefined);assert.match(status.textContent,/задание, методичку, исходные данные и источники/);
+});
 
 test('retry skips acknowledged files and refuses to complete with missing pending material',async()=>{
  const html=read('index.html'),code=html.slice(html.indexOf('async function uploadRequestFiles('),html.indexOf('function openRequest('));
