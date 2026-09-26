@@ -65,11 +65,12 @@ test('submission binds authenticated identity; conflicts and limits are explicit
  result={conflict:true};assert.equal((await app(request({action:'submit',materialsFlow:2,payload:p}))).status,409);
  result={limited:true};assert.equal((await app(request({action:'submit',materialsFlow:2,payload:p}))).status,429);
 });
-test('publishing requires server-confirmed attachments and belongs to the student',async()=>{
+test('publishing requires server-confirmed assignment or written task and belongs to the student',async()=>{
  let result={incomplete:true},path='',body;
  const app=handler({auth:async()=>student,isMember:async()=>true,db:async(p,m,b)=>{path=p;body=b;return result;}});
  const id='6a8cbdda-833d-42fd-a34c-462cc701fa11';
- assert.equal((await app(request({action:'request-publish',id}))).status,409);
+ const incomplete=await app(request({action:'request-publish',id}));
+ assert.equal(incomplete.status,409);assert.match((await incomplete.json()).error,/опишите задачу/);
  assert.equal(path,'rpc/studkab_request_publish');assert.equal(body.p_student,student.id);
  result={ready:true,number:1};
  const published=await (await app(request({action:'request-publish',id}))).json();

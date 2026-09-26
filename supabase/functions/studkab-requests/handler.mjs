@@ -142,7 +142,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     if(!/^[a-f0-9-]{36}$/i.test(String(input.id||'')))return json({error:'Неверная заявка'},400);
     const result=await db('rpc/studkab_request_publish','POST',{p_request:input.id,p_student:user.id});
     if(result.missing)return json({error:'Заявка не найдена'},404);
-    if(result.incomplete)return json({error:'Сначала загрузите задание, методичку, исходные данные и источники'},409);
+    if(result.incomplete)return json({error:'Приложите задание либо опишите задачу и недостающие сведения (от 15 знаков)'},409);
     return json({...result,telegram:'queued',email:'not_configured'});
    }
    if(input.action==='invite'||input.action==='recover'){

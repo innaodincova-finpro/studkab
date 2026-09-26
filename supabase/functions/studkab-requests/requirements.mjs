@@ -168,7 +168,7 @@ export async function requirementAction(input,user,{db,config}){
  if(!request)return {status:400,data:{error:'Неверный номер заявки'}};
  const [row]=await db('studkab_requests?select=id,payload,revision,ready_at,studkab_material_revisions(id,closed_at),studkab_request_reassignments(operation_id)&deleting_at=is.null&limit=1&id=eq.'+request);
  if(!row)return {status:404,data:{error:'Заявка не найдена'}};
- if(row.ready_at===null)return {status:409,data:{error:'Заявка ожидает полный комплект материалов'}};
+ if(row.ready_at===null)return {status:409,data:{error:'Заявка ещё не отправлена исполнителю'}};
  if(input.action==='passport-structure-audit'){
   const [latest]=await db('studkab_requirement_passports?select=items&request_id=eq.'+request+'&order=revision.desc&limit=1');
   const attached=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
