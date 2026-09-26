@@ -20,6 +20,47 @@ async function send(sub:any,message:any,c:any){
  if(res.status===404||res.status===410)await db('studkab_push_subscriptions?id=eq.'+sub.id,'PATCH',{enabled:false,last_error:'Разрешение истекло. Включите уведомления снова.'});
  if(!res.ok)throw new Error('push '+res.status);
 }
+async function dialoguePush(sub:any,c:any){
+ let sent=0,failed=0,cursor=0;
+ for(;;){
+  const events=await db('studkab_dialog_events?select=id,request_id,recipient_id&kind=eq.question&read_at=is.null&recipient_id=eq.'+sub.user_id+'&order=id.asc&limit=100&id=gt.'+cursor);
+  for(const event of events){
+   cursor=event.id;
+   const key=sub.id+':dialog:'+event.id;
+   if(!await db('rpc/claim_studkab_push_delivery','POST',{delivery_key:key,subscription_id:sub.id}))continue;
+   try{
+    const [currentEvent]=await db('studkab_dialog_events?id=eq.'+event.id+'&recipient_id=eq.'+sub.user_id+'&read_at=is.null&select=id,request_id');
+    const [currentSub]=await db('studkab_push_subscriptions?id=eq.'+sub.id+'&user_id=eq.'+sub.user_id+'&enabled=eq.true');
+    if(!currentEvent||!currentSub){await db('studkab_push_deliveries?key=eq.'+encodeURIComponent(key),'PATCH',{sent_at:new Date().toISOString(),result:'cancelled'});continue;}
+    await send(currentSub,{title:'Кабинет студента',body:'В заявке есть новый вопрос. Откройте кабинет для ответа.',tag:key,url:'./index.html#request='+currentEvent.request_id},c);
+    const at=new Date().toISOString();await db('studkab_push_deliveries?key=eq.'+encodeURIComponent(key),'PATCH',{sent_at:at,result:'accepted'});
+    await db('studkab_push_subscriptions?id=eq.'+sub.id,'PATCH',{last_sent_at:at,last_error:null});sent++;
+   }catch{failed++;await db('studkab_push_subscriptions?id=eq.'+sub.id,'PATCH',{last_error:'Уведомление не доставлено. Сервер повторит попытку.'});}
+  }
+  if(events.length<100)break;
+ }
+ return {sent,failed};
+}
+async function dialogueTelegram(){
+ let sent=0,failed=0;
+ const events=await db('rpc/claim_studkab_dialog_telegram','POST',{});
+ for(const event of events){
+  try{
+   const [fresh]=await db('studkab_dialog_events?id=eq.'+event.id+'&read_at=is.null&select=id,request_id');
+   if(!fresh){await db('studkab_dialog_events?id=eq.'+event.id,'PATCH',{telegram_sent_at:new Date().toISOString(),telegram_lease_until:null});continue;}
+   const [owner]=await db('studkab_telegram_setup?id=eq.true&select=owner_chat_id,installed');
+   const token=Deno.env.get('STUDKAB_TELEGRAM_BOT_TOKEN');
+   if(!owner?.installed||!owner.owner_chat_id||!token)throw Error('Telegram recipient unavailable');
+   const response=await fetch('https://api.telegram.org/bot'+token+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:owner.owner_chat_id,text:'В заявке получен ответ студента. Откройте реестр для проверки.',reply_markup:{inline_keyboard:[[{text:'Открыть заявку',url:'https://innaodincova-finpro.github.io/studkab/reestr.html#request='+fresh.request_id}]]}}),signal:AbortSignal.timeout(10000)});
+   if(!response.ok||(await response.json()).ok!==true)throw Error('Telegram unavailable');
+   await db('studkab_dialog_events?id=eq.'+event.id,'PATCH',{telegram_sent_at:new Date().toISOString(),telegram_lease_until:null});sent++;
+  }catch{
+   failed++;
+   await db('studkab_dialog_events?id=eq.'+event.id,'PATCH',{telegram_lease_until:null,telegram_retry_at:new Date(Date.now()+Math.min(3600000,60000*2**event.telegram_attempts)).toISOString()});
+  }
+ }
+ return {sent,failed};
+}
 async function dispatch(c:any){
  let sent=0,failed=0;
  let cursor='';
@@ -27,6 +68,7 @@ async function dispatch(c:any){
   const subs=await db('studkab_push_subscriptions?enabled=eq.true&order=id&limit=100'+(cursor?'&id=gt.'+cursor:''));
   for(const sub of subs){
    try{
+    try{const dialogue=await dialoguePush(sub,c);sent+=dialogue.sent;failed+=dialogue.failed;}catch{failed++;}
     const now=Date.now();const [row]=await db('app_data?app=eq.kabinet&user_id=eq.'+sub.user_id+'&select=data');
     const items=dueEvents(row?.data,sub.timezone,now);
     if(sub.test_due&&now>=Date.parse(sub.test_due)&&now<Date.parse(sub.test_due)+300000)items.push({key:'test:'+sub.test_due,title:'Кабинет студента',body:'Проверка: уведомления приходят при закрытом приложении.',at:now+300000});
@@ -46,6 +88,7 @@ async function dispatch(c:any){
   }
   if(subs.length<100)break;cursor=subs[subs.length-1].id;
  }
+ try{const telegram=await dialogueTelegram();sent+=telegram.sent;failed+=telegram.failed;}catch{failed++;}
  await db('studkab_push_configuration?id=eq.1','PATCH',{last_run_at:new Date().toISOString(),last_result:{sent,failed}});
  return {sent,failed};
 }
@@ -92,4 +135,3 @@ Deno.serve(async req=>{
   return json({error:'Неизвестное действие'},400);
  }catch{return json({error:'Сервис уведомлений временно недоступен. Повторите позже.'},503);}
 });
-

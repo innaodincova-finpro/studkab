@@ -372,6 +372,12 @@
       "version": "20260925194500",
       "name": "c114_complete_before_publish",
       "sha256": "3f2db341c08a46d539fc9ad304f4a4d3b1ef21f3ff171bc20e91499d3528b715"
+    },
+    {
+      "version": "20260926114639",
+      "name": "c120_dialog_events",
+      "file": "20260926114639_c120_dialog_events.sql",
+      "sha256": "12e81249c0c2010cbb1473f57260efb3b1039ac57fadc79f14a76fd09fa0bf24"
     }
   ],
   "production_reconciled_at": "2026-09-23"

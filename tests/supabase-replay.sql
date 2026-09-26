@@ -23,6 +23,7 @@ begin
     'studkab_request_reassignments',
     'studkab_requirement_passports',
     'studkab_clarifications',
+    'studkab_dialog_events',
     'studkab_material_revisions',
     'studkab_requests',
     'studkab_quality_evidence',
@@ -54,11 +55,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 33 then
-    raise exception 'Expected 33 STUDKAB tables, found %', table_count;
+  if table_count <> 34 then
+    raise exception 'Expected 34 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 33 then
-    raise exception 'RLS enabled on only % of 33 STUDKAB tables', rls_count;
+  if rls_count <> 34 then
+    raise exception 'RLS enabled on only % of 34 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';
@@ -94,7 +95,8 @@ begin
      or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text,integer,jsonb)') is null
      or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer,jsonb)') is null
      or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null
-     or to_regprocedure('public.studkab_gen_cancel(uuid,uuid)') is null then
+     or to_regprocedure('public.studkab_gen_cancel(uuid,uuid)') is null
+     or to_regprocedure('public.claim_studkab_dialog_telegram()') is null then
     raise exception 'One or more required STUDKAB functions are missing';
   end if;
 end
