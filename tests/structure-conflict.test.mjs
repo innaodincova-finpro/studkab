@@ -57,3 +57,22 @@ test('executor can read exact conflict; student cannot access private audit',asy
  assert.equal(allowed.status,200);assert.equal(allowed.data.findings[0].number,'2.3');
  assert.equal((await requirementAction(input,{id,email:'student@example.test'},deps)).status,403);
 });
+test('passport approval accepts only a persisted confirmed resolution for current source',async()=>{
+ const file={category:'methodology',file_name:'method.pdf',file_hash:'a'.repeat(64),extracted_text:method};
+ const conflict=structureFindings([file])[0];
+ const passport=defaultPassport({});passport.items=passport.items.map(q=>({...q,verified:true,source:q.id==='ANTIPLAGIARISM'?'Стандарт STUDKAB и методичка':'Методичка, с. 6',text:q.id==='ANTIPLAGIARISM'?'Внешний отчёт по стандарту STUDKAB; в предоставленных материалах числовое условие вуза не обнаружено.':q.id==='STRUCTURE'?'Структура: 2.4 '+conflict.second:'Подтверждённое требование',...(q.id==='ANTIPLAGIARISM'?{originality:{mode:'service_only',service:'',thresholdPercent:null}}:{})}));
+ const item=passport.items.find(q=>q.id==='STRUCTURE');item.structure_resolutions=[{fileHash:file.file_hash,number:conflict.number,first:conflict.first,second:conflict.second,chosenNumber:'2.4',reason:'Номер 2.4 свободен между 2.3 и 2.5 в учебном кейсе',verified:true}];
+ let approved=0;const deps={config:async()=>({executor_email:'executor@example.test'}),db:async path=>{
+  if(path.startsWith('studkab_requests?'))return [{id,ready_at:'2026-09-26T00:00:00Z',revision:1,studkab_material_revisions:[],studkab_request_reassignments:[]}];
+  if(path.startsWith('studkab_requirement_passports?'))return [{items:validatePassport(passport).items}];
+  if(path.startsWith('studkab_request_attachments?'))return [file];
+  if(path==='rpc/studkab_material_manifest_check')return {valid:true};
+  if(path==='rpc/studkab_requirement_passport_approve'){approved++;return {status:'approved'};}
+  throw Error('Unexpected '+path);
+ }};
+ const input={action:'passport-approve',id,passportId:id,sourceFingerprint:'b'.repeat(64),passport};
+ assert.equal((await requirementAction(input,{id,email:'executor@example.test'},deps)).status,200);assert.equal(approved,1);
+ item.structure_resolutions[0].fileHash='c'.repeat(64);
+ const blocked=await requirementAction(input,{id,email:'executor@example.test'},deps);
+ assert.equal(blocked.status,409);assert.equal(blocked.data.code,'STRUCTURE_NUMBER_CONFLICT');assert.equal(approved,1);
+});
