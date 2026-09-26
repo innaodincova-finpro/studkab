@@ -1,4 +1,14 @@
 const {test,expect}=require('@playwright/test');
+test('C115 new request shows missing identity and course fields before any API call',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  D.works=[{id:'w-c115',topic:'Курсовая',format:{},req:{id:'rq-c115',contact:'test'}}];
+  window.requestCalls=[];Oblako.requestApi=async body=>{requestCalls.push(body);return {saved:true};};openRequest('w-c115');
+ });
+ await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
+ await expect(page.locator('[data-request-status]')).toContainText('ФИО студента');
+ expect(await page.evaluate(()=>requestCalls.filter(x=>x.action==='submit').length)).toBe(0);
+});
 test('cabinet request roundtrip, hostile link rejection, repeat preserves work',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
  const sent=await page.evaluate(()=>{
@@ -51,7 +61,7 @@ test('registry document edited, saved, downloaded and keeps derived stage',async
 test('direct request confirms only server acknowledgement and keeps retry ID',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
  await page.evaluate(()=>{
-  D.works=[{id:'w-direct',topic:'Тест прямой заявки',format:{},req:{id:'rq-direct',contact:'test',org:'',notes:''}}];
+  D.works=[{id:'w-direct',topic:'Тест прямой заявки',student:'Студент',deadline:'2026-10-15',format:{workType:'Курсовая работа',univ:'Тестовый вуз',discipline:'Экономика'},req:{id:'rq-direct',contact:'test',org:'',notes:''}}];
   window.requestsSeen=[];
   Oblako.requestApi=async body=>{requestsSeen.push(body);if(body.action==='attachment-list')return {attachments:[]};if(body.action==='request-publish')return {ready:true,number:42};return {saved:true,id:'11111111-1111-4111-8111-111111111111',number:42};};
   openRequest('w-direct');
@@ -145,7 +155,7 @@ test('existing request updates server fields and explicitly replaces assignment'
 test('C090 partial upload survives reopened form and retries only missing materials',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
  await page.evaluate(()=>{
-  D.works=[{id:'w-recover',topic:'Проверка восстановления',format:{},req:{id:'rq-recover',contact:'test'}}];
+  D.works=[{id:'w-recover',topic:'Проверка восстановления',student:'Тестовый студент',deadline:'2026-10-15',format:{workType:'Курсовая работа',univ:'Тестовый вуз',discipline:'Экономика'},req:{id:'rq-recover',contact:'test'}}];
   window.requestsSeen=[];window.savedFiles=[];window.failUpload=true;
   Oblako.requestApi=async body=>{
    requestsSeen.push(body);

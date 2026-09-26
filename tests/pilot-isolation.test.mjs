@@ -36,7 +36,7 @@ test('three synthetic students remain isolated across submit, sign-in and Word r
  const app=handler({auth:async()=>current,config:async()=>({executor_email:executor.email}),isMember:async()=>true,db});
  for(let i=0;i<students.length;i++){
   current=students[i];
-  const response=await app(call({action:'submit',materialsFlow:2,student_id:executor.id,payload:{id:`pilot-${i+1}`,t:`${current.mark}: синтетическая тема`,cn:'SYNTHETIC',fm:{sz:14}}}));
+  const response=await app(call({action:'submit',materialsFlow:2,student_id:executor.id,payload:{id:`pilot-${i+1}`,t:`${current.mark}: синтетическая тема`,k:'Курсовая работа',n:current.mark,u:'Тестовый вуз',d:'Экономика',dl:'2026-10-12',cn:'SYNTHETIC',fm:{sz:14}}}));
   assert.equal(response.status,200);assert.equal(rows[i].student_id,current.id);
   assert.equal((await app(call({action:'request-publish',id:ids[i]}))).status,200);
  }
@@ -89,7 +89,7 @@ test('twenty concurrent synthetic students do not mix requests or results',async
   throw Error(`Unexpected load path: ${path} ${method||''}`);
  };
  const apps=loadStudents.map(student=>handler({auth:async()=>student,config:async()=>({executor_email:executor.email}),isMember:async()=>true,db}));
- const submitted=await Promise.all(apps.map((app,i)=>app(call({action:'submit',materialsFlow:2,student_id:executor.id,payload:{id:`load-${i+1}`,t:`LOAD-STUDENT-${i+1}`,cn:'SYNTHETIC',fm:{sz:14}}}))));
+ const submitted=await Promise.all(apps.map((app,i)=>app(call({action:'submit',materialsFlow:2,student_id:executor.id,payload:{id:`load-${i+1}`,t:`LOAD-STUDENT-${i+1}`,k:'Курсовая работа',n:`Студент ${i+1}`,u:'Тестовый вуз',d:'Экономика',dl:'2026-10-12',cn:'SYNTHETIC',fm:{sz:14}}}))));
  assert.ok(submitted.every(response=>response.status===200));
  assert.equal((await (await handler({auth:async()=>executor,config:async()=>({executor_email:executor.email}),db})(call({action:'inbox'}))).json()).rows.length,0);
  const published=await Promise.all(apps.map((app,i)=>app(call({action:'request-publish',id:rows.find(row=>row.student_id===loadStudents[i].id).id}))));

@@ -6,7 +6,7 @@ import {memberAllowed} from '../supabase/functions/studkab-push/access.mjs';
 // C-054, замечания 4 и 5: заявки, уведомления и восстановление — только для допущенных студентов.
 const owner={id:'00000000-0000-4000-8000-000000000001',email:'owner@example.test',email_confirmed_at:'yes'};
 const stranger={id:'00000000-0000-4000-8000-000000000009',email:'tochka@example.test',email_confirmed_at:'yes'};
-const payload={id:'rq-test',t:'Тема',cn:'Контакт',dl:'2026-10-12',fm:{sz:14}};
+const payload={id:'rq-test',t:'Тема',k:'Курсовая работа',n:'Студент',u:'Вуз',d:'Предмет',cn:'Контакт',dl:'2026-10-12',fm:{sz:14}};
 const call=body=>new Request('https://x.test',{method:'POST',headers:{authorization:'Bearer t'},body:JSON.stringify(body)});
 
 test('C-054: пользователь без допуска не может подать заявку',async()=>{

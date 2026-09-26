@@ -117,7 +117,7 @@ test('partial send checkpoints request, retries same id, and never reports faile
  const html=read('index.html'),code=html.slice(html.indexOf('function openRequest('),html.indexOf('function icsEscape('));
  let click,removed=false,attempt=0;const calls=[],r={id:'client'},status={};
  const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:s=>s==='[data-request-status]'?status:{value:'test'},remove:()=>{removed=true;}};
- const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async input=>{calls.push(input);if(input.action==='request-state')return {payload:{id:'client',t:'new'}};if(input.action==='request-publish')return {ready:true,number:9};return {saved:true,id:a,number:9};}},requestPayload:p=>({id:p.req.id,t:p.topic}),prepareRequestFiles:async()=>['assignment','methodology','data','sources'].map(category=>({category,fileHash:'a'.repeat(64),fileName:category+'.txt'})),uploadRequestFiles:async()=>{if(++attempt===1)throw Error('Upload failed');return 4;},change:fn=>fn(),today:()=> 'today',render:()=>{},toast:()=>{}};
+ const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async input=>{calls.push(input);if(input.action==='request-state')return {payload:{id:'client',t:'new'}};if(input.action==='request-publish')return {ready:true,number:9};return {saved:true,id:a,number:9};}},requestPayload:p=>({id:p.req.id,t:p.topic,k:'Курсовая',n:'Студент',u:'Вуз',d:'Предмет',dl:'2026-10-12'}),prepareRequestFiles:async()=>['assignment','methodology','data','sources'].map(category=>({category,fileHash:'a'.repeat(64),fileName:category+'.txt'})),uploadRequestFiles:async()=>{if(++attempt===1)throw Error('Upload failed');return 4;},change:fn=>fn(),today:()=> 'today',render:()=>{},toast:()=>{}};
  vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
  const btn={disabled:false,getAttribute:()=> 'direct'};
  click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
@@ -132,7 +132,7 @@ test('invalid selected file is rejected before submitting a new request',async()
  const html=read('index.html'),code=html.slice(html.indexOf('function openRequest('),html.indexOf('function icsEscape('));
  let click;const calls=[],r={id:'client'},status={};
  const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:s=>s==='[data-request-status]'?status:{value:'test'}};
- const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async x=>calls.push(x)},prepareRequestFiles:async()=>{throw Error('Invalid file');},toast:()=>{}};
+ const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async x=>calls.push(x)},requestPayload:()=>({k:'Курсовая',n:'Студент',u:'Вуз',d:'Предмет',dl:'2026-10-12'}),prepareRequestFiles:async()=>{throw Error('Invalid file');},toast:()=>{}};
  vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
  const btn={disabled:false,getAttribute:()=> 'direct'};click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls.length,0);assert.equal(r.serverId,undefined);assert.equal(btn.disabled,false);assert.match(status.textContent,/Invalid file/);
@@ -141,7 +141,7 @@ test('three selected categories never create a visible or pending server request
  const html=read('index.html'),code=html.slice(html.indexOf('function openRequest('),html.indexOf('function icsEscape('));
  let click;const calls=[],r={id:'client'},status={};
  const wrap={addEventListener:(_,fn)=>{click=fn;},querySelector:s=>s==='[data-request-status]'?status:{value:'test'}};
- const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async x=>calls.push(x)},prepareRequestFiles:async()=>['assignment','methodology','data'].map(category=>({category,fileHash:'a'.repeat(64)})),toast:()=>{}};
+ const context={work:()=>({topic:'new',req:r}),openModal:()=>wrap,esc:x=>x||'',tooLongFields:()=>[],D:{},window:{Oblako:{}},Oblako:{requestApi:async x=>calls.push(x)},requestPayload:()=>({k:'Курсовая',n:'Студент',u:'Вуз',d:'Предмет',dl:'2026-10-12'}),prepareRequestFiles:async()=>['assignment','methodology','data'].map(category=>({category,fileHash:'a'.repeat(64)})),toast:()=>{}};
  vm.createContext(context);vm.runInContext(code,context);context.openRequest('work');
  const btn={disabled:false,getAttribute:()=> 'direct'};click({target:{closest:()=>btn}});await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls.length,0);assert.equal(r.serverId,undefined);assert.match(status.textContent,/задание, методичку, исходные данные и источники/);

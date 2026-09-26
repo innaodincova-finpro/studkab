@@ -8,7 +8,8 @@ import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
 import {attachmentAction} from './attachments.mjs';
 const fields={id:100,t:300,k:100,d:200,u:300,fc:300,kf:300,ct:100,n:200,g:100,pr:200,fo:100,co:50,s:200,dl:10,rq:500,org:1500,mn:1500,cn:200};
-export function validatePayload(p) {
+const intakeFields={k:'вид работы',n:'ФИО студента',u:'вуз',d:'дисциплину',dl:'срок'};
+export function validatePayload(p,{newSubmission=false,previous=null}={}) {
  if(!p||typeof p!=='object'||Array.isArray(p))throw Error('Неверная заявка');
  const out={v:1};
  for(const [k,max] of Object.entries(fields)) {
@@ -17,7 +18,9 @@ export function validatePayload(p) {
   out[k]=v;
  }
  if(!/^[A-Za-z0-9_-]{1,100}$/.test(out.id)||!out.t.trim()||!out.cn.trim())throw Error('Заполните тему и контакт для ответа');
- if(out.dl&&(!/^\d{4}-\d{2}-\d{2}$/.test(out.dl)||Number.isNaN(Date.parse(out.dl))||new Date(out.dl).toISOString().slice(0,10)!==out.dl))throw Error('Проверьте срок');
+ if(out.dl.trim()&&(!/^\d{4}-\d{2}-\d{2}$/.test(out.dl)||Number.isNaN(Date.parse(out.dl))||new Date(out.dl).toISOString().slice(0,10)!==out.dl))throw Error('Проверьте срок');
+ const missing=Object.entries(intakeFields).filter(([key])=>!out[key].trim()&&(newSubmission||(previous&&typeof previous[key]==='string'&&previous[key].trim()))).map(([,label])=>label);
+ if(missing.length)throw Error('Заполните перед отправкой: '+missing.join(', '));
  const f=p.fm??{};
  if(typeof f!=='object'||Array.isArray(f))throw Error('Проверьте оформление');
  out.fm={};
@@ -95,13 +98,28 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    if(['test-delivery-state','test-deliver','test-result'].includes(input.action)){
     const r=await testDeliveryAction(input,user,{db,config});return json(r.data,r.status||200);
    }
+   if(input.action==='student-progress'){
+    if(typeof isMember!=='function'||await isMember(user.id)!==true)return json({error:'Нет доступа'},403);
+    if(!/^[a-f0-9-]{36}$/i.test(String(input.id||'')))return json({error:'Неверная заявка'},400);
+    const [row]=await db('studkab_requests?select=id,ready_at&deleting_at=is.null&id=eq.'+input.id+'&student_id=eq.'+user.id+'&limit=1');
+    if(!row)return json({error:'Заявка не найдена'},404);
+    if(!row.ready_at)return json({stage:'awaiting_materials',openQuestions:0});
+    const [questions,passports,delivered]=await Promise.all([
+     db('studkab_clarifications?select=id,answered_at&request_id=eq.'+input.id+'&answered_at=is.null&limit=100'),
+     db('studkab_requirement_passports?select=status&request_id=eq.'+input.id+'&order=revision.desc&limit=1'),
+     db('studkab_results?select=delivery_id&request_id=eq.'+input.id+'&order=created_at.desc,id.desc&limit=1')
+    ]);
+    const openQuestions=questions.length;
+    const stage=delivered.length?'delivered':openQuestions?'needs_answer':passports[0]?.status==='approved'?'requirements_approved':passports.length?'requirements_review':'received';
+    return json({stage,openQuestions});
+   }
    if(input.action==='request-state'||input.action==='update-request'){
     if(typeof isMember!=='function'||await isMember(user.id)!==true)return json({error:'Нет доступа'},403);
     if(!/^[a-f0-9-]{36}$/i.test(String(input.id||'')))return json({error:'Неверная заявка'},400);
     const [row]=await db('studkab_requests?select=id,number,payload&deleting_at=is.null&id=eq.'+input.id+'&student_id=eq.'+user.id);
     if(!row)return json({error:'Заявка не найдена'},404);
     if(input.action==='request-state')return json({payload:row.payload});
-    let payload;try{payload=validatePayload(input.payload);}catch(e){return json({error:e.message},400);}
+    let payload;try{payload=validatePayload(input.payload,{previous:row.payload});}catch(e){return json({error:e.message},400);}
     if(!input.expectedPayload||typeof input.expectedPayload!=='object')return json({error:'Откройте заявку заново'},400);
     const result=await db('rpc/update_studkab_request','POST',{p_request:input.id,p_student:user.id,p_expected:input.expectedPayload,p_content:payload});
     if(result.missing)return json({error:'Заявка не найдена'},404);
@@ -113,7 +131,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     // C-054: заявку подаёт только студент, которому исполнитель выдал доступ.
     if(typeof isMember!=='function'||(await isMember(user.id))!==true)return json({error:'Подача заявок открывается после приглашения исполнителя. Попросите у исполнителя приглашение.'},403);
     if(input.materialsFlow!==2)return json({error:'Обновите кабинет перед отправкой заявки с материалами'},409);
-    let payload;try{payload=validatePayload(input.payload);}catch(e){return json({error:e.message},400);}
+    let payload;try{payload=validatePayload(input.payload,{newSubmission:true});}catch(e){return json({error:e.message},400);}
     const result=await db('rpc/submit_studkab_request','POST',{student:user.id,content:payload});
     if(result.conflict)return json({error:'Эта заявка уже передана. Для изменения условий свяжитесь с исполнителем.'},409);
     if(result.limited)return json({error:'Достигнут дневной лимит заявок. Попробуйте завтра.'},429);
