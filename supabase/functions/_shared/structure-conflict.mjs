@@ -30,3 +30,19 @@ export function structureConflicts(attachments=[]){
  }
  return null;
 }
+
+export function structureFindings(attachments=[],items=[]){
+ const item=items.find(q=>q?.id==='STRUCTURE');
+ const resolutions=item?.structure_resolutions||[];
+ const result=[];
+ for(const file of attachments){
+  if(!['assignment','methodology'].includes(file.category))continue;
+  const numbered=Array.from(String(file.extracted_text||'').matchAll(/(?:^|\n)[ \t]*(\d{1,2}(?:\.\d{1,2}){1,2})[ \t]+[^\n]{5,180}/gu),m=>m[1]);
+  for(const conflict of duplicateNumberedHeadings(file.extracted_text)){
+   const resolved=item?.verified===true&&typeof item.source==='string'&&!!item.source.trim()&&!/нумерацию следует уточнить/iu.test(item.text||'')&&Array.isArray(resolutions)&&resolutions.some(r=>r&&r.fileHash===file.file_hash&&r.number===conflict.number&&r.first===conflict.first&&r.second===conflict.second&&r.verified===true&&typeof r.reason==='string'&&r.reason.trim().length>=10&&typeof r.chosenNumber==='string'&&/^\d{1,2}(?:\.\d{1,2}){1,2}$/u.test(r.chosenNumber)&&r.chosenNumber!==r.number&&r.chosenNumber.split('.').slice(0,-1).join('.')===r.number.split('.').slice(0,-1).join('.')&&!numbered.includes(r.chosenNumber)&&String(item.text).includes(r.chosenNumber)&&String(item.text).includes(r.second));
+   result.push({fileName:String(file.file_name||'приложенный документ').slice(0,180),fileHash:file.file_hash,...conflict,resolved});
+   if(result.length>=12)return result;
+  }
+ }
+ return result;
+}
