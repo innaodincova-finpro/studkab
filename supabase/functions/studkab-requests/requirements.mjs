@@ -1,5 +1,7 @@
 import {validateMaterialManifest,resetMaterialEvidence,materialManifestGuard} from '../_shared/material-manifest.mjs';
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
+import {structureFindings} from '../_shared/structure-conflict.mjs';
+import {currentAttachments} from '../_shared/current-attachments.mjs';
 const categories=new Set(['method','measurable','expert','assumption']);
 const statuses=new Set(['draft','approved','stale']);
 const originalityModes=new Set(['university_threshold','university_threshold_no_service','university_no_threshold','service_only']);
@@ -46,7 +48,18 @@ export function validatePassport(input){
    if(!categories.has(item.category))throw Error('Проверьте категорию пункта '+(index+1));
    const answer_ids=Array.isArray(item.answer_ids)?item.answer_ids:[];
    if(answer_ids.length>100||answer_ids.some(x=>typeof x!=='string'||!/^[a-f0-9-]{36}$/i.test(x)))throw Error('Проверьте ответы студента');
-   return {verified:item.verified===true,answer_ids,id,category:item.category,required:item.required!==false,text:text(item.text,2000,'текст пункта',true),source:text(item.source,1000,'источник'),...(id==='ANTIPLAGIARISM'?{originality:originality(item)}:{})};
+   let structure_resolutions=[];
+   if(id==='STRUCTURE'){
+    const values=item.structure_resolutions??[];
+    if(!Array.isArray(values)||values.length>12)throw Error('Проверьте решения по нумерации');
+    structure_resolutions=values.map(r=>{
+     if(!r||typeof r!=='object'||Array.isArray(r))throw Error('Проверьте решение по нумерации');
+     const fileHash=text(r.fileHash,64,'хеш материала',true),number=text(r.number,10,'исходный номер',true),chosenNumber=text(r.chosenNumber,10,'выбранный номер',true);
+     if(!/^[a-f0-9]{64}$/u.test(fileHash)||!/^\d{1,2}(?:\.\d{1,2}){1,2}$/u.test(number)||!/^\d{1,2}(?:\.\d{1,2}){1,2}$/u.test(chosenNumber))throw Error('Проверьте номер и исходный материал');
+     return {fileHash,number,chosenNumber,first:text(r.first,180,'первый заголовок',true),second:text(r.second,180,'второй заголовок',true),reason:text(r.reason,1000,'основание исправления'),verified:r.verified===true};
+    });
+   }
+   return {verified:item.verified===true,answer_ids,id,category:item.category,required:item.required!==false,text:text(item.text,2000,'текст пункта',true),source:text(item.source,1000,'источник'),...(id==='ANTIPLAGIARISM'?{originality:originality(item)}:{}),...(id==='STRUCTURE'?{structure_resolutions}:{})};
   })
  };
 }
@@ -156,6 +169,12 @@ export async function requirementAction(input,user,{db,config}){
  const [row]=await db('studkab_requests?select=id,payload,revision,ready_at,studkab_material_revisions(id,closed_at),studkab_request_reassignments(operation_id)&deleting_at=is.null&limit=1&id=eq.'+request);
  if(!row)return {status:404,data:{error:'Заявка не найдена'}};
  if(row.ready_at===null)return {status:409,data:{error:'Заявка ожидает полный комплект материалов'}};
+ if(input.action==='passport-structure-audit'){
+  const [latest]=await db('studkab_requirement_passports?select=items&request_id=eq.'+request+'&order=revision.desc&limit=1');
+  const attached=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
+  if(!Array.isArray(attached))throw Error('Не удалось прочитать исходные материалы');
+  return {status:200,data:{findings:structureFindings(currentAttachments(attached),latest?.items||[]),materialRevision:row.revision}};
+ }
  const revisionOpen=(row.studkab_material_revisions||[]).some(c=>c.closed_at===null);
  if(revisionOpen&&input.action!=='passport-get'){
   if(input.action!=='passport-ensure')return {status:409,data:{error:'Завершите дополнение материалов перед изменением паспорта'}};
