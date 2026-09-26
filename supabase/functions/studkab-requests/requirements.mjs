@@ -152,9 +152,9 @@ export function defaultPassport(payload={}){
   {id:'METHODOLOGY',category:'expert',required:true,text:'Методология: '+value(payload.mn),source:'Методические требования'},
   {id:'FORMATTING',category:'measurable',required:true,text:'Оформление: '+formatting,source:'Заявка студента'},
   {id:'SOURCES',category:'method',required:true,text:'Источники: '+(facts.SOURCES?.text||'Не указано — требуется уточнить'),source:facts.SOURCES?.source||'Методические требования'},
-  {id:'CALCULATIONS',category:'expert',required:true,text:'Расчёты: '+value(payload.org),source:'Заявка и материалы'},
+  {id:'CALCULATIONS',category:'expert',required:true,text:'Расчёты и исходные данные: Не указано — требуется уточнить',source:''},
   {id:'ANTIPLAGIARISM',category:'measurable',required:true,text:'Система и порог оригинальности: Не указано — требуется уточнить',source:'',originality:null},
-  {id:'TEACHER',category:'method',required:true,text:'Условия преподавателя: '+value(payload.rq),source:'Заявка студента'}
+  {id:'TEACHER',category:'method',required:true,text:'Условия преподавателя: Не указано — требуется уточнить',source:''}
  ]};
  const semantic=semanticRequirements(payload);
  passport.items=passport.items.map(item=>semantic[item.id]?{...item,text:semantic[item.id].text,source:semantic[item.id].source}:item);
