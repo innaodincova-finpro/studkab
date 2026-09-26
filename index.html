@@ -1072,14 +1072,16 @@ function openRequest(workId){
       '<textarea id="rqOrg" style="min-height:90px" placeholder="Название, сфера деятельности, что известно">'+esc(r.org||"")+'</textarea></div>'+
     '<div class="field"><label>Особенности методички</label>'+
       '<textarea id="rqNotes" style="min-height:90px" placeholder="Чем требования кафедры отличаются от обычных">'+esc(r.notes||"")+'</textarea></div>'+
-    '<div class="field"><label>Материалы к заявке</label><p class="hint">DOCX, PDF или TXT, до 5 МБ каждый. Новый файл в заполненной категории заменяет текущую редакцию; прежняя сохраняется в истории. Файлы доступны только вам и исполнителю.</p>'+
-      '<label class="mini">Задание<input type="file" data-request-file="assignment" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
-      '<label class="mini">Методические указания<input type="file" data-request-file="methodology" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
-      '<label class="mini">Исходные данные<input type="file" data-request-file="data" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
-      '<label class="mini">Источники<input type="file" data-request-file="sources" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label></div>'+
+    '<div class="field"><label>Что требуется выполнить и каких сведений не хватает</label>'+
+      '<textarea id="rqRequirements" style="min-height:100px" maxlength="500" placeholder="Опишите задание своими словами, структуру, объём и выданные условия. Если чего-то нет, так и напишите — исполнитель уточнит.">'+esc(w.requirements||"")+'</textarea></div>'+
+    '<div class="field"><label>Материалы к заявке</label><p class="hint">Приложите выданное задание или опишите задачу выше. Остальные файлы нужны, только если они существуют и относятся к вашей работе. Один файл может содержать несколько видов материалов. Если сведений для подготовки не хватает, исполнитель задаст вопрос; отправка заявки не означает одобрения материалов. DOCX, PDF или TXT, до 5 МБ каждый. Новый файл в заполненной категории заменяет текущую редакцию; прежняя сохраняется в истории. Файлы доступны только вам и исполнителю.</p>'+
+      '<label class="mini">Задание или общий файл, если есть<input type="file" data-request-file="assignment" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
+      '<label class="mini">Методические указания, если выданы<input type="file" data-request-file="methodology" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
+      '<label class="mini">Исходные данные, если требуются для работы<input type="file" data-request-file="data" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
+      '<label class="mini">Список источников, если выдан<input type="file" data-request-file="sources" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label></div>'+
     '<div class="infobox">Вуз и кафедра берутся из «Профиль → Данные студента». Дисциплина и руководитель указываются внутри работы: «Оформление документа → Изменить».</div>'+
     '<div class="hint">Заявка сохранится в реестре исполнителя. О новой заявке он получит уведомление в Telegram. Изменения существующей заявки появятся при обновлении реестра. Почтовые уведомления пока не подключены.</div>'+
-    '<p role="status" data-request-status>'+esc(r.filesPending?'Черновик заявки №'+r.number+' ожидает материалы. Исполнитель пока не уведомлён. Выберите незагруженные файлы повторно.':'')+'</p>'+
+    '<p role="status" data-request-status>'+esc(r.filesPending?'Черновик заявки №'+r.number+' ожидает загрузку выбранных файлов. Исполнитель пока не уведомлён. Выберите незагруженные файлы повторно.':'')+'</p>'+
     '<div class="rowbtns">'+
       '<button type="button" class="b b-main" data-send="direct">Отправить заявку исполнителю</button>'+
       '<button type="button" class="b b-alt" data-send="copy">Скопировать текст</button>'+
@@ -1095,9 +1097,10 @@ function openRequest(workId){
     var draft = {
       contact: wrap.querySelector("#rqContact").value,
       org: wrap.querySelector("#rqOrg").value,
-      notes: wrap.querySelector("#rqNotes").value
+      notes: wrap.querySelector("#rqNotes").value,
+      requirements: wrap.querySelector("#rqRequirements").value
     };
-    var probe = { topic:w.topic, requirements:w.requirements, student:w.student, group:w.group,
+    var probe = { topic:w.topic, requirements:draft.requirements, student:w.student, group:w.group,
       deadline:w.deadline, format:w.format,
       req:{ id:r.id, serverId:r.serverId, preserveSubmittedFields:r.preserveSubmittedFields, contact:draft.contact, org:draft.org, notes:draft.notes } };
 
@@ -1126,27 +1129,27 @@ function openRequest(workId){
       var submitPromise=prepareRequestFiles(wrap).then(function(files){
         if(D!==expectedData)throw Error('Кабинет изменился. Откройте заявку заново');
         preparedFiles=files;
-        if(!r.serverId&&new Set(files.map(function(f){return f.category;})).size!==4)throw Error('До отправки выберите задание, методичку, исходные данные и источники.');
-        if(r.filesPending&&!(r.pendingFiles||[]).length&&!files.length)throw Error('Выберите незагруженные файлы повторно. Заявка ожидает материалы.');
+        if(!r.serverId&&!files.some(function(f){return f.category==='assignment';})&&draft.requirements.trim().length<15)throw Error('Приложите задание либо опишите задачу и недостающие сведения (от 15 знаков).');
+        if(r.filesPending&&(r.pendingFiles||[]).length&&!files.length)throw Error('Выберите незагруженные файлы повторно. Заявка ожидает загрузку выбранных файлов.');
         return r.serverId?originalState.then(function(state){if(state.error)throw state.error;return Oblako.requestApi({action:'update-request',id:r.serverId,expectedPayload:state.payload,payload:requestPayload(probe)});}):Oblako.requestApi({action:'submit',materialsFlow:2,payload:requestPayload(probe)});
       });
       submitPromise.then(async function(result){
         if (D !== expectedData) throw new Error("Кабинет изменился. Откройте заявку заново");
         if (!result.saved || !result.id || !result.number) throw new Error("Сохранение не подтверждено. Повторите отправку");
-        change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.serverId=result.id;r.number=result.number;r.pendingFiles=(r.pendingFiles||[]).filter(function(p){return !preparedFiles.some(function(f){return f.category===p.category;});}).concat(preparedFiles.map(function(f){return {category:f.category,fileHash:f.fileHash,fileName:f.fileName};}));r.filesPending=r.pendingFiles.length>0;});
+        change(function(){w.requirements=draft.requirements;r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.serverId=result.id;r.number=result.number;r.pendingFiles=(r.pendingFiles||[]).filter(function(p){return !preparedFiles.some(function(f){return f.category===p.category;});}).concat(preparedFiles.map(function(f){return {category:f.category,fileHash:f.fileHash,fileName:f.fileName};}));r.filesPending=r.pendingFiles.length>0;});
         originalState=Oblako.requestApi({action:'request-state',id:result.id}).then(function(x){return x;},function(e){return {error:e};});
         var uploaded=await uploadRequestFiles(wrap,result.id,btn,preparedFiles,r.pendingFiles);
         if(D!==expectedData)throw Error("Кабинет изменился. Проверьте отправку после входа");
-        btn.textContent='Проверяем полный комплект…';
+        btn.textContent='Публикуем заявку…';
         var published=await Oblako.requestApi({action:'request-publish',id:result.id});
-        if(!published.ready||published.number!==result.number)throw Error('Публикация полного комплекта не подтверждена. Проверьте заявку и повторите.');
+        if(!published.ready||published.number!==result.number)throw Error('Публикация заявки не подтверждена. Проверьте данные и повторите.');
         change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.sent=today();r.sentBy="direct";r.attachments=uploaded;r.filesPending=false;r.pendingFiles=[];});
         wrap.remove();render();toast(result.email==='not_configured' ?
           'Заявка №'+result.number+' сохранена в реестре. Telegram поставлен в очередь, email исполнителю пока не настроен.' :
           'Заявка №'+result.number+' сохранена в реестре. Проверьте уведомления отдельно.');
       }).catch(function(e){
         if(D!==expectedData)return;
-        var message=(r.serverId?'Черновик заявки №'+r.number+' ожидает полный комплект; исполнитель пока не уведомлён. ':'')+(e.message||'Не удалось отправить. Повторите попытку');
+        var message=(r.serverId?'Черновик заявки №'+r.number+' ещё не опубликован; исполнитель пока не уведомлён. ':'')+(e.message||'Не удалось отправить. Повторите попытку');
         if(r.filesPending)message+=' Загрузка материалов не завершена; сохранённые файлы при повторе не дублируются.';
         wrap.querySelector('[data-request-status]').textContent=message;toast(message);
       })

@@ -9,6 +9,23 @@ test('C115 new request shows missing identity and course fields before any API c
  await expect(page.locator('[data-request-status]')).toContainText('ФИО студента');
  expect(await page.evaluate(()=>requestCalls.filter(x=>x.action==='submit').length)).toBe(0);
 });
+test('C121 cabinet asks for a written task when no assignment is attached',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  D.works=[{id:'c121',topic:'Проект',student:'Студент',deadline:'2026-10-15',format:{workType:'Курсовая',univ:'Вуз',discipline:'Экономика'},req:{id:'c121-rq'}}];
+  window.requestCalls=[];
+  Oblako.requestApi=async body=>{requestCalls.push(body);if(body.action==='attachment-list')return {attachments:[]};if(body.action==='request-publish')return {ready:true,number:5};return {saved:true,id:'11111111-1111-4111-8111-111111111111',number:5};};
+  openRequest('c121');
+ });
+ await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
+ await expect(page.locator('[data-request-status]')).toContainText('Приложите задание либо опишите задачу');
+ expect(await page.evaluate(()=>requestCalls.length)).toBe(0);
+ await page.locator('#rqRequirements').fill('Тема утверждена. Требования к объёму и методичку не выдавали — прошу уточнить.');
+ await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>D.works[0].req.sentBy)).toBe('direct');
+ expect(await page.evaluate(()=>requestCalls.find(x=>x.action==='submit').payload.rq)).toContain('методичку не выдавали');
+ expect(await page.evaluate(()=>requestCalls.map(x=>x.action).slice(0,4))).toEqual(['submit','request-state','attachment-list','request-publish']);
+});
 test('cabinet request roundtrip, hostile link rejection, repeat preserves work',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
  const sent=await page.evaluate(()=>{
@@ -179,13 +196,13 @@ test('C090 partial upload survives reopened form and retries only missing materi
  await page.locator('[data-request-file="data"]').setInputFiles(data);
  await page.locator('[data-request-file="sources"]').setInputFiles(sources);
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
- await expect(page.locator('[data-request-status]')).toContainText('Черновик заявки №12 ожидает полный комплект');
+ await expect(page.locator('[data-request-status]')).toContainText('Черновик заявки №12 ещё не опубликован');
  expect(await page.evaluate(()=>D.works[0].req.filesPending)).toBe(true);
  expect(await page.evaluate(()=>requestsSeen.some(x=>x.action==='request-publish'))).toBe(false);
  await page.getByRole('button',{name:'Закрыть',exact:true}).last().click();
  await page.evaluate(()=>openRequest('w-recover'));
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
- await expect(page.locator('[data-request-status]')).toContainText('Не все выбранные ранее материалы загружены');
+ await expect(page.locator('[data-request-status]')).toContainText('Выберите незагруженные файлы повторно');
  expect(await page.evaluate(()=>D.works[0].req.sent)).toBeUndefined();
  await page.locator('[data-request-file="assignment"]').setInputFiles(assignment);
  await page.locator('[data-request-file="methodology"]').setInputFiles(methodology);
