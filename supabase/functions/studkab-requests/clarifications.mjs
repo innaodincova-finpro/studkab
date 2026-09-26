@@ -5,7 +5,18 @@ export async function clarificationAction(input,user,{db,config,isMember}){
  if(!executor&&(!isMember||!await isMember(user.id)))return {status:403,data:{error:'Нет доступа'}};
  const [row]=await db('studkab_requests?select=id,student_id&deleting_at=is.null&id=eq.'+input.id+(executor?'':'&student_id=eq.'+user.id));
  if(!row)return {status:404,data:{error:'Заявка не найдена'}};
- if(input.action==='clarification-list')return {data:{questions:await db('studkab_clarifications?select=id,item_id,question,answer,answer_source,created_at,answered_at&request_id=eq.'+input.id+'&order=created_at.asc,id.asc&limit=100')}};
+ if(input.action==='clarification-unread'){
+  const events=await db('studkab_dialog_events?select=id,kind&request_id=eq.'+input.id+'&recipient_id=eq.'+user.id+'&read_at=is.null&order=id.asc&limit=100');
+  return {data:{unread:events.length,question:events.filter(e=>e.kind==='question').length,answer:events.filter(e=>e.kind==='answer').length}};
+ }
+ if(input.action==='clarification-read'){
+  await db('studkab_dialog_events?request_id=eq.'+input.id+'&recipient_id=eq.'+user.id+'&read_at=is.null','PATCH',{read_at:new Date().toISOString()});
+  return {data:{read:true}};
+ }
+ if(input.action==='clarification-list'){
+  const questions=await db('studkab_clarifications?select=id,item_id,question,answer,answer_source,created_at,answered_at&request_id=eq.'+input.id+'&order=created_at.asc,id.asc&limit=100');
+  return {data:{questions}};
+ }
  if(!uuid(input.questionId))return {status:400,data:{error:'Неверный вопрос'}};
  const clean=(value,max)=>typeof value==='string'&&value.trim().length>0&&value.length<=max?value.trim():null;
  if(input.action==='clarification-ask'){

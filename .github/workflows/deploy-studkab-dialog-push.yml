@@ -1,0 +1,27 @@
+name: Deploy STUDKAB dialogue push
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - supabase/functions/studkab-push/**
+      - .github/workflows/deploy-studkab-dialog-push.yml
+permissions:
+  contents: read
+concurrency:
+  group: studkab-dialog-push-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'innaodincova-finpro/studkab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.117.0
+      - name: Deploy after verifying C120 migration is installed
+        run: supabase functions deploy studkab-push --project-ref dcpthwmuiodrjepifzsd --use-api --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
