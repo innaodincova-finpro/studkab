@@ -76,7 +76,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
    if(['material-revision-state','material-revision-open','material-revision-complete'].includes(input.action)){
     const r=await materialRevisionAction(input,user,{db,config,isMember});return json(r.data,r.status||200);
    }
-   if(['passport-get','passport-ensure','passport-save','passport-approve'].includes(input.action)){
+   if(['passport-get','passport-ensure','passport-save','passport-approve','passport-structure-audit'].includes(input.action)){
     const r=await requirementAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(['attachment-upload','attachment-list','attachment-context','attachment-download'].includes(input.action)){

@@ -401,7 +401,7 @@ test('C077 new revision edits filled requirements and keeps a separate draft',as
   draftItem.requestNumber=6;
   draftItem.passports=[{id:'old',revision:7,status:'approved',title:'Требования',summary:'Старая запись',material_manifest:draftManifest,items}];
   window.savedPassports=[];
-  Oblako.requestApi=async body=>{if(body.action==='material-revision-state')return {materials:draftItem.materialRevision};if(body.action==='clarification-list')return {questions:[]};if(body.action==='attachment-context')return {attachments:[]};if(body.action==='passport-save'){savedPassports.push(body);return {passport:{...body.passport,id:'new',revision:8,status:'draft'}};}throw Error('Unexpected '+body.action);};
+  Oblako.requestApi=async body=>{if(body.action==='material-revision-state')return {materials:draftItem.materialRevision};if(body.action==='clarification-list')return {questions:[]};if(body.action==='attachment-context')return {attachments:[]};if(body.action==='passport-structure-audit')return {findings:[]};if(body.action==='passport-ensure')return {passports:draftItem.passports,materialRevision:0};if(body.action==='passport-save'){savedPassports.push(body);return {passport:{...body.passport,id:'new',revision:8,status:'draft'}};}throw Error('Unexpected '+body.action);};
   openId=draftItem.id;render();
  });
  await page.getByRole('tab',{name:'Требования',exact:true}).click();
@@ -436,6 +436,8 @@ test('C095 answered clarification stays current through revision and approval',a
    if(body.action==='material-revision-state')return {materials:draftItem.materialRevision};
    if(body.action==='clarification-list')return {questions:[question]};
    if(body.action==='attachment-context')return {attachments:[]};
+   if(body.action==='passport-structure-audit')return {findings:[]};
+   if(body.action==='passport-ensure')return {passports:draftItem.passports,materialRevision:0};
    if(body.action==='passport-save')return {passport:{...body.passport,id:'new',revision:3,status:'draft'}};
    if(body.action==='passport-approve')return {passport:{...body.passport,id:'new',revision:3,status:'approved'}};
    throw Error('Unexpected '+body.action);

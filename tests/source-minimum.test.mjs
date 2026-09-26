@@ -8,13 +8,13 @@ const id='11111111-1111-4111-8111-111111111111',hash='a'.repeat(64);
 const user={id,email:'owner@example.test',email_confirmed_at:'yes'};
 const items=[{id:'P1',category:'method',required:true,text:'Объём 25–30 страниц; структура: введение, три главы, заключение, не менее 5 источников и приложения. Использовать только предоставленные данные и S1–S5.',source:'задание'}];
 const attachments=[{category:'assignment',file_name:'Задание.docx',file_hash:hash,extracted_text:'Список источников\n\nНе менее 10 позиций; в тесте использовать предоставленные материалы'}];
-function setup({failure=false}={}){
+function setup({failure=false,files=attachments}={}){
  const writes=[];
  const db=async(path,...args)=>{
   if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path==='rpc/studkab_result_context_version')return 2;
   if(path.startsWith('rpc/')){writes.push(path);return {};}
-  if(path.startsWith('studkab_request_attachments')){if(failure)throw Error('READ_FAILED');return attachments;}
+  if(path.startsWith('studkab_request_attachments')){if(failure)throw Error('READ_FAILED');return files;}
   if(path.startsWith('studkab_requirement_passports'))return [{id,status:'approved',items,summary:'Согласовано',source_fingerprint:hash}];
   if(path.startsWith('studkab_requests'))return [{id,student_id:id,payload:{k:'Курсовая работа'}}];
   if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];
@@ -40,6 +40,14 @@ test('generation estimate and start block existing approved conflicting passport
   const deps=setup();const h=handler({...deps,auth:async()=>user,settings:()=>({enabled:true})});
   const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer test'},body:JSON.stringify({action,request:id,system:'Материалы',materialFingerprint:hash,parts:[{id:'intro',prompt:'Введение'}]})}));
   assert.equal(response.status,409);assert.equal((await response.json()).code,'SOURCE_MINIMUM_CONFLICT');assert.deepEqual(deps.writes,[]);
+ }
+});
+test('generation cannot bypass a repeated section number in original methodology',async()=>{
+ const files=[{category:'methodology',file_name:'method.pdf',file_hash:hash,extracted_text:'2.3 Расчёт себестоимости\n2.3 Расчёт финансовых результатов\n2.5 Оборотные средства'}];
+ for(const action of ['estimate','start']){
+  const deps=setup({files});const h=handler({...deps,auth:async()=>user,settings:()=>({enabled:true})});
+  const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer test'},body:JSON.stringify({action,request:id,system:'Материалы',materialFingerprint:hash,parts:[{id:'intro',prompt:'Введение'}]})}));
+  assert.equal(response.status,409);assert.equal((await response.json()).code,'STRUCTURE_NUMBER_CONFLICT');assert.deepEqual(deps.writes,[]);
  }
 });
 test('review and delivery cannot omit document to bypass source conflict',async()=>{

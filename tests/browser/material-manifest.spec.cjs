@@ -15,6 +15,7 @@ async function setup(page){
    if(body.action==='material-revision-state')return {materials:x.materialRevision};
    if(body.action==='attachment-context')return {attachments:[attachment],materialRevision:2};
    if(body.action==='clarification-list')return {questions:[question]};
+   if(body.action==='passport-structure-audit')return {findings:[]};
    if(body.action==='passport-ensure'){x.passports[0].source_fingerprint=body.sourceFingerprint;return {passports:x.passports,materialRevision:2};}
    if(body.action==='passport-save')return {passport:{...body.passport,id:crypto.randomUUID(),status:'draft',revision:2},materialRevision:2};
    if(body.action==='passport-approve')return {passport:{...body.passport,id:body.passportId,status:'approved',revision:2},materialRevision:2};
