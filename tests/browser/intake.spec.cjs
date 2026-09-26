@@ -202,7 +202,7 @@ test('C090 partial upload survives reopened form and retries only missing materi
  await page.getByRole('button',{name:'Закрыть',exact:true}).last().click();
  await page.evaluate(()=>openRequest('w-recover'));
  await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
- await expect(page.locator('[data-request-status]')).toContainText('Не все выбранные ранее материалы загружены');
+ await expect(page.locator('[data-request-status]')).toContainText('Выберите незагруженные файлы повторно');
  expect(await page.evaluate(()=>D.works[0].req.sent)).toBeUndefined();
  await page.locator('[data-request-file="assignment"]').setInputFiles(assignment);
  await page.locator('[data-request-file="methodology"]').setInputFiles(methodology);
