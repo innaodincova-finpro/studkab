@@ -76,3 +76,10 @@ test('passport approval accepts only a persisted confirmed resolution for curren
  const blocked=await requirementAction(input,{id,email:'executor@example.test'},deps);
  assert.equal(blocked.status,409);assert.equal(blocked.data.code,'STRUCTURE_NUMBER_CONFLICT');assert.equal(approved,1);
 });
+test('a document with more conflicts than the review limit cannot bypass the gate',async()=>{
+ const headings=Array.from({length:13},(_,i)=>`${i+1}.1 Первый подраздел\n${i+1}.1 Второй подраздел`).join('\n');
+ const file={category:'methodology',file_name:'many.pdf',file_hash:'a'.repeat(64),extracted_text:headings};
+ const issues=structureFindings([file]);assert.equal(issues.length,13);assert.equal(issues.at(-1).tooMany,true);
+ const block=await sourceMinimumGuard(async()=>[file],id,[{id:'STRUCTURE',verified:true,source:'Методичка',text:'Структура'}]);
+ assert.equal(block.code,'STRUCTURE_NUMBER_CONFLICT');
+});
