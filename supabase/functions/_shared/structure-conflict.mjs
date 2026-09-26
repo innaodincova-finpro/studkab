@@ -15,9 +15,9 @@ export function duplicateNumberedHeadings(text=''){
   for(let j=i-1;j>=0&&current.offset-matches[j].offset<2000;j--){
    const prior=matches[j];
    if(prior.number!==current.number||prior.title===current.title||prior.title.startsWith(current.title)||current.title.startsWith(prior.title))continue;
+   if(conflicts.length===12)return [...conflicts,{number:'?',first:'',second:'',tooMany:true}];
    conflicts.push({number:current.number,first:prior.display,second:current.display});break;
   }
-  if(conflicts.length===3)break;
  }
  return conflicts;
 }
@@ -39,9 +39,9 @@ export function structureFindings(attachments=[],items=[]){
   if(!['assignment','methodology'].includes(file.category))continue;
   const numbered=Array.from(String(file.extracted_text||'').matchAll(/(?:^|\n)[ \t]*(\d{1,2}(?:\.\d{1,2}){1,2})[ \t]+[^\n]{5,180}/gu),m=>m[1]);
   for(const conflict of duplicateNumberedHeadings(file.extracted_text)){
+   if(result.length===96)return [...result,{fileName:String(file.file_name||'приложенный документ').slice(0,180),number:'?',first:'',second:'',tooMany:true,resolved:false}];
    const resolved=item?.verified===true&&typeof item.source==='string'&&!!item.source.trim()&&!/нумерацию следует уточнить/iu.test(item.text||'')&&Array.isArray(resolutions)&&resolutions.some(r=>r&&r.fileHash===file.file_hash&&r.number===conflict.number&&r.first===conflict.first&&r.second===conflict.second&&r.verified===true&&typeof r.reason==='string'&&r.reason.trim().length>=10&&typeof r.chosenNumber==='string'&&/^\d{1,2}(?:\.\d{1,2}){1,2}$/u.test(r.chosenNumber)&&r.chosenNumber!==r.number&&r.chosenNumber.split('.').slice(0,-1).join('.')===r.number.split('.').slice(0,-1).join('.')&&!numbered.includes(r.chosenNumber)&&String(item.text).includes(r.chosenNumber)&&String(item.text).includes(r.second));
-   result.push({fileName:String(file.file_name||'приложенный документ').slice(0,180),fileHash:file.file_hash,...conflict,resolved});
-   if(result.length>=12)return result;
+   result.push({fileName:String(file.file_name||'приложенный документ').slice(0,180),fileHash:file.file_hash,...conflict,resolved:!conflict.tooMany&&resolved});
   }
  }
  return result;
