@@ -378,6 +378,12 @@
       "name": "c120_dialog_events",
       "file": "20260926114639_c120_dialog_events.sql",
       "sha256": "12e81249c0c2010cbb1473f57260efb3b1039ac57fadc79f14a76fd09fa0bf24"
+    },
+    {
+      "version": "20260926150000",
+      "name": "c121_conditional_request_materials",
+      "file": "20260926150000_c121_conditional_request_materials.sql",
+      "sha256": "9a366f39893662c3f3fa8e39b569c993651f85a91978ede05cc5c9a1810c9d08"
     }
   ],
   "production_reconciled_at": "2026-09-23"
