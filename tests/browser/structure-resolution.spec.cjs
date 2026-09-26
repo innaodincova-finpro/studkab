@@ -36,7 +36,7 @@ test('numbering conflict is visible and a verified version clears the UI blocker
  await dialog.getByRole('button',{name:'Сохранить уточнения'}).click();
  await expect(dialog).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>structureItem.structureFindings?.[0]?.resolved)).toBe(true);
- await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeEnabled();
+ await expect(page.locator('[data-act="passport-approve"]')).toBeEnabled();
  const saved=await page.evaluate(()=>structureCalls.find(c=>c.action==='passport-save').passport.items.find(q=>q.id==='STRUCTURE'));
  expect(saved.structure_resolutions[0].chosenNumber).toBe('2.4');
  expect(saved.text).toContain('2.4 Финансовые результаты');
