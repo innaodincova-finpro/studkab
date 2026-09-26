@@ -24,7 +24,7 @@
   const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
   try{const d=await Oblako.pushRequest({action:'subscribe',subscription:sub.toJSON(),timezone});localStorage.setItem(key,JSON.stringify({id:d.id}));}
   catch(e){await sub.unsubscribe();throw e;}
-  return 'Уведомления включены. Отправка в 10:00 ('+timezone+'). Для проверки нажмите «Проверить через минуту».';
+  return 'Уведомления о вопросах включены. Напоминания о сроках приходят в 10:00 ('+timezone+'). Для проверки нажмите «Проверить через минуту».';
  }
  async function action(name){
   if(busy)return;busy=true;
