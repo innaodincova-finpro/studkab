@@ -51,7 +51,7 @@ export function validatePassport(input){
    let structure_resolutions=[];
    if(id==='STRUCTURE'){
     const values=item.structure_resolutions??[];
-    if(!Array.isArray(values)||values.length>12)throw Error('Проверьте решения по нумерации');
+    if(!Array.isArray(values)||values.length>96)throw Error('Проверьте решения по нумерации');
     structure_resolutions=values.map(r=>{
      if(!r||typeof r!=='object'||Array.isArray(r))throw Error('Проверьте решение по нумерации');
      const fileHash=text(r.fileHash,64,'хеш материала',true),number=text(r.number,10,'исходный номер',true),chosenNumber=text(r.chosenNumber,10,'выбранный номер',true);
