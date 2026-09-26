@@ -20,6 +20,14 @@ test('C120 dialogue events are atomic, unique and scoped to the recipient',async
    insert into studkab_requests values('${request}','${student}',null);
   `);
   for(const name of ['20260914105509_studkab_requirement_passports.sql','20260921165603_c084_requirement_clarifications.sql','20260921181451_c085_clarification_actor_permissions.sql','20260926114639_c120_dialog_events.sql'])await db.exec(file(name));
+  await db.exec(`create table studkab_push_subscriptions(id uuid primary key);
+   create table studkab_push_deliveries(key text primary key,subscription_id uuid references studkab_push_subscriptions(id),claimed_at timestamptz default now(),attempts integer default 1,sent_at timestamptz,result text);
+   grant select,insert,update on studkab_push_deliveries to service_role;
+   grant select,insert on studkab_push_subscriptions to service_role;`);
+  const oldClaim=file('20260907113822_studkab_deadline_push.sql').match(/create function public\.claim_studkab_push_delivery\([\s\S]*?\$\$;/)[0];
+  await db.exec(oldClaim);
+  await db.exec('revoke all on function public.claim_studkab_push_delivery(text,uuid) from public,anon,authenticated; grant execute on function public.claim_studkab_push_delivery(text,uuid) to service_role;');
+  await db.exec(file('20260926161000_c124_dialog_retry.sql'));
   await db.exec(`grant usage on schema auth to service_role;
    grant select,update on studkab_requests to service_role;
    grant select on studkab_request_config,studkab_members to service_role;set role service_role;`);
@@ -33,10 +41,36 @@ test('C120 dialogue events are atomic, unique and scoped to the recipient',async
   await answer();await answer();
   assert.deepEqual((await db.query('select kind,recipient_id from studkab_dialog_events order by id')).rows.map(r=>[r.kind,r.recipient_id]),[['question',student],['answer',executor]]);
   for(const role of ['anon','authenticated'])assert.equal((await db.query("select has_table_privilege($1,'studkab_dialog_events','SELECT') allowed",[role])).rows[0].allowed,false);
+  for(const role of ['anon','authenticated']){
+   assert.equal((await db.query("select has_function_privilege($1,'claim_studkab_dialog_telegram()','EXECUTE') allowed",[role])).rows[0].allowed,false);
+   assert.equal((await db.query("select has_function_privilege($1,'claim_studkab_push_delivery(text,uuid)','EXECUTE') allowed",[role])).rows[0].allowed,false);
+  }
   assert.equal((await db.query("select count(*)::int n from claim_studkab_dialog_telegram()")).rows[0].n,1);
   assert.equal((await db.query("select count(*)::int n from claim_studkab_dialog_telegram()")).rows[0].n,0);
   await db.query("update studkab_dialog_events set telegram_lease_until=now()-interval '1 minute' where kind='answer'");
   assert.equal((await db.query("select count(*)::int n from claim_studkab_dialog_telegram()")).rows[0].n,1);
+  await db.query("update studkab_dialog_events set telegram_attempts=8,telegram_lease_until=now()-interval '1 minute',telegram_retry_at=now()-interval '1 minute' where kind='answer'");
+  assert.equal((await db.query("select count(*)::int n from claim_studkab_dialog_telegram()")).rows[0].n,1);
+  await db.query("update studkab_dialog_events set telegram_sent_at=now(),telegram_lease_until=now()-interval '1 minute' where kind='answer'");
+  assert.equal((await db.query("select count(*)::int n from claim_studkab_dialog_telegram()")).rows[0].n,0);
+  await db.query("update studkab_dialog_events set telegram_sent_at=null,read_at=now() where kind='answer'");
+  assert.equal((await db.query("select count(*)::int n from claim_studkab_dialog_telegram()")).rows[0].n,0);
+  const subscription='66666666-6666-4666-8666-666666666666';
+  await db.query('insert into studkab_push_subscriptions(id) values($1)',[subscription]);
+  const claim=key=>db.query('select claim_studkab_push_delivery($1,$2) ok',[key,subscription]);
+  const dialogueKey=subscription+':dialog:1';
+  assert.equal((await claim(dialogueKey)).rows[0].ok,true);
+  await db.query("update studkab_push_deliveries set attempts=4,claimed_at=now()-interval '2 hours' where key=$1",[dialogueKey]);
+  assert.equal((await claim(dialogueKey)).rows[0].ok,true);
+  assert.equal((await claim(dialogueKey)).rows[0].ok,false);
+  await db.query("update studkab_push_deliveries set attempts=12,claimed_at=now()-interval '2 hours' where key=$1",[dialogueKey]);
+  assert.equal((await claim(dialogueKey)).rows[0].ok,true);
+  await db.query("update studkab_push_deliveries set sent_at=now(),claimed_at=now()-interval '2 hours' where key=$1",[dialogueKey]);
+  assert.equal((await claim(dialogueKey)).rows[0].ok,false);
+  const reminderKey=subscription+':deadline:1';
+  assert.equal((await claim(reminderKey)).rows[0].ok,true);
+  await db.query("update studkab_push_deliveries set attempts=4,claimed_at=now()-interval '2 hours' where key=$1",[reminderKey]);
+  assert.equal((await claim(reminderKey)).rows[0].ok,false);
   const calls=[];const deps={config:async()=>({executor_email:'executor@example.test'}),isMember:async()=>true,db:async(path,method,body)=>{
    calls.push({path,method,body});if(path.startsWith('studkab_requests?'))return path.includes('student_id=eq.'+stranger)?[]:[{id:request,student_id:student}];
    if(path.startsWith('studkab_dialog_events?')&&!method)return [{id:1,kind:'question'}];return [];
