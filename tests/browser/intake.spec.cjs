@@ -88,8 +88,10 @@ test('direct request confirms only server acknowledgement and keeps retry ID',as
  await expect.poll(()=>page.evaluate(()=>D.works[0].req.sentBy)).toBe('direct');
  expect(await page.evaluate(()=>D.works[0].req.number)).toBe(42);
  await page.evaluate(()=>{Oblako.requestApi=async body=>{requestsSeen.push(body);throw Error('Сеть недоступна');};openRequest('w-direct');});
- await page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true}).click();
- await expect(page.getByRole('button',{name:'Отправить заявку исполнителю',exact:true})).toBeEnabled();
+ await expect(page.getByRole('heading',{name:'Условия переданной заявки'})).toBeVisible();
+ await page.getByRole('button',{name:'Сохранить изменения заявки',exact:true}).click();
+ await expect(page.locator('[data-request-status]')).toContainText('Изменения не сохранены');
+ await expect(page.getByRole('button',{name:'Сохранить изменения заявки',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>requestsSeen.map(x=>x.action))).toEqual(['submit','request-state','attachment-list','attachment-upload','attachment-upload','attachment-upload','attachment-upload','request-publish','request-state']);
  expect(await page.evaluate(()=>requestsSeen.filter(x=>x.action==='submit').map(x=>x.payload.id))).toEqual(['rq-direct']);
  expect(await page.evaluate(()=>D.works[0].req.number)).toBe(42);

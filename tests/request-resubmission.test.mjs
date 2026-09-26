@@ -99,7 +99,7 @@ test('repeat submit waits for real server acknowledgement; error keeps form open
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(calls[1].action,'update-request');assert.equal(calls[1].payload.t,'new');assert.equal(calls[1].expectedPayload.t,'old');
   assert.equal(removed,!fail);assert.equal(r.sent,fail?'before':'today');assert.equal(btn.disabled,false);
-  assert.equal(messages.some(x=>x.includes('сохранена в реестре')), !fail);
+  assert.equal(messages.some(x=>x.includes('Изменения заявки №9 сохранены')), !fail);
  }
 });
 test('registry applies revised submission once and keeps executor document and notes',async()=>{
