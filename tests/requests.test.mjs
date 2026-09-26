@@ -2,13 +2,48 @@ import {defaultPassport} from '../supabase/functions/studkab-requests/requiremen
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handler,validatePayload} from '../supabase/functions/studkab-requests/handler.mjs';
-const p={id:'rq-test',t:'Тема',cn:'Контакт',dl:'2026-10-12',fm:{sz:14}};
+const p={id:'rq-test',t:'Тема',k:'Курсовая работа',n:'Тестовый студент',u:'Тестовый вуз',d:'Экономика',cn:'Контакт',dl:'2026-10-12',fm:{sz:14}};
 const owner={id:'owner',email:'owner@example.test',email_confirmed_at:'2026-01-01'};
 const student={...owner,id:'student',email:'student@example.test'};
 const request=(body,headers={authorization:'Bearer test'})=>new Request('https://example.test',{method:'POST',headers,body:JSON.stringify(body)});
 test('server validates types, identifiers, dates, formatting and strips unknown keys',()=>{
  for(const bad of [null,[],{...p,id:'bad"'},{...p,cn:''},{...p,t:{}},{...p,dl:'2026-02-31'},{...p,fm:{sz:100}}])assert.throws(()=>validatePayload(bad));
  assert.equal(validatePayload({...p,student_id:'forged'}).student_id,undefined);
+});
+test('C115: new intake rejects missing identity and assignment metadata before database write; old blank fields remain editable',async()=>{
+ let writes=0;
+ const old={...p,n:'',u:'',d:'',dl:''};
+ const app=handler({auth:async()=>student,isMember:async()=>true,db:async path=>{
+  if(path.startsWith('studkab_requests?'))return [{id:'11111111-1111-4111-8111-111111111111',payload:old}];
+  writes++;return {id:'stored',number:1};
+ }});
+ for(const key of ['k','n','u','d','dl']){
+  const response=await app(request({action:'submit',materialsFlow:2,payload:{...p,[key]:'  '}}));
+  assert.equal(response.status,400,key);assert.match((await response.json()).error,/Заполните перед отправкой/);assert.equal(writes,0);
+ }
+ const id='11111111-1111-4111-8111-111111111111';
+ assert.equal((await app(request({action:'update-request',id,expectedPayload:old,payload:old}))).status,200);
+ assert.equal((await app(request({action:'update-request',id,expectedPayload:old,payload:{...old,n:'Имя'}}))).status,200);
+ assert.throws(()=>validatePayload({...p,n:''},{previous:p}),/ФИО студента/);
+});
+test('C115: student sees only server-confirmed progress of own published request',async()=>{
+ const id='11111111-1111-4111-8111-111111111111';let who=student,ready=null,passport=[],questions=[],results=[],detailReads=0;
+ const app=handler({auth:async()=>who,isMember:async()=>true,db:async path=>{
+  if(path.startsWith('studkab_requests?'))return who.id===student.id?[{id,ready_at:ready}]:[];
+  detailReads++;
+  if(path.startsWith('studkab_clarifications?'))return questions;
+  if(path.startsWith('studkab_requirement_passports?'))return passport;
+  if(path.startsWith('studkab_results?'))return results;
+  throw Error('Unexpected database read');
+ }});
+ const progress=async()=>app(request({action:'student-progress',id}));
+ assert.deepEqual(await (await progress()).json(),{stage:'awaiting_materials',openQuestions:0});assert.equal(detailReads,0);
+ ready='2026-09-26T00:00:00Z';assert.equal((await (await progress()).json()).stage,'received');
+ passport=[{status:'draft'}];assert.equal((await (await progress()).json()).stage,'requirements_review');
+ passport=[{status:'approved'}];assert.equal((await (await progress()).json()).stage,'requirements_approved');
+ questions=[{id:'question',answered_at:null}];assert.deepEqual(await (await progress()).json(),{stage:'needs_answer',openQuestions:1});
+ results=[{delivery_id:'delivery'}];assert.equal((await (await progress()).json()).stage,'delivered');
+ who={...student,id:'other'};const before=detailReads;assert.equal((await progress()).status,404);assert.equal(detailReads,before);
 });
 test('auth and inbox ownership are enforced before reading requests',async()=>{
  let reads=0,user=null;

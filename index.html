@@ -1109,6 +1109,16 @@ function openRequest(workId){
 
     if (how === "direct") {
       if (btn.disabled) return;
+      if (!r.serverId) {
+        var intake = requestPayload(probe), missing = [];
+        [['k','вид работы'],['n','ФИО студента'],['u','вуз'],['d','дисциплину'],['dl','срок']].forEach(function(field){
+          if (!String(intake[field[0]] || '').trim()) missing.push(field[1]);
+        });
+        if (missing.length) {
+          var hint = 'Заполните перед отправкой: ' + missing.join(', ') + '. ФИО и вуз — в профиле; вид работы, дисциплину и срок — в карточке работы.';
+          wrap.querySelector('[data-request-status]').textContent = hint; toast(hint); return;
+        }
+      }
       if (!window.Oblako || !Oblako.requestApi) { toast("Вход временно недоступен"); return; }
       var expectedData = D;
       btn.disabled = true; btn.textContent = "Отправляем…";
@@ -1931,7 +1941,7 @@ function viewWorks(){
         '<div class="txt"><b>' + esc(w.topic) + '</b><small>' +
           esc((w.format && w.format.workType) || "работа") +
           (w.deadline ? ' · ' + ruDate(w.deadline) : '') + (over ? ' · срок прошёл' : '') + '</small></div>' +
-        pill(st) + '</div>';
+        (w.req && w.req.serverId ? '<span class="pill">Заявка №'+esc(w.req.number||'')+'</span>' : pill(st)) + '</div>';
     }).join(""))
     : '<div class="empty">' + (D.works.length ? 'В этом отборе пусто.' : 'Работ пока нет. Нажмите «Новая работа» внизу.') + '</div>');
 }
@@ -1947,9 +1957,10 @@ function viewWork(id){
     '<div class="title" style="font-size:21px">' + esc(w.topic) + '</div>' +
     '<div class="mut" style="margin:4px 0 14px">' + esc(f.workType || "Работа") +
       (f.discipline ? ' · ' + esc(f.discipline) : '') +
-      (w.deadline ? ' · срок ' + ruDate(w.deadline) : '') + ' · ' + pill(st) + '</div>';
+      (w.deadline ? ' · срок ' + ruDate(w.deadline) : '') + (w.req && w.req.serverId ? ' · Заявка №'+esc(w.req.number||'') : ' · ' + pill(st)) + '</div>';
 
   if(w.req && w.req.serverId){
+    h += card(lab('Ход заявки №'+esc(w.req.number||''))+'<p class="hint" data-student-progress role="status">Нажмите «Обновить», чтобы получить этап из реестра.</p><button type="button" class="btn" data-act="student-progress" data-id="'+esc(w.id)+'">Обновить этап</button>');
     h += card(lab('Материалы заявки')+'<p class="hint">Проверьте, запросил ли исполнитель дополнительные документы. Загрузите файлы и отдельно завершите дополнение.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Проверить и дополнить материалы</button>');
     h += card(lab("Вопросы исполнителя")+'<p class="hint">Посмотрите, нужны ли уточнения по вашей работе, и сохраните ответ.</p><button type="button" class="btn" data-act="student-clarifications" data-id="'+esc(w.id)+'">Открыть вопросы и ответы</button>');
     h += '<section data-test-delivery-host hidden></section>';
@@ -2577,6 +2588,15 @@ document.addEventListener("click", function(ev){
   if (act === "edit-format") return openFormatEditor(id);
   if (act === "edit-chapter") return openChapterEditor(id, el.getAttribute("data-ch"));
   if(act==='student-materials'){openStudentMaterials(id);return;}
+  if(act==='student-progress'){
+    var pw=work(id),host=document.querySelector('[data-student-progress]');
+    if(!pw||!pw.req||!pw.req.serverId||!host)return;
+    host.textContent='Проверяем этап в реестре…';
+    var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Подтверждённой передачи Word студенту нет.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
+    Oblako.requestApi({action:'student-progress',id:pw.req.serverId}).then(function(result){
+      if(host.isConnected)host.textContent=(labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Открытых вопросов: '+result.openQuestions+'.':'');
+    },function(err){if(host.isConnected)host.textContent='Не удалось получить этап из реестра: '+(err.message||'повторите позже');});return;
+  }
   if(act==='student-clarifications'){var cw=work(id);if(cw&&cw.req&&cw.req.serverId)StudClarifications.show({requestId:cw.req.serverId,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal});return;}
   if (act === "receive-result") return StudResults.receive(work(id));
   if (act === "export-word") return exportWord(id);
