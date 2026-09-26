@@ -23,7 +23,7 @@ test('numbering conflict is visible and a verified version clears the UI blocker
   openId=x.id;render();await loadPassports(x);
  });
  await page.getByRole('tab',{name:'Требования',exact:true}).click();
- await expect(page.locator('.warnbar')).toContainText('Повтор номера 2.3');
+ await expect(page.locator('.workflow-blocker')).toContainText('Повтор номера 2.3');
  await expect(page.getByRole('button',{name:'Утвердить',exact:true})).toBeDisabled();
  await page.evaluate(()=>editPassport(structureItem,true));
  const dialog=page.getByRole('dialog',{name:'Проверка требований'});
