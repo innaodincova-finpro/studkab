@@ -384,6 +384,12 @@
       "name": "c121_conditional_request_materials",
       "file": "20260926125807_c121_conditional_request_materials.sql",
       "sha256": "9a366f39893662c3f3fa8e39b569c993651f85a91978ede05cc5c9a1810c9d08"
+    },
+    {
+      "version": "20260926161000",
+      "name": "c124_dialog_retry",
+      "file": "20260926161000_c124_dialog_retry.sql",
+      "sha256": "2c1e908da9a5e069aa1ac379cf2a4a887eee210e5c1516a8fa5667cea1c057e5"
     }
   ],
   "production_reconciled_at": "2026-09-23"
