@@ -155,7 +155,7 @@ test('existing request updates server fields and explicitly replaces assignment'
 test('C090 partial upload survives reopened form and retries only missing materials',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
  await page.evaluate(()=>{
-  D.works=[{id:'w-recover',topic:'Проверка восстановления',format:{},req:{id:'rq-recover',contact:'test'}}];
+  D.works=[{id:'w-recover',topic:'Проверка восстановления',student:'Тестовый студент',deadline:'2026-10-15',format:{workType:'Курсовая работа',univ:'Тестовый вуз',discipline:'Экономика'},req:{id:'rq-recover',contact:'test'}}];
   window.requestsSeen=[];window.savedFiles=[];window.failUpload=true;
   Oblako.requestApi=async body=>{
    requestsSeen.push(body);
