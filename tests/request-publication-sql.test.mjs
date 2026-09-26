@@ -17,7 +17,7 @@ test('C114/C121 publication waits for an assignment or written description, pres
   const old='33333333-3333-4333-8333-333333333333',current='44444444-4444-4444-8444-444444444444';
   await db.query('insert into studkab_requests(id,number,student_id,telegram_sent_at) values($1,9,$2,now())',[old,student]);
   await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260925194500_c114_complete_before_publish.sql',import.meta.url),'utf8'));
-  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260926150000_c121_conditional_request_materials.sql',import.meta.url),'utf8'));
+  await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260926125807_c121_conditional_request_materials.sql',import.meta.url),'utf8'));
   assert.equal((await db.query('select ready_at is not null as ready from studkab_requests where id=$1',[old])).rows[0].ready,true);
   await db.query('insert into studkab_requests(id,number,student_id) values($1,1,$2)',[current,student]);
   assert.equal((await db.query('select count(*)::int n from claim_studkab_requests()')).rows[0].n,0);
