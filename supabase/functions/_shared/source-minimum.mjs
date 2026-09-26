@@ -32,7 +32,7 @@ export async function sourceMinimumGuard(db,request,items) {
  const result=findings({attachments:currentAttachments(attachments),items});
  if(!result.conflicts.length){
   const structure=structureFindings(currentAttachments(attachments),items).find(x=>!x.resolved);
-  if(structure)return {error:'В исходном файле '+structure.fileName+' повторён номер '+structure.number+' у разных разделов. Уточните нумерацию до утверждения паспорта.',code:'STRUCTURE_NUMBER_CONFLICT',findings:structure};
+  if(structure)return {error:structure.tooMany?'В исходном файле '+structure.fileName+' слишком много неоднозначных номеров. Проверьте исправленную методичку вручную.':'В исходном файле '+structure.fileName+' повторён номер '+structure.number+' у разных разделов. Уточните нумерацию до утверждения паспорта.',code:'STRUCTURE_NUMBER_CONFLICT',findings:structure};
   return null;
  }
  const {source,passport}=result.conflicts[0];
