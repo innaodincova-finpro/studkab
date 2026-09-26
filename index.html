@@ -16,8 +16,8 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=15"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=1"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=1"></script><script src="results-ui.js?v=19"></script>
-<script src="push.js?v=1"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=1"></script><script src="results-ui.js?v=19"></script>
+<script src="push.js?v=2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1949,7 +1949,7 @@ function viewWorks(){
 /* ---------- КАРТОЧКА РАБОТЫ ---------- */
 function viewWork(id){
   var w = work(id);
-  if (!w) return '<div class="empty">Работа не найдена</div>';
+  if (!w) return linkedDialogRequest?'<div class="empty"><h2>Новый вопрос по заявке</h2><p>Откройте вопросы в защищённом кабинете. Для доступа войдите в аккаунт этой заявки.</p><button type="button" class="btn" data-act="linked-dialog">Открыть вопросы</button></div>':'<div class="empty">Работа не найдена</div>';
   var st = getStatus(w), p = getProgress(w), f = w.format, ch = w.structure;
   var issues = checkWork(w);
 
@@ -1962,7 +1962,7 @@ function viewWork(id){
   if(w.req && w.req.serverId){
     h += card(lab('Ход заявки №'+esc(w.req.number||''))+'<p class="hint" data-student-progress role="status">Нажмите «Обновить», чтобы получить этап из реестра.</p><button type="button" class="btn" data-act="student-progress" data-id="'+esc(w.id)+'">Обновить этап</button>');
     h += card(lab('Материалы заявки')+'<p class="hint">Проверьте, запросил ли исполнитель дополнительные документы. Загрузите файлы и отдельно завершите дополнение.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Проверить и дополнить материалы</button>');
-    h += card(lab("Вопросы исполнителя")+'<p class="hint">Посмотрите, нужны ли уточнения по вашей работе, и сохраните ответ.</p><button type="button" class="btn" data-act="student-clarifications" data-id="'+esc(w.id)+'">Открыть вопросы и ответы</button>');
+    h += card(lab("Вопросы исполнителя")+'<p class="hint" data-dialog-unread role="status">Проверяем новые вопросы…</p><p class="hint">Чтобы получать сообщения при закрытом кабинете, включите уведомления в разделе «Ещё» на этом устройстве.</p><button type="button" class="btn" data-act="student-clarifications" data-id="'+esc(w.id)+'">Открыть вопросы и ответы</button>');
     h += '<section data-test-delivery-host hidden></section>';
     h += card(lab("Черновик от исполнителя") + '<p class="hint">Откройте результат заявки, чтобы проверить готовность и скачать документ Word.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
     h += '<details class="fold"><summary>Мои разделы и доработка</summary><div class="in"><p class="hint">Здесь текст, который вы редактируете в кабинете. Процент ниже относится только к этим разделам. Документ исполнителя доступен отдельно, в результате заявки.</p>';
@@ -2070,7 +2070,7 @@ function viewMore(){
 
   h += section("Хранение записей", CloudUI.panel());
 
-  h += section("Уведомления", (window.Oblako && Oblako.mode === "cloud") ? '<p class="hint">За указанное в настройках число дней до сдачи работы, в 10:00 по часовому поясу этого устройства. Работает для сохранённых в облаке работ, даже когда кабинет закрыт.</p>' +
+  h += section("Уведомления", (window.Oblako && Oblako.mode === "cloud") ? '<p class="hint">Новые вопросы приходят после сохранения исполнителем. Напоминания о сроках приходят в 10:00 за указанное число дней. Уведомления работают на подключённом устройстве, даже когда кабинет закрыт.</p>' +
     '<p class="hint">На iPhone откройте кабинет с ярлыка на экране «Домой» (iOS 16.4 или новее).</p>' +
     '<div class="chips"><button class="chip" data-act="push-enable">Включить уведомления</button><button class="chip" data-act="push-test">Проверить через минуту</button><button class="chip" data-act="push-status">Проверить состояние</button><button class="chip" data-act="push-disable">Отключить</button></div>' +
     '<p class="hint" id="push-status" role="status" aria-live="polite">Уведомления подключаются отдельно на каждом устройстве.</p>' : '<p class="hint">Напоминания о сроках приходят на этот телефон, даже когда кабинет закрыт. Для этого нужен вход и сохранение работ в облаке.</p><button class="chip" data-act="cloud">Войти, чтобы включить уведомления</button>');
@@ -2306,14 +2306,14 @@ function render(){
   else if (tab === "cal") p.innerHTML = viewCal();
   else if (tab === "works") p.innerHTML = openWorkId ? viewWork(openWorkId) : viewWorks();
   else p.innerHTML = viewMore();
-  if(tab==="works"&&openWorkId)StudResults.mountTestDelivery(work(openWorkId),p.querySelector('[data-test-delivery-host]'),true);
+  if(tab==="works"&&openWorkId&&work(openWorkId))StudResults.mountTestDelivery(work(openWorkId),p.querySelector('[data-test-delivery-host]'),true);
   var fab = document.getElementById("fab");
   if (tab === "more"){ fab.hidden = true; }
   else if (tab === "cal"){
     fab.hidden = false; fab.setAttribute("data-act", "cal-add"); fab.removeAttribute("data-id");
     fab.innerHTML = '<i aria-hidden="true">＋</i><span>Добавить</span>';
   }
-  else if (tab === "works" && openWorkId){
+  else if (tab === "works" && openWorkId && work(openWorkId)){
     fab.hidden = false; fab.setAttribute("data-act", "send-request"); fab.setAttribute("data-id", openWorkId);
     fab.innerHTML = '<i aria-hidden="true">✉</i><span>Заявка</span>';
   } else {
@@ -2324,7 +2324,17 @@ function render(){
   window.scrollTo(0, 0);
   markSaved();
   cloudPaint();
+  refreshStudentDialogue();
 }
+async function refreshStudentDialogue(){
+ var w=tab==='works'&&openWorkId&&work(openWorkId),host=document.querySelector('[data-dialog-unread]');
+ if(!w||!w.req||!w.req.serverId||!host||!window.Oblako||!Oblako.requestApi)return;
+ var identity=Oblako.identity();
+ try{var state=await Oblako.requestApi({action:'clarification-unread',id:w.req.serverId});
+  if(host.isConnected&&Oblako.identity()===identity)host.textContent=state.question?'Новых вопросов: '+state.question+'. Откройте и ответьте.':'Новых вопросов нет. Откройте раздел, чтобы проверить историю.';
+ }catch(e){if(host.isConnected)host.textContent='Не удалось проверить новые вопросы. Повторите после подключения к сети.';}
+}
+setInterval(refreshStudentDialogue,60000);
 
 /* ==================================================================
    СБОРКА .DOCX
@@ -2581,6 +2591,7 @@ document.addEventListener("click", function(ev){
   if (act === "go-works"){ workFilter = el.getAttribute("data-k"); tab = "works"; openWorkId = null; return render(); }
   if (act === "go-cal"){ tab = "cal"; calMode = "month"; calCursor = null; calSel = null; return render(); }
   if (act === "back") return back();
+  if (act === 'linked-dialog' && linkedDialogRequest){StudClarifications.show({requestId:linkedDialogRequest,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal});return;}
   if (act === "open-work") return go("works", id);
   if (act === "work-filter"){ workFilter = el.getAttribute("data-k"); return render(); }
   if (act === "new-work") return openNewWork();
@@ -2597,7 +2608,7 @@ document.addEventListener("click", function(ev){
       if(host.isConnected)host.textContent=(labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Открытых вопросов: '+result.openQuestions+'.':'');
     },function(err){if(host.isConnected)host.textContent='Не удалось получить этап из реестра: '+(err.message||'повторите позже');});return;
   }
-  if(act==='student-clarifications'){var cw=work(id);if(cw&&cw.req&&cw.req.serverId)StudClarifications.show({requestId:cw.req.serverId,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal});return;}
+  if(act==='student-clarifications'){var cw=work(id);if(cw&&cw.req&&cw.req.serverId)StudClarifications.show({requestId:cw.req.serverId,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal,onRead:refreshStudentDialogue});return;}
   if (act === "receive-result") return StudResults.receive(work(id));
   if (act === "export-word") return exportWord(id);
   if (act === "save-template") return saveAsTemplate(id);
@@ -2755,6 +2766,9 @@ document.addEventListener("keydown", function(ev){
 load();
 render();
 cloudInit();
+var linkedDialogRequest=null;
+var dialogueLink=location.hash.match(/^#request=([a-f0-9-]{36})$/i);
+if(dialogueLink){linkedDialogRequest=dialogueLink[1];var linked=D.works.find(function(w){return w.req&&w.req.serverId===dialogueLink[1];});tab='works';openWorkId=linked?linked.id:'linked-dialog';render();history.replaceState(null,'',location.pathname+location.search);}
 
 </script>
 </body>

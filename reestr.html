@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=15"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=1"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=1"></script><script src="results-ui.js?v=19"></script><script src="request-workflow.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=1"></script><script src="results-ui.js?v=19"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1910,6 +1910,7 @@ function render(){
     var primary=p.querySelector('.request-action [data-act]');
     if(primary)p.querySelectorAll('.request-content button[data-act]').forEach(function(button){if(button.dataset.act===primary.dataset.act)button.remove();});
   }
+  refreshExecutorDialogue();
   cloudPaint();
   var fab = document.getElementById("fab");
   if (tab === "more"){ fab.hidden = true; }
@@ -1927,6 +1928,23 @@ function render(){
   if(toolbar)toolbar.appendChild(fab);else p.after(fab);
   window.scrollTo(0,0); showStorageWarn();
 }
+var dialogueRefreshBusy=false;
+async function refreshExecutorDialogue(){
+ if(dialogueRefreshBusy||tab!=='list'||!window.Oblako||!Oblako.requestApi)return;
+ var hosts=Array.from(document.querySelectorAll('[data-dialog-count]')).filter(function(host){return /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(host.dataset.dialogCount||'');});
+ if(!hosts.length)return;
+ dialogueRefreshBusy=true;var identity=Oblako.identity();
+ try{
+  for(var i=0;i<hosts.length;i+=5){
+   await Promise.all(hosts.slice(i,i+5).map(async function(host){
+    try{var state=await Oblako.requestApi({action:'clarification-unread',id:host.dataset.dialogCount});
+     if(host.isConnected&&Oblako.identity()===identity)host.textContent=state.answer?'Новых ответов: '+state.answer:'';
+    }catch(e){if(host.isConnected&&Oblako.identity()===identity)host.textContent='Ответы: нет связи';}
+   }));
+  }
+ }finally{dialogueRefreshBusy=false;}
+}
+setInterval(refreshExecutorDialogue,60000);
 
 function list0(fl, qr){
   var q2 = String(qr||"").toLowerCase();
@@ -1988,7 +2006,7 @@ function viewList(){
     var w=requestWorkflow(x),over=x.deadline&&x.deadline<today()&&!w.complete&&w.key!=='cancelled';
     var next=x.requestNumber?w.label:'Открыть документ';
     var previous=x.deliveryState&&x.deliveryState.last;
-    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button>'+(previous?'<small>Ранее передано '+esc(ruDate(String(previous.createdAt).slice(0,10)))+'</small>':'')+'<small>'+esc(x.student||'Студент не указан')+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||'Вуз не указан')+'</td><td><span class="registry-topic">'+esc(x.topic||'Тема не указана')+'</span></td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small class="deadline-overdue">Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(w.title)+'</span>'+(w.blocker?'<small>'+esc(w.blocker)+'</small>':'')+(next?'<small class="request-next">Исполнитель: '+esc(next)+'</small>':'')+'</td></tr>';
+    return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button><small data-dialog-count="'+esc(x.id)+'" role="status"></small>'+(previous?'<small>Ранее передано '+esc(ruDate(String(previous.createdAt).slice(0,10)))+'</small>':'')+'<small>'+esc(x.student||'Студент не указан')+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||'Вуз не указан')+'</td><td><span class="registry-topic">'+esc(x.topic||'Тема не указана')+'</span></td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small class="deadline-overdue">Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(w.title)+'</span>'+(w.blocker?'<small>'+esc(w.blocker)+'</small>':'')+(next?'<small class="request-next">Исполнитель: '+esc(next)+'</small>':'')+'</td></tr>';
   }).join('')+'</tbody></table>'):'<div class="empty">По этому запросу заявок нет. Измените поиск или этап.</div>';
   return h+(list.length>10?pager():'');
 }
@@ -2122,7 +2140,7 @@ function passportContent(x){
     (items.length?'<div class="passport-list">'+items.map(passportItemView).join('')+'</div>':'<p class="hint">Пункты пока не добавлены.</p>')+
     materialManifestContent(x,p)+
     (p.status!=='approved'?'<p class="hint passport-warning">Паспорт не утверждён — платная подготовка запрещена.</p>':'')+
-    '<div class="chips"><button type="button" class="chip" data-act="executor-clarifications" data-id="'+esc(x.id)+'">Вопросы студенту</button><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-revise" data-id="'+esc(x.id)+'">Новая версия</button>'+(x.requestNumber?'<button type="button" class="chip" data-act="request-kind-correct" data-id="'+esc(x.id)+'">Исправить вид работы по заданию</button>':'')+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'"'+(canApprove?'':' disabled title="Сначала заполните обязательные требования"')+'>Утвердить</button>':'')+'</div>';
+    '<div class="chips"><button type="button" class="chip" data-act="executor-clarifications" data-id="'+esc(x.id)+'">Вопросы студенту</button><span data-dialog-count="'+esc(x.id)+'" role="status">Проверяем ответы…</span><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Обновить</button><button type="button" class="chip" data-act="passport-revise" data-id="'+esc(x.id)+'">Новая версия</button>'+(x.requestNumber?'<button type="button" class="chip" data-act="request-kind-correct" data-id="'+esc(x.id)+'">Исправить вид работы по заданию</button>':'')+(p.status==='draft'?'<button type="button" class="chip ok" data-act="passport-approve" data-id="'+esc(x.id)+'"'+(canApprove?'':' disabled title="Сначала заполните обязательные требования"')+'>Утвердить</button>':'')+'</div>';
 }
 function passportCard(x){ return card(passportContent(x)); }
 async function loadMaterialRevision(x){
@@ -2763,7 +2781,7 @@ document.addEventListener("click", function(ev){
   if (act === "review-word") return StudResults.deliver(item(id),true);
   if (act === "deliver-result") return StudResults.deliver(item(id));
   if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
-  if(act==='executor-clarifications'){var cq=item(id);if(cq)StudClarifications.show({requestId:cq.id,executor:true,items:((cq.passports||[])[0]||{}).items||[],labels:PASSPORT_ITEM_LABEL,api:Oblako.requestApi,esc:esc,openModal:openModal,onChange:function(){return loadPassports(cq);}});return;}
+  if(act==='executor-clarifications'){var cq=item(id);if(cq)StudClarifications.show({requestId:cq.id,executor:true,items:((cq.passports||[])[0]||{}).items||[],labels:PASSPORT_ITEM_LABEL,api:Oblako.requestApi,esc:esc,openModal:openModal,onRead:refreshExecutorDialogue,onChange:function(){return loadPassports(cq);}});return;}
   if (act === "passport-edit" || act === "passport-revise") {var pe=item(id);if(pe)editPassport(pe,act === "passport-revise");return;}
   if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;var approvalRevision=pa.passportMaterialRevision,approvalIdentity=Oblako.identity(),approvalData=D;var materialIssues=materialManifestIssues(pa,pv);if(materialIssues.length){toast(materialIssues.join(' '));return;}var unresolved=passportUnresolved(pv);if(unresolved.length){toast('Сначала уточните: '+unresolved.map(function(q){return PASSPORT_ITEM_LABEL[q.id]||q.id;}).join(', '));return;}passportFingerprint(pa).then(function(sourceFingerprint){if(approvalIdentity!==Oblako.identity()||approvalData!==D)throw Error('Аккаунт изменился. Откройте заявку заново.');return Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items,material_manifest:pv.material_manifest},sourceFingerprint:sourceFingerprint,expectedRevision:approvalRevision});}).then(function(r){if(approvalIdentity!==Oblako.identity()||approvalData!==D)return;pa.passportMaterialRevision=r.materialRevision;pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){toast(e.message||'Не удалось утвердить паспорт');});return;}
   if (act === "doc-open") return openDocBuilder(id);
