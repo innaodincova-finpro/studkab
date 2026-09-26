@@ -114,6 +114,7 @@ for(const width of [390,1440])test('C096 executor return preserves old passport 
    if(body.action==='attachment-context')return {attachments:[],materialRevision:materialState.requestRevision};
    if(body.action==='clarification-list')return {questions:[]};
    if(body.action==='passport-get')return {passports:x.passports,materialRevision:materialState.requestRevision};
+   if(body.action==='passport-structure-audit')return {findings:[]};
    if(body.action==='passport-ensure'){if(materialState.state==='open')throw Error('No creation while open');if(body.expectedRevision!==materialState.requestRevision)throw Error('Stale material revision');return {materialRevision:materialState.requestRevision,passports:[{id:'new-passport',revision:2,status:'draft',items:[],source_fingerprint:body.sourceFingerprint},...x.passports]};}
    throw Error('Unexpected '+body.action);
   };
