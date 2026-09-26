@@ -19,7 +19,7 @@ test('C120 dialogue events are atomic, unique and scoped to the recipient',async
    insert into studkab_members values('${student}');
    insert into studkab_requests values('${request}','${student}',null);
   `);
-  for(const name of ['20260914105509_studkab_requirement_passports.sql','20260921165603_c084_requirement_clarifications.sql','20260921181451_c085_clarification_actor_permissions.sql','20260926140000_c120_dialog_events.sql'])await db.exec(file(name));
+  for(const name of ['20260914105509_studkab_requirement_passports.sql','20260921165603_c084_requirement_clarifications.sql','20260921181451_c085_clarification_actor_permissions.sql','20260926114639_c120_dialog_events.sql'])await db.exec(file(name));
   await db.exec(`grant usage on schema auth to service_role;
    grant select,update on studkab_requests to service_role;
    grant select on studkab_request_config,studkab_members to service_role;set role service_role;`);
