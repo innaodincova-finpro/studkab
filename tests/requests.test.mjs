@@ -148,6 +148,19 @@ test('passport validation separates evidence categories and strips unknown field
  const generated=defaultPassport({k:'Курсовая работа',d:'Экономика',rq:'25 страниц'});
  assert.deepEqual(generated.items.map(x=>x.id),['WORK_TYPE','DISCIPLINE','STRUCTURE','VOLUME','METHODOLOGY','FORMATTING','SOURCES','CALCULATIONS','ANTIPLAGIARISM','TEACHER']);
  assert.match(generated.items.find(x=>x.id==='ANTIPLAGIARISM').text,/требуется уточнить/i);
+ for(const work of [
+  {k:'Реферат',org:'Исследуемая организация',rq:'Сделать обзор темы без расчётов'},
+  {k:'Курсовая работа',org:'Промышленное предприятие',rq:'Рассчитать себестоимость и прибыль'}
+ ]){
+  const items=defaultPassport(work).items;
+  for(const id of ['CALCULATIONS','TEACHER']){
+   const item=items.find(x=>x.id===id);
+   assert.notEqual(item.verified,true);
+   assert.equal(item.source,'');
+   assert.match(item.text,/требуется уточнить/i);
+   assert.doesNotMatch(item.text,/Исследуемая организация|Промышленное предприятие|Сделать обзор|Рассчитать себестоимость/);
+  }
+ }
 });
 
 test('saving and approving a passport use server RPC and never trust a student identity',async()=>{
