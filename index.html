@@ -16,7 +16,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=15"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=1"></script><script src="results-ui.js?v=20"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=1"></script><script src="results-ui.js?v=21"></script>
 <script src="push.js?v=2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1065,7 +1065,7 @@ function openRequest(workId){
   var originalState=r.serverId?Oblako.requestApi({action:'request-state',id:r.serverId}).then(function(x){return x;},function(e){return {error:e};}):null;
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>'+
-    '<h2>'+(wasSubmitted?'Условия переданной заявки':'Заявка на черновик')+'</h2>'+
+    '<h2>'+(wasSubmitted?'Условия переданной заявки':'Заявка исполнителю')+'</h2>'+
     '<p class="small">'+(wasSubmitted?'Заявка уже передана. Изменения возможны только до начала подготовки; если подготовка началась, запросите дополнение материалов у исполнителя.':'Данные по работе подставятся сами. Допишите то, чего в кабинете нет.')+'</p>'+
     '<div class="field" style="margin-top:14px"><label>Как с вами связаться</label>'+
       '<input type="text" id="rqContact" value="'+esc(r.contact||"")+'" placeholder="Телефон или ник в Telegram"></div>'+
@@ -1655,7 +1655,7 @@ function viewToday(){
         '<div style="min-width:0">' + lab("Ближайшая сдача") +
           '<div class="title">' + esc(w.topic) + '</div>' +
           '<div class="mut" style="margin-top:3px">' + esc((w.format && w.format.workType || "работа").toLowerCase()) +
-            ' · ' + ruDate(w.deadline) + ' · готово на ' + p + '%</div>' +
+            ' · ' + ruDate(w.deadline) + ' · ' + (w.req&&w.req.serverId?'мои разделы: ':'готово на ') + p + '%</div>' +
         '</div>' +
         '<div class="days ' + tone + '"><b>' + (d < 0 ? -d : d) + '</b><span>' +
           (d < 0 ? ruDays(d) + " назад" : d === 0 ? "сегодня" : ruDays(d)) + '</span></div>' +
@@ -1663,7 +1663,7 @@ function viewToday(){
       '<div class="bar"><i style="width:' + p + '%"></i></div>' +
       '<div class="chips">' +
         '<button type="button" class="chip" data-act="open-work" data-id="' + w.id + '">Открыть работу</button>' +
-        '<button type="button" class="chip warn" data-act="send-request" data-id="' + w.id + '">Заказать черновик</button>' +
+        '<button type="button" class="chip warn" data-act="send-request" data-id="' + w.id + '">' + (w.req&&w.req.serverId?'Условия заявки':'Отправить заявку') + '</button>' +
       '</div>', "now");
   } else {
     h += card(lab(D.works.length ? "Ближайшая сдача" : "С чего начать") +
@@ -1964,11 +1964,11 @@ function viewWork(id){
       (w.deadline ? ' · срок ' + ruDate(w.deadline) : '') + (w.req && w.req.serverId ? ' · Заявка №'+esc(w.req.number||'') : ' · ' + pill(st)) + '</div>';
 
   if(w.req && w.req.serverId){
-    h += card(lab('Ход заявки №'+esc(w.req.number||''))+'<p class="hint" data-student-progress role="status">Нажмите «Обновить», чтобы получить этап из реестра.</p><button type="button" class="btn" data-act="student-progress" data-id="'+esc(w.id)+'">Обновить этап</button>');
+    h += card(lab('Ход заявки №'+esc(w.req.number||''))+'<p class="hint" data-student-progress role="status">Проверяем этап заявки…</p><button type="button" class="btn" data-act="student-progress" data-id="'+esc(w.id)+'">Обновить этап</button>');
     h += card(lab('Материалы заявки')+'<p class="hint">Проверьте, запросил ли исполнитель дополнительные документы. Загрузите файлы и отдельно завершите дополнение.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Проверить и дополнить материалы</button>');
     h += card(lab("Вопросы исполнителя")+'<p class="hint" data-dialog-unread role="status">Проверяем новые вопросы…</p><p class="hint">Чтобы получать сообщения при закрытом кабинете, включите уведомления в разделе «Ещё» на этом устройстве.</p><button type="button" class="btn" data-act="student-clarifications" data-id="'+esc(w.id)+'">Открыть вопросы и ответы</button>');
     h += '<section data-test-delivery-host hidden></section>';
-    h += card(lab("Черновик от исполнителя") + '<p class="hint">Откройте результат заявки, чтобы проверить готовность и скачать документ Word.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
+    h += card(lab("Результат заявки") + '<p class="hint">Проверьте, доступен ли документ Word для скачивания.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
     h += '<details class="fold"><summary>Мои разделы и доработка</summary><div class="in"><p class="hint">Здесь текст, который вы редактируете в кабинете. Процент ниже относится только к этим разделам. Документ исполнителя доступен отдельно, в результате заявки.</p>';
   }
 
@@ -2013,14 +2013,14 @@ function viewWork(id){
 
   if(w.req && w.req.serverId) h += '</div></details>';
 
-  h += card(lab("Заявка на черновик") +
+  h += card(lab("Заявка исполнителю") +
     (w.req && w.req.serverId && (w.req.filesPending||!w.req.sent)
       ? '<div class="mut">Заявка №'+esc(w.req.number)+' сохранена. Отправка материалов не завершена; откройте заявку для проверки.</div>'
       : w.req && w.req.sent
       ? '<div class="mut">' +
         ({ direct:"Заявка передана исполнителю ", copy:"Текст скопирован ", wa:"Открыта для отправки в WhatsApp ", tg:"Открыта для отправки в Telegram " }[w.req.sentBy] || "Подготовлена ") +
         ruDate(w.req.sent) + '. Изменения доступны до начала подготовки исполнителем.</div>'
-      : '<div class="mut">При отправке из кабинета черновик будет доступен здесь, в разделе «Черновик от исполнителя».</div>') +
+      : '<div class="mut">После передачи готовый Word будет доступен в разделе «Результат заявки».</div>') +
     '<div class="chips"><button type="button" class="chip warn" data-act="send-request" data-id="' + w.id + '">' + (w.req&&w.req.serverId&&w.req.sent?'Условия заявки':'Отправить заявку') + '</button></div>');
 
 
@@ -2113,7 +2113,7 @@ function viewMore(){
   h += '<details class="fold"><summary>Подсказки</summary><div class="in">' +
     '<div class="item"><div class="ic">1</div><div class="txt"><b>Заведите работу</b><small>Тема, вид, срок. Оформление подставится из ваших данных</small></div></div>' +
     '<div class="item"><div class="ic">2</div><div class="txt"><b>Пишите по разделам</b><small>Тап по разделу открывает редактор. Микрофон на клавиатуре — для диктовки</small></div></div>' +
-    '<div class="item"><div class="ic">3</div><div class="txt"><b>Нужен черновик — отправьте заявку</b><small>Кнопка в работе. Готовый документ придёт в мессенджер</small></div></div>' +
+      '<div class="item"><div class="ic">3</div><div class="txt"><b>Нужен документ — отправьте заявку</b><small>Кнопка в работе. После передачи Word доступен в результате заявки.</small></div></div>' +
     '<div class="item"><div class="ic">4</div><div class="txt"><b>Скачивайте Word</b><small>Титульный лист, поля и содержание уже на месте</small></div></div>' +
     '<div class="item"><div class="ic">5</div><div class="txt"><b>Добавьте на экран телефона</b><small>Меню браузера → «На экран „Домой“»</small></div></div>' +
     '<div class="chips" style="margin-top:10px"><button type="button" class="chip" data-act="demo">Показать пример</button></div>' +
@@ -2329,6 +2329,17 @@ function render(){
   markSaved();
   cloudPaint();
   refreshStudentDialogue();
+  refreshStudentProgress();
+}
+function refreshStudentProgress(){
+ var w=tab==='works'&&openWorkId&&work(openWorkId),host=document.querySelector('[data-student-progress]');
+ if(!w||!w.req||!w.req.serverId||!host||!window.Oblako||!Oblako.requestApi)return;
+ var identity=Oblako.identity(),requestId=w.req.serverId;
+ host.textContent='Проверяем этап заявки…';
+ var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Подтверждённой передачи Word студенту нет.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
+ Oblako.requestApi({action:'student-progress',id:requestId}).then(function(result){
+  if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)host.textContent=(labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Открытых вопросов: '+result.openQuestions+'.':'');
+ },function(err){if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)host.textContent='Не удалось получить этап из реестра: '+(err.message||'повторите позже');});
 }
 async function refreshStudentDialogue(){
  var w=tab==='works'&&openWorkId&&work(openWorkId),host=document.querySelector('[data-dialog-unread]');
@@ -2606,11 +2617,7 @@ document.addEventListener("click", function(ev){
   if(act==='student-progress'){
     var pw=work(id),host=document.querySelector('[data-student-progress]');
     if(!pw||!pw.req||!pw.req.serverId||!host)return;
-    host.textContent='Проверяем этап в реестре…';
-    var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Подтверждённой передачи Word студенту нет.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
-    Oblako.requestApi({action:'student-progress',id:pw.req.serverId}).then(function(result){
-      if(host.isConnected)host.textContent=(labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Открытых вопросов: '+result.openQuestions+'.':'');
-    },function(err){if(host.isConnected)host.textContent='Не удалось получить этап из реестра: '+(err.message||'повторите позже');});return;
+    refreshStudentProgress();return;
   }
   if(act==='student-clarifications'){var cw=work(id);if(cw&&cw.req&&cw.req.serverId)StudClarifications.show({requestId:cw.req.serverId,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal,onRead:refreshStudentDialogue});return;}
   if (act === "receive-result") return StudResults.receive(work(id));

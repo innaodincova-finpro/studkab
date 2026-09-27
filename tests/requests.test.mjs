@@ -42,6 +42,7 @@ test('C115: student sees only server-confirmed progress of own published request
  passport=[{status:'draft'}];assert.equal((await (await progress()).json()).stage,'requirements_review');
  passport=[{status:'approved'}];assert.equal((await (await progress()).json()).stage,'requirements_approved');
  questions=[{id:'question',answered_at:null}];assert.deepEqual(await (await progress()).json(),{stage:'needs_answer',openQuestions:1});
+ results=[{delivery_id:null}];assert.equal((await (await progress()).json()).stage,'needs_answer');
  results=[{delivery_id:'delivery'}];assert.equal((await (await progress()).json()).stage,'delivered');
  who={...student,id:'other'};const before=detailReads;assert.equal((await progress()).status,404);assert.equal(detailReads,before);
 });

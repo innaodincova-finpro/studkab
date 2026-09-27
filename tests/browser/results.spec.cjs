@@ -209,14 +209,14 @@ test('student receives Word without overwriting own work; changed account cannot
   Oblako.requestApi=async()=>({result:{created_at:'2026-09-09T00:00:00Z',document:{topic:'Результат',student:'Тест',group:'',format:{font:'Times New Roman',size:14},chapters:[{id:'intro',name:'Введение'}],structure:{intro:{text:'Текст исполнителя'}}}}});
   StudResults.receive({req:{serverId:'11111111-1111-4111-8111-111111111111'}});
  });
- await expect(page.getByRole('button',{name:'Скачать черновик Word'})).toBeVisible();
- const download=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать черновик Word'}).click();expect((await download).suggestedFilename()).toMatch(/\.docx$/);
+ await expect(page.getByRole('button',{name:'Скачать Word',exact:true})).toBeVisible();
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать Word',exact:true}).click();expect((await download).suggestedFilename()).toMatch(/\.docx$/);
  expect(await page.evaluate(()=>JSON.stringify(D)===originalData)).toBe(true);
  await page.screenshot({path:'test-results/result-student-mobile.png'});
  await page.evaluate(()=>QA.switchUser('other'));
  await expect.poll(()=>page.evaluate(()=>Oblako.email)).toBe('other@example.test');
  // Account switching closes sheets in the application; no old result can be downloaded.
- await expect(page.getByRole('button',{name:'Скачать черновик Word'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Скачать Word',exact:true})).toHaveCount(0);
 });
 
 for(const change of ['recipient','document','passport','account'])test('C-071 '+change+' change blocks a saved review',async({page})=>{
@@ -235,7 +235,7 @@ test('student downloads the exact reviewed bytes and rejects a corrupted file',a
   Oblako.requestApi=async()=>({result:{version_id:'v',created_at:'2026-09-12',document:doc,docxBase64:file64,fileHash:expectedHash}});
   StudResults.receive({req:{serverId:'11111111-1111-4111-8111-111111111111'}});
  });
- const wait=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать черновик Word'}).click();const down=await wait;
+ const wait=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать Word',exact:true}).click();const down=await wait;
  const fs=require('node:fs'),crypto=require('node:crypto');expect(crypto.createHash('sha256').update(fs.readFileSync(await down.path())).digest('hex')).toBe(await page.evaluate(()=>expectedHash));
  await page.locator('[data-x]').click();
  await page.evaluate(()=>{expectedHash='0'.repeat(64);StudResults.receive({req:{serverId:'11111111-1111-4111-8111-111111111111'}});});
