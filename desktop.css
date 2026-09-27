@@ -116,6 +116,9 @@
 .request-tabs button{flex:0 0 auto;min-height:46px;padding:10px 12px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--mut);font:inherit;font-size:14px;cursor:pointer}
 .request-tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
 .request-panel[hidden]{display:none!important}
+.request-maintenance{border-top:1px solid var(--line);margin-top:18px;padding-top:8px}
+.request-maintenance summary{cursor:pointer;color:var(--mut);font-weight:600;padding:10px 0}
+.request-maintenance .del{margin-top:14px}
 .request-panel .lab{margin-top:12px}
 .request-history{padding-left:20px;line-height:1.8}
 .request-workspace .workflow-steps{display:none}
@@ -147,6 +150,13 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
  .request-tabs{margin-bottom:12px}
  .request-tabs button{font-size:13px;padding:10px}
  .request-panel{padding:16px}
+}
+@media(max-width:599px){
+ .request-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible;gap:4px;margin-bottom:12px}
+ .request-tabs button{min-width:0;min-height:46px;padding:8px 3px;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-align:center}
+ .request-panel .stat{align-items:flex-start}
+ .request-panel .stat span{flex:0 0 34%}
+ .request-panel .stat b{min-width:0;flex:1}
 }
 
 .registry-topic,.request-head h1{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}

@@ -1885,7 +1885,7 @@ function counts(){
   return c;
 }
 var STAGE_FILTERS=[['requirements','Требования'],['preparation','Подготовка'],['quality','Проверка'],['delivery','К передаче'],['delivered','Передано'],['cancelled','Отменено']];
-function stageBucket(x){var key=requestWorkflow(x).key;return key==='intake'||key==='passport'?'requirements':key;}
+function stageBucket(x){var key=requestWorkflow(x).key;return key==='intake'||key==='passport'?'requirements':key==='external-review'?'quality':key;}
 function stageCounts(){var c={all:D.items.length};STAGE_FILTERS.forEach(function(q){c[q[0]]=D.items.filter(function(x){return stageBucket(x)===q[0];}).length;});return c;}
 function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
@@ -2314,7 +2314,7 @@ function viewItem(id){
                  : '<span class="mut">Контакт не указан</span>') +
     '</div></header>';
 
-  var overview=lab("Заявка") + row("Тип работы", x.workType) + row("Тема", x.topic) + row("Дисциплина", x.discipline) +
+  var overview=lab("Основное") + row("Тип работы", x.workType) + row("Дисциплина", x.discipline) +
     row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group);
   var panel=x.requestNumber?'<section data-test-delivery-host hidden></section>'+workflowCard(x)+(x.deliveryState&&x.deliveryState.last?card(deliveryHistory(x)):''):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
   h+='<div class="request-workspace"><aside class="request-action" aria-label="Следующее действие">'+panel+'</aside><div class="request-content"><div class="request-tabs" role="tablist" aria-label="Разделы заявки">'+[['overview','Обзор'],['requirements','Требования'],['materials','Материалы'],['result','Документ'],['delivery','Проверка'],['history','Версии и история']].map(function(t){return '<button type="button" role="tab" id="request-tab-'+t[0]+'" aria-controls="request-panel-'+t[0]+'" aria-selected="'+(defaultGroup===t[0])+'" tabindex="'+(defaultGroup===t[0]?'0':'-1')+'" data-act="request-tab" data-key="'+t[0]+'" data-id="'+esc(x.id)+'">'+t[1]+'</button>';}).join('')+'</div>';
@@ -2343,12 +2343,12 @@ function viewItem(id){
   if(x.requestNumber) requirements = passportContent(x)+'<details class="requirement-original"><summary>Исходные сведения заявки и требования вуза</summary>'+requirements+'</details>';
   h += group("requirements","Требования и материалы",requirements,defaultGroup==="requirements");
 
-  var progress = lab("Служебные действия") +
+  var progress = '<details class="request-maintenance"><summary>Заметка и управление карточкой</summary>' +
     '<p class="hint">Этап заявки определяется по паспорту, документу и проверкам. Ручной статус не объявляет работу готовой.</p>'+
     '<div class="fld"><label for="note">Заметка исполнителя</label><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">' + esc(x.note||"") + '</textarea></div>' +
-    '<div class="row"><button type="button" class="chip" data-act="save-note" data-id="' + esc(x.id) + '">Сохранить заметку</button>' +
-    '<button type="button" class="del" data-act="delete" data-id="' + esc(x.id) + '">удалить</button></div>';
-  h += group("overview","Обзор",overview+'<div class="section-separator">'+progress+'</div>');
+    '<button type="button" class="chip" data-act="save-note" data-id="' + esc(x.id) + '">Сохранить заметку</button>' +
+    '<div><button type="button" class="del" data-act="delete" data-id="' + esc(x.id) + '">Удалить карточку заявки</button></div></details>';
+  h += group("overview","Обзор",overview+progress);
 
   var result = (hasDoc
       ? '<div class="mut">' + x.doc.order.length + ' разделов · ' + dp.toLocaleString('ru-RU') + ' знаков' + (x.doc.updated ? ' · правка ' + ruDate(x.doc.updated) : '') + '</div>'
@@ -2358,7 +2358,7 @@ function viewItem(id){
   if(x.materialRevision&&x.materialRevision.state==='open')result='<p role="status">Подготовка и прикрепление результата недоступны, пока студент дополняет материалы. После завершения потребуется новый утверждённый паспорт.</p>';
   h += group("result",hasDoc?"Документ":"Подготовка документа",result,defaultGroup==="result");
 
-  h += group("delivery","Итоговая проверка и передача",x.requestNumber?'<p class="hint">Итоговая проверка относится к точной версии Word. Наличие текста и автоматическая проверка сами по себе не означают одобрение. Передача доступна только без блокирующих критериев.</p>'+(workflow.key==='delivery'?'':workflow.key==='delivered'?'<p>Результат передан. Для следующей версии сначала откройте документ и повторите проверки.</p><button type="button" class="chip" data-act="deliver-result" data-id="'+esc(x.id)+'">Проверить новую версию</button>':'<p>Следуйте действию в панели заявки. Итоговая проверка станет следующим шагом после проверки документа.</p>'):'<p class="hint">Серверная передача недоступна: заявка добавлена вручную.</p>');
+  h += group("delivery","Итоговая проверка и передача",x.requestNumber?'<p class="hint">Итоговая проверка относится к точной версии Word. Наличие текста и автоматическая проверка сами по себе не означают одобрение. Передача доступна только без блокирующих критериев.</p>'+(workflow.key==='delivery'?'<p>Сейчас можно открыть итоговую проверку кнопкой «Провести итоговую проверку» в панели следующего действия.</p>':workflow.key==='external-review'?'<p>Прикреплённый Word ожидает проверки. Откройте её кнопкой «Проверить прикреплённый Word» в панели следующего действия.</p>':workflow.key==='delivered'?'<p>Результат передан. Для следующей версии сначала откройте документ и повторите проверки.</p><button type="button" class="chip" data-act="deliver-result" data-id="'+esc(x.id)+'">Проверить новую версию</button>':'<p>Этот этап пока недоступен. Текущее действие и причина указаны в панели следующего действия.</p>'):'<p class="hint">Серверная передача недоступна: заявка добавлена вручную.</p>');
   var versions=Array.isArray(x.passports)?x.passports:[];
   var history=lab('Версии паспорта')+(versions.length?'<ul class="request-history">'+versions.map(function(p){return '<li>Версия '+esc(p.revision||1)+' · '+esc({approved:'утверждён',draft:'проект',stale:'устарел'}[p.status]||p.status||'статус неизвестен')+'</li>';}).join('')+'</ul>':'<p class="hint">Сохранённые версии паспорта пока не загружены.</p>');
   if(x.doc&&x.doc.serverJob)history+=lab('Сохранённая подготовка')+'<p class="hint">Состояние и историю серверной подготовки можно посмотреть в редакторе документа.</p>';

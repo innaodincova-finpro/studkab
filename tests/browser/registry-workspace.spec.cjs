@@ -16,6 +16,24 @@ async function seed(page){
   tab='list';openId=null;filter='all';query='';listPage=1;listPageSize=25;render();
  });
 }
+test('attached Word appears in review filter and review tab gives the current action',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{
+  const x=D.items[0]; D.items=[x];
+  x.requirements='Учебное задание для проверки перехода';
+  x.passports=[{revision:1,status:'approved',items:[],material_manifest:{basis:'Исходное задание',requirements:[{id:'assignment',label:'Учебное задание',required:true,attachment_ids:[],answer_ids:[],payload_fields:['rq'],not_applicable_reason:''}]}}];
+  x.externalResult={name:'учебный.docx',fileHash:'a'.repeat(64),chapters:[],structure:{}};
+  render();
+ });
+ await expect.poll(()=>page.evaluate(()=>requestWorkflow(D.items[0]).key)).toBe('external-review');
+ await expect(page.getByRole('button',{name:'Проверка · 1'})).toBeVisible();
+ await page.getByRole('button',{name:'Проверка · 1'}).click();
+ await expect(page.locator('.request-row')).toHaveCount(1);
+ await page.locator('.open-request').click();
+ await page.getByRole('tab',{name:'Проверка',exact:true}).click();
+ await expect(page.getByRole('tabpanel')).toContainText('Прикреплённый Word ожидает проверки');
+ await expect(page.locator('.request-action')).toContainText('Проверить прикреплённый Word');
+});
 test('pagination, number search and return preserve list context',async({page})=>{
  await seed(page);
  await expect(page.locator('.request-row')).toHaveCount(25);
@@ -44,6 +62,7 @@ test('pagination, number search and return preserve list context',async({page})=
 test('six tabs retain unsaved note, keyboard focus and request data',async({page})=>{
  await seed(page);await page.locator('.open-request').first().click();
  const before=await page.evaluate(()=>JSON.stringify(D));
+ await page.locator('.request-maintenance summary').click();
  await page.locator('#note').fill('Ещё не сохранено');
  for(const name of ['Требования','Материалы','Документ','Проверка','Версии и история','Обзор']){
   await page.getByRole('tab',{name,exact:true}).click();
@@ -59,6 +78,21 @@ test('six tabs retain unsaved note, keyboard focus and request data',async({page
  await page.evaluate(()=>QA.switchUser('workspace-other'));
  await expect.poll(()=>page.evaluate(()=>openId)).toBeNull();
  await expect(page.locator('#note')).toHaveCount(0);
+});
+test('phone card exposes every section and keeps destructive action in details',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await seed(page);
+ await page.locator('.open-request').first().click();
+ const tabs=page.locator('.request-tabs [role="tab"]');
+ await expect(tabs).toHaveCount(6);
+ for(let i=0;i<6;i++){
+  const box=await tabs.nth(i).boundingBox();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x+box.width).toBeLessThanOrEqual(390);
+ }
+ await expect(page.locator('.request-maintenance')).not.toHaveAttribute('open');
+ await expect(page.locator('.request-panel .stat').filter({hasText:'Тема'})).toHaveCount(0);
+ await page.locator('.request-maintenance summary').click();
+ await expect(page.getByRole('button',{name:'Удалить карточку заявки'})).toBeVisible();
 });
 test('single primary action uses real workflow and keeps exact Word review gate',async({page})=>{
  await seed(page);
