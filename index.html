@@ -1970,7 +1970,7 @@ function viewWork(id){
 
   if(w.req && w.req.serverId){
     h += card(lab('Ход заявки №'+esc(w.req.number||''))+'<p class="hint" data-student-progress role="status">Проверяем этап заявки…</p><button type="button" class="btn" data-act="student-progress" data-id="'+esc(w.id)+'">Обновить этап</button>');
-    h += card(lab('Материалы заявки')+'<p class="hint">Проверьте, запросил ли исполнитель дополнительные документы. Загрузите файлы и отдельно завершите дополнение.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Проверить и дополнить материалы</button>');
+    h += card(lab('Материалы заявки')+'<p class="hint">Здесь можно посмотреть полученные файлы. Добавить новые получится, если исполнитель откроет дополнение материалов.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Открыть материалы заявки</button>');
     h += card(lab("Вопросы исполнителя")+'<p class="hint" data-dialog-unread role="status">Проверяем новые вопросы…</p><p class="hint">Чтобы получать сообщения при закрытом кабинете, включите уведомления в разделе «Ещё» на этом устройстве.</p><button type="button" class="btn" data-act="student-clarifications" data-id="'+esc(w.id)+'">Открыть вопросы и ответы</button>');
     h += '<section data-test-delivery-host hidden></section>';
     h += card(lab("Результат заявки") + '<p class="hint">Проверьте, доступен ли документ Word для скачивания.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
@@ -2341,7 +2341,7 @@ function refreshStudentProgress(){
  if(!w||!w.req||!w.req.serverId||!host||!window.Oblako||!Oblako.requestApi)return;
  var identity=Oblako.identity(),requestId=w.req.serverId;
  host.textContent='Проверяем этап заявки…';
- var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Подтверждённой передачи Word студенту нет.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
+ var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Исполнитель готовит или проверяет Word; передача студенту ещё не зарегистрирована.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
  Oblako.requestApi({action:'student-progress',id:requestId}).then(function(result){
   if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)host.textContent=(labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Открытых вопросов: '+result.openQuestions+'.':'');
  },function(err){if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)host.textContent='Не удалось получить этап из реестра: '+(err.message||'повторите позже');});
