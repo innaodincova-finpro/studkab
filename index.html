@@ -1498,7 +1498,7 @@ function openNewWork(){
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>'+
     '<h2>Новая работа</h2>'+
-    '<p class="small">Здесь создаётся запись в вашем кабинете. Исполнителю она пока не отправляется. После создания откройте «Заявка» в карточке работы, приложите материалы и отправьте её.</p>'+
+    '<p class="small">Здесь создаётся запись в вашем кабинете. Исполнителю она пока не отправляется. После создания нажмите «Заполнить и отправить заявку» в карточке работы, приложите материалы и подтвердите отправку.</p>'+
     '<div class="field" style="margin-top:14px"><label for="nTopic">Тема</label><input type="text" id="nTopic" placeholder="Например: Организация работы проектной команды"></div>'+
     '<div class="field"><label for="nType">Вид работы</label>'+
       '<select id="nType"><option>Курсовая работа</option><option>Выпускная квалификационная работа</option>'+
@@ -1964,6 +1964,10 @@ function viewWork(id){
       (f.discipline ? ' · ' + esc(f.discipline) : '') +
       (w.deadline ? ' · срок ' + ruDate(w.deadline) : '') + (w.req && w.req.serverId ? ' · Заявка №'+esc(w.req.number||'') : ' · ' + pill(st)) + '</div>';
 
+  if(!(w.req && w.req.serverId)) h += card(lab('Заявка исполнителю')+
+    '<p class="hint">Работа сохранена только в вашем кабинете. Чтобы исполнитель получил заявку, укажите условия и приложите материалы.</p>'+
+    '<button type="button" class="chip warn" data-act="send-request" data-id="'+esc(w.id)+'">Заполнить и отправить заявку</button>');
+
   if(w.req && w.req.serverId){
     h += card(lab('Ход заявки №'+esc(w.req.number||''))+'<p class="hint" data-student-progress role="status">Проверяем этап заявки…</p><button type="button" class="btn" data-act="student-progress" data-id="'+esc(w.id)+'">Обновить этап</button>');
     h += card(lab('Материалы заявки')+'<p class="hint">Проверьте, запросил ли исполнитель дополнительные документы. Загрузите файлы и отдельно завершите дополнение.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Проверить и дополнить материалы</button>');
@@ -2014,7 +2018,7 @@ function viewWork(id){
 
   if(w.req && w.req.serverId) h += '</div></details>';
 
-  h += card(lab("Заявка исполнителю") +
+  if(w.req && w.req.serverId) h += card(lab("Заявка исполнителю") +
     (w.req && w.req.serverId && (w.req.filesPending||!w.req.sent)
       ? '<div class="mut">Заявка №'+esc(w.req.number)+' сохранена. Отправка материалов не завершена; откройте заявку для проверки.</div>'
       : w.req && w.req.sent

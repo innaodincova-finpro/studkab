@@ -8,7 +8,12 @@ test('C150 creating a work tells the student that the request has not been sent'
  await modal.getByRole('textbox',{name:'Тема'}).fill('Проверка первого шага');
  await modal.getByRole('button',{name:'Создать'}).click();
  await expect(page.locator('#toast')).toContainText('Заявка исполнителю ещё не отправлена');
- await expect(page.getByRole('button',{name:'Заявка'})).toBeVisible();
+ const action=page.getByRole('button',{name:'Заполнить и отправить заявку'});
+ await expect(action).toBeVisible();
+ await expect(action).toHaveCount(1);
+ expect(await page.evaluate(()=>D.works[0]?.req?.serverId)).toBeUndefined();
+ await action.click();
+ await expect(page.getByRole('dialog',{name:'Заявка исполнителю'})).toBeVisible();
  expect(await page.evaluate(()=>D.works[0]?.req?.serverId)).toBeUndefined();
 });
 
