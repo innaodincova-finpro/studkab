@@ -1990,10 +1990,11 @@ async function receiveInbox() {
 }
 function viewList(){
   var list=list0(filter,query), chips=[{k:"all",t:"Все"}].concat(STAGE_FILTERS.map(function(s){return {k:s[0],t:s[1]};}));
+  var inAccount=!!(window.Oblako&&Oblako.mode==='cloud');
   var pages=Math.max(1,Math.ceil(list.length/listPageSize));
   listPage=Math.max(1,Math.min(listPage,pages));
   var start=(listPage-1)*listPageSize;
-  var h='<div class="registry-toolbar"><div><h1>Заявки</h1><p class="mut">'+D.items.length+' '+plural(D.items.length,'заявка','заявки','заявок')+' · этап и следующий шаг</p></div><button type="button" class="chip" data-act="receive-inbox">Получить заявки из кабинетов</button></div>'+
+  var h='<div class="registry-toolbar"><div><h1>Заявки</h1><p class="mut">'+D.items.length+' '+plural(D.items.length,'заявка','заявки','заявок')+(inAccount?' · этап и следующий шаг':' на этом устройстве · без входа в аккаунт')+'</p></div>'+(inAccount?'<button type="button" class="chip" data-act="receive-inbox">Получить заявки из кабинетов</button>':'<button type="button" class="chip" data-act="cloud">Войти и открыть облачные заявки</button>')+'</div>'+
     '<div class="fld"><input type="search" id="q" aria-label="Поиск заявок" value="'+esc(query)+'" placeholder="Номер, студент, вуз или тема"></div>'+
     '<div class="registry-filters" aria-label="Этапы заявок">'+chips.map(function(f){
       var n=list0(f.k,query).length;
@@ -2001,7 +2002,7 @@ function viewList(){
     }).join('')+'</div>';
   function pager(){return '<nav class="registry-pagination" aria-label="Страницы заявок"><span role="status">Найдено '+list.length+' · '+(list.length?(start+1)+'–'+Math.min(start+listPageSize,list.length):'0')+'</span><label>На странице <select data-act="page-size" aria-label="Заявок на странице"><option value="25"'+(listPageSize===25?' selected':'')+'>25</option><option value="50"'+(listPageSize===50?' selected':'')+'>50</option></select></label><div><button type="button" class="mini" data-act="list-page" data-page="'+(listPage-1)+'"'+(listPage===1?' disabled':'')+' aria-label="Предыдущая страница">←</button><span> '+listPage+' / '+pages+' </span><button type="button" class="mini" data-act="list-page" data-page="'+(listPage+1)+'"'+(listPage===pages?' disabled':'')+' aria-label="Следующая страница">→</button></div></nav>';}
   h+=pager();
-  if(!D.items.length)return h+'<div class="empty">Заявок нет. Нажмите «Получить заявки из кабинетов», чтобы обновить список.</div>';
+  if(!D.items.length)return h+'<div class="empty">'+(inAccount?'На этом устройстве заявки пока не загружены. Нажмите «Получить заявки из кабинетов», чтобы проверить облачный реестр.':'Вы сейчас без входа в аккаунт. Здесь показаны только записи этого браузера; состояние облачных заявок неизвестно. Войдите в тот же аккаунт, которым пользуетесь в реестре.')+'</div>';
   h+=list.length?card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Заявка / студент</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Этап и следующий шаг</th></tr></thead><tbody>'+list.slice(start,start+listPageSize).map(function(x){
     var w=requestWorkflow(x),over=x.deadline&&x.deadline<today()&&!w.complete&&w.key!=='cancelled';
     var next=x.requestNumber?w.label:'Открыть документ';
