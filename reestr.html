@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=15"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=1"></script><script src="results-ui.js?v=19"></script><script src="request-workflow.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=1"></script><script src="results-ui.js?v=20"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -258,6 +258,8 @@ button.b{width:auto;display:inline-block;padding:11px 16px}
 .fld,.field{margin-bottom:10px}
 .fld label,.field label{display:block;font-size:11px;color:var(--mut);margin-bottom:4px;font-weight:500}
 input,textarea,select{width:100%;border:1px solid var(--line);border-radius:11px;padding:11px;font-size:16px;background:rgba(255,255,255,.9);color:var(--ink)}
+.sheet-in input[type="checkbox"]{width:18px;height:18px;min-width:18px;margin:2px 0 0;padding:0;border-radius:4px}
+.sheet-in label:has(>input[type="checkbox"]){display:flex;align-items:flex-start;gap:10px;line-height:1.45}
 textarea{resize:vertical;min-height:120px;line-height:1.5}
 input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-color:var(--head)}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}

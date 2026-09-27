@@ -45,6 +45,16 @@ async function fillReview(page){
  await page.locator('[data-criterion-status="C08"]').selectOption('not_applicable');
  await page.locator('[data-reviewed]').check();return download;
 }
+test('Word review keeps checkboxes beside their labels and explains missing student name',async({page})=>{
+ await setupReview(page);
+ const box=await page.locator('[data-word-opened]').evaluate(el=>({width:el.getBoundingClientRect().width,left:el.getBoundingClientRect().left,labelLeft:el.closest('label').getBoundingClientRect().left}));
+ expect(box.width).toBeLessThan(24);
+ expect(box.left-box.labelLeft).toBeLessThan(24);
+ await page.locator('.sheet .close').click();
+ await page.evaluate(()=>{candidate.student='';candidate.doc.review=DraftQuality.stamp(candidate);StudResults.deliver(candidate);});
+ await expect(page.getByRole('note')).toContainText('По одному этому экрану личность получателя подтвердить нельзя');
+ await expect(page.locator('[data-reviewed]').locator('..')).toContainText('проверил кабинет получателя');
+});
 test('C-071 saving review never delivers; reopening restores exact bytes and separate delivery',async({page})=>{
  await setupReview(page);await page.setViewportSize({width:390,height:844});
  await page.locator('[data-save-review]').click();await expect(page.locator('[data-result-status]')).toContainText('Скачайте и проверьте Word');
