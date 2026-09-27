@@ -1498,6 +1498,7 @@ function openNewWork(){
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>'+
     '<h2>Новая работа</h2>'+
+    '<p class="small">Здесь создаётся запись в вашем кабинете. Исполнителю она пока не отправляется. После создания откройте «Заявка» в карточке работы, приложите материалы и отправьте её.</p>'+
     '<div class="field" style="margin-top:14px"><label for="nTopic">Тема</label><input type="text" id="nTopic" placeholder="Например: Организация работы проектной команды"></div>'+
     '<div class="field"><label for="nType">Вид работы</label>'+
       '<select id="nType"><option>Курсовая работа</option><option>Выпускная квалификационная работа</option>'+
@@ -1533,7 +1534,7 @@ function openNewWork(){
         req:{ id:uid("rq"), contact: st.contact || "", org:"", notes:"", sent:"" }
       });
     });
-    wrap.remove(); go("works", newId); toast("Работа создана");
+    wrap.remove(); go("works", newId); toast("Работа создана. Заявка исполнителю ещё не отправлена.");
   });
 }
 
@@ -1668,7 +1669,7 @@ function viewToday(){
   } else {
     h += card(lab(D.works.length ? "Ближайшая сдача" : "С чего начать") +
       '<div class="mut">' + (D.works.length ? "Работ со сроком пока нет."
-        : "Заведите работу — тема и срок. Кабинет будет напоминать о сроках и соберёт документ по вашей методичке.") + '</div>' +
+        : "Создайте работу с темой и сроком. Затем отправьте заявку исполнителю с материалами или ведите собственные разделы.") + '</div>' +
       '<div class="chips"><button type="button" class="chip" data-act="new-work">Новая работа</button>' +
       (D.works.length ? '' : '<button type="button" class="chip" data-act="go-profile">Данные о себе</button>') + '</div>');
   }
@@ -2111,10 +2112,10 @@ function viewMore(){
     '<div class="hint">Копия — отдельный файл с вашими записями. Сохраните его перед переносом или заменой данных. Облачное сохранение проверяйте в разделе «Хранение записей».</div>');
 
   h += '<details class="fold"><summary>Подсказки</summary><div class="in">' +
-    '<div class="item"><div class="ic">1</div><div class="txt"><b>Заведите работу</b><small>Тема, вид, срок. Оформление подставится из ваших данных</small></div></div>' +
-    '<div class="item"><div class="ic">2</div><div class="txt"><b>Пишите по разделам</b><small>Тап по разделу открывает редактор. Микрофон на клавиатуре — для диктовки</small></div></div>' +
-      '<div class="item"><div class="ic">3</div><div class="txt"><b>Нужен документ — отправьте заявку</b><small>Кнопка в работе. После передачи Word доступен в результате заявки.</small></div></div>' +
-    '<div class="item"><div class="ic">4</div><div class="txt"><b>Скачивайте Word</b><small>Титульный лист, поля и содержание уже на месте</small></div></div>' +
+    '<div class="item"><div class="ic">1</div><div class="txt"><b>Создайте работу в кабинете</b><small>Тема, вид и срок сохраняются у вас. Это ещё не заявка исполнителю.</small></div></div>' +
+    '<div class="item"><div class="ic">2</div><div class="txt"><b>Отправьте заявку, если нужен исполнитель</b><small>Откройте работу, заполните условия, приложите материалы и подтвердите отправку. Свои разделы можно вести отдельно.</small></div></div>' +
+    '<div class="item"><div class="ic">3</div><div class="txt"><b>Следите за заявкой</b><small>Проверяйте этап и отвечайте на вопросы исполнителя в карточке.</small></div></div>' +
+    '<div class="item"><div class="ic">4</div><div class="txt"><b>Получите результат</b><small>После передачи скачайте Word в разделе «Результат заявки» и проверьте документ.</small></div></div>' +
     '<div class="item"><div class="ic">5</div><div class="txt"><b>Добавьте на экран телефона</b><small>Меню браузера → «На экран „Домой“»</small></div></div>' +
     '<div class="chips" style="margin-top:10px"><button type="button" class="chip" data-act="demo">Показать пример</button></div>' +
     '<div class="row" style="margin-top:8px"><span></span><button type="button" class="del" data-act="reset">очистить кабинет</button></div>' +
