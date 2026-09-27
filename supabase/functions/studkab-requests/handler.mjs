@@ -110,7 +110,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
      db('studkab_results?select=delivery_id&request_id=eq.'+input.id+'&order=created_at.desc,id.desc&limit=1')
     ]);
     const openQuestions=questions.length;
-    const stage=delivered.length?'delivered':openQuestions?'needs_answer':passports[0]?.status==='approved'?'requirements_approved':passports.length?'requirements_review':'received';
+    const stage=delivered[0]?.delivery_id?'delivered':openQuestions?'needs_answer':passports[0]?.status==='approved'?'requirements_approved':passports.length?'requirements_review':'received';
     return json({stage,openQuestions});
    }
    if(input.action==='request-state'||input.action==='update-request'){
