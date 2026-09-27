@@ -1885,7 +1885,7 @@ function counts(){
   return c;
 }
 var STAGE_FILTERS=[['requirements','Требования'],['preparation','Подготовка'],['quality','Проверка'],['delivery','К передаче'],['delivered','Передано'],['cancelled','Отменено']];
-function stageBucket(x){var key=requestWorkflow(x).key;return key==='intake'||key==='passport'?'requirements':key;}
+function stageBucket(x){var key=requestWorkflow(x).key;return key==='intake'||key==='passport'?'requirements':key==='external-review'?'quality':key;}
 function stageCounts(){var c={all:D.items.length};STAGE_FILTERS.forEach(function(q){c[q[0]]=D.items.filter(function(x){return stageBucket(x)===q[0];}).length;});return c;}
 function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
@@ -2358,7 +2358,7 @@ function viewItem(id){
   if(x.materialRevision&&x.materialRevision.state==='open')result='<p role="status">Подготовка и прикрепление результата недоступны, пока студент дополняет материалы. После завершения потребуется новый утверждённый паспорт.</p>';
   h += group("result",hasDoc?"Документ":"Подготовка документа",result,defaultGroup==="result");
 
-  h += group("delivery","Итоговая проверка и передача",x.requestNumber?'<p class="hint">Итоговая проверка относится к точной версии Word. Наличие текста и автоматическая проверка сами по себе не означают одобрение. Передача доступна только без блокирующих критериев.</p>'+(workflow.key==='delivery'?'':workflow.key==='delivered'?'<p>Результат передан. Для следующей версии сначала откройте документ и повторите проверки.</p><button type="button" class="chip" data-act="deliver-result" data-id="'+esc(x.id)+'">Проверить новую версию</button>':'<p>Следуйте действию в панели заявки. Итоговая проверка станет следующим шагом после проверки документа.</p>'):'<p class="hint">Серверная передача недоступна: заявка добавлена вручную.</p>');
+  h += group("delivery","Итоговая проверка и передача",x.requestNumber?'<p class="hint">Итоговая проверка относится к точной версии Word. Наличие текста и автоматическая проверка сами по себе не означают одобрение. Передача доступна только без блокирующих критериев.</p>'+(workflow.key==='delivery'?'<p>Сейчас можно открыть итоговую проверку кнопкой «Провести итоговую проверку» в панели следующего действия.</p>':workflow.key==='external-review'?'<p>Прикреплённый Word ожидает проверки. Откройте её кнопкой «Проверить прикреплённый Word» в панели следующего действия.</p>':workflow.key==='delivered'?'<p>Результат передан. Для следующей версии сначала откройте документ и повторите проверки.</p><button type="button" class="chip" data-act="deliver-result" data-id="'+esc(x.id)+'">Проверить новую версию</button>':'<p>Этот этап пока недоступен. Текущее действие и причина указаны в панели следующего действия.</p>'):'<p class="hint">Серверная передача недоступна: заявка добавлена вручную.</p>');
   var versions=Array.isArray(x.passports)?x.passports:[];
   var history=lab('Версии паспорта')+(versions.length?'<ul class="request-history">'+versions.map(function(p){return '<li>Версия '+esc(p.revision||1)+' · '+esc({approved:'утверждён',draft:'проект',stale:'устарел'}[p.status]||p.status||'статус неизвестен')+'</li>';}).join('')+'</ul>':'<p class="hint">Сохранённые версии паспорта пока не загружены.</p>');
   if(x.doc&&x.doc.serverJob)history+=lab('Сохранённая подготовка')+'<p class="hint">Состояние и историю серверной подготовки можно посмотреть в редакторе документа.</p>';

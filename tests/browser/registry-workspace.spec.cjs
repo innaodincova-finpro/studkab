@@ -16,6 +16,24 @@ async function seed(page){
   tab='list';openId=null;filter='all';query='';listPage=1;listPageSize=25;render();
  });
 }
+test('attached Word appears in review filter and review tab gives the current action',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{
+  const x=D.items[0]; D.items=[x];
+  x.requirements='Учебное задание для проверки перехода';
+  x.passports=[{revision:1,status:'approved',items:[],material_manifest:{basis:'Исходное задание',requirements:[{id:'assignment',label:'Учебное задание',required:true,attachment_ids:[],answer_ids:[],payload_fields:['rq'],not_applicable_reason:''}]}}];
+  x.externalResult={name:'учебный.docx',fileHash:'a'.repeat(64),chapters:[],structure:{}};
+  render();
+ });
+ await expect.poll(()=>page.evaluate(()=>requestWorkflow(D.items[0]).key)).toBe('external-review');
+ await expect(page.getByRole('button',{name:'Проверка · 1'})).toBeVisible();
+ await page.getByRole('button',{name:'Проверка · 1'}).click();
+ await expect(page.locator('.request-row')).toHaveCount(1);
+ await page.locator('.open-request').click();
+ await page.getByRole('tab',{name:'Проверка',exact:true}).click();
+ await expect(page.getByRole('tabpanel')).toContainText('Прикреплённый Word ожидает проверки');
+ await expect(page.locator('.request-action')).toContainText('Проверить прикреплённый Word');
+});
 test('pagination, number search and return preserve list context',async({page})=>{
  await seed(page);
  await expect(page.locator('.request-row')).toHaveCount(25);
