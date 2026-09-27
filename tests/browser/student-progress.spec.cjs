@@ -33,3 +33,17 @@ test('C149 opening a student request reads its stage and retry remains available
  await expect(page.getByText(/мои разделы: \d+%/)).toBeVisible();
  await expect(page.getByRole('button',{name:'Условия заявки'})).toBeVisible();
 });
+
+test('C151 approved requirements do not claim Word was delivered or materials can be added now',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  const w={id:'c151-work',topic:'Учебный вариант 1',deadline:'2026-10-25',format:{workType:'Курсовая'},structure:emptyStructure(),req:{id:'c151',serverId:'11111111-1111-4111-8111-111111111111',number:1}};
+  D.works=[w];
+  Oblako.requestApi=async body=>body.action==='student-progress'?{stage:'requirements_approved',openQuestions:0}:{question:0};
+  go('works',w.id);
+ });
+ await expect(page.locator('[data-student-progress]')).toContainText('готовит или проверяет Word');
+ await expect(page.locator('[data-student-progress]')).toContainText('передача студенту ещё не зарегистрирована');
+ await expect(page.getByText('Добавить новые получится, если исполнитель откроет дополнение материалов.')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Открыть материалы заявки'})).toBeVisible();
+});
