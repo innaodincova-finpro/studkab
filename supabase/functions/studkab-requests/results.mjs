@@ -135,6 +135,10 @@ async function resultActionV2(input,user,{db,config}) {
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный номер заявки'}};
  const [request]=await db('studkab_requests?select=id,student_id,payload&limit=1&id=eq.'+input.id);
  if(!request)return {status:404,data:{error:'Заявка не найдена'}};
+ // A historical request may have bypassed the current intake requirement.
+ // Keep its saved Word available for correction, but never approve or deliver it.
+ if(['prepare-result','review-result','deliver','rebind-result'].includes(input.action)&&!String(request.payload?.n||'').trim())
+  return {status:409,data:{error:'В заявке не указано ФИО студента. Уточните данные и подготовьте новую версию Word с правильным титульным листом.'}};
  if(input.action==='result'){
   if(request.student_id!==user.id)return {status:404,data:{error:'Заявка не найдена'}};
   const [result]=await db('studkab_results?select=delivery_id,document,created_at,version_id&request_id=eq.'+input.id+'&order=created_at.desc,id.desc&limit=1');
@@ -168,7 +172,7 @@ async function resultActionV2(input,user,{db,config}) {
  let result;
  if(input.action==='prepare-result'){
   let document;try{document=validateResult(input.document);}catch(e){return {status:400,data:{error:e.message}};}
-  if(request.payload?.n&&document.student.trim()!==request.payload.n.trim())return {status:409,data:{error:errors.recipient}};
+  if(!document.student.trim()||document.student.trim()!==request.payload.n.trim())return {status:409,data:{error:errors.recipient}};
   if(document.reviewContext&&!await currentPassport(document,input.id,db))return {status:409,data:{error:errors.stale}};
   const file=input.docxBase64;
   if(typeof file!=='string'||file.length>4194304||file.length<8||!/^UEsDB[A-Za-z0-9+/]*={0,2}$/.test(file))return {status:400,data:{error:errors.file}};

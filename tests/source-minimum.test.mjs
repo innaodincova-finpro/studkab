@@ -16,7 +16,7 @@ function setup({failure=false,files=attachments}={}){
   if(path.startsWith('rpc/')){writes.push(path);return {};}
   if(path.startsWith('studkab_request_attachments')){if(failure)throw Error('READ_FAILED');return files;}
   if(path.startsWith('studkab_requirement_passports'))return [{id,status:'approved',items,summary:'Согласовано',source_fingerprint:hash}];
-  if(path.startsWith('studkab_requests'))return [{id,student_id:id,payload:{k:'Курсовая работа'}}];
+  if(path.startsWith('studkab_requests'))return [{id,student_id:id,payload:{k:'Курсовая работа',n:'Тестовый студент'}}];
   if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];
   throw Error('Unexpected '+path);
  };
