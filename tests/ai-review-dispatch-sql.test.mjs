@@ -10,7 +10,7 @@ test('queued review of superseded Word is stopped before reserve and paid dispat
  try{
   await db.exec(`create role anon; create role authenticated; create role service_role;
     create schema auth; create table auth.users(id uuid primary key);
-    create table public.studkab_requests(id uuid primary key,student_id uuid,payload jsonb);`);
+    create table public.studkab_requests(id uuid primary key,student_id uuid,payload jsonb,deleting_at timestamptz);`);
   for(const name of ['20260911195103_studkab_generation_storage_v1.sql','20260912123246_studkab_budget_reconciliation.sql',
    '20260914105509_studkab_requirement_passports.sql','20260915070508_mandatory_passport_generation_limits.sql',
    '20260915130000_studkab_generation_stop.sql','20260918092405_expose_bounded_job_release_total.sql'])
@@ -18,8 +18,7 @@ test('queued review of superseded Word is stopped before reserve and paid dispat
   await db.exec(`create table public.studkab_result_versions(id uuid primary key,request_id uuid not null,
    revision integer not null,file_hash text not null);
    update public.studkab_gen_budget set limit_microusd=500000 where id=true;`);
-  const c157=readFileSync(new URL('../supabase/migrations/20260928070000_c157_review_dispatch_unknown.sql',import.meta.url),'utf8');
-  await db.exec(c157.slice(c157.indexOf('create or replace function public.studkab_gen_dispatch('),c157.indexOf('create or replace function public.studkab_quality_check(')));
+  await db.exec(readFileSync(new URL('../supabase/migrations/20260928105609_c160_review_dispatch_passport_lock.sql',import.meta.url),'utf8'));
   const user=randomUUID(),request=randomUUID(),versionA=randomUUID(),versionB=randomUUID(),fp='a'.repeat(64),hashA='b'.repeat(64);
   await db.query('insert into auth.users(id) values($1)',[user]);
   await db.query("insert into studkab_requests(id,student_id,payload) values($1,$2,'{\"n\":\"Студент Тестов\"}')",[request,user]);
@@ -45,6 +44,13 @@ test('queued review of superseded Word is stopped before reserve and paid dispat
   const claimB=(await one('select studkab_gen_claim() c')).c;
   await db.query("update studkab_requests set payload='{}' where id=$1",[request]);
   assert.equal((await one('select studkab_gen_dispatch($1,$2,$3) id',[jobB,claimB.ordinal,claimB.claim])).id,null);
+  assert.equal(Number((await one('select reserved_microusd from studkab_gen_budget')).reserved_microusd),0);
+  await db.query('update studkab_requests set payload=$2 where id=$1',[request,{n:'Студент Тестов'}]);
+  const jobC=await makeJob(versionB,'c'.repeat(64));
+  const claimC=(await one('select studkab_gen_claim() c')).c;
+  await db.query("update studkab_requirement_passports set status='stale' where id=$1",[saved.id]);
+  assert.equal((await one('select studkab_gen_dispatch($1,$2,$3) id',[jobC,claimC.ordinal,claimC.claim])).id,null);
+  assert.equal((await one('select status from studkab_gen_jobs where id=$1',[jobC])).status,'stale');
   assert.equal(Number((await one('select reserved_microusd from studkab_gen_budget')).reserved_microusd),0);
  }finally{await db.close();}
 });
