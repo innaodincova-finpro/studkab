@@ -1,5 +1,20 @@
 # Соответствие требований и доказательств
 
+## C160 — независимая сверка и привязка согласия к паспорту, 28.09.2026
+
+Открытые дефекты, риски и недостающие доказательства с приоритетами и
+критериями закрытия: [`docs/C160_OPEN_ISSUES.md`](docs/C160_OPEN_ISSUES.md).
+R3/R4/R8/R9/R13 → `studkab-generation-api/handler.mjs`,
+`quality-evidence-ui.js`, `index.html`, `reestr.html`, `sw.js`,
+`tests/generation-api.test.mjs`, `tests/browser/quality-evidence.spec.cjs`,
+`tests/offline.test.cjs`. Локально `quality-review-estimate` возвращает ID
+утверждённого паспорта, `start` требует того же ID вместе с ценой и SHA-256
+Word. Новая адресная проверка меняет паспорт без смены Word/цены и получает
+409 до вызова `studkab_gen_start`; повторная оценка допускает текущий ID.
+Целевой Node/offline набор 49/49. Полный CI, установка Edge/Pages и рабочая
+приёмка пока не проведены; production не изменён. Отдельная гонка
+смены паспорта с dispatch и автоматизация 16 пунктов остаются открытыми.
+
 ## C159 — рабочая заявка №1: предел допустимой правки, 28.09.2026
 
 Read-only SQL: `studkab_requests.number=1`, `revision=4`, опубликована;

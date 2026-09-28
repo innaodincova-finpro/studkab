@@ -82,13 +82,15 @@
    await options.ensureVersion();var expected=captured();
    var quote=await Oblako.generationApi({action:'quality-review-estimate',request:options.id,versionId:expected.versionId});check(expected);
    if(quote.fileHash!==expected.fileHash)throw Error('Word изменился после оценки стоимости.');
+   if(!/^[a-f0-9-]{36}$/i.test(quote.passportId||''))throw Error('Сервер не подтвердил версию паспорта. Обновите проверку.');
    if(!quote.canStart)throw Error('Бюджет не позволяет запуск проверки. Предельный расход не подтверждён.');
    var cost=(quote.estimatedCostMicrousd/1000000).toFixed(4),max=(quote.maxCostMicrousd/1000000).toFixed(4);
-   if(!global.confirm('Запустить платную ИИ проверку этой версии Word? Расчётный резерв: $'+cost+'. Предел для работы: $'+max+'.')){
+   if(!global.confirm('Запустить платную ИИ проверку этой версии Word по паспорту №'+quote.passportRevision+'? Расчётный резерв: $'+cost+'. Предел для работы: $'+max+'.')){
     aiStatus.textContent='Запуск отменён. Расходов нет.';return;}
    check(expected);
    var answer=await Oblako.generationApi({action:'quality-review-start',request:options.id,versionId:expected.versionId,
-    confirmedEstimateMicrousd:quote.estimatedCostMicrousd,confirmedFileHash:expected.fileHash});check(expected);
+    confirmedEstimateMicrousd:quote.estimatedCostMicrousd,confirmedFileHash:expected.fileHash,
+    confirmedPassportId:quote.passportId});check(expected);
    if(!answer.job)throw Error('Сервер не подтвердил создание проверки.');
    aiJob=typeof answer.job==='string'?answer.job:answer.job?.id;
    if(!/^[a-f0-9-]{36}$/i.test(aiJob||''))throw Error('Сервер не подтвердил номер задачи. Найдите её через историю проверок.');

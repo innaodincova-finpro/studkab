@@ -158,12 +158,13 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     const remaining=!!b&&!!policy?Math.min(Number(b.limit_microusd),Number(policy.temporary_total_microusd))-Number(b.reserved_microusd):0;
     const canStart=remaining>0&&prepared.estimatedTotal<=Number(limit.max_cost_microusd)&&prepared.estimatedTotal<=remaining;
     const estimate={status:'estimate',versionId:context.version.id,fileHash:context.version.file_hash,
-      passportRevision:context.passport.revision,canStart,maxCostMicrousd:Number(limit.max_cost_microusd),
+      passportId:context.passport.id,passportRevision:context.passport.revision,canStart,maxCostMicrousd:Number(limit.max_cost_microusd),
       estimatedCostMicrousd:prepared.estimatedTotal,remainingMicrousd:Math.max(0,remaining)};
     if(input.action==='quality-review-estimate')return reply(estimate);
-    // The caller must acknowledge the exact server quote and immutable Word hash.
+    // The caller must acknowledge the exact quote, Word and approved passport.
     if(!canStart)return reply({error:'BUDGET_BLOCKED'},409);
-    if(input.confirmedEstimateMicrousd!==prepared.estimatedTotal||input.confirmedFileHash!==context.version.file_hash)
+    if(input.confirmedEstimateMicrousd!==prepared.estimatedTotal||input.confirmedFileHash!==context.version.file_hash
+      ||input.confirmedPassportId!==context.passport.id)
      return reply({error:'REVIEW_CONFIRMATION_REQUIRED',estimate},409);
     const job=await db('rpc/studkab_gen_start',{p_owner:user.id,p_request:input.request,
       p_input:prepared.snapshot,p_plan:prepared.plan,p_passport:context.passport.id,p_work_kind:kind,
