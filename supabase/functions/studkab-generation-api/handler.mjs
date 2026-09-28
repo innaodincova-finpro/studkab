@@ -144,7 +144,8 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     if(materials)return reply(materials,409);
     const conflict=await sourceMinimumGuard(db,input.request,context.passport.items);
     if(conflict)return reply(conflict,409);
-    const prompt=reviewPrompt(context.packet);
+    const financeProfile=/FIN-UAT-01/.test([requestRow.payload?.rq,requestRow.payload?.mn].filter(Boolean).join('\n'));
+    const prompt=reviewPrompt(context.packet,financeProfile);
     let prepared;
     try{prepared=prepare({request:input.request,materialFingerprint:context.passport.source_fingerprint,
       system:prompt.system,parts:[{id:'quality_review',prompt:prompt.user}],reviewMode:true,

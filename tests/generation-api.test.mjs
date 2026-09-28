@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {handler,prepare,failure,diagnostic,workKind} from '../supabase/functions/studkab-generation-api/handler.mjs';
 import {reserveMicrousd} from '../supabase/functions/_shared/deepseek-cost.mjs';
 import {reviewPacket,reviewPrompt} from '../supabase/functions/studkab-generation-api/review-pass.mjs';
+import DraftQuality from '../draft-quality.js';
 const uid='11111111-1111-4111-8111-111111111111',job='22222222-2222-4222-8222-222222222222';
 const requestId='33333333-3333-4333-8333-333333333333',passportId='44444444-4444-4444-8444-444444444444',materialFingerprint='a'.repeat(64);
 const valid={action:'start',request:requestId,system:'Материалы',materialFingerprint,parts:[{id:'intro',prompt:'Введение'}]};
@@ -27,6 +28,16 @@ const reviewVersion='55555555-5555-4555-8555-555555555555',reviewHash='b'.repeat
 const reviewContext={packet:{word:{revision:33,fileHash:reviewHash,documentHash:'c'.repeat(64),text:'Текст Word'},
  passport:{revision:4,sourceFingerprint:materialFingerprint,items:[]},materials:[{category:'assignment',fileHash:'d'.repeat(64),text:'Задание'}]},
  passport:{id:passportId,revision:4,source_fingerprint:materialFingerprint,items:[]},version:{id:reviewVersion,file_hash:reviewHash}};
+test('AI prompt uses the same 16 code labels as the review form and excludes visual claims',()=>{
+ for(const financeProfile of [false,true]){
+  const local=DraftQuality.reviewCriteria({requirements:financeProfile?'FIN-UAT-01':''});
+  const system=reviewPrompt(reviewContext.packet,financeProfile).system;
+  assert.equal(local.length,16);
+  for(const {code,label} of local)assert.ok(system.includes(code+' — '+label),code);
+  assert.match(system,/C11.*notChecked/s);
+  assert.match(system,/библиографические записи/);
+ }
+});
 function reviewSetup({budget=500000,stale=false,user={id:uid,email:'owner@example.test',email_confirmed_at:'yes'}}={}){
  const calls=[];
  const h=handler({auth:async()=>user,config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
