@@ -56,6 +56,7 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
      }
     }
     let email={configured:false,accepted:0,pending:0,unknown:0,failed:0};
+    await db('rpc/reconcile_studkab_request_emails','POST',{});
     const settings=typeof emailSettings==='function'?emailSettings(cfg):null;
     if(emailConfigured(settings||{})){
      email.configured=true;

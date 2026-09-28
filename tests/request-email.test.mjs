@@ -34,6 +34,14 @@ test('email is queued once at publication, never for draft/old request; separate
   assert.equal((await db.query('select finish_studkab_request_email($1,$2,$3,$4) ok',[fresh,first.lease_id,'accepted','message-5'])).rows[0].ok,false);
   const state=(await db.query('select status,provider_message_id from studkab_request_email_notifications where request_id=$1',[fresh])).rows[0];
   assert.deepEqual(state,{status:'accepted',provider_message_id:'message-5'});
+  const interrupted='66666666-6666-4666-8666-666666666666';
+  await db.query('insert into studkab_requests(id,number,student_id,payload) values($1,6,$2,$3)',[interrupted,student,{rq:'Нужен учебный анализ по заданию'}]);
+  await db.query('select studkab_request_publish($1,$2)',[interrupted,student]);
+  await db.query('select * from claim_studkab_request_emails()');
+  await db.query("update studkab_request_email_notifications set claimed_at=now()-interval '6 minutes' where request_id=$1",[interrupted]);
+  assert.equal((await db.query('select reconcile_studkab_request_emails() n')).rows[0].n,1);
+  assert.equal((await db.query('select status from studkab_request_email_notifications where request_id=$1',[interrupted])).rows[0].status,'unknown');
+  assert.equal((await db.query('select count(*)::int n from claim_studkab_request_emails()')).rows[0].n,0);
  }finally{await db.close();}
 });
 
@@ -52,6 +60,7 @@ test('cron records email independently; missing provider never claims email',asy
  const calls=[];let enabled=false;
  const app=handler({config:async()=>({cron_token:'job',executor_email:settings.to}),db:async(path,method,body)=>{
   calls.push({path,body});if(path==='rpc/claim_studkab_requests')return [];
+  if(path==='rpc/reconcile_studkab_request_emails')return 0;
   if(path==='rpc/claim_studkab_request_emails')return [{request_id:id,lease_id:'55555555-5555-4555-8555-555555555555',number:7}];
   if(path==='rpc/finish_studkab_request_email')return true;
   throw Error(path);

@@ -53,6 +53,21 @@ end $$;
 revoke all on function public.claim_studkab_request_emails() from public,anon,authenticated;
 grant execute on function public.claim_studkab_request_emails() to service_role;
 
+-- An interrupted sender may have reached the provider. Expire its lease to
+-- unknown for manual reconciliation; never silently resend that letter.
+create function public.reconcile_studkab_request_emails()
+returns integer language plpgsql security invoker set search_path=pg_catalog,public as $$
+declare affected integer;
+begin
+ update public.studkab_request_email_notifications
+ set status='unknown',last_error='Sender interrupted; verify with provider',lease_id=null
+ where status='sending' and claimed_at < now()-interval '5 minutes';
+ get diagnostics affected = row_count;
+ return affected;
+end $$;
+revoke all on function public.reconcile_studkab_request_emails() from public,anon,authenticated;
+grant execute on function public.reconcile_studkab_request_emails() to service_role;
+
 create function public.finish_studkab_request_email(p_request uuid,p_lease uuid,p_status text,p_message_id text default null)
 returns boolean language plpgsql security invoker set search_path=pg_catalog,public as $$
 begin
