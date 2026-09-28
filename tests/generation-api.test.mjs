@@ -42,14 +42,15 @@ test('AI report registry reads immutable parts scoped to owner, current Word and
   calls.push(path);
   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved'}];
-  if(path.startsWith('studkab_gen_jobs'))return [{id:job,created_at:'2026-09-28T10:00:00Z',status:'complete',snapshot:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}},
-   {id:'old',snapshot:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId:'old'}}}];
+  if(path.startsWith('studkab_gen_jobs'))return [{id:job,created_at:'2026-09-28T10:00:00Z',status:'complete',snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}},
+   {id:'old',snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId:'old'}}}}];
   if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:report}];return [];
  }});
  const request=body=>h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify(body)}));
  const response=await request({action:'quality-review-reports',request:requestId,versionId:reviewVersion});
  assert.equal(response.status,200);const saved=await response.json();assert.equal(saved.reports.length,1);assert.equal(saved.reports[0].report.findings[0].observation,'Нет вывода');
  assert.ok(calls.find(p=>p.startsWith('studkab_gen_jobs')).includes('owner_id=eq.'+uid));
+ assert.ok(calls.find(p=>p.startsWith('studkab_gen_jobs')).includes('snapshot->input->review_target->>versionId'));
  assert.equal(calls.filter(p=>p.startsWith('studkab_gen_parts')).length,1);
  assert.equal((await request({action:'quality-review-reports',request:requestId,versionId:passportId})).status,409);
 });
@@ -125,6 +126,14 @@ test('disabled integration does not read budget or create job',async()=>{const s
 test('server owner and reserve override client fields',async()=>{const s=setup();const body={...valid,owner:'other',parts:[{...valid.parts[0],max_cost_microusd:1}]};assert.equal((await s.request(body)).status,200);const args=s.calls.at(-1).args;assert.equal(args.p_owner,uid);assert.equal(args.p_plan[0].max_cost_microusd,250000);});
 test('same request produces identical immutable RPC input',async()=>{const s=setup();await s.request(valid);await s.request(valid);const starts=s.calls.filter(c=>c.path==='rpc/studkab_gen_start');assert.deepEqual(starts[0].args,starts[1].args);});
 test('status always filters by authenticated owner and omits secrets',async()=>{const s=setup();const r=await s.request({action:'status',job,owner:'other'});const value=await r.json();assert.ok(s.calls[0].path.includes('owner_id=eq.'+uid));assert.deepEqual(value.diagnostics,[]);assert.deepEqual(value.parts,[{ordinal:0,id:'intro',section:'intro',state:'done',text:'Сохранено',failure:null}]);});
+test('job status reads the review target from the persisted input envelope',async()=>{
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),db:async path=>{
+  if(path.startsWith('studkab_gen_jobs'))return [{id:job,request_id:requestId,status:'complete',snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}];
+  return [];
+ }});
+ const result=await (await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify({action:'status',job})}))).json();
+ assert.deepEqual(result.reviewTarget,{versionId:reviewVersion,fileHash:reviewHash,passportId});
+});
 test('missing or foreign job returns no part data',async()=>{const s=setup({missing:true});assert.equal((await s.request({action:'status',job})).status,404);assert.equal(s.calls.length,1);});
 test('query injection cannot reach database',async()=>{const s=setup();assert.equal((await s.request({action:'status',job:'x&owner_id=neq.x'})).status,400);assert.equal(s.calls.length,0);});
 test('plan rejects duplicates, invalid sizes and missing trusted costs',()=>{assert.throws(()=>prepare({...valid,parts:[valid.parts[0],valid.parts[0]]},250000));assert.throws(()=>prepare(valid,0));assert.throws(()=>prepare({...valid,system:'x'.repeat(100001)},250000));});
