@@ -90,7 +90,10 @@
   function validation(message){var error=Error(message);error.qualityValidation=true;return error;}
   function value(name){return body.querySelector('[data-q="'+name+'"]');}
   function put(name,v){var node=value(name);if(node)node.value=v===undefined||v===null?'':String(v);}
-  function statusText(){return ready()?'Внутренняя и внешняя проверки сохранены для этой версии Word. Завершите проверку содержания по критериям.':'Обычная передача заблокирована, пока обе проверки этой версии не пройдены. Тестовая передача не подтверждает качество.';}
+  function statusText(){
+   if(state?.blockingCodes?.includes('ai_review_open'))return 'Обычная передача заблокирована: ИИ проверка этого Word ещё идёт либо в ней сохранены открытые замечания. После исправления Word сохраните новую версию и проверьте её снова.';
+   return ready()?'Внутренняя и внешняя проверки сохранены для этой версии Word. Завершите проверку содержания по критериям.':'Обычная передача заблокирована, пока обе проверки этой версии не пройдены. Тестовая передача не подтверждает качество.';
+  }
   function summary(evidence){return evidence?esc(labels[evidence.payload&&evidence.payload.disposition]||'Результат не подтверждён')+' · '+esc(new Date(evidence.createdAt||evidence.created_at).toLocaleString('ru-RU')):'Проверка не сохранена';}
   function findingsView(){
    var target=body.querySelector('[data-quality-findings]');if(!target)return;
