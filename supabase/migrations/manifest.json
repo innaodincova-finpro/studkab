@@ -390,6 +390,12 @@
       "name": "c124_dialog_retry",
       "file": "20260926161000_c124_dialog_retry.sql",
       "sha256": "2c1e908da9a5e069aa1ac379cf2a4a887eee210e5c1516a8fa5667cea1c057e5"
+    },
+    {
+      "version": "20260928054546",
+      "name": "c156_ai_review_gate",
+      "file": "20260928054546_c156_ai_review_gate.sql",
+      "sha256": "6d98601d7f8439d7ea51610c6c998b08d3dbd2dfdfe3ab174eec841381fbe8af"
     }
   ],
   "production_reconciled_at": "2026-09-23"

@@ -148,3 +148,17 @@ test('AI review explains why a test assignment cannot start a paid job',async({p
  await expect(page.locator('[data-ai-status]')).toContainText('Расходов нет');
  expect(await page.evaluate(()=>aiCalls.map(x=>x.action))).toEqual(['quality-review-estimate']);
 });
+test('open AI findings visibly block readiness of the current Word',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  const original=Oblako.requestApi;
+  Oblako.requestApi=async body=>{
+   const response=await original(body);
+   if(body.action==='quality-state')return {...response,eligible:false,blockingCodes:['ai_review_open']};
+   return response;
+  };
+ });
+ await page.locator('[data-quality-refresh]').click();
+ await expect(page.locator('[data-quality-status]')).toContainText('сохранены открытые замечания');
+ expect(await page.evaluate(()=>qReady)).toBe(false);
+});
