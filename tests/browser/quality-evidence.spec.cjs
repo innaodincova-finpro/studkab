@@ -15,6 +15,7 @@ async function setup(page,{reset=true,unavailable=false}={}){
    let latest=JSON.parse(sessionStorage.getItem('quality-fixture')||'{}');
    if(body.action==='quality-state')return {bindings:qBinding,thresholdRequirement:{itemId:'ANTIPLAGIARISM',text:'Оригинальность не менее 70 процентов',mode:'university_threshold',service:'Учебная система',thresholdPercent:70},latest,eligible:['internal_borrowing','external_originality'].every(k=>latest[k]?.payload.disposition==='pass'),blockingCodes:['internal_borrowing','external_originality'].filter(k=>latest[k]?.payload.disposition!=='pass')};
    if(body.action==='quality-scan'){if(window.qDeferred)await new Promise(resolve=>window.qRelease=resolve);return {scan:qScan,scanHash:'d'.repeat(64)};}
+   if(body.action==='quality-document-audit')return {audit:{fileHash:qBinding.fileHash,verdict:'not_evaluated',words:12,scope:'Основной текст DOCX; страницы не проверены.',findings:[{line:3,excerpt:'[указать период]'}]}};
    if(body.action==='quality-save'){
     if(body.versionId!==qBinding.versionId||body.fileHash!==qBinding.fileHash)throw Error('QUALITY_STALE');
     const payload={...body.payload};let reportHash=null;
@@ -36,6 +37,12 @@ async function internal(page){
  await page.locator('[data-q="internalDisposition"]').selectOption('pass');await page.locator('[data-q="internalNotes"]').fill('Проверены все доступные источники, цитата обоснована.');
  await page.locator('[data-quality-save-internal]').click();await expect(page.locator('[data-internal-saved]')).toContainText('Пройдено');
 }
+test('C152 read-only Word audit shows a location without granting quality readiness',async({page})=>{
+ await setup(page);await page.locator('[data-word-audit-run]').click();
+ await expect(page.locator('[data-word-audit-result]')).toContainText('Строка 3: [указать период]');
+ expect(await page.evaluate(()=>qReady)).toBe(false);
+ expect(await page.evaluate(()=>qCalls.filter(x=>x.action==='quality-save').length)).toBe(0);
+});
 async function externalForm(page){
  await page.locator('details').filter({has:page.locator('[data-q="service"]')}).last().evaluate(el=>el.open=true);
  await expect(page.locator('[data-q="service"]')).toHaveValue('Учебная система');await page.locator('[data-q="checkId"]').fill('SYNTHETIC-REPORT');await page.locator('[data-q="checkedAt"]').fill('2026-09-23');

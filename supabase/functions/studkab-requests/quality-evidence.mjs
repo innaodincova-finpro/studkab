@@ -1,6 +1,7 @@
 import {inspectWord} from '../_shared/external-word.mjs';
 import {currentAttachments} from '../_shared/current-attachments.mjs';
 import {scanInternalBorrowing} from '../_shared/internal-borrowing.mjs';
+import {auditWordText} from '../_shared/word-audit.mjs';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i,hash=/^[a-f0-9]{64}$/;
 const canonical=x=>Array.isArray(x)?'['+x.map(canonical).join(',')+']':x&&typeof x==='object'?'{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}':JSON.stringify(x);
 const digest=async x=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical(x))))].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -39,6 +40,13 @@ async function scan(db,id,version,bindings){
  const scanHash=await digest({report,sourceBindings});
  return {scan:report,scanHash,sourceBindings};
 }
+async function documentAudit(db,id,version,bindings){
+ const [v]=await db('studkab_result_versions?select=docx_base64,file_hash&id=eq.'+version+'&request_id=eq.'+id);
+ if(!v||v.file_hash!==bindings.fileHash)throw Error('QUALITY_STALE');
+ const extracted=await inspectWord(Uint8Array.from(atob(v.docx_base64),c=>c.charCodeAt(0)));
+ if(extracted.fileHash!==bindings.fileHash)throw Error('QUALITY_STALE');
+ return auditWordText(extracted.text,extracted.fileHash);
+}
 export async function qualityAction(input,user,{db,config}){
  const cfg=await config();if(!user.email||user.email.toLowerCase()!==cfg.executor_email?.toLowerCase())return fail('QUALITY_FORBIDDEN',403);
  if(!uuid.test(input.id||''))return fail('QUALITY_INVALID',400);
@@ -59,6 +67,7 @@ export async function qualityAction(input,user,{db,config}){
    return {data:{bindings,thresholdRequirement:bindings.thresholdRequirement,eligible:state.eligible,blockingCodes:state.blockingCodes,latest:Object.fromEntries(['internal_borrowing','external_originality'].map(k=>[k,clean(rows.find(e=>e.kind===k))]))}};
   }
   if(input.action==='quality-scan'){const computed=await scan(db,input.id,input.versionId,bindings);return {data:{scan:computed.scan,scanHash:computed.scanHash}};}
+  if(input.action==='quality-document-audit')return {data:{audit:await documentAudit(db,input.id,input.versionId,bindings)}};
   if(input.action!=='quality-save'||!uuid.test(input.evidenceId||''))return fail('QUALITY_INVALID',400);
   for(const k of ['recipientId','passportId','fileHash','documentHash','sourceFingerprint'])if(input[k]!==bindings[k])return fail('QUALITY_STALE');
   const p=input.payload;if(!p||!['pass','fail','manual'].includes(p.disposition)||typeof p.notes!=='string'||p.notes.trim().length<10||p.notes.length>4000)return fail('QUALITY_INVALID',400);
