@@ -2,6 +2,7 @@ import {materialManifestGuard} from '../_shared/material-manifest.mjs';
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 import {expandParts} from './plan.mjs';
 import {reserveMicrousd,MAX_OUTPUT_TOKENS} from '../_shared/deepseek-cost.mjs';
+import {reviewPacket,reviewPrompt} from './review-pass.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store',
  'Access-Control-Allow-Origin':'https://innaodincova-finpro.github.io',
  'Access-Control-Allow-Headers':'authorization,content-type,apikey',
@@ -50,8 +51,15 @@ export function prepare(input,workLimit){
   return {id:p.id,prompt:p.prompt,target_chars:p.target_chars};
  });
  if(!validated.length)throw Error('INVALID_INPUT');
- const plan=expandParts(validated,workLimit,MAX_OUTPUT_TOKENS);
+ const plan=input.reviewMode===true
+  ? validated.map(p=>({id:p.id,section_id:p.id,part_index:0,part_count:1,prompt:p.prompt,
+    max_cost_microusd:workLimit,max_output_tokens:MAX_OUTPUT_TOKENS,target_chars:3000}))
+  : expandParts(validated,workLimit,MAX_OUTPUT_TOKENS);
  const snapshot={system:input.system,prompts:{},material_fingerprint:input.materialFingerprint};
+ if(input.reviewMode===true){
+  if(validated.length!==1||validated[0].id!=='quality_review'||!input.reviewTarget)throw Error('INVALID_REVIEW');
+  snapshot.review_target=input.reviewTarget;
+ }
  for(const part of validated)snapshot.prompts[part.id]=part.prompt;
  for(const part of plan){
   const original=snapshot.prompts[part.section_id];
@@ -69,7 +77,7 @@ export function prepare(input,workLimit){
  if(new TextEncoder().encode(JSON.stringify({input:snapshot,plan})).byteLength>900000)throw Error('INPUT_TOO_BIG');
  return {snapshot,plan,estimatedTotal};
 }
-export function handler({auth,config,db,settings}){
+export function handler({auth,config,db,settings,readReviewPacket=reviewPacket}){
  return async req=>{
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
   if(req.method!=='POST')return reply({error:'METHOD'},405);
@@ -100,7 +108,7 @@ export function handler({auth,config,db,settings}){
     if(!kind)return reply({error:'WORK_TYPE_REQUIRED'},409);
     const [limit]=await db('studkab_gen_limits?work_kind=eq.'+kind+'&select=max_cost_microusd&limit=1');
     if(!limit)return reply({error:'WORK_LIMIT_NOT_CONFIGURED'},503);
-    let prepared;try{prepared=prepare(input,Number(limit.max_cost_microusd));}catch(e){return reply({error:e.message},400);}
+    let prepared;try{prepared=prepare({...input,reviewMode:false},Number(limit.max_cost_microusd));}catch(e){return reply({error:e.message},400);}
     const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&status=eq.approved&source_fingerprint=eq.'+input.materialFingerprint+'&select=id,revision,source_fingerprint,items&order=revision.desc&limit=1');
     if(!passport)return reply({error:'PASSPORT_REQUIRED'},409);
     const materials=await materialManifestGuard((path,method,body)=>db(path,body),input.request,passport.id);
@@ -120,6 +128,47 @@ export function handler({auth,config,db,settings}){
     return reply({job,status:'queued',passportRevision:passport.revision,workKind:kind,
      maxCostMicrousd:Number(limit.max_cost_microusd),estimatedCostMicrousd:prepared.estimatedTotal,remainingMicrousd:remaining});
    }
+   if(input.action==='quality-review-estimate'||input.action==='quality-review-start'){
+    const s=settings();if(!s.enabled)return reply({error:'GENERATION_NOT_CONFIGURED'},503);
+    if(!uuid.test(input.request||'')||!uuid.test(input.versionId||''))return reply({error:'INVALID_INPUT'},400);
+    const [requestRow]=await db('studkab_requests?id=eq.'+input.request+'&select=id,payload&limit=1');
+    if(!requestRow)return reply({error:'REQUEST_NOT_FOUND'},404);
+    const kind=workKind(requestRow.payload?.k);
+    if(!kind)return reply({error:'WORK_TYPE_REQUIRED'},409);
+    const [limit]=await db('studkab_gen_limits?work_kind=eq.'+kind+'&select=max_cost_microusd&limit=1');
+    if(!limit)return reply({error:'WORK_LIMIT_NOT_CONFIGURED'},503);
+    let context;
+    try{context=await readReviewPacket(db,input.request,input.versionId);}
+    catch(e){const code=String(e.message);return reply({error:/^(INVALID_INPUT|REVIEW_VERSION_STALE|PASSPORT_REQUIRED|REVIEW_MATERIALS_MISSING|REVIEW_MATERIALS_UNREADABLE|REVIEW_SYNTHETIC_PAID_BLOCKED|REVIEW_CONTEXT_TOO_BIG)$/.test(code)?code:'REVIEW_UNAVAILABLE'},409);}
+    const materials=await materialManifestGuard((path,method,body)=>db(path,body),input.request,context.passport.id);
+    if(materials)return reply(materials,409);
+    const conflict=await sourceMinimumGuard(db,input.request,context.passport.items);
+    if(conflict)return reply(conflict,409);
+    const financeProfile=/FIN-UAT-01/.test([requestRow.payload?.rq,requestRow.payload?.mn].filter(Boolean).join('\n'));
+    const prompt=reviewPrompt(context.packet,financeProfile);
+    let prepared;
+    try{prepared=prepare({request:input.request,materialFingerprint:context.passport.source_fingerprint,
+      system:prompt.system,parts:[{id:'quality_review',prompt:prompt.user}],reviewMode:true,
+      reviewTarget:{versionId:context.version.id,fileHash:context.version.file_hash,passportId:context.passport.id}},Number(limit.max_cost_microusd));}
+    catch(e){return reply({error:e.message==='INPUT_TOO_BIG'?'REVIEW_CONTEXT_TOO_BIG':'REVIEW_UNAVAILABLE'},409);}
+    const [b]=await db('studkab_gen_budget?id=eq.true&select=limit_microusd,reserved_microusd');
+    const [policy]=await db('studkab_gen_policy?id=eq.true&select=temporary_total_microusd');
+    const remaining=!!b&&!!policy?Math.min(Number(b.limit_microusd),Number(policy.temporary_total_microusd))-Number(b.reserved_microusd):0;
+    const canStart=remaining>0&&prepared.estimatedTotal<=Number(limit.max_cost_microusd)&&prepared.estimatedTotal<=remaining;
+    const estimate={status:'estimate',versionId:context.version.id,fileHash:context.version.file_hash,
+      passportRevision:context.passport.revision,canStart,maxCostMicrousd:Number(limit.max_cost_microusd),
+      estimatedCostMicrousd:prepared.estimatedTotal,remainingMicrousd:Math.max(0,remaining)};
+    if(input.action==='quality-review-estimate')return reply(estimate);
+    // The caller must acknowledge the exact server quote and immutable Word hash.
+    if(!canStart)return reply({error:'BUDGET_BLOCKED'},409);
+    if(input.confirmedEstimateMicrousd!==prepared.estimatedTotal||input.confirmedFileHash!==context.version.file_hash)
+     return reply({error:'REVIEW_CONFIRMATION_REQUIRED',estimate},409);
+    const job=await db('rpc/studkab_gen_start',{p_owner:user.id,p_request:input.request,
+      p_input:prepared.snapshot,p_plan:prepared.plan,p_passport:context.passport.id,p_work_kind:kind,
+      p_max_cost_microusd:Number(limit.max_cost_microusd)});
+    return reply({job,status:'queued',reviewTarget:prepared.snapshot.review_target,
+      estimatedCostMicrousd:prepared.estimatedTotal,maxCostMicrousd:Number(limit.max_cost_microusd)});
+   }
    if(input.action==='history'){
     if(typeof input.request!=='string'||!idPattern.test(input.request))return reply({error:'INVALID_INPUT'},400);
     const jobs=await db('studkab_gen_jobs?request_id=eq.'+encodeURIComponent(input.request)+'&owner_id=eq.'+encodeURIComponent(user.id)+'&select=id,request_id,version,status,created_at&order=created_at.desc&limit=20');
@@ -134,7 +183,8 @@ export function handler({auth,config,db,settings}){
    }
    if(input.action==='status'){
     if(!uuid.test(input.job||''))return reply({error:'INVALID_JOB'},400);
-    const [job]=await db('studkab_gen_jobs?id=eq.'+input.job+'&owner_id=eq.'+encodeURIComponent(user.id)+'&select=id,request_id,version,status,created_at');
+    const [stored]=await db('studkab_gen_jobs?id=eq.'+input.job+'&owner_id=eq.'+encodeURIComponent(user.id)+'&select=id,request_id,version,status,created_at,snapshot');
+    const job=stored&&{id:stored.id,request_id:stored.request_id,version:stored.version,status:stored.status,created_at:stored.created_at};
     if(!job)return reply({error:'NOT_FOUND'},404);
     const parts=await db('studkab_gen_parts?job_id=eq.'+job.id+'&select=ordinal,state,result,spec,failure_stage,failure_reason,failure_count,failure_at&order=ordinal.asc');
     const attempts=await db('studkab_gen_attempts?job_id=eq.'+job.id+'&select=request_id,ordinal,state,reason,detail,started_at,finished_at&order=ordinal.asc,started_at.asc');
@@ -146,7 +196,7 @@ export function handler({auth,config,db,settings}){
      promptTokens:a.detail?.prompt_tokens,completionTokens:a.detail?.completion_tokens});if(d)diagnostics.push(d);}
     for(const p of parts)if(p.failure_stage==='preparation'){const d=diagnostic({ordinal:p.ordinal,section:p.spec?.section_id||p.spec?.id,stage:'preparation',
      attempt:p.failure_count,reason:p.failure_reason,started_at:p.failure_at,finished_at:p.failure_at});if(d)diagnostics.push(d);}
-    return reply({job,diagnostics,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,
+    return reply({job,reviewTarget:stored?.snapshot?.review_target||null,diagnostics,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,
      failure:p.state==='unknown'?(p.failure_stage==='preparation'?{code:p.failure_reason}:failure(attempts.find(a=>a.ordinal===p.ordinal))):null}))});
    }
    return reply({error:'UNKNOWN_ACTION'},400);

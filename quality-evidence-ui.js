@@ -7,15 +7,70 @@
  function field(name,label,type){return '<label style="display:block;margin:10px 0">'+esc(label)+'<input data-q="'+name+'" type="'+(type||'text')+'" style="width:100%;box-sizing:border-box"'+(type==='number'?' min="0" max="100" step="0.01"':' maxlength="1000"')+'></label>';}
  function disposition(name){return '<label>Результат проверки<select data-q="'+name+'" style="width:100%"><option value="manual">Нужна ручная проверка</option><option value="fail">Не пройдено</option><option value="pass">Пройдено</option></select></label>';}
  function mount(host,options){
-  var state=null,verified=false,dirty=false,scan=null,scanHash=null,busy=false,currentBinding=null,operations={},lastReady=false;
-  host.innerHTML='<details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Они не заменяют проверку содержания по 16 критериям.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
+  var state=null,verified=false,dirty=false,scan=null,scanHash=null,busy=false,currentBinding=null,operations={},lastReady=false,aiJob=null,aiBusy=false,aiBinding=null;
+  host.innerHTML='<details data-ai-review><summary>ИИ проверка содержания Word</summary><p class="hint">Помощник проверяет сохранённую версию Word по паспорту и приложенным материалам. Он показывает замечания и пробелы доказательств; его ответ не ставит отметки «пройдено» и не передаёт файл студенту. Используется платный API с отдельным подтверждением расчётного предела.</p><button type="button" class="chip" data-ai-start>Оценить стоимость и запустить</button><button type="button" class="chip" data-ai-refresh>Проверить результат</button><button type="button" class="chip" data-ai-recover>Найти предыдущую проверку</button><p role="status" data-ai-status>Проверка ещё не запущена.</p><pre data-ai-result style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre></details><details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Они не заменяют проверку содержания по 16 критериям.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
   var msg=host.querySelector('[data-quality-status]'),body=host.querySelector('[data-quality-body]');
+  var aiStatus=host.querySelector('[data-ai-status]'),aiResult=host.querySelector('[data-ai-result]');
   function guard(){options.guard();if(!host.isConnected)throw Error('Окно проверки закрыто.');}
   function captured(){guard();return binding(options.getBinding());}
   function ready(){return verified&&!dirty&&!!state&&state.eligible===true&&Array.isArray(state.blockingCodes)&&state.blockingCodes.length===0&&['internal_borrowing','external_originality'].every(function(k){return state.latest&&state.latest[k]&&state.latest[k].payload&&state.latest[k].payload.disposition==='pass';});}
   function notify(){lastReady=ready();if(options.onChange)options.onChange(lastReady,busy);}
   function controls(silent){var blocked=busy||(options.parentBusy&&options.parentBusy());host.querySelectorAll('button,input,select,textarea').forEach(function(el){el.disabled=blocked||(el.dataset.q&&(!state||el.dataset.locked==='true'));});host.querySelector('[data-quality-refresh]').disabled=blocked||!options.getBinding();if(!silent)notify();}
   function check(after){guard();if(!equal(captured(),after))throw Error('Word, паспорт или получатель изменились. Откройте проверку заново.');}
+  async function aiRun(fn){if(aiBusy)return;aiBusy=true;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=true;});
+   try{guard();await fn();}catch(e){aiStatus.textContent=e.message==='REVIEW_SYNTHETIC_PAID_BLOCKED'?
+    'Платная ИИ проверка учебной тестовой заявки запрещена. Расходов нет.':(e.message||'ИИ проверка недоступна.');}
+   finally{aiBusy=false;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=false;});}}
+  async function aiRefresh(){
+   if(!aiJob)throw Error('Сначала запустите или найдите проверку.');
+   var expected=captured();
+   if(aiBinding&&!equal(expected,aiBinding)){
+    aiResult.textContent='';throw Error('Word, паспорт или получатель изменились. Откройте проверку заново.');
+   }
+   var answer=await Oblako.generationApi({action:'status',job:aiJob});check(expected);
+   if(answer.reviewTarget?.versionId!==expected.versionId||answer.reviewTarget?.fileHash!==expected.fileHash)
+    throw Error('Ответ ИИ относится к другой версии Word. Запустите проверку текущего файла.');
+   var part=answer.parts?.find(function(p){return p.id==='quality_review';});
+   if(answer.job?.status==='complete'&&part?.state==='done'&&typeof part.text==='string'){
+    var parsed;try{parsed=JSON.parse(part.text);}catch{throw Error('Модель вернула ответ не в согласованном формате. Положительное заключение недоступно.');}
+    var codes=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
+    var checked=parsed.coverage?.checked,notChecked=parsed.coverage?.notChecked;
+    if(parsed.wordHash!==expected.fileHash||!Array.isArray(parsed.findings)||parsed.findings.length>32||
+      parsed.findings.some(function(f){return !codes.includes(f.code)||!['fail','needs_evidence'].includes(f.status)||
+       typeof f.location!=='string'||typeof f.observation!=='string';})||
+      !Array.isArray(checked)||!Array.isArray(notChecked)||
+      [...checked,...notChecked].length!==16||new Set([...checked,...notChecked]).size!==16||
+      [...checked,...notChecked].some(function(code){return !codes.includes(code);}))
+     throw Error('Модель не подтвердила версию или состав отчёта. Положительное заключение недоступно.');
+    aiResult.textContent=JSON.stringify(parsed,null,2);aiStatus.textContent='ИИ замечания получены для этой версии Word. Это предварительный разбор, не итоговая приёмка.';
+   }else aiStatus.textContent='Состояние проверки: '+(answer.job?.status||'неизвестно')+'. Обновите результат позже.';
+  }
+  host.querySelector('[data-ai-start]').onclick=function(){return aiRun(async function(){
+   await options.ensureVersion();var expected=captured();
+   var quote=await Oblako.generationApi({action:'quality-review-estimate',request:options.id,versionId:expected.versionId});check(expected);
+   if(quote.fileHash!==expected.fileHash)throw Error('Word изменился после оценки стоимости.');
+   if(!quote.canStart)throw Error('Бюджет не позволяет запуск проверки. Предельный расход не подтверждён.');
+   var cost=(quote.estimatedCostMicrousd/1000000).toFixed(4),max=(quote.maxCostMicrousd/1000000).toFixed(4);
+   if(!global.confirm('Запустить платную ИИ проверку этой версии Word? Расчётный резерв: $'+cost+'. Предел для работы: $'+max+'.')){
+    aiStatus.textContent='Запуск отменён. Расходов нет.';return;}
+   check(expected);
+   var answer=await Oblako.generationApi({action:'quality-review-start',request:options.id,versionId:expected.versionId,
+    confirmedEstimateMicrousd:quote.estimatedCostMicrousd,confirmedFileHash:expected.fileHash});check(expected);
+   if(!answer.job)throw Error('Сервер не подтвердил создание проверки.');
+   aiJob=typeof answer.job==='string'?answer.job:answer.job?.id;
+   if(!/^[a-f0-9-]{36}$/i.test(aiJob||''))throw Error('Сервер не подтвердил номер задачи. Найдите её через историю проверок.');
+   aiBinding=expected;
+   aiResult.textContent='';aiStatus.textContent='ИИ проверка поставлена в очередь. Нажмите «Проверить результат» позже.';
+  });};
+  host.querySelector('[data-ai-refresh]').onclick=function(){return aiRun(aiRefresh);};
+  host.querySelector('[data-ai-recover]').onclick=function(){return aiRun(async function(){
+   var expected=captured(),list=await Oblako.generationApi({action:'history',request:String(options.id)});check(expected);
+   for(var item of (list.jobs||[])){
+    var result=await Oblako.generationApi({action:'status',job:item.id});check(expected);
+    if(result.reviewTarget?.versionId===expected.versionId&&result.reviewTarget?.fileHash===expected.fileHash){aiJob=item.id;aiBinding=expected;return aiRefresh();}
+   }
+   aiStatus.textContent='Для этой версии Word прежняя ИИ проверка не найдена.';
+  });};
   function validation(message){var error=Error(message);error.qualityValidation=true;return error;}
   function value(name){return body.querySelector('[data-q="'+name+'"]');}
   function put(name,v){var node=value(name);if(node)node.value=v===undefined||v===null?'':String(v);}
@@ -91,7 +146,7 @@
   }
   async function refresh(){
    guard();state=null;notify();var proposed=options.getBinding();if(!proposed){body.innerHTML='';scan=null;scanHash=null;msg.textContent='Нажмите «Начать проверки», чтобы сохранить точную версию Word.';return;}
-   var expected=binding(proposed);if(currentBinding&&!equal(currentBinding,expected)){scan=null;scanHash=null;operations={};}currentBinding=expected;
+   var expected=binding(proposed);if(currentBinding&&!equal(currentBinding,expected)){scan=null;scanHash=null;operations={};aiJob=null;aiResult.textContent='';aiStatus.textContent='Word или паспорт изменился. Выполните новую ИИ проверку.';}currentBinding=expected;
    var result=await Oblako.requestApi({action:'quality-state',id:options.id,versionId:expected.versionId});check(expected);
    if(!result||!equal(result.bindings,expected)||!result.latest||!Array.isArray(result.blockingCodes)||typeof result.eligible!=='boolean')throw Error('Сервер не подтвердил проверки этой версии Word.');
    state=result;verified=true;dirty=false;render();msg.textContent=statusText();notify();
