@@ -31,8 +31,9 @@ jobs:
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
         with:
           version: 2.117.0
+      - run: npm ci
       - name: Check request and result delivery
-        run: node --test tests/external-word.test.mjs tests/requests.test.mjs tests/request-attachments.test.mjs tests/test-delivery-api.test.mjs
+        run: node --test tests/request-email.test.mjs tests/external-word.test.mjs tests/requests.test.mjs tests/request-attachments.test.mjs tests/test-delivery-api.test.mjs
       - name: Deploy existing function
         run: supabase functions deploy studkab-requests --project-ref dcpthwmuiodrjepifzsd --use-api --no-verify-jwt
         env:
