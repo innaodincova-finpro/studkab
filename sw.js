@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v97-review-consent";
+const CACHE = "studkab-v98-ai-criteria";
 const SHELL = [
   "./desktop.css?v=7",
   "./",
@@ -19,8 +19,8 @@ const SHELL = [
   "./draft-quality.js?v=15",
   "./draft-editor.js?v=9",
   "./result-docx.js?v=7",
-  "./quality-evidence-ui.js?v=5",
-  "./results-ui.js?v=22",
+  "./quality-evidence-ui.js?v=6",
+  "./results-ui.js?v=23",
   "./external-word.mjs?v=1",
   "./request-workflow.js?v=3",
   "./onboarding.js?v=2",

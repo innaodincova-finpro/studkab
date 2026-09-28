@@ -30,13 +30,17 @@ const financeLabels=[
  'Ограничения данных','Оформление','Ясность и согласованность'
 ];
 const criteria=genericLabels.map((_,i)=>i<13?'C'+String(i+1).padStart(2,'0'):'S0'+(i-12));
+// This review receives only extracted DOCX body text. These claims require
+// rendered pages or an actual Word open and cannot be certified by this pass.
+const visualOnly=['C11','C12','S02'];
 
 export function parseReviewReport(raw,hash){
  let data;try{data=JSON.parse(raw);}catch{return null;}
  if(!data||data.wordHash!==hash||!Array.isArray(data.findings)||data.findings.length>32)return null;
  const allowed=new Set(criteria),checked=data.coverage?.checked,notChecked=data.coverage?.notChecked;
  if(!Array.isArray(checked)||!Array.isArray(notChecked)||checked.length+notChecked.length!==16||
-  new Set([...checked,...notChecked]).size!==16||[...checked,...notChecked].some(code=>!allowed.has(code)))return null;
+  new Set([...checked,...notChecked]).size!==16||[...checked,...notChecked].some(code=>!allowed.has(code))||
+  visualOnly.some(code=>!notChecked.includes(code)))return null;
  if(data.findings.some(f=>!f||!allowed.has(f.code)||!['fail','needs_evidence'].includes(f.status)||
   ![f.location,f.requirement,f.observation].every(s=>typeof s==='string'&&s.trim().length>0&&s.length<=4000)))return null;
  return {wordHash:hash,findings:data.findings.map(f=>({code:f.code,location:f.location,requirement:f.requirement,

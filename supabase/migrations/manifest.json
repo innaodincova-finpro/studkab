@@ -322,6 +322,12 @@
       "name": "c160_review_dispatch_passport_lock",
       "file": "20260928105609_c160_review_dispatch_passport_lock.sql",
       "sha256": "7a182c38365a247b3d5187aab99ff524ca6f7b66ec8f61b59f32afee279aaea5"
+    },
+    {
+      "version": "20260928112143",
+      "name": "c162_ai_visual_scope",
+      "file": "20260928112143_c162_ai_visual_scope.sql",
+      "sha256": "2784781dc69900619a423d0c081b254642f23cb0e1dd89e0616f32476e17812b"
     }
   ],
   "pending_migrations": [

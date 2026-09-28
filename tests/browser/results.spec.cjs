@@ -45,6 +45,28 @@ async function fillReview(page){
  await page.locator('[data-criterion-status="C08"]').selectOption('not_applicable');
  await page.locator('[data-reviewed]').check();return download;
 }
+test('C161 current AI findings annotate unfinished criteria without creating a positive review',async({page})=>{
+ await setupReview(page);
+ await page.evaluate(()=>{
+  Oblako.generationApi=async body=>{
+   if(body.action!=='quality-review-reports')throw Error('Unexpected paid action');
+   return {versionId:remote.receipt.versionId,fileHash:remote.receipt.fileHash,passportId:candidate.passports[0].id,
+    reports:[{jobId:'99999999-9999-4999-8999-999999999999',createdAt:'2026-09-28T10:00:00Z',current:true,status:'complete',report:{wordHash:remote.receipt.fileHash,
+     findings:[{code:'C05',status:'fail',location:'Заключение',requirement:'Выводы',observation:'Нет ответа на задачу'}],
+     coverage:{checked:['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C13','S01','S03'],notChecked:['C11','C12','S02']}}}]};
+  };
+ });
+ await page.locator('[data-ai-review]').evaluate(el=>el.open=true);
+ await page.locator('[data-ai-recover]').click();
+ await expect(page.locator('[data-criterion-status="C05"]')).toHaveValue('fail');
+ await expect(page.locator('[data-criterion="C05"]')).toHaveValue(/ИИ-помощник/);
+ await expect(page.locator('[data-criterion-status="C12"]')).toHaveValue('manual');
+ await expect(page.locator('[data-criterion-status="C01"]')).toHaveValue('');
+ await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await page.locator('[data-save-review]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Скачайте и проверьте Word');
+ expect(await page.evaluate(()=>calls.filter(x=>x.action==='review-result').length)).toBe(0);
+});
 test('Word review keeps checkboxes beside their labels and explains missing student name',async({page})=>{
  await setupReview(page);
  const box=await page.locator('[data-word-opened]').evaluate(el=>({width:el.getBoundingClientRect().width,left:el.getBoundingClientRect().left,labelLeft:el.closest('label').getBoundingClientRect().left}));

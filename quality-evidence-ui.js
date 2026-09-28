@@ -2,6 +2,24 @@
  'use strict';
  var KEYS=['versionId','recipientId','fileHash','documentHash','passportId','sourceFingerprint'];
  var labels={pass:'Пройдено',fail:'Не пройдено',manual:'Нужна ручная проверка'};
+ var REVIEW_CODES=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
+ function reviewSuggestions(report,hash){
+  if(!report||report.wordHash!==hash||!Array.isArray(report.findings)||report.findings.length>32)return null;
+  var coverage=report.coverage||{},checked=coverage.checked,missing=coverage.notChecked;
+  if(!Array.isArray(checked)||!Array.isArray(missing)||checked.length+missing.length!==16||
+   new Set(checked.concat(missing)).size!==16||checked.concat(missing).some(function(code){return !REVIEW_CODES.includes(code);})||
+   ['C11','C12','S02'].some(function(code){return !missing.includes(code);}))return null;
+  var out={};
+  missing.forEach(function(code){out[code]={status:'manual',section:'Не проверено помощником',evidence:'ИИ-помощник не подтвердил этот пункт по доступным данным. Положительная приёмка недоступна.'};});
+  for(var f of report.findings){
+   if(!f||!REVIEW_CODES.includes(f.code)||!['fail','needs_evidence'].includes(f.status)||
+    [f.location,f.requirement,f.observation].some(function(s){return typeof s!=='string'||!s.trim()||s.length>4000;}))return null;
+   if(f.status==='needs_evidence'&&out[f.code]?.status==='fail')continue;
+   out[f.code]={status:f.status==='fail'?'fail':'manual',section:f.location.slice(0,300),
+    evidence:('ИИ-помощник: '+f.requirement+'; '+f.observation).slice(0,2000)};
+  }
+  return out;
+ }
  function binding(value){var out={};KEYS.forEach(function(k){if(!value||typeof value[k]!=='string'||!value[k])throw Error('Привязка проверки к Word не подтверждена.');out[k]=value[k];});return out;}
  function equal(a,b){return JSON.stringify(binding(a))===JSON.stringify(binding(b));}
  function field(name,label,type){return '<label style="display:block;margin:10px 0">'+esc(label)+'<input data-q="'+name+'" type="'+(type||'text')+'" style="width:100%;box-sizing:border-box"'+(type==='number'?' min="0" max="100" step="0.01"':' maxlength="1000"')+'></label>';}
@@ -65,6 +83,11 @@
     'Ответ ИИ сохранён, но формат не подтверждён. Нужна повторная проверка; положительный вывод недоступен.':
     saved.reports.length?'ИИ проверка этой версии ещё выполняется.':'Для текущего Word и паспорта ИИ проверка не запускалась.';return;}
    if(currentComplete.length){aiJob=currentComplete[0].jobId;aiBinding=expected;}
+   if(currentComplete.length&&options.onReviewSuggestions){
+    var suggestions=reviewSuggestions(currentComplete[0].report,expected.fileHash);
+    if(!suggestions)throw Error('Состав ИИ отчёта не подтверждён. Протокол не заполнен.');
+    options.onReviewSuggestions(suggestions,expected);
+   }
    complete.forEach(function(item){
     var block=document.createElement('section'),title=document.createElement('h4');
     title.textContent='Версия Word '+expected.fileHash.slice(0,12)+'… · '+new Date(item.createdAt).toLocaleString('ru-RU')+(item.current?' · текущий паспорт':' · прежний паспорт');block.append(title);
@@ -201,5 +224,5 @@
   controls();
   return {sync:function(){controls(true);},refresh:async function(){try{await refresh();}catch(e){state=null;msg.textContent=e.message||'Проверки недоступны.';}finally{controls();}},ready:function(){return lastReady;},reason:function(){return state?statusText():msg.textContent;},invalidate:function(){state=null;notify();}};
  }
- global.QualityEvidence={mount:mount};
+ global.QualityEvidence={mount:mount,reviewSuggestions:reviewSuggestions};
 })(window);
