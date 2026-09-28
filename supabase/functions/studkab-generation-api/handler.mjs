@@ -178,11 +178,11 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     // Stored job parts are immutable after completion. Query the exact Word
     // version at the database, so unrelated generation jobs cannot hide it.
     const jobs=await db('studkab_gen_jobs?request_id=eq.'+input.request+'&owner_id=eq.'+user.id+
-      '&snapshot->review_target->>versionId=eq.'+version.id+
+      '&snapshot->input->review_target->>versionId=eq.'+version.id+
       '&select=id,status,created_at,snapshot&order=created_at.desc&limit=20');
     const reports=[];
     for(const job of jobs){
-     const target=job.snapshot?.review_target;
+     const target=job.snapshot?.input?.review_target;
      if(target?.versionId!==version.id||target?.fileHash!==version.file_hash||target?.passportId!==passport.id)continue;
      const [part]=await db('studkab_gen_parts?job_id=eq.'+job.id+'&spec->>id=eq.quality_review&select=state,result&limit=1');
      const report=part?.state==='done'?parseReviewReport(part.result,version.file_hash):null;
@@ -218,7 +218,7 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
      promptTokens:a.detail?.prompt_tokens,completionTokens:a.detail?.completion_tokens});if(d)diagnostics.push(d);}
     for(const p of parts)if(p.failure_stage==='preparation'){const d=diagnostic({ordinal:p.ordinal,section:p.spec?.section_id||p.spec?.id,stage:'preparation',
      attempt:p.failure_count,reason:p.failure_reason,started_at:p.failure_at,finished_at:p.failure_at});if(d)diagnostics.push(d);}
-    return reply({job,reviewTarget:stored?.snapshot?.review_target||null,diagnostics,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,
+    return reply({job,reviewTarget:stored?.snapshot?.input?.review_target||null,diagnostics,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,
      failure:p.state==='unknown'?(p.failure_stage==='preparation'?{code:p.failure_reason}:failure(attempts.find(a=>a.ordinal===p.ordinal))):null}))});
    }
    return reply({error:'UNKNOWN_ACTION'},400);
