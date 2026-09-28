@@ -112,7 +112,7 @@ export async function recoverOneDriveTempFile({entry,accessToken,journal,fetcher
   const after=await fetcher(path,{method:'GET',headers,signal:AbortSignal.timeout(30000)});
   if(after.status!==404)throw Error('GRAPH_TEMP_FILE_UNCONFIRMED');
  }catch{throw Error('GRAPH_TEMP_FILE_UNCONFIRMED');}
- try{await journal.cleared({driveId:entry.driveId,name:entry.name});}
+ try{await journal.cleared({driveId:entry.driveId,name:entry.name,claimToken:entry.claimToken});}
  catch{throw Error('GRAPH_JOURNAL_UNAVAILABLE');}
  return {cleared:true};
 }

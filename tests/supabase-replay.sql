@@ -55,11 +55,15 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 34 then
-    raise exception 'Expected 34 STUDKAB tables, found %', table_count;
+  if table_count <> 35 then
+    raise exception 'Expected 35 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 34 then
-    raise exception 'RLS enabled on only % of 34 STUDKAB tables', rls_count;
+  if rls_count <> 35 then
+    raise exception 'RLS enabled on only % of 35 STUDKAB tables', rls_count;
+  end if;
+  if to_regclass('public.studkab_graph_temp_files') is null
+    or to_regprocedure('public.studkab_graph_claim_cleanup()') is null then
+    raise exception 'C168 temporary-file cleanup ledger is missing';
   end if;
   if to_regclass('public.studkab_request_attachments') is null then
     raise exception 'Request attachments table is missing';

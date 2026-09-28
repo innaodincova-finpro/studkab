@@ -328,6 +328,12 @@
       "name": "c162_ai_visual_scope",
       "file": "20260928112143_c162_ai_visual_scope.sql",
       "sha256": "2784781dc69900619a423d0c081b254642f23cb0e1dd89e0616f32476e17812b"
+    },
+    {
+      "version": "20260928123227",
+      "name": "c168_onedrive_temp_journal",
+      "file": "20260928123227_c168_onedrive_temp_journal.sql",
+      "sha256": "d6875ea914df04807f47999a66745fecdbf2da947fa375d0e4f18a68c39c4faf"
     }
   ],
   "pending_migrations": [
