@@ -316,6 +316,12 @@
       "production_verified_at": "2026-09-23",
       "production_sha256": "f4aa89bfba8daeb7d3c9fe255c8342b3e0f4deb210a2896f51324f1f6bafdf60",
       "comparison": "exact"
+    },
+    {
+      "version": "20260928105609",
+      "name": "c160_review_dispatch_passport_lock",
+      "file": "20260928105609_c160_review_dispatch_passport_lock.sql",
+      "sha256": "7a182c38365a247b3d5187aab99ff524ca6f7b66ec8f61b59f32afee279aaea5"
     }
   ],
   "pending_migrations": [

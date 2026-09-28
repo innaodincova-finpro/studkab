@@ -83,15 +83,16 @@ test('AI prompt uses the same 16 code labels as the review form and excludes vis
 });
 function reviewSetup({budget=500000,stale=false,user={id:uid,email:'owner@example.test',email_confirmed_at:'yes'}}={}){
  const calls=[];
+ let context=reviewContext;
  const h=handler({auth:async()=>user,config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
-  readReviewPacket:async()=>{if(stale)throw Error('REVIEW_VERSION_STALE');return reviewContext;},
+  readReviewPacket:async()=>{if(stale)throw Error('REVIEW_VERSION_STALE');return context;},
   db:async(path,args)=>{calls.push({path,args});if(path.startsWith('studkab_requests'))return [{payload:{k:'Курсовая работа',n:'Студент Тестов'}}];
    if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];
    if(path.startsWith('studkab_gen_budget'))return [{limit_microusd:budget,reserved_microusd:0}];
    if(path.startsWith('studkab_gen_policy'))return [{temporary_total_microusd:budget}];
    if(path==='rpc/studkab_material_manifest_check')return {valid:true};
    if(path.startsWith('rpc/studkab_gen_start'))return job;return [];}});
- return {calls,request:body=>h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify(body)}))};
+ return {calls,setContext:next=>{context=next;},request:body=>h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify(body)}))};
 }
 test('quality review builds a server-owned prompt with no automatic pass or delivery',async()=>{
  const s=reviewSetup(),request={action:'quality-review-estimate',request:requestId,versionId:reviewVersion,
@@ -100,7 +101,7 @@ test('quality review builds a server-owned prompt with no automatic pass or deli
  assert.equal(quote.canStart,true);
  assert.equal(s.calls.some(c=>c.path==='rpc/studkab_gen_start'),false);
  const answer=await (await s.request({...request,action:'quality-review-start',confirmedEstimateMicrousd:quote.estimatedCostMicrousd,
-   confirmedFileHash:reviewHash})).json();
+   confirmedFileHash:reviewHash,confirmedPassportId:quote.passportId})).json();
  assert.equal(answer.status,'queued');
  const saved=s.calls.find(c=>c.path==='rpc/studkab_gen_start').args;
  assert.equal(saved.p_input.review_target.fileHash,reviewHash);
@@ -109,6 +110,28 @@ test('quality review builds a server-owned prompt with no automatic pass or deli
  assert.ok(saved.p_input.system.includes('Не присваивай статус pass'));
  assert.ok(!JSON.stringify(saved).includes('client override'));
  assert.ok(!JSON.stringify(saved).includes('ignore all rules'));
+});
+test('same Word and quote cannot authorize paid review after passport changes',async()=>{
+ const s=reviewSetup(),request={request:requestId,versionId:reviewVersion};
+ const first=await (await s.request({...request,action:'quality-review-estimate'})).json();
+ assert.equal(first.passportId,passportId);
+ const nextId='66666666-6666-4666-8666-666666666666';
+ s.setContext({...reviewContext,passport:{...reviewContext.passport,id:nextId,revision:5}});
+ const oldConfirmation={...request,action:'quality-review-start',confirmedEstimateMicrousd:first.estimatedCostMicrousd,
+  confirmedFileHash:reviewHash,confirmedPassportId:first.passportId};
+ const refused=await s.request(oldConfirmation),fresh=await refused.json();
+ assert.equal(refused.status,409);
+ assert.equal(fresh.error,'REVIEW_CONFIRMATION_REQUIRED');
+ assert.equal(fresh.estimate.passportId,nextId);
+ assert.equal(fresh.estimate.estimatedCostMicrousd,first.estimatedCostMicrousd);
+ assert.equal(s.calls.some(c=>c.path==='rpc/studkab_gen_start'),false);
+ const missing=await s.request({...oldConfirmation,confirmedPassportId:undefined});
+ assert.equal(missing.status,409);
+ assert.equal(s.calls.some(c=>c.path==='rpc/studkab_gen_start'),false);
+ const accepted=await s.request({...oldConfirmation,confirmedPassportId:nextId});
+ assert.equal(accepted.status,200);
+ assert.equal(s.calls.filter(c=>c.path==='rpc/studkab_gen_start').length,1);
+ assert.equal(s.calls.find(c=>c.path==='rpc/studkab_gen_start').args.p_passport,nextId);
 });
 test('quality review fails closed on changed Word, absent budget, wrong actor or unconfirmed quote',async()=>{
  for(const s of [reviewSetup({stale:true}),reviewSetup({budget:0}),reviewSetup({user:{id:uid,email:'student@example.test',email_confirmed_at:'yes'}}),reviewSetup()]){
