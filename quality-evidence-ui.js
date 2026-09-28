@@ -19,7 +19,8 @@
   function check(after){guard();if(!equal(captured(),after))throw Error('Word, паспорт или получатель изменились. Откройте проверку заново.');}
   async function aiRun(fn){if(aiBusy)return;aiBusy=true;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=true;});
    try{guard();await fn();}catch(e){aiStatus.textContent=e.message==='REVIEW_SYNTHETIC_PAID_BLOCKED'?
-    'Платная ИИ проверка учебной тестовой заявки запрещена. Расходов нет.':(e.message||'ИИ проверка недоступна.');}
+    'Платная ИИ проверка учебной тестовой заявки запрещена. Расходов нет.':e.message==='STUDENT_NAME_REQUIRED'?
+    'В заявке отсутствует ФИО студента. Платная ИИ проверка закрыта; уточните данные перед подготовкой Word.':(e.message||'ИИ проверка недоступна.');}
    finally{aiBusy=false;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=false;});}}
   async function aiRefresh(){
    if(!aiJob)throw Error('Сначала запустите или найдите проверку.');
@@ -43,7 +44,11 @@
       [...checked,...notChecked].some(function(code){return !codes.includes(code);}))
      throw Error('Модель не подтвердила версию или состав отчёта. Положительное заключение недоступно.');
     await aiLoadSaved();
-   }else aiStatus.textContent='Состояние проверки: '+(answer.job?.status||'неизвестно')+'. Обновите результат позже.';
+   }else if(answer.job?.status==='unknown'||part?.state==='unknown')
+    aiStatus.textContent='Результат платного запроса неизвестен. Выдача заблокирована; повторная оплата и повторный запуск не выполняются автоматически. Требуется сверка попытки и расходов.';
+   else if(answer.job?.status==='stale')
+    aiStatus.textContent='Word или паспорт изменился. Эта проверка остановлена; результат не относится к текущему файлу.';
+   else aiStatus.textContent='Состояние проверки: '+(answer.job?.status||'неизвестно')+'. Обновите результат позже.';
   }
   async function aiLoadSaved(){
    var expected=captured(),saved=await Oblako.generationApi({action:'quality-review-reports',request:options.id,versionId:expected.versionId});check(expected);
@@ -51,20 +56,27 @@
     throw Error('Не удалось подтвердить историю ИИ проверки для этого Word.');
    aiResult.replaceChildren();
    var complete=saved.reports.filter(function(r){return r.status==='complete'&&r.report;});
-   if(!complete.length){aiStatus.textContent=saved.reports.some(function(r){return r.status==='invalid'})?
+   var currentComplete=complete.filter(function(r){return r.current;});
+   var unresolved=saved.reports.filter(function(r){return r.status==='unknown'||r.status==='invalid'||
+    (r.status==='complete'&&r.report.findings.some(function(f){return f.status==='fail';}));});
+   if(!complete.length){aiStatus.textContent=saved.reports.some(function(r){return r.status==='unknown'})?
+    'Результат платного запроса неизвестен. Выдача заблокирована до сверки попытки и расходов; автоматического платного повтора нет.':
+    saved.reports.some(function(r){return r.status==='invalid'})?
     'Ответ ИИ сохранён, но формат не подтверждён. Нужна повторная проверка; положительный вывод недоступен.':
-    saved.reports.length?'ИИ проверка этой версии ещё выполняется.':'Для текущего Word и паспорта замечаний ИИ пока нет.';return;}
-   aiJob=complete[0].jobId;aiBinding=expected;
+    saved.reports.length?'ИИ проверка этой версии ещё выполняется.':'Для текущего Word и паспорта ИИ проверка не запускалась.';return;}
+   if(currentComplete.length){aiJob=currentComplete[0].jobId;aiBinding=expected;}
    complete.forEach(function(item){
     var block=document.createElement('section'),title=document.createElement('h4');
-    title.textContent='Версия Word '+expected.fileHash.slice(0,12)+'… · '+new Date(item.createdAt).toLocaleString('ru-RU');block.append(title);
+    title.textContent='Версия Word '+expected.fileHash.slice(0,12)+'… · '+new Date(item.createdAt).toLocaleString('ru-RU')+(item.current?' · текущий паспорт':' · прежний паспорт');block.append(title);
     var findings=item.report.findings;
     if(!findings.length){var empty=document.createElement('p');empty.textContent='Модель не указала доказанных замечаний. Это не положительная приёмка.';block.append(empty);}
     findings.forEach(function(f){var entry=document.createElement('p');entry.style.whiteSpace='pre-wrap';
      entry.textContent=f.code+' · '+(f.status==='fail'?'Замечание':'Нужны доказательства')+'\nМесто: '+f.location+'\nТребование: '+f.requirement+'\nНаблюдение: '+f.observation;block.append(entry);});
     var gaps=document.createElement('p');gaps.textContent='Не проверено: '+(item.report.coverage.notChecked.join(', ')||'не указано')+'.';block.append(gaps);aiResult.append(block);
    });
-   aiStatus.textContent='Сохранено ИИ проверок для этой версии и паспорта: '+complete.length+'. Замечания требуют рассмотрения исполнителем; положительная приёмка здесь не ставится.';
+   aiStatus.textContent=unresolved.length?'Обычная выдача заблокирована: для этих байтов Word есть незакрытые ИИ замечания или неизвестный результат. Записей: '+unresolved.length+'.':
+    currentComplete.length?'Сохранено ИИ проверок для текущего паспорта: '+currentComplete.length+'. Положительная приёмка здесь не ставится.':
+    'Для текущего паспорта ИИ проверки нет. Требуется новый проход этого Word.';
   }
   host.querySelector('[data-ai-start]').onclick=function(){return aiRun(async function(){
    await options.ensureVersion();var expected=captured();
@@ -91,7 +103,8 @@
   function value(name){return body.querySelector('[data-q="'+name+'"]');}
   function put(name,v){var node=value(name);if(node)node.value=v===undefined||v===null?'':String(v);}
   function statusText(){
-   if(state?.blockingCodes?.includes('ai_review_open'))return 'Обычная передача заблокирована: ИИ проверка этого Word ещё идёт либо в ней сохранены открытые замечания. После исправления Word сохраните новую версию и проверьте её снова.';
+   if(state?.blockingCodes?.includes('ai_review_open'))return 'Обычная передача заблокирована: проверка этого Word ещё идёт, её результат неизвестен либо сохранены открытые замечания. Откройте ИИ-проверку для подробностей; после исправления Word потребуется новый отчёт.';
+   if(state?.blockingCodes?.includes('ai_review_required'))return 'Обычная передача заблокирована: для текущих Word и паспорта нет завершённого подтверждённого ИИ-отчёта. Запустите проверку после подтверждения стоимости.';
    return ready()?'Внутренняя и внешняя проверки сохранены для этой версии Word. Завершите проверку содержания по критериям.':'Обычная передача заблокирована, пока обе проверки этой версии не пройдены. Тестовая передача не подтверждает качество.';
   }
   function summary(evidence){return evidence?esc(labels[evidence.payload&&evidence.payload.disposition]||'Результат не подтверждён')+' · '+esc(new Date(evidence.createdAt||evidence.created_at).toLocaleString('ru-RU')):'Проверка не сохранена';}
@@ -184,7 +197,7 @@
   function changed(){dirty=true;msg.textContent='Есть несохранённые изменения проверки. Сохраните их или обновите проверки, чтобы отменить ввод. Обычная передача недоступна.';notify();}
   body.addEventListener('input',changed);body.addEventListener('change',changed);
   controls();
-  return {sync:function(){controls(true);},refresh:async function(){try{await refresh();}catch(e){state=null;msg.textContent=e.message||'Проверки недоступны.';}finally{controls();}},ready:function(){return lastReady;},invalidate:function(){state=null;notify();}};
+  return {sync:function(){controls(true);},refresh:async function(){try{await refresh();}catch(e){state=null;msg.textContent=e.message||'Проверки недоступны.';}finally{controls();}},ready:function(){return lastReady;},reason:function(){return state?statusText():msg.textContent;},invalidate:function(){state=null;notify();}};
  }
  global.QualityEvidence={mount:mount};
 })(window);

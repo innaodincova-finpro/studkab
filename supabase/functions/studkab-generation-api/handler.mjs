@@ -104,6 +104,7 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     if(typeof input.request!=='string'||!uuid.test(input.request))return reply({error:'INVALID_INPUT'},400);
     const [requestRow]=await db('studkab_requests?id=eq.'+input.request+'&select=id,payload&limit=1');
     if(!requestRow)return reply({error:'REQUEST_NOT_FOUND'},404);
+    if(!String(requestRow.payload?.n||'').trim())return reply({error:'STUDENT_NAME_REQUIRED'},409);
     const kind=workKind(requestRow.payload?.k);
     if(!kind)return reply({error:'WORK_TYPE_REQUIRED'},409);
     const [limit]=await db('studkab_gen_limits?work_kind=eq.'+kind+'&select=max_cost_microusd&limit=1');
@@ -133,6 +134,7 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     if(!uuid.test(input.request||'')||!uuid.test(input.versionId||''))return reply({error:'INVALID_INPUT'},400);
     const [requestRow]=await db('studkab_requests?id=eq.'+input.request+'&select=id,payload&limit=1');
     if(!requestRow)return reply({error:'REQUEST_NOT_FOUND'},404);
+    if(!String(requestRow.payload?.n||'').trim())return reply({error:'STUDENT_NAME_REQUIRED'},409);
     const kind=workKind(requestRow.payload?.k);
     if(!kind)return reply({error:'WORK_TYPE_REQUIRED'},409);
     const [limit]=await db('studkab_gen_limits?work_kind=eq.'+kind+'&select=max_cost_microusd&limit=1');
@@ -175,19 +177,28 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     if(!version||version.id!==input.versionId)return reply({error:'REVIEW_VERSION_STALE'},409);
     const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&select=id,status&order=revision.desc&limit=1');
     if(!passport||passport.status!=='approved')return reply({error:'PASSPORT_REQUIRED'},409);
-    // Stored job parts are immutable after completion. Query the exact Word
-    // version at the database, so unrelated generation jobs cannot hide it.
-    const jobs=await db('studkab_gen_jobs?request_id=eq.'+input.request+'&owner_id=eq.'+user.id+
-      '&snapshot->input->review_target->>versionId=eq.'+version.id+
-      '&select=id,status,created_at,snapshot&order=created_at.desc&limit=20');
+    // The DB gate includes every matching job, including old owners and old
+    // passports for these bytes. Paginate so an early failure cannot vanish.
+    const jobs=[];
+    for(let offset=0;offset<10000;offset+=100){
+     const page=await db('studkab_gen_jobs?request_id=eq.'+input.request+
+      '&snapshot->input->review_target->>fileHash=eq.'+version.file_hash+
+      '&select=id,status,created_at,snapshot&order=created_at.desc,id.desc&limit=100&offset='+offset);
+     jobs.push(...page);
+     if(page.length<100)break;
+     if(offset===9900)return reply({error:'REVIEW_HISTORY_TOO_LARGE'},409);
+    }
     const reports=[];
     for(const job of jobs){
      const target=job.snapshot?.input?.review_target;
-     if(target?.versionId!==version.id||target?.fileHash!==version.file_hash||target?.passportId!==passport.id)continue;
+     if(target?.fileHash!==version.file_hash)continue;
      const [part]=await db('studkab_gen_parts?job_id=eq.'+job.id+'&spec->>id=eq.quality_review&select=state,result&limit=1');
      const report=part?.state==='done'?parseReviewReport(part.result,version.file_hash):null;
-     reports.push({jobId:job.id,createdAt:job.created_at,status:part?.state==='done'?(report?'complete':'invalid'):
-      job.status==='complete'?'invalid':job.status,report});
+     reports.push({jobId:job.id,createdAt:job.created_at,passportId:target.passportId,
+      current:target.versionId===version.id&&target.passportId===passport.id,
+      status:job.status==='unknown'||part?.state==='unknown'?'unknown':
+       part?.state==='done'?(report?'complete':'invalid'):
+       job.status==='complete'?'invalid':job.status,report});
     }
     return reply({versionId:version.id,fileHash:version.file_hash,passportId:passport.id,reports});
    }
