@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v95-ai-report-registry";
+const CACHE = "studkab-v96-ai-review-gate";
 const SHELL = [
   "./desktop.css?v=7",
   "./",
@@ -19,8 +19,8 @@ const SHELL = [
   "./draft-quality.js?v=15",
   "./draft-editor.js?v=9",
   "./result-docx.js?v=7",
-  "./quality-evidence-ui.js?v=3",
-  "./results-ui.js?v=21",
+  "./quality-evidence-ui.js?v=4",
+  "./results-ui.js?v=22",
   "./external-word.mjs?v=1",
   "./request-workflow.js?v=3",
   "./onboarding.js?v=2",
@@ -29,10 +29,9 @@ const SHELL = [
 ];
 
 self.addEventListener("install", (e) => {
-  self.skipWaiting();                       // новая версия вступает сразу
   e.waitUntil(
     caches.open(CACHE).then((c) =>
-      Promise.all(SHELL.map((u) => c.add(u).catch(() => null)))
+      Promise.all(SHELL.map((u) => c.add(u))).then(() => self.skipWaiting())
     )
   );
 });
