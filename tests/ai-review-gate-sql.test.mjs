@@ -18,6 +18,7 @@ test('AI failure blocks positive review and direct delivery on exact Word; old f
   await db.exec(readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'));
   const c157=readFileSync(new URL('../supabase/migrations/20260928070000_c157_review_dispatch_unknown.sql',import.meta.url),'utf8');
   await db.exec(c157.slice(c157.indexOf('create or replace function public.studkab_quality_check('),c157.lastIndexOf('commit;')));
+  await db.exec(readFileSync(new URL('../supabase/migrations/20260928112143_c162_ai_visual_scope.sql',import.meta.url),'utf8'));
   await db.exec('set role service_role');
   const request=randomUUID(),attachment=randomUUID();
   await db.query('insert into studkab_requests(id,student_id,client_id,payload) values($1,$2,$1::uuid::text,$3)',[request,actor.student,{rq:'Учебное задание'}]);
@@ -69,8 +70,10 @@ test('AI failure blocks positive review and direct delivery on exact Word; old f
   await db.query("insert into studkab_gen_jobs(id,owner_id,request_id,version,snapshot,passport_id,work_kind,max_cost_microusd,status) values($1,$2,$3,$4,$5,$6,'coursework',250000,'complete')",[cleanJob,actor.executor,request,randomUUID(),clean,passport.id]);
   await db.query("insert into studkab_gen_parts(job_id,ordinal,spec,state,result) values($1,0,'{\"id\":\"quality_review\"}','done',$2)",[cleanJob,JSON.stringify({...report,wordHash:newReceipt.fileHash,findings:[]})]);
   assert.equal((await rpc('studkab_quality_check',[request,corrected])).eligible,true);
+  const claimedVisual={...report,wordHash:newReceipt.fileHash,findings:[],coverage:{checked:codes.filter(c=>c!=='C12'),notChecked:['C12']}};
   assert.ok((await review(corrected,newReceipt)).reviewId);
   assert.equal(await rpc('studkab_ai_review_clear',[JSON.stringify({...report,findings:[{...report.findings[0],status:'needs_evidence'}]}),receipt.fileHash]),true);
+  assert.equal(await rpc('studkab_ai_review_clear',[JSON.stringify(claimedVisual),newReceipt.fileHash]),false);
   assert.equal(await rpc('studkab_ai_review_clear',['not-json',receipt.fileHash]),false);
  }finally{await db.close();}
 });

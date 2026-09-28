@@ -33,6 +33,7 @@ const report=JSON.stringify({wordHash:reviewHash,findings:[{code:'C05',location:
 test('saved AI report is validated before display, and malformed or wrong hash stays invalid',()=>{
  assert.equal(parseReviewReport(report,reviewHash).findings[0].code,'C05');
  assert.equal(parseReviewReport(report,'f'.repeat(64)),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),coverage:{checked:codes.filter(c=>c!=='C12'),notChecked:['C12']}}),reviewHash),null);
  assert.equal(parseReviewReport(report.replace('Задание',''),reviewHash),null);
  assert.equal(parseReviewReport('not json',reviewHash),null);
 });

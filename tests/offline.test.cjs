@@ -3,12 +3,12 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const base='https://example.test/studkab/';
-test('both entry pages and offline shell use the consent-aware quality script',()=>{
+test('both entry pages and offline shell use the AI criterion assistance scripts',()=>{
  for(const page of ['index.html','reestr.html'])
-  assert.match(fs.readFileSync(page,'utf8'),/quality-evidence-ui\.js\?v=5/);
+  assert.match(fs.readFileSync(page,'utf8'),/quality-evidence-ui\.js\?v=6.*results-ui\.js\?v=23/);
  const shell=fs.readFileSync('sw.js','utf8');
- assert.match(shell,/studkab-v97-review-consent/);
- assert.match(shell,/quality-evidence-ui\.js\?v=5/);
+ assert.match(shell,/studkab-v98-ai-criteria/);
+ assert.match(shell,/quality-evidence-ui\.js\?v=6/);
 });
 function worker(fetch){
  const handlers={},entries=new Map(),pending=[];
@@ -48,14 +48,14 @@ test('a failed required asset keeps the previous offline worker active',async()=
  const self={location:{origin:new URL(base).origin},registration:{scope:base},
   skipWaiting:()=>{activated++;},clients:{claim:async()=>{}},addEventListener:(name,fn)=>handlers[name]=fn};
  const caches={open:async name=>({add:async url=>{const res=await fetch(url);if(!res.ok)throw Error('resource unavailable');cached.set(name+':'+url,res);}}),
-  keys:async()=>[old,'studkab-v97-review-consent'],delete:async key=>{deleted.push(key);return true;}};
+  keys:async()=>[old,'studkab-v98-ai-criteria'],delete:async key=>{deleted.push(key);return true;}};
  const fetch=async url=>new Response('asset',{status:url.includes('results-ui.js')?503:200});
  vm.runInNewContext(fs.readFileSync('sw.js','utf8'),{URL,Response,fetch,caches,self});
  handlers.install({waitUntil:p=>{install=p;}});
  await assert.rejects(install,/resource unavailable/);
  assert.equal(activated,0);
  assert.deepEqual(deleted,[]);
- assert.ok(!cached.has('studkab-v97-review-consent:./results-ui.js?v=22'));
+ assert.ok(!cached.has('studkab-v98-ai-criteria:./results-ui.js?v=23'));
 });
 
 test('push opens only a same-origin application URL and rejects foreign targets',async()=>{

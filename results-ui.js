@@ -42,11 +42,29 @@
   var checklist=methodology+(external?'':DraftEditor.sourceReview(x))+'<details><summary>Протокол проверки — 16 пунктов</summary><p class=hint>Для каждого пункта выберите результат и укажите страницу, таблицу или другое доказательство. «Не пройден» и незавершённая ручная проверка блокируют передачу. Для «Не применимо» обязательно объясните причину.</p>'+codes.map(function(code,i){return '<fieldset style="margin:12px 0"><legend>'+esc(labels[i])+'</legend><label>Результат <select data-criterion-status="'+code+'"><option value="">Выберите результат</option><option value="pass">Пройден</option><option value="fail">Не пройден</option><option value="manual">Нужна ручная проверка</option><option value="not_applicable">Не применимо</option></select></label><input data-criterion-section="'+code+'" maxlength="300" placeholder="Место: страница, раздел или весь документ"><textarea data-criterion="'+code+'" rows="2" maxlength="2000" placeholder="Доказательство или обоснование" style="width:100%;box-sizing:border-box"></textarea></fieldset>';}).join('')+'</details>';
   var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Итоговая проверка Word</h3><p>'+esc(x.student||'ФИО в заявке не указано')+' · заявка №'+esc(x.requestNumber)+'</p><p>'+esc(x.topic)+'</p>'+(x.student?'':'<p class="warnbox" role="note">ФИО в заявке не указано. До подтверждения проверки убедитесь, что это заявка нужного студента и что Word адресован привязанному к ней кабинету. По одному этому экрану личность получателя подтвердить нельзя.</p>')+'<p class="hint">Этот экран заполняет исполнитель после фактической проверки точного файла. Если вы не открывали его в Microsoft Word и не сверяли содержание, закройте окно без подтверждений. Положительный протокол не сохраняется по предположению; передача студенту выполняется отдельно.</p><button type="button" class="chip" data-preview disabled>Скачать точный Word</button><p><label><input type="checkbox" data-word-opened disabled> Я открыл скачанный Word в Microsoft Word и проверил его содержимое</label></p><div data-passport-rebind hidden><p>Требования заявки изменились. Проверьте, подходит ли сохранённый Word к новым требованиям. Если текст нужно исправить, подготовьте новую версию Word.</p><p data-passport-changes></p><label><input type="checkbox" data-passport-confirm> Я сверил изменённые требования с этим Word</label><p><textarea data-passport-explanation rows="3" maxlength="2000" placeholder="Что сверено и почему исправлять Word не требуется" style="width:100%;box-sizing:border-box"></textarea></p><button type="button" class="chip" data-passport-reuse>Использовать тот же Word после проверки</button></div>'+checklist+'<div data-quality-evidence></div><details data-review-history><summary>История проверок всех версий Word</summary><div data-review-history-body style="overflow-wrap:anywhere">Откройте, чтобы загрузить историю.</div></details><p><label><input type="checkbox" data-reviewed> Я сверил документ с заявкой и проверил кабинет получателя</label></p><button type="button" class="chip" data-save-notes disabled>Сохранить замечания</button><button type="button" class="btn" data-save-review disabled>Сохранить итоговую проверку</button><p class="hint" role="status" data-quality-reason>Подтверждаем проверки точной версии Word…</p><button type="button" class="btn" data-deliver hidden disabled style="display:none">Передать студенту</button><p role="status" data-result-status>Проверяем сохранённое состояние…</p><button type="button" class="chip" data-result-refresh disabled>Обновить состояние</button>');
   wrap.dataset.accountIdentity=String(identity);
+  var aiProtocol=global.document.createElement('p');aiProtocol.setAttribute('role','status');aiProtocol.textContent='Помощник ещё не перенёс замечания в протокол. Положительные отметки автоматически не ставятся.';
+  wrap.querySelector('[data-quality-evidence]').before(aiProtocol);
   var notesButton=wrap.querySelector('[data-save-notes]');
   var msg=wrap.querySelector('[data-result-status]'),saveButton=wrap.querySelector('[data-save-review]'),sendButton=wrap.querySelector('[data-deliver]'),refreshButton=wrap.querySelector('[data-result-refresh]');
   var opened=wrap.querySelector('[data-word-opened]');
   function confirmedWord(){return previewed&&opened.checked;}
   function guard(){try{if(!wrap.isConnected||!same(data,identity))throw Error('Аккаунт изменился или окно закрыто. Откройте проверку заново.');if(key!==contextKey(x,external)||(!external&&x.doc.review!==DraftQuality.stamp(x)))throw Error('Документ, требования или получатель изменились. Повторите проверку.');}catch(e){known=false;throw e;}}
+  function applyAiSuggestions(suggestions,expected){
+   guard();if(!receipt||reviewed||delivered||passportChanged||receipt.versionId!==expected.versionId||
+    receipt.fileHash!==expected.fileHash||receipt.documentHash!==expected.documentHash||
+    receipt.recipientId!==expected.recipientId||x.passports[0]?.id!==expected.passportId)return;
+   var count=0,unverified=0;
+   codes.forEach(function(code){
+    var suggestion=suggestions[code];if(!suggestion)return;
+    var status=wrap.querySelector('[data-criterion-status="'+code+'"]'),field=wrap.querySelector('[data-criterion="'+code+'"]'),section=wrap.querySelector('[data-criterion-section="'+code+'"]');
+    if(status.value&&!status.dataset.aiSuggestion&&status.value!=='pass')return;
+    status.value=suggestion.status;field.value=suggestion.evidence;section.value=suggestion.section;
+    status.dataset.aiSuggestion='1';field.dataset.aiSuggestion='1';section.dataset.aiSuggestion='1';
+    count++;if(suggestion.status==='manual')unverified++;
+   });
+   aiProtocol.textContent=count?'Помощник перенёс '+count+' замечаний или непроверенных пунктов в протокол; '+unverified+' требуют доказательств. Положительных отметок он не ставил. Выдача остаётся закрытой до полной проверки точного Word.':
+    'Помощник не указал замечаний в текстовой части. Это не подтверждает остальные пункты, страницы и оформление Word.';
+  }
   function controls(){
    notesButton.textContent=reviewed&&!amend?'Добавить замечания к проверке':'Сохранить замечания';notesButton.hidden=delivered;notesButton.disabled=busy||qualityBusy||!known||passportChanged;
    saveButton.hidden=reviewed||delivered;saveButton.disabled=busy||qualityBusy||!known||passportChanged||!quality||!quality.ready();
@@ -67,7 +85,8 @@
    criteria[codes[i]]={status:value,evidence:evidence,section:wrap.querySelector('[data-criterion-section="'+codes[i]+'"]').value.trim()};
   }return criteria;}
   function clearReviewInputs(){
-   codes.forEach(function(code){wrap.querySelector('[data-criterion-status="'+code+'"]').value='';wrap.querySelector('[data-criterion="'+code+'"]').value='';wrap.querySelector('[data-criterion-section="'+code+'"]').value='';});
+   codes.forEach(function(code){['data-criterion-status','data-criterion','data-criterion-section'].forEach(function(attr){var field=wrap.querySelector('['+attr+'="'+code+'"]');field.value='';delete field.dataset.aiSuggestion;});});
+   aiProtocol.textContent='Версия Word или паспорт изменились. Загрузите ИИ проверку для этого файла заново.';
    wrap.querySelector('[data-reviewed]').checked=false;
    reviewId=crypto.randomUUID();notesId=crypto.randomUUID();amend=false;
   }
@@ -201,6 +220,7 @@
    id:requestId,guard:guard,parentBusy:function(){return busy||!known||passportChanged;},getBinding:function(){if(!receipt||passportChanged)return null;var p=x.passports[0];return Object.assign({},receipt,{passportId:p.id,sourceFingerprint:p.source_fingerprint});},
    ensureVersion:async function(){guard();await prepareVersion();guard();known=true;controls();},
    onChange:function(ready,pending){qualityBusy=pending;controls();},
+   onReviewSuggestions:applyAiSuggestions,
    onSaved:async function(){await loadState(false);controls();}
   });
   else wrap.querySelector('[data-quality-evidence]').textContent='Проверки качества не загружены. Обновите приложение; обычная передача недоступна.';
