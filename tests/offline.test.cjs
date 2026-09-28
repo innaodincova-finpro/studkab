@@ -35,6 +35,22 @@ test('successful navigation refreshes its own offline copy',async()=>{
  assert.equal(await w.entries.get(base+'reestr.html').clone().text(),'new registry');
 });
 
+test('a failed required asset keeps the previous offline worker active',async()=>{
+ const handlers={},deleted=[],cached=new Map(),old='studkab-v95-ai-report-registry';
+ let activated=0,install;
+ const self={location:{origin:new URL(base).origin},registration:{scope:base},
+  skipWaiting:()=>{activated++;},clients:{claim:async()=>{}},addEventListener:(name,fn)=>handlers[name]=fn};
+ const caches={open:async name=>({add:async url=>{const res=await fetch(url);if(!res.ok)throw Error('resource unavailable');cached.set(name+':'+url,res);}}),
+  keys:async()=>[old,'studkab-v96-ai-review-gate'],delete:async key=>{deleted.push(key);return true;}};
+ const fetch=async url=>new Response('asset',{status:url.includes('results-ui.js')?503:200});
+ vm.runInNewContext(fs.readFileSync('sw.js','utf8'),{URL,Response,fetch,caches,self});
+ handlers.install({waitUntil:p=>{install=p;}});
+ await assert.rejects(install,/resource unavailable/);
+ assert.equal(activated,0);
+ assert.deepEqual(deleted,[]);
+ assert.ok(!cached.has('studkab-v96-ai-review-gate:./results-ui.js?v=22'));
+});
+
 test('push opens only a same-origin application URL and rejects foreign targets',async()=>{
  const handlers={},shown=[],opened=[],navigated=[];
  const existing={url:base+'index.html',navigate:async url=>{navigated.push(url);existing.url=url},focus:async()=>{}};

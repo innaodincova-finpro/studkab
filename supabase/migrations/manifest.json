@@ -396,6 +396,12 @@
       "name": "c156_ai_review_gate",
       "file": "20260928054546_c156_ai_review_gate.sql",
       "sha256": "6d98601d7f8439d7ea51610c6c998b08d3dbd2dfdfe3ab174eec841381fbe8af"
+    },
+    {
+      "version": "20260928070000",
+      "name": "c157_review_dispatch_unknown",
+      "file": "20260928070000_c157_review_dispatch_unknown.sql",
+      "sha256": "6a8960cffeded351cbb04a992640b1606fc99961fa33724073e76d9af4be3c03"
     }
   ],
   "production_reconciled_at": "2026-09-23"

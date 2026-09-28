@@ -16,7 +16,7 @@ function setup({user={id:uid,email:'owner@example.test',email_confirmed_at:'yes'
  const h=handler({auth:async()=>user,config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled,cost}),
  db:async(path,args)=>{calls.push({path,args});if(path==='rpc/studkab_material_manifest_check')return {valid:true};if(path.startsWith('studkab_gen_budget'))return [{limit_microusd:budget,reserved_microusd:0}];
  if(path.startsWith('studkab_gen_policy'))return [{temporary_total_microusd:total}];
- if(path.startsWith('studkab_requests'))return [{id:requestId,payload:{k:workType}}];
+ if(path.startsWith('studkab_requests'))return [{id:requestId,payload:{k:workType,n:'Студент Тестов'}}];
  if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];
  if(path.startsWith('studkab_requirement_passports'))return passport?[{id:passportId,revision:1,source_fingerprint:materialFingerprint,items:[]}]:[];
  if(path.startsWith('rpc/'))return job;if(path.startsWith('studkab_gen_jobs'))return missing?[]:[{id:job,status:'running'}];
@@ -36,7 +36,7 @@ test('saved AI report is validated before display, and malformed or wrong hash s
  assert.equal(parseReviewReport(report.replace('Задание',''),reviewHash),null);
  assert.equal(parseReviewReport('not json',reviewHash),null);
 });
-test('AI report registry reads immutable parts scoped to owner, current Word and passport',async()=>{
+test('AI report registry reads immutable parts for exact Word and marks the current passport',async()=>{
  const calls=[];
  const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),db:async path=>{
   calls.push(path);
@@ -48,11 +48,28 @@ test('AI report registry reads immutable parts scoped to owner, current Word and
  }});
  const request=body=>h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify(body)}));
  const response=await request({action:'quality-review-reports',request:requestId,versionId:reviewVersion});
- assert.equal(response.status,200);const saved=await response.json();assert.equal(saved.reports.length,1);assert.equal(saved.reports[0].report.findings[0].observation,'Нет вывода');
- assert.ok(calls.find(p=>p.startsWith('studkab_gen_jobs')).includes('owner_id=eq.'+uid));
- assert.ok(calls.find(p=>p.startsWith('studkab_gen_jobs')).includes('snapshot->input->review_target->>versionId'));
- assert.equal(calls.filter(p=>p.startsWith('studkab_gen_parts')).length,1);
+ assert.equal(response.status,200);const saved=await response.json();assert.equal(saved.reports.length,2);assert.equal(saved.reports[0].report.findings[0].observation,'Нет вывода');
+ assert.equal(saved.reports[0].current,true);assert.equal(saved.reports[1].current,false);
+ assert.ok(!calls.find(p=>p.startsWith('studkab_gen_jobs')).includes('owner_id=eq.'));
+ assert.ok(calls.find(p=>p.startsWith('studkab_gen_jobs')).includes('snapshot->input->review_target->>fileHash'));
+ assert.equal(calls.filter(p=>p.startsWith('studkab_gen_parts')).length,2);
  assert.equal((await request({action:'quality-review-reports',request:requestId,versionId:passportId})).status,409);
+});
+test('AI history includes blocker beyond first 20 and follows pagination across owner changes',async()=>{
+ const paths=[],jobs=Array.from({length:101},(_,i)=>({id:'job-'+i,status:i===100?'unknown':'complete',created_at:'2026-09-28',
+  snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}));
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
+  config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),db:async path=>{
+   paths.push(path);
+   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
+   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved'}];
+   if(path.startsWith('studkab_gen_jobs'))return jobs.slice(Number(path.match(/offset=(\d+)/)?.[1]||0),Number(path.match(/offset=(\d+)/)?.[1]||0)+100);
+   if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:report}];return [];
+  }});
+ const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify({action:'quality-review-reports',request:requestId,versionId:reviewVersion})}));
+ assert.equal(response.status,200);const saved=await response.json();assert.equal(saved.reports.length,101);
+ assert.equal(saved.reports.at(-1).status,'unknown');
+ assert.ok(paths.some(path=>path.includes('offset=100')));
 });
 test('AI prompt uses the same 16 code labels as the review form and excludes visual claims',()=>{
  for(const financeProfile of [false,true]){
@@ -68,7 +85,7 @@ function reviewSetup({budget=500000,stale=false,user={id:uid,email:'owner@exampl
  const calls=[];
  const h=handler({auth:async()=>user,config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
   readReviewPacket:async()=>{if(stale)throw Error('REVIEW_VERSION_STALE');return reviewContext;},
-  db:async(path,args)=>{calls.push({path,args});if(path.startsWith('studkab_requests'))return [{payload:{k:'Курсовая работа'}}];
+  db:async(path,args)=>{calls.push({path,args});if(path.startsWith('studkab_requests'))return [{payload:{k:'Курсовая работа',n:'Студент Тестов'}}];
    if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];
    if(path.startsWith('studkab_gen_budget'))return [{limit_microusd:budget,reserved_microusd:0}];
    if(path.startsWith('studkab_gen_policy'))return [{temporary_total_microusd:budget}];
@@ -99,6 +116,20 @@ test('quality review fails closed on changed Word, absent budget, wrong actor or
   assert.notEqual(response.status,200);
   assert.equal(s.calls.some(c=>c.path==='rpc/studkab_gen_start'),false);
  }
+});
+test('missing student name blocks paid estimate and queue before any budget or provider reservation',async()=>{
+ const calls=[];
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
+  config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+  readReviewPacket:async()=>{throw Error('must not read paid context');},
+  db:async path=>{calls.push(path);if(path.startsWith('studkab_requests'))return [{id:requestId,payload:{k:'Курсовая работа',n:'  '}}];throw Error('unexpected DB call');}});
+ for(const action of ['estimate','start','quality-review-estimate','quality-review-start']){
+  const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},
+   body:JSON.stringify({action,request:requestId,versionId:reviewVersion})}));
+  assert.equal(response.status,409);
+  assert.equal((await response.json()).error,'STUDENT_NAME_REQUIRED');
+ }
+ assert.equal(calls.length,4);
 });
 test('review packet rejects old Word and hashes exact saved bytes',async()=>{
  const db=async path=>{
