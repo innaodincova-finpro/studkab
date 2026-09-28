@@ -407,4 +407,20 @@
       "version": "20260928054546",
       "name": "c156_ai_review_gate",
       "file": "20260928054546_c156_ai_review_gate.sql",
-      "sha256": "6d98601d7f8439d7ea51610c6c998b08d3dbd2dfdf
+      "sha256": "6d98601d7f8439d7ea51610c6c998b08d3dbd2dfdfe3ab174eec841381fbe8af"
+    },
+    {
+      "version": "20260928070000",
+      "name": "c157_review_dispatch_unknown",
+      "file": "20260928070000_c157_review_dispatch_unknown.sql",
+      "sha256": "6a8960cffeded351cbb04a992640b1606fc99961fa33724073e76d9af4be3c03"
+    },
+    {
+      "file": "20260928163000_c172_request_email_notifications.sql",
+      "version": "20260928163000",
+      "name": "c172_request_email_notifications",
+      "sha256": "5bdbb3a3ed8ad078212ce75b942c5c1afee0f57082daa15448bab9b1760700e0"
+    }
+  ],
+  "production_reconciled_at": "2026-09-23"
+}
