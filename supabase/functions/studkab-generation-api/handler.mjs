@@ -139,7 +139,7 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     if(!limit)return reply({error:'WORK_LIMIT_NOT_CONFIGURED'},503);
     let context;
     try{context=await readReviewPacket(db,input.request,input.versionId);}
-    catch(e){const code=String(e.message);return reply({error:/^(INVALID_INPUT|REVIEW_VERSION_STALE|PASSPORT_REQUIRED|REVIEW_MATERIALS_MISSING|REVIEW_MATERIALS_UNREADABLE|REVIEW_CONTEXT_TOO_BIG)$/.test(code)?code:'REVIEW_UNAVAILABLE'},409);}
+    catch(e){const code=String(e.message);return reply({error:/^(INVALID_INPUT|REVIEW_VERSION_STALE|PASSPORT_REQUIRED|REVIEW_MATERIALS_MISSING|REVIEW_MATERIALS_UNREADABLE|REVIEW_SYNTHETIC_PAID_BLOCKED|REVIEW_CONTEXT_TOO_BIG)$/.test(code)?code:'REVIEW_UNAVAILABLE'},409);}
     const materials=await materialManifestGuard((path,method,body)=>db(path,body),input.request,context.passport.id);
     if(materials)return reply(materials,409);
     const conflict=await sourceMinimumGuard(db,input.request,context.passport.items);

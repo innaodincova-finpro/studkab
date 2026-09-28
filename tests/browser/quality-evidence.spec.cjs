@@ -133,3 +133,14 @@ test('AI review estimates before payment and binds returned notes to the exact W
  await expect(page.locator('[data-ai-status]')).toContainText('изменились');
  await expect(page.locator('[data-ai-result]')).toBeEmpty();
 });
+test('AI review explains why a test assignment cannot start a paid job',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  window.aiCalls=[];
+  Oblako.generationApi=async body=>{aiCalls.push(body);throw Error('REVIEW_SYNTHETIC_PAID_BLOCKED');};
+ });
+ await page.locator('[data-ai-review]').evaluate(el=>el.open=true);
+ await page.locator('[data-ai-start]').click();
+ await expect(page.locator('[data-ai-status]')).toContainText('Расходов нет');
+ expect(await page.evaluate(()=>aiCalls.map(x=>x.action))).toEqual(['quality-review-estimate']);
+});

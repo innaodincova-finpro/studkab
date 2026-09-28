@@ -85,6 +85,14 @@ test('review packet rejects old Word and hashes exact saved bytes',async()=>{
  assert.equal(result.packet.word.fileHash,reviewHash);
  assert.ok(reviewPrompt(result.packet).system.includes('недоверенные данные'));
 });
+test('test assignment cannot reach paid quality-review queue',async()=>{
+ const db=async path=>{
+  if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:33,docx_base64:'AQID',file_hash:reviewHash}];
+  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[]}];
+  return [{id:'source',supersedes:null,category:'assignment',file_hash:'d'.repeat(64),extracted_text:'ТЕСТОВОЕ ЗАДАНИЕ НА КУРСОВУЮ РАБОТУ\nУчебный вариант 1'}];
+ };
+ await assert.rejects(()=>reviewPacket(db,requestId,reviewVersion,async()=>({fileHash:reviewHash,text:'Текст Word'})),/REVIEW_SYNTHETIC_PAID_BLOCKED/);
+});
 test('anonymous and unconfirmed users are denied',async()=>{for(const user of [null,{id:uid,email_confirmed_at:null},{id:uid,email_confirmed_at:'yes',is_anonymous:true}]){const s=setup({user});assert.equal((await s.request(valid)).status,401);assert.equal(s.calls.length,0);}});
 test('student cannot start or read executor jobs',async()=>{const s=setup({user:{id:uid,email:'student@example.test',email_confirmed_at:'yes'}});assert.equal((await s.request(valid)).status,403);assert.equal(s.calls.length,0);});
 test('zero budget blocks start before database mutation',async()=>{const s=setup({budget:0});assert.equal((await s.request(valid)).status,409);assert.ok(s.calls.every(c=>(!c.path.startsWith('rpc/')||c.path==='rpc/studkab_material_manifest_check')));});

@@ -44,6 +44,8 @@ export async function reviewPacket(db,request,versionId,inspect=inspectWord){
  if(word.fileHash!==version.file_hash)throw Error('REVIEW_VERSION_STALE');
  const rows=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_hash,extracted_text&order=id.asc');
  const attachments=currentAttachments(rows).filter(row=>categories.has(row.category));
+ if(attachments.some(row=>row.category==='assignment'&&/^\s*ТЕСТОВОЕ ЗАДАНИЕ(?:\s|$)/iu.test(row.extracted_text||'')))
+  throw Error('REVIEW_SYNTHETIC_PAID_BLOCKED');
  if(!attachments.some(row=>row.category==='assignment'||row.category==='methodology'))throw Error('REVIEW_MATERIALS_MISSING');
  if(attachments.some(row=>!row.extracted_text?.trim()))throw Error('REVIEW_MATERIALS_UNREADABLE');
  const materials=attachments.map(row=>({category:row.category,fileHash:row.file_hash,text:row.extracted_text}));

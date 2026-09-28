@@ -18,7 +18,8 @@
   function controls(silent){var blocked=busy||(options.parentBusy&&options.parentBusy());host.querySelectorAll('button,input,select,textarea').forEach(function(el){el.disabled=blocked||(el.dataset.q&&(!state||el.dataset.locked==='true'));});host.querySelector('[data-quality-refresh]').disabled=blocked||!options.getBinding();if(!silent)notify();}
   function check(after){guard();if(!equal(captured(),after))throw Error('Word, паспорт или получатель изменились. Откройте проверку заново.');}
   async function aiRun(fn){if(aiBusy)return;aiBusy=true;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=true;});
-   try{guard();await fn();}catch(e){aiStatus.textContent=e.message||'ИИ проверка недоступна.';}
+   try{guard();await fn();}catch(e){aiStatus.textContent=e.message==='REVIEW_SYNTHETIC_PAID_BLOCKED'?
+    'Платная ИИ проверка учебной тестовой заявки запрещена. Расходов нет.':(e.message||'ИИ проверка недоступна.');}
    finally{aiBusy=false;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=false;});}}
   async function aiRefresh(){
    if(!aiJob)throw Error('Сначала запустите или найдите проверку.');
