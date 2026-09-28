@@ -2,7 +2,7 @@ import {materialManifestGuard} from '../_shared/material-manifest.mjs';
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 import {expandParts} from './plan.mjs';
 import {reserveMicrousd,MAX_OUTPUT_TOKENS} from '../_shared/deepseek-cost.mjs';
-import {reviewPacket,reviewPrompt} from './review-pass.mjs';
+import {reviewPacket,reviewPrompt,parseReviewReport} from './review-pass.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store',
  'Access-Control-Allow-Origin':'https://innaodincova-finpro.github.io',
  'Access-Control-Allow-Headers':'authorization,content-type,apikey',
@@ -168,6 +168,28 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
       p_max_cost_microusd:Number(limit.max_cost_microusd)});
     return reply({job,status:'queued',reviewTarget:prepared.snapshot.review_target,
       estimatedCostMicrousd:prepared.estimatedTotal,maxCostMicrousd:Number(limit.max_cost_microusd)});
+   }
+   if(input.action==='quality-review-reports'){
+    if(!uuid.test(input.request||'')||!uuid.test(input.versionId||''))return reply({error:'INVALID_INPUT'},400);
+    const [version]=await db('studkab_result_versions?request_id=eq.'+input.request+'&select=id,file_hash&order=revision.desc&limit=1');
+    if(!version||version.id!==input.versionId)return reply({error:'REVIEW_VERSION_STALE'},409);
+    const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&select=id,status&order=revision.desc&limit=1');
+    if(!passport||passport.status!=='approved')return reply({error:'PASSPORT_REQUIRED'},409);
+    // Stored job parts are immutable after completion. Query the exact Word
+    // version at the database, so unrelated generation jobs cannot hide it.
+    const jobs=await db('studkab_gen_jobs?request_id=eq.'+input.request+'&owner_id=eq.'+user.id+
+      '&snapshot->review_target->>versionId=eq.'+version.id+
+      '&select=id,status,created_at,snapshot&order=created_at.desc&limit=20');
+    const reports=[];
+    for(const job of jobs){
+     const target=job.snapshot?.review_target;
+     if(target?.versionId!==version.id||target?.fileHash!==version.file_hash||target?.passportId!==passport.id)continue;
+     const [part]=await db('studkab_gen_parts?job_id=eq.'+job.id+'&spec->>id=eq.quality_review&select=state,result&limit=1');
+     const report=part?.state==='done'?parseReviewReport(part.result,version.file_hash):null;
+     reports.push({jobId:job.id,createdAt:job.created_at,status:part?.state==='done'?(report?'complete':'invalid'):
+      job.status==='complete'?'invalid':job.status,report});
+    }
+    return reply({versionId:version.id,fileHash:version.file_hash,passportId:passport.id,reports});
    }
    if(input.action==='history'){
     if(typeof input.request!=='string'||!idPattern.test(input.request))return reply({error:'INVALID_INPUT'},400);
