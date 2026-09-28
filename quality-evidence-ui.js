@@ -7,7 +7,7 @@
  function field(name,label,type){return '<label style="display:block;margin:10px 0">'+esc(label)+'<input data-q="'+name+'" type="'+(type||'text')+'" style="width:100%;box-sizing:border-box"'+(type==='number'?' min="0" max="100" step="0.01"':' maxlength="1000"')+'></label>';}
  function disposition(name){return '<label>Результат проверки<select data-q="'+name+'" style="width:100%"><option value="manual">Нужна ручная проверка</option><option value="fail">Не пройдено</option><option value="pass">Пройдено</option></select></label>';}
  function mount(host,options){
-  var state=null,verified=false,dirty=false,scan=null,scanHash=null,busy=false,currentBinding=null,operations={},lastReady=false,aiJob=null,aiBusy=false;
+  var state=null,verified=false,dirty=false,scan=null,scanHash=null,busy=false,currentBinding=null,operations={},lastReady=false,aiJob=null,aiBusy=false,aiBinding=null;
   host.innerHTML='<details data-ai-review><summary>ИИ проверка содержания Word</summary><p class="hint">Помощник проверяет сохранённую версию Word по паспорту и приложенным материалам. Он показывает замечания и пробелы доказательств; его ответ не ставит отметки «пройдено» и не передаёт файл студенту. Используется платный API с отдельным подтверждением расчётного предела.</p><button type="button" class="chip" data-ai-start>Оценить стоимость и запустить</button><button type="button" class="chip" data-ai-refresh>Проверить результат</button><button type="button" class="chip" data-ai-recover>Найти предыдущую проверку</button><p role="status" data-ai-status>Проверка ещё не запущена.</p><pre data-ai-result style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre></details><details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Они не заменяют проверку содержания по 16 критериям.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
   var msg=host.querySelector('[data-quality-status]'),body=host.querySelector('[data-quality-body]');
   var aiStatus=host.querySelector('[data-ai-status]'),aiResult=host.querySelector('[data-ai-result]');
@@ -22,7 +22,11 @@
    finally{aiBusy=false;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=false;});}}
   async function aiRefresh(){
    if(!aiJob)throw Error('Сначала запустите или найдите проверку.');
-   var expected=captured(),answer=await Oblako.generationApi({action:'status',job:aiJob});check(expected);
+   var expected=captured();
+   if(aiBinding&&!equal(expected,aiBinding)){
+    aiResult.textContent='';throw Error('Word, паспорт или получатель изменились. Откройте проверку заново.');
+   }
+   var answer=await Oblako.generationApi({action:'status',job:aiJob});check(expected);
    if(answer.reviewTarget?.versionId!==expected.versionId||answer.reviewTarget?.fileHash!==expected.fileHash)
     throw Error('Ответ ИИ относится к другой версии Word. Запустите проверку текущего файла.');
    var part=answer.parts?.find(function(p){return p.id==='quality_review';});
@@ -54,6 +58,7 @@
    if(!answer.job)throw Error('Сервер не подтвердил создание проверки.');
    aiJob=typeof answer.job==='string'?answer.job:answer.job?.id;
    if(!/^[a-f0-9-]{36}$/i.test(aiJob||''))throw Error('Сервер не подтвердил номер задачи. Найдите её через историю проверок.');
+   aiBinding=expected;
    aiResult.textContent='';aiStatus.textContent='ИИ проверка поставлена в очередь. Нажмите «Проверить результат» позже.';
   });};
   host.querySelector('[data-ai-refresh]').onclick=function(){return aiRun(aiRefresh);};
@@ -61,7 +66,7 @@
    var expected=captured(),list=await Oblako.generationApi({action:'history',request:String(options.id)});check(expected);
    for(var item of (list.jobs||[])){
     var result=await Oblako.generationApi({action:'status',job:item.id});check(expected);
-    if(result.reviewTarget?.versionId===expected.versionId&&result.reviewTarget?.fileHash===expected.fileHash){aiJob=item.id;return aiRefresh();}
+    if(result.reviewTarget?.versionId===expected.versionId&&result.reviewTarget?.fileHash===expected.fileHash){aiJob=item.id;aiBinding=expected;return aiRefresh();}
    }
    aiStatus.textContent='Для этой версии Word прежняя ИИ проверка не найдена.';
   });};

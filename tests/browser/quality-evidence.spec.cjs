@@ -131,4 +131,5 @@ test('AI review estimates before payment and binds returned notes to the exact W
  await page.evaluate(()=>qBinding={...qBinding,fileHash:'f'.repeat(64)});
  await page.locator('[data-ai-refresh]').click();
  await expect(page.locator('[data-ai-status]')).toContainText('изменились');
+ await expect(page.locator('[data-ai-result]')).toBeEmpty();
 });
