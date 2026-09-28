@@ -42,8 +42,29 @@
       [...checked,...notChecked].length!==16||new Set([...checked,...notChecked]).size!==16||
       [...checked,...notChecked].some(function(code){return !codes.includes(code);}))
      throw Error('Модель не подтвердила версию или состав отчёта. Положительное заключение недоступно.');
-    aiResult.textContent=JSON.stringify(parsed,null,2);aiStatus.textContent='ИИ замечания получены для этой версии Word. Это предварительный разбор, не итоговая приёмка.';
+    await aiLoadSaved();
    }else aiStatus.textContent='Состояние проверки: '+(answer.job?.status||'неизвестно')+'. Обновите результат позже.';
+  }
+  async function aiLoadSaved(){
+   var expected=captured(),saved=await Oblako.generationApi({action:'quality-review-reports',request:options.id,versionId:expected.versionId});check(expected);
+   if(saved.versionId!==expected.versionId||saved.fileHash!==expected.fileHash||saved.passportId!==expected.passportId||!Array.isArray(saved.reports))
+    throw Error('Не удалось подтвердить историю ИИ проверки для этого Word.');
+   aiResult.replaceChildren();
+   var complete=saved.reports.filter(function(r){return r.status==='complete'&&r.report;});
+   if(!complete.length){aiStatus.textContent=saved.reports.some(function(r){return r.status==='invalid'})?
+    'Ответ ИИ сохранён, но формат не подтверждён. Нужна повторная проверка; положительный вывод недоступен.':
+    saved.reports.length?'ИИ проверка этой версии ещё выполняется.':'Для текущего Word и паспорта замечаний ИИ пока нет.';return;}
+   aiJob=complete[0].jobId;aiBinding=expected;
+   complete.forEach(function(item){
+    var block=document.createElement('section'),title=document.createElement('h4');
+    title.textContent='Версия Word '+expected.fileHash.slice(0,12)+'… · '+new Date(item.createdAt).toLocaleString('ru-RU');block.append(title);
+    var findings=item.report.findings;
+    if(!findings.length){var empty=document.createElement('p');empty.textContent='Модель не указала доказанных замечаний. Это не положительная приёмка.';block.append(empty);}
+    findings.forEach(function(f){var entry=document.createElement('p');entry.style.whiteSpace='pre-wrap';
+     entry.textContent=f.code+' · '+(f.status==='fail'?'Замечание':'Нужны доказательства')+'\nМесто: '+f.location+'\nТребование: '+f.requirement+'\nНаблюдение: '+f.observation;block.append(entry);});
+    var gaps=document.createElement('p');gaps.textContent='Не проверено: '+(item.report.coverage.notChecked.join(', ')||'не указано')+'.';block.append(gaps);aiResult.append(block);
+   });
+   aiStatus.textContent='Сохранено ИИ проверок для этой версии и паспорта: '+complete.length+'. Замечания требуют рассмотрения исполнителем; положительная приёмка здесь не ставится.';
   }
   host.querySelector('[data-ai-start]').onclick=function(){return aiRun(async function(){
    await options.ensureVersion();var expected=captured();
@@ -64,12 +85,7 @@
   });};
   host.querySelector('[data-ai-refresh]').onclick=function(){return aiRun(aiRefresh);};
   host.querySelector('[data-ai-recover]').onclick=function(){return aiRun(async function(){
-   var expected=captured(),list=await Oblako.generationApi({action:'history',request:String(options.id)});check(expected);
-   for(var item of (list.jobs||[])){
-    var result=await Oblako.generationApi({action:'status',job:item.id});check(expected);
-    if(result.reviewTarget?.versionId===expected.versionId&&result.reviewTarget?.fileHash===expected.fileHash){aiJob=item.id;aiBinding=expected;return aiRefresh();}
-   }
-   aiStatus.textContent='Для этой версии Word прежняя ИИ проверка не найдена.';
+   await aiLoadSaved();
   });};
   function validation(message){var error=Error(message);error.qualityValidation=true;return error;}
   function value(name){return body.querySelector('[data-q="'+name+'"]');}
@@ -150,6 +166,7 @@
    var result=await Oblako.requestApi({action:'quality-state',id:options.id,versionId:expected.versionId});check(expected);
    if(!result||!equal(result.bindings,expected)||!result.latest||!Array.isArray(result.blockingCodes)||typeof result.eligible!=='boolean')throw Error('Сервер не подтвердил проверки этой версии Word.');
    state=result;verified=true;dirty=false;render();msg.textContent=statusText();notify();
+   try{await aiLoadSaved();}catch(e){aiResult.replaceChildren();aiStatus.textContent=e.message||'История ИИ проверки недоступна.';}
   }
   async function saveEvidence(kind,payload){
    var expected=captured(),signature=JSON.stringify([expected,payload]);if(!operations[kind]||operations[kind].signature!==signature)operations[kind]={id:crypto.randomUUID(),signature:signature};

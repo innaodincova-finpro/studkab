@@ -113,9 +113,11 @@ test('AI review estimates before payment and binds returned notes to the exact W
    aiCalls.push(body);
    if(body.action==='quality-review-estimate')return {canStart:true,fileHash:qBinding.fileHash,estimatedCostMicrousd:56000,maxCostMicrousd:250000};
    if(body.action==='quality-review-start')return {job:{id:'55555555-5555-4555-8555-555555555555'}};
+   if(body.action==='quality-review-reports')return {versionId:qBinding.versionId,fileHash:qBinding.fileHash,passportId:qBinding.passportId,reports:[{jobId:'55555555-5555-4555-8555-555555555555',createdAt:'2026-09-28T10:00:00Z',status:'complete',report:{wordHash:qBinding.fileHash,
+    findings:[{code:'C05',location:'раздел 2.4',requirement:'Задание',observation:'Не завершено распределение прибыли',status:'fail'}],coverage:{checked:['C05'],notChecked:['C01','C02','C03','C04','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03']}}}]};
    if(body.action==='status')return {job:{status:'complete'},reviewTarget:{versionId:qBinding.versionId,fileHash:qBinding.fileHash},
     parts:[{id:'quality_review',state:'done',text:JSON.stringify({wordHash:qBinding.fileHash,
-     findings:[{code:'C05',location:'раздел 2.4',observation:'Не завершено распределение прибыли',status:'fail'}],coverage:{checked:['C05'],notChecked:['C01','C02','C03','C04','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03']}})}]};
+     findings:[{code:'C05',location:'раздел 2.4',requirement:'Задание',observation:'Не завершено распределение прибыли',status:'fail'}],coverage:{checked:['C05'],notChecked:['C01','C02','C03','C04','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03']}})}]};
    throw Error('Unexpected action '+body.action);
   };
  });
@@ -127,6 +129,8 @@ test('AI review estimates before payment and binds returned notes to the exact W
  expect(await page.evaluate(()=>aiCalls.filter(x=>x.action==='quality-review-start').length)).toBe(1);
  await page.locator('[data-ai-refresh]').click();
  await expect(page.locator('[data-ai-result]')).toContainText('Не завершено распределение прибыли');
+ await page.locator('[data-quality-refresh]').click();
+ await expect(page.locator('[data-ai-result]')).toContainText('Требование: Задание');
  expect(await page.evaluate(()=>qReady)).toBe(false);
  await page.evaluate(()=>qBinding={...qBinding,fileHash:'f'.repeat(64)});
  await page.locator('[data-ai-refresh]').click();

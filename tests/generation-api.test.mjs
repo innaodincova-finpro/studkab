@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {handler,prepare,failure,diagnostic,workKind} from '../supabase/functions/studkab-generation-api/handler.mjs';
 import {reserveMicrousd} from '../supabase/functions/_shared/deepseek-cost.mjs';
-import {reviewPacket,reviewPrompt} from '../supabase/functions/studkab-generation-api/review-pass.mjs';
+import {reviewPacket,reviewPrompt,parseReviewReport} from '../supabase/functions/studkab-generation-api/review-pass.mjs';
 import DraftQuality from '../draft-quality.js';
 const uid='11111111-1111-4111-8111-111111111111',job='22222222-2222-4222-8222-222222222222';
 const requestId='33333333-3333-4333-8333-333333333333',passportId='44444444-4444-4444-8444-444444444444',materialFingerprint='a'.repeat(64);
@@ -28,6 +28,31 @@ const reviewVersion='55555555-5555-4555-8555-555555555555',reviewHash='b'.repeat
 const reviewContext={packet:{word:{revision:33,fileHash:reviewHash,documentHash:'c'.repeat(64),text:'Текст Word'},
  passport:{revision:4,sourceFingerprint:materialFingerprint,items:[]},materials:[{category:'assignment',fileHash:'d'.repeat(64),text:'Задание'}]},
  passport:{id:passportId,revision:4,source_fingerprint:materialFingerprint,items:[]},version:{id:reviewVersion,file_hash:reviewHash}};
+const codes=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
+const report=JSON.stringify({wordHash:reviewHash,findings:[{code:'C05',location:'Глава 2',requirement:'Задание',observation:'Нет вывода',status:'fail'}],coverage:{checked:['C05'],notChecked:codes.filter(c=>c!=='C05')}});
+test('saved AI report is validated before display, and malformed or wrong hash stays invalid',()=>{
+ assert.equal(parseReviewReport(report,reviewHash).findings[0].code,'C05');
+ assert.equal(parseReviewReport(report,'f'.repeat(64)),null);
+ assert.equal(parseReviewReport(report.replace('Задание',''),reviewHash),null);
+ assert.equal(parseReviewReport('not json',reviewHash),null);
+});
+test('AI report registry reads immutable parts scoped to owner, current Word and passport',async()=>{
+ const calls=[];
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),db:async path=>{
+  calls.push(path);
+  if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
+  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved'}];
+  if(path.startsWith('studkab_gen_jobs'))return [{id:job,created_at:'2026-09-28T10:00:00Z',status:'complete',snapshot:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}},
+   {id:'old',snapshot:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId:'old'}}}];
+  if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:report}];return [];
+ }});
+ const request=body=>h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify(body)}));
+ const response=await request({action:'quality-review-reports',request:requestId,versionId:reviewVersion});
+ assert.equal(response.status,200);const saved=await response.json();assert.equal(saved.reports.length,1);assert.equal(saved.reports[0].report.findings[0].observation,'Нет вывода');
+ assert.ok(calls.find(p=>p.startsWith('studkab_gen_jobs')).includes('owner_id=eq.'+uid));
+ assert.equal(calls.filter(p=>p.startsWith('studkab_gen_parts')).length,1);
+ assert.equal((await request({action:'quality-review-reports',request:requestId,versionId:passportId})).status,409);
+});
 test('AI prompt uses the same 16 code labels as the review form and excludes visual claims',()=>{
  for(const financeProfile of [false,true]){
   const local=DraftQuality.reviewCriteria({requirements:financeProfile?'FIN-UAT-01':''});

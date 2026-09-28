@@ -31,6 +31,18 @@ const financeLabels=[
 ];
 const criteria=genericLabels.map((_,i)=>i<13?'C'+String(i+1).padStart(2,'0'):'S0'+(i-12));
 
+export function parseReviewReport(raw,hash){
+ let data;try{data=JSON.parse(raw);}catch{return null;}
+ if(!data||data.wordHash!==hash||!Array.isArray(data.findings)||data.findings.length>32)return null;
+ const allowed=new Set(criteria),checked=data.coverage?.checked,notChecked=data.coverage?.notChecked;
+ if(!Array.isArray(checked)||!Array.isArray(notChecked)||checked.length+notChecked.length!==16||
+  new Set([...checked,...notChecked]).size!==16||[...checked,...notChecked].some(code=>!allowed.has(code)))return null;
+ if(data.findings.some(f=>!f||!allowed.has(f.code)||!['fail','needs_evidence'].includes(f.status)||
+  ![f.location,f.requirement,f.observation].every(s=>typeof s==='string'&&s.trim().length>0&&s.length<=4000)))return null;
+ return {wordHash:hash,findings:data.findings.map(f=>({code:f.code,location:f.location,requirement:f.requirement,
+  observation:f.observation,status:f.status})),coverage:{checked,notChecked}};
+}
+
 // Every byte of the review context comes from the server. A cached browser
 // document, a client-supplied prompt, and a previous Word version are excluded.
 export async function reviewPacket(db,request,versionId,inspect=inspectWord){
