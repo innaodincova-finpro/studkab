@@ -306,7 +306,7 @@ async function reviewStateApp(options={}){
   if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path==='rpc/studkab_quality_check'){assert.equal(method,'POST');assert.deepEqual(body,{p_request:requestId,p_version:versionId});if(options.qualityUnavailable)throw Error('Quality unavailable');return {eligible:!options.qualityMissing,evidenceIds:options.qualityChanged?{...qualityEvidenceIds,internal_borrowing:requestId}:qualityEvidenceIds};}
   if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:options.legacy?1:2;
-  if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId}];
+  if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId,payload:{n:'Тестовый студент'}}];
   if(path.startsWith('studkab_requirement_passports?'))return [{id:passportId,status:options.stalePassport?'stale':'approved',source_fingerprint:reviewContext.sourceFingerprint}];
   if(path.startsWith('studkab_result_versions?'))return options.empty?[]:[{id:versionId,revision:1,recipient_id:options.otherRecipient?requestId:recipientId,document:options.storedDocument||(options.changed?{...document,topic:'Changed'}:document),file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
   if(path.startsWith('studkab_result_passport_bindings?'))return [{id:versionId,document_fingerprint:options.storedDocument?.reviewContext?.fingerprint||reviewContext.fingerprint,passport_id:passportId}];
@@ -393,7 +393,7 @@ test('C109 passport revision offers the same Word and requires an explicit serve
   if(path==='rpc/studkab_result_context_version')return 2;
   if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path==='rpc/studkab_rebind_result_passport'){confirmed=true;assert.deepEqual(body.p_changed_items,['VOLUME']);assert.equal(body.p_version,versionId);return {bindingId:versionId,versionId,fileHash:binding.fileHash};}
-  if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId}];
+  if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId,payload:{n:documentFixture.student}}];
   if(path.startsWith('studkab_result_versions?'))return [{id:versionId,revision:21,recipient_id:recipientId,document:original,file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
   if(path.startsWith('studkab_result_passport_bindings?'))return path.includes('order=created_at')?[{passport_id:oldPassport}]:confirmed?[{id:versionId,document_fingerprint:updated.reviewContext.fingerprint}]:[];
   if(path.startsWith('studkab_requirement_passports?'))return path.includes('id=eq.'+oldPassport)?[{id:oldPassport,items:[{id:'VOLUME',text:'До 10 страниц'}]}]:[{id:passportId,status:'approved',source_fingerprint:updated.reviewContext.sourceFingerprint,items:[{id:'VOLUME',text:'До 12 страниц'}]}];

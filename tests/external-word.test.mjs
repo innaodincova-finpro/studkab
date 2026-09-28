@@ -10,6 +10,22 @@ async function fixture(text='Текст учебного документа & д
  return new Uint8Array(await c.window.ResultDocx(d,d.chapters).arrayBuffer());
 }
 const pid='77777777-7777-4777-8777-777777777777',rid='11111111-1111-4111-8111-111111111111';
+test('a legacy request without student name cannot prepare, approve or deliver Word',async()=>{
+ for(const version of [1,2]){
+  let writes=0;
+  const db=async path=>{
+   if(path.startsWith('studkab_requests?'))return [{student_id:'student',payload:{n:''}}];
+   if(path==='rpc/studkab_result_context_version')return version;
+   writes++;throw Error('Unexpected database operation: '+path);
+  };
+  for(const action of ['prepare-result','review-result','deliver']){
+   const answer=await resultAction({action,id:rid,versionId:pid},{email:'executor@example.test'},{db,config:async()=>({executor_email:'executor@example.test'})});
+   assert.equal(answer.status,409,action+' v'+version);
+   assert.match(answer.data.error,/ФИО студента/);
+  }
+  assert.equal(writes,0);
+ }
+});
 test('C083 inspects real DOCX and preserves exact bytes/hash',async()=>{
  const bytes=await fixture(),before=Buffer.from(bytes),r=await inspectWord(bytes);
  assert.match(r.text,/Текст учебного документа & данные/);assert.match(r.fileHash,/^[a-f0-9]{64}$/);assert.deepEqual(Buffer.from(bytes),before);

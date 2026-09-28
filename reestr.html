@@ -1486,6 +1486,7 @@ function openDocBuilder(id){
     if (t.closest("[data-docsave]")){ readBack(); toast(storageOk ? "Сохранено" : "Не сохранено: браузер не разрешает хранение"); return; }
     if (t.closest("[data-docx]")){
       readBack();
+      if(!(x.student||'').trim()){toast('ФИО студента не указано: титульный лист Word будет неполным. Уточните данные заявки.');return;}
       try{
         var f = Object.assign({ toc:true, year:String(new Date().getFullYear()) }, x.format || {}, {
           univ:x.univ, faculty:x.faculty, kafedra:x.kafedra, program:x.program, form:x.form, course:x.course,
