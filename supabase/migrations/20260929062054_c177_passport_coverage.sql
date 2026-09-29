@@ -77,6 +77,7 @@ create function public.studkab_requirement_coverage_check(p_request uuid,p_versi
 language plpgsql stable security invoker set search_path='' as $$
 declare b uuid; s public.studkab_result_requirement_snapshots; p public.studkab_requirement_passports;
  v public.studkab_result_versions; item jsonb; e public.studkab_result_requirement_evidence;
+ originality public.studkab_quality_evidence;
  target_id text; seen text[]:='{}'; blocked jsonb:='[]'; covered jsonb:='{}';
 begin
  b:=public.studkab_current_result_binding(p_request,p_version);
@@ -99,6 +100,29 @@ begin
   seen:=array_append(seen,target_id);
   if nullif(trim(coalesce(item->>'source','')),'') is null then
    blocked:=blocked||jsonb_build_array(target_id); continue;
+  end if;
+  -- C102 already binds the external PDF and its explicit Word confirmation to
+  -- this exact version. The model has no PDF and cannot certify this item.
+  if target_id='ANTIPLAGIARISM' then
+   select * into originality from public.studkab_quality_evidence
+    where version_id=p_version and kind='external_originality'
+    order by sequence desc limit 1;
+   if originality.id is null or originality.request_id is distinct from p_request
+    or originality.passport_id is distinct from s.passport_id
+    or originality.file_hash is distinct from s.file_hash
+    or originality.document_hash is distinct from s.document_hash
+    or originality.source_fingerprint is distinct from s.source_fingerprint
+    or originality.report_hash is null
+    or originality.payload->>'disposition' is distinct from 'pass'
+    or originality.payload->>'thresholdItemId' is distinct from target_id
+    or originality.payload->>'thresholdBasis' is distinct from item->>'text'
+    or originality.payload->'requirementConfirmed' is distinct from 'true'::jsonb
+    or originality.payload->'wordBindingConfirmed' is distinct from 'true'::jsonb
+    or not exists(select 1 from public.studkab_quality_evidence_bindings eb
+     where eb.evidence_id=originality.id and eb.binding_id=b)
+   then blocked:=blocked||jsonb_build_array(target_id);
+   else covered:=covered||jsonb_build_object(target_id,originality.id); end if;
+   continue;
   end if;
   select evidence.* into e from public.studkab_result_requirement_evidence evidence
    left join public.studkab_gen_jobs j on j.id=evidence.review_job_id
