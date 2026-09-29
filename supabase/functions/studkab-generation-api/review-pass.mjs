@@ -43,6 +43,12 @@ const quoteAddressesRequirement=(requirement,sourceQuote,wordQuote)=>{
  const source=significantTerms(sourceQuote),word=significantTerms(wordQuote);
  return terms.length>0&&terms.every(term=>source.has(term)&&word.has(term));
 };
+const normalizedQuote=text=>text.toLocaleLowerCase('ru').replace(/\s+/gu,' ').trim();
+// Repeating an instruction inside the Word is evidence of the instruction,
+// not evidence that its requested work was performed. This guard alone does
+// not establish semantic correctness of a different excerpt.
+const quotesOnlyTheAssignment=(source,wordQuote)=>
+ normalizedQuote(source).includes(normalizedQuote(wordQuote));
 
 export function parseReviewReport(raw,hash,packet){
  let data;try{data=JSON.parse(raw);}catch{return null;}
@@ -73,6 +79,7 @@ export function parseReviewReport(raw,hash,packet){
      !item.source_attachment_id||item.source_attachment_id!==r.sourceId||
      !source||r.sourceQuote.trim().length<12||r.wordQuote.trim().length<12||
      !source.text.includes(r.sourceQuote)||!packet.word.text.includes(r.wordQuote)||
+     quotesOnlyTheAssignment(source.text,r.wordQuote)||
      !quoteAddressesRequirement(item.text||'',r.sourceQuote,r.wordQuote)||
      r.wordLocator.trim().length<3||r.explanation.trim().length<10)return null;
    }
