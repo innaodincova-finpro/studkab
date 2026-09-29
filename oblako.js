@@ -216,7 +216,7 @@
   };
 
   Oblako.pushRequest = async function (body) {
-    if (!client || !userId || Oblako.app !== "kabinet") throw new Error("Сначала войдите в аккаунт");
+    if (!client || !userId || !["kabinet", "reestr"].includes(Oblako.app)) throw new Error("Сначала войдите в аккаунт");
     var expected = userId;
     var r = await client.auth.getSession();
     var session = r.data && r.data.session;
