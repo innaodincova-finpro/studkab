@@ -49,6 +49,10 @@ const normalizedQuote=text=>text.toLocaleLowerCase('ru').replace(/\s+/gu,' ').tr
 // not establish semantic correctness of a different excerpt.
 const quotesOnlyTheAssignment=(source,wordQuote)=>
  normalizedQuote(source).includes(normalizedQuote(wordQuote));
+// A clause can be assigned any ID in the passport. Its ID cannot be used to
+// bypass checks that require arithmetic or a rendered view of the exact Word.
+const needsNonTextEvidence=item=>['ANTIPLAGIARISM','CALCULATIONS'].includes(item.id)||
+ /расч[её]т|вычисл|формул|коэффициент|процент|суммир|таблиц|диаграмм|рисунк|график|черт[её]ж|оформлен|страниц|визуаль|шрифт|поля|нумерац|интервал|pdf|антиплагиат/i.test(item.text||'');
 
 export function parseReviewReport(raw,hash,packet){
  let data;try{data=JSON.parse(raw);}catch{return null;}
@@ -75,7 +79,7 @@ export function parseReviewReport(raw,hash,packet){
     const source=materials.get(r.sourceId);
     // Exact excerpts are necessary evidence, but not a proof of visual layout,
     // external originality, or the semantic correctness of a calculation.
-    if(['ANTIPLAGIARISM','CALCULATIONS'].includes(item.id)||/оформлен|страниц|визуаль|шрифт|поля|нумерац|pdf|антиплагиат/i.test(item.text||'')||
+    if(needsNonTextEvidence(item)||
      !item.source_attachment_id||item.source_attachment_id!==r.sourceId||
      !source||r.sourceQuote.trim().length<12||r.wordQuote.trim().length<12||
      !source.text.includes(r.sourceQuote)||!packet.word.text.includes(r.wordQuote)||
