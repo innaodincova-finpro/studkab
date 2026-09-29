@@ -1,6 +1,7 @@
 import webpush from 'npm:web-push@3.6.7';
 import {dueEvents,validSubscription} from './schedule.js';
 import {cronAllowed,memberAllowed} from './access.mjs';
+import {requestPush} from './request-push.mjs';
 const URL_BASE=Deno.env.get('SUPABASE_URL')!;
 const SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const cors={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS'};
@@ -63,6 +64,7 @@ async function dialogueTelegram(){
 }
 async function dispatch(c:any){
  let sent=0,failed=0;
+ try{const requests=await requestPush({db,send,configuration:c});sent+=requests.sent;failed+=requests.failed;}catch{failed++;}
  let cursor='';
  for(;;){
   const subs=await db('studkab_push_subscriptions?enabled=eq.true&order=id&limit=100'+(cursor?'&id=gt.'+cursor:''));
