@@ -17,7 +17,7 @@
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=15"></script>
 <script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=6"></script><script src="results-ui.js?v=23"></script>
-<script src="push.js?v=2"></script>
+<script src="push.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1081,7 +1081,7 @@ function openRequest(workId){
       '<label class="mini">Исходные данные, если требуются для работы<input type="file" data-request-file="data" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>'+
       '<label class="mini">Список источников, если выдан<input type="file" data-request-file="sources" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label></div>'+
     '<div class="infobox">Вуз и кафедра берутся из «Профиль → Данные студента». Дисциплина и руководитель указываются внутри работы: «Оформление документа → Изменить».</div>'+
-    '<div class="hint">'+(wasSubmitted?'Сохранённые изменения появятся у исполнителя после обновления реестра. Повторное уведомление о новой заявке не отправляется.':'Заявка сохранится в реестре исполнителя. О новой заявке он получит уведомление в Telegram. Изменения существующей заявки появятся при обновлении реестра.')+' Почтовые уведомления пока не подключены.</div>'+
+    '<div class="hint">'+(wasSubmitted?'Сохранённые изменения появятся у исполнителя после обновления реестра. Повторное уведомление о новой заявке не отправляется.':'Заявка сохранится в реестре исполнителя. О новой заявке он получит push на подключённые устройства. Изменения существующей заявки появятся при обновлении реестра.')+'</div>'+
     '<p role="status" data-request-status>'+esc(r.filesPending?'Черновик заявки №'+r.number+' ожидает загрузку выбранных файлов. Исполнитель пока не уведомлён. Выберите незагруженные файлы повторно.':'')+'</p>'+
     '<div class="rowbtns">'+
       '<button type="button" class="b b-main" data-send="direct">'+(wasSubmitted?'Сохранить изменения заявки':'Отправить заявку исполнителю')+'</button>'+
@@ -1145,9 +1145,8 @@ function openRequest(workId){
         var published=await Oblako.requestApi({action:'request-publish',id:result.id});
         if(!published.ready||published.number!==result.number)throw Error('Публикация заявки не подтверждена. Проверьте данные и повторите.');
         change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.sent=today();r.sentBy="direct";r.attachments=uploaded;r.filesPending=false;r.pendingFiles=[];});
-        wrap.remove();render();toast(wasSubmitted?'Изменения заявки №'+result.number+' сохранены. Исполнитель увидит их после обновления реестра.':published.email==='not_configured' ?
-          'Заявка №'+result.number+' опубликована. Telegram поставлен в очередь, email пока не настроен.' :
-          'Заявка №'+result.number+' опубликована. Telegram и email поставлены в очередь; доставка ещё не подтверждена.');
+        wrap.remove();render();toast(wasSubmitted?'Изменения заявки №'+result.number+' сохранены. Исполнитель увидит их после обновления реестра.':
+          'Заявка №'+result.number+' опубликована. Push для подключённых устройств исполнителя обрабатывается сервером; получение ещё не подтверждено.');
       }).catch(function(e){
         if(D!==expectedData)return;
         var message=(wasSubmitted?'Изменения не сохранены. ':r.serverId?'Черновик заявки №'+r.number+' ещё не опубликован; исполнитель пока не уведомлён. ':'')+(e.message||'Не удалось отправить. Повторите попытку');

@@ -2,7 +2,6 @@ import {accessLink} from './access-links.mjs';
 import {handler} from './handler.mjs';
 import {extract} from './extract.ts';
 import {attachmentDownloadUrl} from './download-url.mjs';
-import {sendRequestEmail,requestEmailSettings} from './request-email.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const bucket='studkab-request-materials';
 async function db(path:string,method='GET',body?:unknown){
@@ -50,6 +49,6 @@ async function remove(path:string){
  const r=await fetch(base+'/storage/v1/object/'+bucket+'/'+path,{method:'DELETE',headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000)});
  if(!r.ok&&r.status!==404)throw Error('Storage cleanup unavailable');
 }
-Deno.serve(handler({auth,db,send,sendEmail:sendRequestEmail,
- emailSettings:(cfg:any)=>requestEmailSettings(cfg,{host:Deno.env.get('STUDKAB_SMTP_HOST'),port:Deno.env.get('STUDKAB_SMTP_PORT'),username:Deno.env.get('STUDKAB_SMTP_USERNAME'),password:Deno.env.get('STUDKAB_SMTP_PASSWORD'),from:Deno.env.get('STUDKAB_EMAIL_FROM')}),
+Deno.serve(handler({auth,db,send,
+ emailSettings:()=>({}), // C175: email is superseded by app push; never claim its queue.
  invite,isMember,upload,download,remove,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));

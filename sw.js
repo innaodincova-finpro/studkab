@@ -3,11 +3,11 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v98-ai-criteria";
+const CACHE = "studkab-v99-request-push";
 const SHELL = [
   "./desktop.css?v=7",
   "./",
-  "./push.js?v=2",
+  "./push.js?v=3",
   "./index.html",
   "./reestr.html",
   "./manifest-kabinet.webmanifest",
@@ -114,7 +114,7 @@ self.addEventListener('push', event => {
    const candidate=new URL(String(data.url||''),root);
    if(candidate.origin===root.origin && candidate.pathname.startsWith(root.pathname))target=candidate.href;
   }catch{}
-  await self.registration.showNotification('Кабинет студента', {
+  await self.registration.showNotification(data.title==='Реестр заявок'?'Реестр заявок':'Кабинет студента', {
    body:String(data.body||'Откройте кабинет, чтобы посмотреть напоминание.').slice(0,250),
    tag:String(data.tag||'studkab').slice(0,250),data:{url:target}
   });
