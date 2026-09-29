@@ -77,7 +77,7 @@
   }
   function controls(){
    setAutomatic();
-   notesButton.textContent=reviewed&&!amend?'Добавить замечания к проверке':'Сохранить замечания';notesButton.hidden=delivered||automatic;notesButton.disabled=busy||qualityBusy||!known||passportChanged;
+   notesButton.textContent=reviewed&&!amend?'Добавить замечания к проверке':'Сохранить замечания';notesButton.hidden=delivered||automatic;notesButton.style.display=notesButton.hidden?'none':'';notesButton.disabled=busy||qualityBusy||!known||passportChanged;
    saveButton.hidden=reviewed||delivered;saveButton.disabled=busy||qualityBusy||!known||passportChanged||!quality||!quality.ready();
    sendButton.hidden=!reviewed&&!delivered;sendButton.style.display=sendButton.hidden?'none':'';saveButton.style.display=saveButton.hidden?'none':'';sendButton.disabled=busy||qualityBusy||!known||passportChanged||delivered||amend||!quality||!quality.ready();
    sendButton.textContent=delivered?'Результат передан':'Передать студенту';
