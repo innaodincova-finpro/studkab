@@ -16,9 +16,13 @@ export async function sendRequestEmail(row,{from,password,to,connect=()=>Deno.co
  const subject='Новая заявка №'+row.number+' в STUDKAB';
  const body='Опубликована заявка №'+row.number+'. Откройте её в реестре после входа: '+url;
  const message='From: STUDKAB <'+from+'>\r\nTo: <'+to+'>\r\nSubject: =?UTF-8?B?'+b64(subject)+'?=\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'+fold(b64(body))+'\r\n.\r\n';
- let conn,accepted=false,afterData=false;
+ let conn,deadlineTimer;
  try{
-  conn=await connect();
+  let connectTimer;
+  const opening=connect();
+  try{conn=await Promise.race([opening,new Promise((_,reject)=>{connectTimer=setTimeout(()=>reject(Error('SMTP connect timeout')),10000);})]);}
+  finally{clearTimeout(connectTimer);}
+  deadlineTimer=setTimeout(()=>{try{conn?.close();}catch{}},10000);
   let buffer='';
   const write=async value=>{
    const bytes=enc.encode(value);
@@ -59,16 +63,15 @@ export async function sendRequestEmail(row,{from,password,to,connect=()=>Deno.co
   outcome=await step('MAIL FROM:<'+from+'>',[250]);if(outcome)return outcome;
   outcome=await step('RCPT TO:<'+to+'>',[250,251]);if(outcome)return outcome;
   outcome=await step('DATA',[354]);if(outcome)return outcome;
-  afterData=true;
   await write(message);
   const final=await response();
   if(final!==250)return {status:'unknown'};
-  accepted=true;
   try{await write('QUIT\r\n');}catch{}
   return {status:'accepted'};
  }catch{
   return {status:'unknown'};
  }finally{
+  clearTimeout(deadlineTimer);
   try{conn?.close();}catch{}
  }
 }
