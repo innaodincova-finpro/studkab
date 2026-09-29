@@ -35,10 +35,13 @@ const criteria=genericLabels.map((_,i)=>i<13?'C'+String(i+1).padStart(2,'0'):'S0
 const visualOnly=['C11','C12','S02'];
 const significantTerms=text=>new Set((text.toLocaleLowerCase('ru').match(/[\p{L}\p{N}]+/gu)||[])
  .filter(term=>term.length>=5).map(term=>term.slice(0,5)));
+const instructionTerms=new Set(['работ','должн','требу','необх','нужн','следу','предс','содер','выпол','проан','прове','рассм','указа','приве']);
 const quoteAddressesRequirement=(requirement,sourceQuote,wordQuote)=>{
- const terms=significantTerms(requirement);
+ // A shared instruction verb (e.g. "analyse") does not show that the Word
+ // covers the requested subject (e.g. revenue rather than expenses).
+ const terms=[...significantTerms(requirement)].filter(term=>!instructionTerms.has(term));
  const source=significantTerms(sourceQuote),word=significantTerms(wordQuote);
- return terms.size>0&&[...terms].some(term=>source.has(term)&&word.has(term));
+ return terms.length>0&&terms.every(term=>source.has(term)&&word.has(term));
 };
 
 export function parseReviewReport(raw,hash,packet){

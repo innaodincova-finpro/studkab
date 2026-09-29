@@ -56,6 +56,9 @@ test('per-request review accepts only exact source and Word excerpts and leaves 
  const irrelevant='Ознакомиться с общими правилами оформления работы';
  const unrelated={...packet,word:{text:word+' '+irrelevant},materials:[{id:'source-1',text:source+' '+irrelevant}]};
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],sourceQuote:irrelevant,wordQuote:irrelevant},requirements[1]]}),reviewHash,unrelated),null);
+ const wrongSubject={...packet,word:{text:'В разделе 2 представлен анализ расходов и выводы по результатам.'}};
+ const mismatched={...requirements[0],sourceQuote:'анализ выручки и выводы',wordQuote:'анализ расходов и выводы'};
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[mismatched,requirements[1]]}),reviewHash,wrongSubject),null);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0],{...requirements[1],status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',wordQuote:'анализ выручки и выводы',wordLocator:'раздел 2',explanation:'Внешняя проверка прошла'}]}),reviewHash,packet),null);
 });
 test('server archives validated per-item review evidence for the current Word only',async()=>{
