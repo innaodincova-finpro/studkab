@@ -42,7 +42,7 @@ def check_docx(path):
             raise ValueError('DOCX_EXPANDED_TOO_LARGE')
 
 
-def check_image(path):
+def check_image(path, text_chars=0):
     if not path.is_file() or path.stat().st_size == 0:
         raise RuntimeError('PAGE_IMAGE_MISSING')
     try:
@@ -50,6 +50,15 @@ def check_image(path):
             image.verify()
         with Image.open(path) as image:
             image.load()
+            # A rasterizer may exit successfully and produce a valid but blank
+            # PNG. Compare ink with the independently extracted PDF page text.
+            if text_chars:
+                gray = image.convert('L').resize((200, 280))
+                ink = sum(value < 245 for value in gray.tobytes())
+                if ink < (20 if text_chars >= 20 else 1):
+                    raise RuntimeError('PAGE_IMAGE_BLANK_WITH_TEXT')
+    except RuntimeError:
+        raise
     except Exception as exc:
         raise RuntimeError('PAGE_IMAGE_CORRUPT') from exc
 
@@ -59,7 +68,7 @@ def render(source, destination):
     check_docx(source)
     if destination.exists():
         raise ValueError('OUTPUT_ALREADY_EXISTS')
-    for name in ('soffice', 'pdfinfo', 'pdftocairo'):
+    for name in ('soffice', 'pdfinfo', 'pdftocairo', 'pdftotext'):
         if shutil.which(name) is None:
             raise RuntimeError(f'MISSING_RENDERER:{name}')
 
@@ -84,14 +93,16 @@ def render(source, destination):
         try:
             rendered = []
             def rasterize(number, target):
+                text_chars = len(run(['pdftotext', '-f', str(number), '-l', str(number),
+                                      str(pdf), '-']).strip())
                 for attempt in range(3):
                     target.unlink(missing_ok=True)
                     run(['pdftocairo', '-f', str(number), '-l', str(number),
                          '-singlefile', '-r', '120', '-png', str(pdf),
                          str(target.with_suffix(''))])
                     try:
-                        check_image(target)
-                        return
+                        check_image(target, text_chars)
+                        return text_chars
                     except RuntimeError:
                         if attempt == 2:
                             raise
@@ -99,14 +110,15 @@ def render(source, destination):
             for number in range(1, pages + 1):
                 name = f'page-{number:03d}.png'
                 target = destination / name
-                rasterize(number, target)
-                rendered.append({'page': number, 'file': name, 'sha256': digest(target)})
+                text_chars = rasterize(number, target)
+                rendered.append({'page': number, 'file': name, 'sha256': digest(target),
+                                 'pdf_text_chars': text_chars})
             # Recheck the complete set after conversion: a truncated PNG may
             # appear even if a converter returned a successful process status.
             for page in rendered:
                 target = destination / page['file']
                 try:
-                    check_image(target)
+                    check_image(target, page['pdf_text_chars'])
                     if digest(target) != page['sha256']:
                         raise RuntimeError('PAGE_IMAGE_CHANGED')
                 except RuntimeError:
@@ -114,7 +126,7 @@ def render(source, destination):
                     page['sha256'] = digest(target)
             for page in rendered:
                 target = destination / page['file']
-                check_image(target)
+                check_image(target, page['pdf_text_chars'])
                 if digest(target) != page['sha256']:
                     raise RuntimeError('PAGE_IMAGE_CHANGED')
             manifest = {'source_sha256': digest(source), 'source_bytes': source.stat().st_size,

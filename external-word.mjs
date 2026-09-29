@@ -64,6 +64,16 @@ export async function inspectWord(bytes){
   const shown=[...link.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(t=>decodeXml(t[1])).join('').trim();
   if(target&&shown===target)active.add(target);
  }
+ const attr=(tag,name)=>tag&&new RegExp('\\bw:'+name+'="([^"]*)"').exec(tag)?.[1];
+ const twips=(tag,name)=>{const value=attr(tag,name);return value!==undefined&&/^-?\d{1,7}$/.test(value)?Number(value):null;};
+ const sections=[...xml.matchAll(/<w:sectPr\b[^>]*>[\s\S]*?<\/w:sectPr>/g)].slice(0,32).map(m=>{
+  const size=/<w:pgSz\b[^>]*\/?\s*>/.exec(m[0])?.[0],margin=/<w:pgMar\b[^>]*\/?\s*>/.exec(m[0])?.[0];
+  return {width:twips(size,'w'),height:twips(size,'h'),left:twips(margin,'left'),right:twips(margin,'right'),top:twips(margin,'top'),bottom:twips(margin,'bottom')};
+ });
+ const styles=entries.has('word/styles.xml')?await read('word/styles.xml'):'';
+ const normal=[...styles.matchAll(/<w:style\b[^>]*>[\s\S]*?<\/w:style>/g)].find(m=>attr(m[0].slice(0,m[0].indexOf('>')+1),'styleId')==='Normal')?.[0]||'';
+ const font=/<w:rFonts\b[^>]*\/?\s*>/.exec(normal)?.[0],size=/<w:sz\b[^>]*\/?\s*>/.exec(normal)?.[0],spacing=/<w:spacing\b[^>]*\/?\s*>/.exec(normal)?.[0],indent=/<w:ind\b[^>]*\/?\s*>/.exec(normal)?.[0];
+ const normalStyle=normal?{font:(attr(font,'ascii')||attr(font,'hAnsi')||'').slice(0,100),sizeHalfPoints:twips(size,'val'),line:twips(spacing,'line'),lineRule:attr(spacing,'lineRule')||'',firstLine:twips(indent,'firstLine')}:null;
  const fileHash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
- return {text,fileHash,linkAudit:{printedCount:printed.length,activeCount:printed.filter(u=>active.has(u)).length,missing:printed.filter(u=>!active.has(u))}};
+ return {text,fileHash,linkAudit:{printedCount:printed.length,activeCount:printed.filter(u=>active.has(u)).length,missing:printed.filter(u=>!active.has(u))},declaredLayout:{sections,sectionLimitReached:[...xml.matchAll(/<w:sectPr\b/g)].length>32,normalStyle}};
 }
