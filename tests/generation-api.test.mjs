@@ -66,6 +66,23 @@ test('per-request review accepts only exact source and Word excerpts and leaves 
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[echoRow,requirements[1]]}),reviewHash,echoPacket),null);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0],{...requirements[1],status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',wordQuote:'анализ выручки и выводы',wordLocator:'раздел 2',explanation:'Внешняя проверка прошла'}]}),reviewHash,packet),null);
 });
+test('arbitrary passport IDs cannot turn calculations or visual requirements into text-only passes',()=>{
+ const cases=[
+  {text:'Рассчитать коэффициент ликвидности',source:'Необходимо рассчитать коэффициент ликвидности по данным отчётности.',
+   word:'Коэффициент ликвидности рассчитан по данным отчётности: значение 1,5.',
+   sourceQuote:'рассчитать коэффициент ликвидности по данным отчётности',wordQuote:'Коэффициент ликвидности рассчитан по данным отчётности'},
+  {text:'Представить таблицу с результатами',source:'Необходимо представить таблицу с результатами исследования.',
+   word:'В разделе 2 приведена таблица с результатами исследования.',
+   sourceQuote:'представить таблицу с результатами исследования',wordQuote:'таблица с результатами исследования'}
+ ];
+ for(const c of cases){
+  const packet={word:{text:c.word},passport:{items:[{id:'REQ_custom_42',text:c.text,required:true,source_attachment_id:'source-1'}]},
+   materials:[{id:'source-1',text:c.source}]};
+  const row={id:'REQ_custom_42',status:'pass',sourceId:'source-1',sourceQuote:c.sourceQuote,wordQuote:c.wordQuote,
+   wordLocator:'раздел 2',explanation:'Условие исполнено, доказательство содержится в тексте'};
+  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,c.text);
+ }
+});
 test('server archives validated per-item review evidence for the current Word only',async()=>{
  const excerpt='анализ выручки и выводы',wordExcerpt='анализ выручки показывает рост на 7 процентов';
  const rows=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',
