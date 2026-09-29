@@ -106,7 +106,9 @@ begin
    order by coalesce(j.created_at,evidence.created_at) desc,evidence.id desc limit 1;
   if e.id is null or e.disposition='fail' or e.disposition='not_checked'
    or nullif(trim(e.source_locator),'') is null
-   or (e.disposition='pass' and nullif(trim(e.word_locator),'') is null)
+   or (e.disposition='pass' and (nullif(trim(e.word_locator),'') is null
+    or nullif(item->>'source_attachment_id','') is null
+    or e.source_locator is distinct from item->>'source_attachment_id'))
    or (e.disposition='not_applicable' and (coalesce((item->>'required')::boolean,true)
      or nullif(trim(e.explanation),'') is null))
   then blocked:=blocked||jsonb_build_array(target_id);
@@ -179,7 +181,8 @@ begin
    or length(coalesce(row->>'wordQuote',''))>2000
    or length(coalesce(row->>'wordLocator',''))>500
    or length(coalesce(row->>'explanation',''))>2000
-   or (row->>'status'='pass' and (length(trim(coalesce(row->>'sourceQuote','')))<12
+   or (row->>'status'='pass' and (row->>'sourceId' is distinct from item->>'source_attachment_id'
+     or length(trim(coalesce(row->>'sourceQuote','')))<12
      or length(trim(coalesce(row->>'wordQuote','')))<12
      or length(trim(coalesce(row->>'wordLocator','')))<3))
   then raise exception 'REQUIREMENT_REVIEW_INVALID'; end if;

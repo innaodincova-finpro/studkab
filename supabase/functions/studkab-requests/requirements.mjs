@@ -59,7 +59,9 @@ export function validatePassport(input){
      return {fileHash,number,chosenNumber,first:text(r.first,180,'первый заголовок',true),second:text(r.second,180,'второй заголовок',true),reason:text(r.reason,1000,'основание исправления'),verified:r.verified===true};
     });
    }
-   return {verified:item.verified===true,answer_ids,id,category:item.category,required:item.required!==false,text:text(item.text,2000,'текст пункта',true),source:text(item.source,1000,'источник'),...(id==='ANTIPLAGIARISM'?{originality:originality(item)}:{}),...(id==='STRUCTURE'?{structure_resolutions}:{})};
+   const source_attachment_id=item.source_attachment_id==null?null:text(item.source_attachment_id,36,'связь с исходным файлом');
+   if(source_attachment_id&&!/^[a-f0-9-]{36}$/i.test(source_attachment_id))throw Error('Проверьте связь требования с исходным файлом');
+   return {verified:item.verified===true,answer_ids,id,category:item.category,required:item.required!==false,text:text(item.text,2000,'текст пункта',true),source:text(item.source,1000,'источник'),...(source_attachment_id?{source_attachment_id}:{}),...(id==='ANTIPLAGIARISM'?{originality:originality(item)}:{}),...(id==='STRUCTURE'?{structure_resolutions}:{})};
   })
  };
 }

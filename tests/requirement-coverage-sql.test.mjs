@@ -14,13 +14,14 @@ test('current passport items need independent, version-bound evidence before any
   await db.exec(reassignmentSetupSQL());
   for(const file of ['20260923144056_c101_answered_reassignment.sql','20260923153452_c102_quality_evidence.sql','20260924150000_c104_originality_policy.sql','20260924150100_originality_threshold_without_service.sql','20260924170000_c109_result_passport_binding.sql','20260928054546_c156_ai_review_gate.sql','20260928070000_c157_review_dispatch_unknown.sql'])
    await db.exec(readFileSync(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
-  const request=randomUUID(),version=randomUUID();
+  const request=randomUUID(),version=randomUUID(),source=randomUUID();
   await db.exec('set role service_role');
   await db.query('insert into studkab_requests(id,student_id,client_id,payload) values($1,$2,$1::uuid::text,$3)',[request,actor.student,{rq:'Синтетическое задание',n:'Студент'}]);
+  await db.query("insert into studkab_request_attachments(id,request_id,student_id,category,file_name,content_type,size_bytes,file_hash,storage_path,extracted_text) values($1,$2,$3,'assignment','task.txt','text/plain',3,$4,$1::uuid::text,'Учебное условие')",[source,request,actor.student,'c'.repeat(64)]);
   const manifest={basis:'Задание',requirements:[{id:'task',label:'Задание',required:true,attachment_ids:[],answer_ids:[],payload_fields:['rq'],not_applicable_reason:''}]};
   const requirements=items.map((i,n)=>i.id==='ANTIPLAGIARISM'
-   ?{...i,source:'Задание, раздел '+(n+1),text:'Оригинальность: не менее 70% в системе Учебная система.',originality:{mode:'university_threshold',service:'Учебная система',thresholdPercent:70}}
-   :{...i,source:'Задание, раздел '+(n+1)});
+   ?{...i,source:'Задание, раздел '+(n+1),source_attachment_id:source,text:'Оригинальность: не менее 70% в системе Учебная система.',originality:{mode:'university_threshold',service:'Учебная система',thresholdPercent:70}}
+   :{...i,source:'Задание, раздел '+(n+1),source_attachment_id:source});
   const p=await rpc('studkab_requirement_passport_save',[request,actor.executor,'Паспорт','',requirements,fingerprint,null,manifest]);
   await rpc('studkab_requirement_passport_approve',[request,p.id,actor.executor,requirements,fingerprint,null,manifest]);
   const doc={topic:'Тест',reviewContext:{passportId:p.id,sourceFingerprint:fingerprint,fingerprint:'b'.repeat(64)}};
@@ -34,21 +35,21 @@ test('current passport items need independent, version-bound evidence before any
   assert.equal((await rpc('studkab_quality_check',[request,version])).blockingCodes.includes('requirement_coverage'),true);
   const criteria=Object.fromEntries(Array.from({length:13},(_,i)=>'C'+String(i+1).padStart(2,'0')).concat(['S01','S02','S03']).map(k=>[k,{status:'pass',evidence:'Сверено с Word'}]));
   await assert.rejects(()=>db.query('insert into studkab_result_reviews(id,version_id,reviewer_id,criteria) values($1,$2,$3,$4)',[randomUUID(),version,actor.executor,criteria]),/QUALITY_EVIDENCE_REQUIRED/);
-  await assert.rejects(()=>rpc('studkab_requirement_evidence_record',[request,version,actor.other,'WORK_TYPE','pass','Задание, раздел 1','Word, раздел 1','']),/FORBIDDEN/);
-  await assert.rejects(()=>rpc('studkab_requirement_evidence_record',[request,version,actor.executor,'WORK_TYPE','pass','Задание, раздел 1','','']),/REQUIREMENT_EVIDENCE_INVALID/);
+  await assert.rejects(()=>rpc('studkab_requirement_evidence_record',[request,version,actor.other,'WORK_TYPE','pass',source,'Word, раздел 1','']),/FORBIDDEN/);
+  await assert.rejects(()=>rpc('studkab_requirement_evidence_record',[request,version,actor.executor,'WORK_TYPE','pass',source,'','']),/REQUIREMENT_EVIDENCE_INVALID/);
   for(const [index,item] of requirements.entries()){
-   await rpc('studkab_requirement_evidence_record',[request,version,actor.executor,item.id,'pass','Задание, раздел '+(index+1),'Word, раздел '+(index+1),'Проверено']);
+   await rpc('studkab_requirement_evidence_record',[request,version,actor.executor,item.id,'pass',source,'Word, раздел '+(index+1),'Проверено']);
   }
   coverage=await rpc('studkab_requirement_coverage_check',[request,version]);
   assert.equal(coverage.eligible,true);
   assert.equal(Object.keys(coverage.evidenceIds).length,requirements.length);
-  await rpc('studkab_requirement_evidence_record',[request,version,actor.executor,'WORK_TYPE','fail','Задание, раздел 1','Word, раздел 1','Несовпадение']);
+  await rpc('studkab_requirement_evidence_record',[request,version,actor.executor,'WORK_TYPE','fail',source,'Word, раздел 1','Несовпадение']);
   assert.deepEqual((await rpc('studkab_requirement_coverage_check',[request,version])).blockingCodes,['WORK_TYPE']);
   assert.equal((await rpc('studkab_quality_check',[request,version])).eligible,false);
   assert.equal((await one('select count(*)::int n from studkab_result_requirement_snapshots where version_id=$1',[version])).n,1);
   assert.equal((await one('select file_hash from studkab_result_requirement_snapshots where version_id=$1',[version])).file_hash,receipt.fileHash);
   const job=randomUUID(),reviewRows=requirements.map((item,index)=>({id:item.id,
-   status:item.id==='ANTIPLAGIARISM'?'not_checked':'pass',sourceId:'source-'+(index+1),
+   status:item.id==='ANTIPLAGIARISM'?'not_checked':'pass',sourceId:source,
    sourceQuote:'Точное основание из материала '+(index+1),wordQuote:'Проверяемый фрагмент точного Word '+(index+1),
    wordLocator:'раздел '+(index+1),explanation:'Сверено с исходным материалом и текущим Word'}));
   const snapshot={input:{review_target:{versionId:version,fileHash:receipt.fileHash,passportId:p.id}}};

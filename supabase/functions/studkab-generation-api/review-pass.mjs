@@ -60,6 +60,7 @@ export function parseReviewReport(raw,hash,packet){
     // Exact excerpts are necessary evidence, but not a proof of visual layout,
     // external originality, or the semantic correctness of a calculation.
     if(['ANTIPLAGIARISM','CALCULATIONS'].includes(item.id)||/оформлен|страниц|визуаль|шрифт|поля|нумерац|pdf|антиплагиат/i.test(item.text||'')||
+     !item.source_attachment_id||item.source_attachment_id!==r.sourceId||
      !source||r.sourceQuote.trim().length<12||r.wordQuote.trim().length<12||
      !source.text.includes(r.sourceQuote)||!packet.word.text.includes(r.wordQuote)||
      r.wordLocator.trim().length<3||r.explanation.trim().length<10)return null;
@@ -115,7 +116,7 @@ export function reviewPrompt(packet,financeProfile=false){
   '"sourceId":"id приложения","sourceQuote":"дословная выдержка из текста приложения",'+
   '"wordQuote":"дословная выдержка из Word","wordLocator":"раздел и место",'+
   '"explanation":"что именно подтверждено или что мешает"}]. '+
-  'pass только при достаточном проверяемом текстовом свидетельстве из обоих документов; если оно отсутствует, not_checked. '+
+  'pass только если пункт паспорта содержит source_attachment_id, равный id цитируемого приложения, и есть достаточное текстовое свидетельство из обоих документов; иначе not_checked. '+
   'Внешний PDF, страницы, визуальное оформление и правильность вычисления по одному тексту не подтверждай.';
  return {system,user:JSON.stringify(packet)};
 }
