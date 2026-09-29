@@ -62,7 +62,7 @@ test('passport UI blocks approval and paid preparation while required facts are 
  assert.match(ui,/return requireApprovedPassport\(x\)\.then/);
 });
 
-const {statedRequirements,fillMissingDraft,requirementAction}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+const {statedRequirements,fillMissingDraft,linkLiteralDraftSources,requirementAction}=await import('../supabase/functions/studkab-requests/requirements.mjs');
 const inputFacts={rq:'Учебный тест. 25–30 страниц основного текста: введение 2, теория 6–7, анализ 8–10. Источники: пять предоставленных учебных фрагментов S1–S5 и исходные данные; не выдавать за реальные публикации. Оригинальность не проверена, порог не задан.',mn:'Разделы 2 / 6–7 / 8–10 / 7–8 / 2 страницы (25–29, в пределах 25–30).'};
 test('explicit total and source restrictions survive extraction without invented originality',()=>{
  const items=defaultPassport(inputFacts).items;
@@ -82,11 +82,29 @@ test('repair only fills standard placeholders of a draft without mutating histor
  const manual={...before,items:[{id:'VOLUME',text:'Объём: 33 страницы'},{id:'SOURCES',text:'Источники: уточнить у преподавателя'}]};
  assert.equal(fillMissingDraft(manual,inputFacts),manual);
 });
+test('literal requirement links only to one current source and never becomes verified',()=>{
+ const phrase='Обязательно представить анализ выручки за три отчётных периода';
+ const base={status:'draft',items:[{id:'ANALYSIS',text:'Требование: '+phrase,source:'Методичка',verified:false},
+  {id:'CALCULATIONS',text:'Расчёты: Не указано — требуется уточнить',verified:false}]};
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',old='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const attachments=[{id:old,category:'methodology',extracted_text:phrase,supersedes:null},
+  {id,category:'methodology',file_name:'method.txt',extracted_text:'Введение\n'+phrase,supersedes:old}];
+ const linked=linkLiteralDraftSources(base,attachments);
+ assert.equal(base.items[0].source_attachment_id,undefined);
+ assert.equal(linked.items[0].source_attachment_id,id);
+ assert.match(linked.items[0].source,/method\.txt, строка извлечённого текста 2/);
+ assert.equal(linked.items[0].verified,false);
+ assert.equal(linked.items[1].source_attachment_id,undefined);
+ assert.equal(linkLiteralDraftSources(linked,attachments),linked);
+ assert.equal(linkLiteralDraftSources(base,[...attachments,{id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',category:'assignment',extracted_text:phrase}]),base);
+ assert.equal(linkLiteralDraftSources({...base,status:'approved'},attachments).items[0].source_attachment_id,undefined);
+});
 test('ensure persists repaired draft as a separate version and subsequent reads do not resave',async()=>{
  let rows=[{...defaultPassport({}),id:'old',revision:1,status:'draft',source_fingerprint:'a'.repeat(64)}],writes=0;
  const deps={config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
   if(path.startsWith('studkab_requests?'))return [{payload:inputFacts}];
   if(path.startsWith('studkab_requirement_passports?'))return rows;
+  if(path.startsWith('studkab_request_attachments?'))return [];
   assert.equal(path,'rpc/studkab_requirement_passport_save');writes++;
   const next={id:'new',revision:2,status:'draft',items:body.p_items,source_fingerprint:body.p_source_fingerprint};rows=[next,...rows];return next;
  }};
@@ -95,6 +113,30 @@ test('ensure persists repaired draft as a separate version and subsequent reads 
  const first=await requirementAction(request,user,deps);assert.equal(first.data.created,true);assert.equal(rows[1].items.find(x=>x.id==='VOLUME').text,'Объём: Не указано — требуется уточнить');
  assert.equal((await requirementAction(request,user,deps)).data.created,false);assert.equal(writes,1);
  assert.equal((await requirementAction(request,{...user,email:'student@example.test'},deps)).status,403);
+});
+test('ensure stores one literal source link, but refreshes it after a material revision',async()=>{
+ const id='33333333-3333-4333-8333-333333333333',actor='22222222-2222-4222-8222-222222222222';
+ const first='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',second='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const phrase='Обязательно представить анализ выручки за три отчётных периода';
+ const base=defaultPassport({});base.items.push({id:'ANALYSIS',category:'method',required:true,text:phrase,source:'Задание',verified:false});
+ let rows=[{...base,status:'draft',source_fingerprint:'a'.repeat(64)}],attachments=[{id:first,category:'assignment',file_name:'task.txt',extracted_text:phrase}];
+ const db=async(path,method,body)=>{
+  if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+  if(path.startsWith('studkab_requirement_passports?'))return rows;
+  if(path.startsWith('studkab_request_attachments?'))return attachments;
+  assert.equal(path,'rpc/studkab_requirement_passport_save');
+  const saved={...base,status:'draft',source_fingerprint:body.p_source_fingerprint,items:body.p_items};rows=[saved,...rows];return saved;
+ };
+ const deps={config:async()=>({executor_email:'executor@example.test'}),db};
+ const user={id:actor,email:'executor@example.test'};
+ const input={action:'passport-ensure',id,sourceFingerprint:'a'.repeat(64)};
+ assert.equal((await requirementAction(input,user,deps)).data.created,true);
+ assert.equal(rows[0].items.at(-1).source_attachment_id,first);
+ assert.equal((await requirementAction(input,user,deps)).data.created,false);
+ attachments=[{...attachments[0],id:second,supersedes:first}];
+ assert.equal((await requirementAction({...input,sourceFingerprint:'b'.repeat(64)},user,deps)).data.created,true);
+ assert.equal(rows[0].items.at(-1).source_attachment_id,second);
+ assert.equal(rows[0].items.at(-1).verified,false);
 });
 
 const semanticInput={

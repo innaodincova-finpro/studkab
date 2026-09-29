@@ -115,6 +115,25 @@ export function fillMissingDraft(passport,payload){
  return changed?{...passport,items}:passport;
 }
 
+// A source link is only a locator, never an approval. Ambiguous or paraphrased
+// requirements stay open for clarification instead of acquiring a guessed file.
+export function linkLiteralDraftSources(passport,attachments){
+ if(passport.status&&passport.status!=='draft')return passport;
+ const leaves=currentAttachments(attachments).filter(a=>['assignment','methodology'].includes(a.category)&&typeof a.extracted_text==='string');
+ let changed=false;
+ const items=passport.items.map(item=>{
+  if(item.verified||item.source_attachment_id)return item;
+  const literal=String(item.text||'').replace(/^[^:]{1,50}:\s*/u,'').trim();
+  if(literal.length<20||/Не указано|требуется уточнить/iu.test(literal))return item;
+  const matches=leaves.filter(a=>a.extracted_text.includes(literal));
+  if(matches.length!==1)return item;
+  changed=true;
+  const row=matches[0],line=row.extracted_text.slice(0,row.extracted_text.indexOf(literal)).split('\n').length;
+  return {...item,source_attachment_id:row.id,source:`${row.file_name || 'Приложение'}, строка извлечённого текста ${line}: ${literal.slice(0,300)}`.slice(0,1000)};
+ });
+ return changed?{...passport,items}:passport;
+}
+
 // Interpret only explicit section lists. Never infer research methods or waive checks.
 export function semanticRequirements(payload={}){
  const rq=typeof payload.rq==='string'?payload.rq.trim():'';
@@ -194,8 +213,13 @@ export async function requirementAction(input,user,{db,config}){
   if(!/^[a-f0-9]{64}$/.test(input.sourceFingerprint||''))return {status:400,data:{error:'Сначала сохраните актуальные материалы'}};
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,material_manifest,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
-  if(rows.length&&rows[0].status!=='stale'&&rows[0].source_fingerprint===input.sourceFingerprint&&filled===rows[0])return {status:200,data:{passports:rows,created:false,materialRevision:row.revision}};
-  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Требования уточнены по исходной заявке без изменения исходных сведений. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:rows[0].status==='stale'||rows[0].source_fingerprint!==input.sourceFingerprint?filled.items.map(item=>({...item,verified:false,answer_ids:[]})):filled.items}:defaultPassport(row.payload);
+  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,extracted_text');
+  if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
+  const sameSource=rows.length&&rows[0].status!=='stale'&&rows[0].source_fingerprint===input.sourceFingerprint;
+  const linked=sameSource?linkLiteralDraftSources(filled,attachments):filled;
+  if(sameSource&&linked===rows[0])return {status:200,data:{passports:rows,created:false,materialRevision:row.revision}};
+  let passport=rows.length?{title:rows[0].title,summary:linked!==rows[0]?'Требования уточнены по исходным материалам. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:sameSource?linked.items:filled.items.map(item=>{const {source_attachment_id,...rest}=item;return {...rest,verified:false,answer_ids:[]};})}:defaultPassport(row.payload);
+  if(!sameSource)passport=linkLiteralDraftSources(passport,attachments);
   passport.material_manifest=rows.length?(rows[0].status==='stale'||rows[0].source_fingerprint!==input.sourceFingerprint?resetMaterialEvidence(rows[0].material_manifest):rows[0].material_manifest):null;
   const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_material_manifest:passport.material_manifest??null,p_source_fingerprint:input.sourceFingerprint,p_expected_revision:input.expectedRevision??null});
   if(created.error)return {status:409,data:created};
