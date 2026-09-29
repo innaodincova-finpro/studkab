@@ -2,7 +2,7 @@ import {accessLink} from './access-links.mjs';
 import {handler} from './handler.mjs';
 import {extract} from './extract.ts';
 import {attachmentDownloadUrl} from './download-url.mjs';
-import {sendRequestEmail} from './request-email.mjs';
+import {sendRequestEmail,requestEmailSettings} from './request-email.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const bucket='studkab-request-materials';
 async function db(path:string,method='GET',body?:unknown){
@@ -51,5 +51,5 @@ async function remove(path:string){
  if(!r.ok&&r.status!==404)throw Error('Storage cleanup unavailable');
 }
 Deno.serve(handler({auth,db,send,sendEmail:sendRequestEmail,
- emailSettings:(cfg:any)=>({apiKey:Deno.env.get('STUDKAB_BREVO_API_KEY'),from:Deno.env.get('STUDKAB_EMAIL_FROM'),to:cfg?.executor_email}),
+ emailSettings:(cfg:any)=>requestEmailSettings(cfg,{from:Deno.env.get('STUDKAB_EMAIL_FROM'),password:Deno.env.get('STUDKAB_MAILRU_APP_PASSWORD')}),
  invite,isMember,upload,download,remove,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
