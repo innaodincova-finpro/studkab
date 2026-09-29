@@ -51,20 +51,19 @@ test('Mail.ru SMTP sends only the request number and authenticated link to the s
  assert.equal(chosen.to,cfg.notification_email);
  assert.notEqual(chosen.to,cfg.executor_email);
  const writes=[],responses=['220 ready','250-smtp.mail.ru','250 AUTH LOGIN','334 username','334 password','235 authenticated','250 sender','250 recipient','354 go ahead','250 accepted'];
- const connect=async()=>({read:async b=>{const s=responses.shift();if(!s)return null;const v=new TextEncoder().encode(s+'\\r\\n');b.set(v);return v.length;},
+ const connect=async()=>({read:async b=>{const s=responses.shift();if(!s)return null;const v=new TextEncoder().encode(s+'\r\n');b.set(v);return v.length;},
   write:async b=>{writes.push(new TextDecoder().decode(b));return b.length;},close:()=>{}});
  assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...chosen,connect}),{status:'accepted'});
  assert.ok(writes.some(x=>x.includes('RCPT TO:<inbox@example.test>')));
  assert.ok(writes.some(x=>x.includes('AUTH LOGIN')));
- assert.ok(writes.some(x=>x.includes('reestr.html#request=')===false));
  const mime=writes.find(x=>x.includes('Content-Transfer-Encoding: base64'));
  assert.ok(mime);assert.ok(mime.includes('To: <inbox@example.test>'));
- assert.ok(new TextDecoder().decode(Uint8Array.from(atob(mime.split('\\r\\n\\r\\n')[1].replace(/\\s|\\./g,'')),x=>x.charCodeAt(0))).includes('reestr.html#request='+id));
+ assert.ok(new TextDecoder().decode(Uint8Array.from(atob(mime.split('\r\n\r\n')[1].replace(/\s|\./g,'')),x=>x.charCodeAt(0))).includes('reestr.html#request='+id));
  assert.ok(!mime.includes('Тестовый студент'));
 });
 
 test('SMTP failure before DATA is bounded; uncertain result after DATA is never retried',async()=>{
- const fake=(codes)=>async()=>({read:async b=>{const s=codes.shift();if(!s)return null;const v=new TextEncoder().encode(s+'\\r\\n');b.set(v);return v.length;},write:async b=>b.length,close:()=>{}});
+ const fake=(codes)=>async()=>({read:async b=>{const s=codes.shift();if(!s)return null;const v=new TextEncoder().encode(s+'\r\n');b.set(v);return v.length;},write:async b=>b.length,close:()=>{}});
  const prefix=['220 ready','250 hello','334 username','334 password','235 authenticated','250 sender'];
  assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:fake([...prefix,'451 later'])}),{status:'pending'});
  assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:fake(['220 ready','250 hello','334 username','334 password','535 invalid'])}),{status:'failed'});
