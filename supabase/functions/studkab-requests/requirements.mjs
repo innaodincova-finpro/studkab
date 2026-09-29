@@ -148,8 +148,8 @@ export function inventoryExplicitClauses(passport,attachments){
   const lines=row.extracted_text.replace(/\r/g,'').split('\n');
   for(let n=0;n<lines.length;n++){
    const line=lines[n].trim(),match=/^(?:\d{1,2}(?:\.\d{1,2}){0,2}[.)]?|[•*–-])\s+(.+)$/u.exec(line);
-   if(!match)continue;
-   const clause=match[1].trim();
+   const clause=(match?.[1]||(/^(?:в\s+работе\s+необходимо|работа\s+должна|документ\s+должен|отч[её]т\s+должен|необходимо|требуется|следует|обязательно)(?=\s|[:—–-])/iu.test(line)?line:'')).trim();
+   if(!clause)continue;
    if(clause.length<20||clause.length>1000||!/должн|необходим|требует|обязател|не менее|не более|следует|включа|содерж|представ|оформ|указа/iu.test(clause))continue;
    const normalized=clause.replace(/\s+/gu,' ').toLowerCase();
    if(seen.has(normalized)||items.some(i=>String(i.text).toLowerCase().includes(normalized)))continue;
@@ -163,6 +163,23 @@ export function inventoryExplicitClauses(passport,attachments){
   }
  }
  return changed?{...passport,items}:passport;
+}
+
+async function structureQuestionId(request,question){
+ const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(request+'\n'+question)));
+ hash[6]=(hash[6]&15)|64;hash[8]=(hash[8]&63)|128;
+ const hex=Array.from(hash.slice(0,16),b=>b.toString(16).padStart(2,'0')).join('');
+ return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+}
+
+async function askUnresolvedStructure(db,request,actor,attachments,items){
+ const issues=structureFindings(currentAttachments(attachments),items).filter(i=>!i.resolved&&!i.tooMany);
+ for(const issue of issues){
+  const question=`В файле «${issue.fileName}» номер ${issue.number} указан для двух разделов: «${issue.first}» и «${issue.second}». Уточните у преподавателя правильный номер второго раздела и укажите основание ответа.`;
+  const result=await db('rpc/studkab_clarification_ask','POST',{p_request:request,p_actor:actor,p_id:await structureQuestionId(request,question),p_item:'STRUCTURE',p_question:question});
+  if(!result?.id||result.error)return {status:409,data:{error:'Не удалось сохранить вопрос студенту: '+(result?.error||'сервер не подтвердил запись')}};
+ }
+ return null;
 }
 
 // Interpret only explicit section lists. Never infer research methods or waive checks.
@@ -250,13 +267,19 @@ export async function requirementAction(input,user,{db,config}){
   let linked;
   try{linked=sameSource?inventoryExplicitClauses(linkLiteralDraftSources(filled,attachments),attachments):filled;}
   catch(e){return {status:409,data:{error:e.message}};}
-  if(sameSource&&linked===rows[0])return {status:200,data:{passports:rows,created:false,materialRevision:row.revision}};
+  if(sameSource&&linked===rows[0]){
+   const questionError=await askUnresolvedStructure(db,request,user.id,attachments,rows[0].items);
+   if(questionError)return questionError;
+   return {status:200,data:{passports:rows,created:false,materialRevision:row.revision}};
+  }
   let passport=rows.length?{title:rows[0].title,summary:linked!==rows[0]?'Требования уточнены по исходным материалам. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:sameSource?linked.items:filled.items.map(item=>{const {source_attachment_id,...rest}=item;return {...rest,verified:false,answer_ids:[]};})}:defaultPassport(row.payload);
   if(!sameSource)try{passport=inventoryExplicitClauses(linkLiteralDraftSources(passport,attachments),attachments);}
    catch(e){return {status:409,data:{error:e.message}};}
   passport.material_manifest=rows.length?(rows[0].status==='stale'||rows[0].source_fingerprint!==input.sourceFingerprint?resetMaterialEvidence(rows[0].material_manifest):rows[0].material_manifest):null;
   const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_material_manifest:passport.material_manifest??null,p_source_fingerprint:input.sourceFingerprint,p_expected_revision:input.expectedRevision??null});
   if(created.error)return {status:409,data:created};
+  const questionError=await askUnresolvedStructure(db,request,user.id,attachments,created.items||passport.items);
+  if(questionError)return questionError;
   return {status:200,data:{passports:[created].concat(rows),created:true,materialRevision:row.revision}};
  }
  let passport;
