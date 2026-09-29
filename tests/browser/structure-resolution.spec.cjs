@@ -1,6 +1,6 @@
 const {test,expect}=require('@playwright/test');
 
-test('numbering conflict is visible and a verified version clears the UI blocker',async({page})=>{
+test('numbering conflict needs a student answer even after a local resolution',async({page})=>{
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(async()=>{
   const x=fromPayload({id:'11111111-1111-4111-8111-111111111111',t:'Тест нумерации',k:'Курсовая работа',rq:'Учебное задание'});
@@ -9,15 +9,16 @@ test('numbering conflict is visible and a verified version clears the UI blocker
   const items=StudClarifications.requiredIds.map(id=>({id,category:'method',required:true,verified:true,text:id==='STRUCTURE'?'Структура: нумерацию следует уточнить; калькуляция, финансовые результаты':'Подтверждённое требование',source:'Методичка',answer_ids:[]}));
   x.requestNumber=1;x.materialRevision={state:'locked',requestRevision:2,cycleId:null,canReopen:true};x.passportMaterialRevision=2;x.attachments=[file];x.clarifications=[];
   x.passports=[{id:'44444444-4444-4444-8444-444444444444',revision:1,status:'draft',title:'Требования',items,material_manifest:{basis:'Методичка',requirements:[{id:'M1',label:'Методичка',required:true,attachment_ids:[file.id],answer_ids:[],payload_fields:[],not_applicable_reason:''}]}}];
-  D.items=[x];window.structureItem=x;window.structureCalls=[];
+  D.items=[x];window.structureItem=x;window.structureCalls=[];window.structureQuestionCreated=false;
   Oblako.requestApi=async body=>{
    structureCalls.push(body);
    if(body.action==='material-revision-state')return {materials:x.materialRevision};
    if(body.action==='attachment-context')return {attachments:[file],materialRevision:2};
    if(body.action==='passport-ensure'){x.passports[0].source_fingerprint=body.sourceFingerprint;return {passports:x.passports,materialRevision:2};}
    if(body.action==='passport-structure-audit'){const q=x.passports[0].items.find(i=>i.id==='STRUCTURE'),resolved=!!q.structure_resolutions?.[0]?.verified;return {findings:[{...original,resolved}]};}
-   if(body.action==='clarification-list')return {questions:[]};
+   if(body.action==='clarification-list')return {questions:window.structureQuestionCreated?[{id:'55555555-5555-4555-8555-555555555555',item_id:'STRUCTURE',question:'Уточните нумерацию',answer:null}]:[]};
    if(body.action==='passport-save'){x.passports=[{...body.passport,id:crypto.randomUUID(),status:'draft',revision:2,source_fingerprint:body.sourceFingerprint}];return {passport:x.passports[0],materialRevision:2};}
+   if(body.action==='passport-approve'){window.structureQuestionCreated=true;throw Error('Ожидается ответ студента по повтору номера 2.3');}
    throw Error('Unexpected action '+body.action);
   };
   openId=x.id;render();await loadPassports(x);
@@ -37,6 +38,9 @@ test('numbering conflict is visible and a verified version clears the UI blocker
  await expect(dialog).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>structureItem.structureFindings?.[0]?.resolved)).toBe(true);
  await expect(page.locator('[data-act="passport-approve"]')).toBeEnabled();
+ await page.locator('[data-act="passport-approve"]').click();
+ await expect(page.locator('[data-act="passport-approve"]')).toBeDisabled();
+ await expect(page.getByText('Есть вопросы без ответа или ответы, ещё не учтённые в этой версии требований.')).toBeVisible();
  const saved=await page.evaluate(()=>structureCalls.find(c=>c.action==='passport-save').passport.items.find(q=>q.id==='STRUCTURE'));
  expect(saved.structure_resolutions[0].chosenNumber).toBe('2.4');
  expect(saved.text).toContain('2.4 Финансовые результаты');

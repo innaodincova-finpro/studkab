@@ -145,6 +145,43 @@ test('approval refuses an omitted enumerated obligation before any approval RPC'
  assert.match(result.data.error,/отдельные условия/);
  assert.equal(approved,false);
 });
+test('approval refuses to downgrade an inventoried obligation to optional',async()=>{
+ const p=defaultPassport({}),source='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ p.items=p.items.map(i=>({...i,text:i.id==='ANTIPLAGIARISM'?originalityText({mode:'service_only',service:'',thresholdPercent:null}):'Конкретное требование',source:i.id==='ANTIPLAGIARISM'?'Стандарт STUDKAB':'Задание',verified:true}));
+ p.items.find(i=>i.id==='ANTIPLAGIARISM').originality={mode:'service_only',service:'',thresholdPercent:null};
+ p.items.push({id:'REQ_'+source.replace(/-/g,'')+'_1',category:'method',required:false,verified:false,
+  text:'Работа должна содержать анализ выручки за три года',source:'task.txt, строка 1',source_attachment_id:source,answer_ids:[]});
+ const result=await requirementAction({action:'passport-approve',id:'33333333-3333-4333-8333-333333333333',passportId:'44444444-4444-4444-8444-444444444444',passport:p},
+  {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async path=>{
+   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+   if(path.startsWith('studkab_request_attachments?'))return [{id:source,category:'assignment',file_name:'task.txt',extracted_text:'1. Работа должна содержать анализ выручки за три года'}];
+   throw Error('Approval must stop before database mutation: '+path);
+  }});
+ assert.equal(result.status,409);assert.match(result.data.error,/отдельные условия/);
+});
+test('approval asks the student despite a client-supplied structure resolution',async()=>{
+ const p=defaultPassport({}),id='33333333-3333-4333-8333-333333333333',actor='22222222-2222-4222-8222-222222222222';
+ const file={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',category:'methodology',file_name:'guide.txt',file_hash:'f'.repeat(64),
+  extracted_text:'2.3 Анализ выручки по периодам\n2.3 Анализ себестоимости по периодам'};
+ p.items=p.items.map(i=>({...i,text:i.id==='ANTIPLAGIARISM'?originalityText({mode:'service_only',service:'',thresholdPercent:null}):'Конкретное требование',source:i.id==='ANTIPLAGIARISM'?'Стандарт STUDKAB':'Задание',verified:true}));
+ p.items.find(i=>i.id==='ANTIPLAGIARISM').originality={mode:'service_only',service:'',thresholdPercent:null};
+ const structure=p.items.find(i=>i.id==='STRUCTURE');
+ structure.text='Структура: Анализ себестоимости по периодам — 2.4';
+ structure.structure_resolutions=[{fileHash:file.file_hash,number:'2.3',chosenNumber:'2.4',first:'Анализ выручки по периодам',second:'Анализ себестоимости по периодам',verified:true,reason:'Подтверждено преподавателем'}];
+ let asked=0;
+ const result=await requirementAction({action:'passport-approve',id,passportId:'44444444-4444-4444-8444-444444444444',passport:p},
+  {id:actor,email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
+   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+   if(path.startsWith('studkab_request_attachments?')){assert.match(path,/\bfile_hash\b/);return [file];}
+   if(path==='rpc/studkab_clarification_ask'){
+    asked++;assert.equal(body.p_item,'STRUCTURE');assert.equal(body.p_actor,actor);return {id:body.p_id,answer:null};
+   }
+   throw Error('Approval must wait for the student: '+path);
+  }});
+ assert.equal(asked,1);assert.equal(result.status,409);assert.match(result.data.error,/Ожидается ответ студента/);
+});
 test('ensure persists repaired draft as a separate version and subsequent reads do not resave',async()=>{
  let rows=[{...defaultPassport({}),id:'old',revision:1,status:'draft',source_fingerprint:'a'.repeat(64)}],writes=0;
  const deps={config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{

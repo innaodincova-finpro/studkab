@@ -172,12 +172,18 @@ async function structureQuestionId(request,fileHash,question){
  return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
 }
 
-async function askUnresolvedStructure(db,request,actor,attachments,items){
- const issues=structureFindings(currentAttachments(attachments),items).filter(i=>!i.resolved&&!i.tooMany);
+async function askUnresolvedStructure(db,request,actor,attachments,items,{requireAnswered=false}={}){
+ // Approval cannot trust a client-supplied resolution. Ask for each conflict
+ // even when the submitted passport claims it is already resolved.
+ const findings=structureFindings(currentAttachments(attachments),requireAnswered?[]:items);
+ if(findings.some(i=>i.tooMany))return {status:409,data:{error:'Слишком много неоднозначных номеров. Нужна исправленная методичка'}};
+ const issues=findings.filter(i=>!i.resolved);
  for(const issue of issues){
   const question=`В файле «${issue.fileName}» номер ${issue.number} указан для двух разделов: «${issue.first}» и «${issue.second}». Уточните у преподавателя правильную нумерацию этих разделов и укажите основание ответа.`;
   const result=await db('rpc/studkab_clarification_ask','POST',{p_request:request,p_actor:actor,p_id:await structureQuestionId(request,issue.fileHash,question),p_item:'STRUCTURE',p_question:question});
   if(!result?.id||result.error)return {status:409,data:{error:'Не удалось сохранить вопрос студенту: '+(result?.error||'сервер не подтвердил запись')}};
+  if(requireAnswered&&(!String(result.answer||'').trim()||!String(result.answer_source||'').trim()))
+   return {status:409,data:{error:'Ожидается ответ студента по повтору номера '+issue.number+'. После ответа создайте новую версию паспорта и свяжите её с ответом.'}};
  }
  return null;
 }
@@ -296,13 +302,15 @@ export async function requirementAction(input,user,{db,config}){
   if(required.some(id=>!passport.items.some(q=>q.id===id))||passport.items.some(item=>(item.required||required.includes(item.id))&&(!item.verified||!item.source||(/не указано|требуется уточнить|порог не задан|ожидается ответ/i.test(item.text)&&!(item.id==='ANTIPLAGIARISM'&&item.originality?.mode==='university_threshold_no_service'&&item.text===originalityText(item.originality))))))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
   const anti=passport.items.find(item=>item.id==='ANTIPLAGIARISM');
   if(!anti.originality||anti.text!==originalityText(anti.originality)||anti.originality.mode==='service_only'&&!/STUDKAB/i.test(anti.source)||['university_threshold','university_no_threshold'].includes(anti.originality.mode)&&!anti.originality.service)return {status:409,data:{error:'Укажите подтверждённое основание проверки оригинальности'}};
-  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,extracted_text');
+  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
   if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
   let enumerated;
   try{enumerated=inventoryExplicitClauses({status:'draft',items:passport.items.filter(i=>!/^REQ_[a-f0-9]{32}_\d+$/u.test(i.id))},attachments).items.filter(i=>/^REQ_[a-f0-9]{32}_\d+$/u.test(i.id));}
   catch(e){return {status:409,data:{error:e.message}};}
-  if(enumerated.some(found=>!passport.items.some(i=>i.id===found.id&&i.text===found.text&&i.source_attachment_id===found.source_attachment_id)))
+  if(enumerated.some(found=>!passport.items.some(i=>i.id===found.id&&i.text===found.text&&i.source_attachment_id===found.source_attachment_id&&i.required===true)))
    return {status:409,data:{error:'В задании или методичке найдены отдельные условия, которых нет в паспорте. Обновите черновик и уточните их.'}};
+  const questionError=await askUnresolvedStructure(db,request,user.id,attachments,passport.items,{requireAnswered:true});
+  if(questionError)return questionError;
   const [saved]=await db('studkab_requirement_passports?request_id=eq.'+request+'&id=eq.'+version+'&select=items&limit=1');
   if(!saved)return {status:409,data:{error:'Версия паспорта не найдена'}};
   const materials=await materialManifestGuard(db,request,version);
