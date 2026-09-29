@@ -66,6 +66,7 @@ test('SMTP failure before DATA is bounded; uncertain result after DATA is never 
  const fake=(codes)=>async()=>({read:async b=>{const s=codes.shift();if(!s)return null;const v=new TextEncoder().encode(s+'\r\n');b.set(v);return v.length;},write:async b=>b.length,close:()=>{}});
  const prefix=['220 ready','250 hello','334 username','334 password','235 authenticated','250 sender'];
  assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:fake([...prefix,'451 later'])}),{status:'pending'});
+ assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:async()=>{throw Error('connect failed');}}),{status:'pending'});
  assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:fake(['220 ready','250 hello','334 username','334 password','535 invalid'])}),{status:'failed'});
  assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:fake([...prefix,'250 recipient','354 go ahead'])}),{status:'unknown'});
 });
