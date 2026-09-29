@@ -19,11 +19,11 @@
   const permission=await Notification.requestPermission();
   if(permission!=='granted')throw new Error('Уведомления не разрешены. Разрешите их в настройках браузера или телефона.');
   const r=await registration(),{publicKey}=await Oblako.pushRequest({action:'key'});
-  let sub=await r.pushManager.getSubscription();
-  if(!sub){const raw=atob(publicKey.replace(/-/g,'+').replace(/_/g,'/'));sub=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(raw,c=>c.charCodeAt(0))});}
+  let sub=await r.pushManager.getSubscription(),created=false;
+  if(!sub){const raw=atob(publicKey.replace(/-/g,'+').replace(/_/g,'/'));sub=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(raw,c=>c.charCodeAt(0))});created=true;}
   const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
   try{const d=await Oblako.pushRequest({action:'subscribe',subscription:sub.toJSON(),timezone});localStorage.setItem(key,JSON.stringify({id:d.id}));}
-  catch(e){await sub.unsubscribe();throw e;}
+  catch(e){if(created)await sub.unsubscribe();throw e;}
   return 'Push включён на этом устройстве ('+timezone+'). Для проверки используйте кнопку рядом.';
  }
  async function action(name){
