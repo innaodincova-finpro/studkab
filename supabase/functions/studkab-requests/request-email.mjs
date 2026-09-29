@@ -16,7 +16,7 @@ export async function sendRequestEmail(row,{from,password,to,connect=()=>Deno.co
  const subject='Новая заявка №'+row.number+' в STUDKAB';
  const body='Опубликована заявка №'+row.number+'. Откройте её в реестре после входа: '+url;
  const message='From: STUDKAB <'+from+'>\r\nTo: <'+to+'>\r\nSubject: =?UTF-8?B?'+b64(subject)+'?=\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'+fold(b64(body))+'\r\n.\r\n';
- let conn,deadlineTimer;
+ let conn,deadlineTimer,dataStarted=false;
  try{
   let connectTimer;
   const opening=connect();
@@ -63,13 +63,14 @@ export async function sendRequestEmail(row,{from,password,to,connect=()=>Deno.co
   outcome=await step('MAIL FROM:<'+from+'>',[250]);if(outcome)return outcome;
   outcome=await step('RCPT TO:<'+to+'>',[250,251]);if(outcome)return outcome;
   outcome=await step('DATA',[354]);if(outcome)return outcome;
+  dataStarted=true;
   await write(message);
   const final=await response();
   if(final!==250)return {status:'unknown'};
   try{await write('QUIT\r\n');}catch{}
   return {status:'accepted'};
  }catch{
-  return {status:'unknown'};
+  return {status:dataStarted?'unknown':'pending'};
  }finally{
   clearTimeout(deadlineTimer);
   try{conn?.close();}catch{}
