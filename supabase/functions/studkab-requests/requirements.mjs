@@ -165,8 +165,8 @@ export function inventoryExplicitClauses(passport,attachments){
  return changed?{...passport,items}:passport;
 }
 
-async function structureQuestionId(request,question){
- const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(request+'\n'+question)));
+async function structureQuestionId(request,fileHash,question){
+ const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(request+'\n'+fileHash+'\n'+question)));
  hash[6]=(hash[6]&15)|64;hash[8]=(hash[8]&63)|128;
  const hex=Array.from(hash.slice(0,16),b=>b.toString(16).padStart(2,'0')).join('');
  return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
@@ -175,8 +175,8 @@ async function structureQuestionId(request,question){
 async function askUnresolvedStructure(db,request,actor,attachments,items){
  const issues=structureFindings(currentAttachments(attachments),items).filter(i=>!i.resolved&&!i.tooMany);
  for(const issue of issues){
-  const question=`В файле «${issue.fileName}» номер ${issue.number} указан для двух разделов: «${issue.first}» и «${issue.second}». Уточните у преподавателя правильный номер второго раздела и укажите основание ответа.`;
-  const result=await db('rpc/studkab_clarification_ask','POST',{p_request:request,p_actor:actor,p_id:await structureQuestionId(request,question),p_item:'STRUCTURE',p_question:question});
+  const question=`В файле «${issue.fileName}» номер ${issue.number} указан для двух разделов: «${issue.first}» и «${issue.second}». Уточните у преподавателя правильную нумерацию этих разделов и укажите основание ответа.`;
+  const result=await db('rpc/studkab_clarification_ask','POST',{p_request:request,p_actor:actor,p_id:await structureQuestionId(request,issue.fileHash,question),p_item:'STRUCTURE',p_question:question});
   if(!result?.id||result.error)return {status:409,data:{error:'Не удалось сохранить вопрос студенту: '+(result?.error||'сервер не подтвердил запись')}};
  }
  return null;
@@ -261,7 +261,7 @@ export async function requirementAction(input,user,{db,config}){
   if(!/^[a-f0-9]{64}$/.test(input.sourceFingerprint||''))return {status:400,data:{error:'Сначала сохраните актуальные материалы'}};
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,material_manifest,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
-  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,extracted_text');
+  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
   if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
   const sameSource=rows.length&&rows[0].status!=='stale'&&rows[0].source_fingerprint===input.sourceFingerprint;
   let linked;

@@ -209,7 +209,7 @@ test('duplicate section number creates one stable question for the student on re
  const deps={config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
   if(path.startsWith('studkab_requirement_passports?'))return rows;
-  if(path.startsWith('studkab_request_attachments?'))return [file];
+  if(path.startsWith('studkab_request_attachments?')){assert.match(path,/\bfile_hash\b/);return [file];}
   if(path==='rpc/studkab_requirement_passport_save'){
    const created={id:'44444444-4444-4444-8444-444444444444',status:'draft',source_fingerprint:'a'.repeat(64),items:body.p_items};rows=[created];return created;
   }
@@ -224,9 +224,18 @@ test('duplicate section number creates one stable question for the student on re
  const user={id:actor,email:'executor@example.test'};
  assert.equal((await requirementAction(input,user,deps)).status,409);
  acknowledge=true;
- assert.equal((await requirementAction(input,user,deps)).data.created,false);
- assert.equal((await requirementAction(input,user,deps)).data.created,false);
- assert.equal(savedQuestions.size,1);
+  assert.equal((await requirementAction(input,user,deps)).data.created,false);
+  assert.equal((await requirementAction(input,user,deps)).data.created,false);
+  assert.equal(savedQuestions.size,1);
+  const structure=rows[0].items.find(item=>item.id==='STRUCTURE');
+  Object.assign(structure,{verified:true,source:'Ответ преподавателя',text:'Структура: Анализ себестоимости по периодам — 2.4',structure_resolutions:[{
+   fileHash:file.file_hash,number:'2.3',chosenNumber:'2.4',first:'Анализ выручки по периодам',second:'Анализ себестоимости по периодам',verified:true,reason:'Подтверждено преподавателем'
+  }]});
+  assert.equal((await requirementAction(input,user,deps)).status,200);
+  assert.equal(savedQuestions.size,1);
+  file.file_hash='e'.repeat(64);
+  assert.equal((await requirementAction(input,user,deps)).status,200);
+  assert.equal(savedQuestions.size,2);
 });
 
 const semanticInput={
