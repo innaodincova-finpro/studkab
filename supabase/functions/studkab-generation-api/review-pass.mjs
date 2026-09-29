@@ -33,6 +33,13 @@ const criteria=genericLabels.map((_,i)=>i<13?'C'+String(i+1).padStart(2,'0'):'S0
 // This review receives only extracted DOCX body text. These claims require
 // rendered pages or an actual Word open and cannot be certified by this pass.
 const visualOnly=['C11','C12','S02'];
+const significantTerms=text=>new Set((text.toLocaleLowerCase('ru').match(/[\p{L}\p{N}]+/gu)||[])
+ .filter(term=>term.length>=5).map(term=>term.slice(0,5)));
+const quoteAddressesRequirement=(requirement,sourceQuote,wordQuote)=>{
+ const terms=significantTerms(requirement);
+ const source=significantTerms(sourceQuote),word=significantTerms(wordQuote);
+ return terms.size>0&&[...terms].some(term=>source.has(term)&&word.has(term));
+};
 
 export function parseReviewReport(raw,hash,packet){
  let data;try{data=JSON.parse(raw);}catch{return null;}
@@ -63,6 +70,7 @@ export function parseReviewReport(raw,hash,packet){
      !item.source_attachment_id||item.source_attachment_id!==r.sourceId||
      !source||r.sourceQuote.trim().length<12||r.wordQuote.trim().length<12||
      !source.text.includes(r.sourceQuote)||!packet.word.text.includes(r.wordQuote)||
+     !quoteAddressesRequirement(item.text||'',r.sourceQuote,r.wordQuote)||
      r.wordLocator.trim().length<3||r.explanation.trim().length<10)return null;
    }
    requirements.push({id:item.id,status:r.status,sourceId:r.sourceId,sourceQuote:r.sourceQuote,
