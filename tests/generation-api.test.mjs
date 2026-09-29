@@ -39,11 +39,11 @@ test('saved AI report is validated before display, and malformed or wrong hash s
 });
 test('per-request review accepts only exact source and Word excerpts and leaves unverifiable items open',()=>{
  const source='По заданию необходимо представить анализ выручки и выводы по результатам.';
- const word='В разделе 2 представлен анализ выручки и выводы по результатам.';
+ const word='В разделе 2 анализ выручки показывает рост на 7 процентов; выводы объясняют причины изменения.';
  const packet={word:{text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true,source_attachment_id:'source-1'},
   {id:'ANTIPLAGIARISM',text:'Внешний PDF',required:true}]},materials:[{id:'source-1',text:source}]};
  const requirements=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',
-  wordQuote:'анализ выручки и выводы',wordLocator:'раздел 2',explanation:'Описаны анализ выручки и итоговые выводы'},
+  wordQuote:'анализ выручки показывает рост на 7 процентов; выводы объясняют причины изменения',wordLocator:'раздел 2',explanation:'Описаны анализ выручки и итоговые выводы'},
   {id:'ANTIPLAGIARISM',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Внешний отчёт проверяется отдельно'}];
  const raw=JSON.stringify({...JSON.parse(report),requirements});
  assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].status,'pass');
@@ -59,12 +59,18 @@ test('per-request review accepts only exact source and Word excerpts and leaves 
  const wrongSubject={...packet,word:{text:'В разделе 2 представлен анализ расходов и выводы по результатам.'}};
  const mismatched={...requirements[0],sourceQuote:'анализ выручки и выводы',wordQuote:'анализ расходов и выводы'};
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[mismatched,requirements[1]]}),reviewHash,wrongSubject),null);
+ const echoed='В задании требуется проанализировать выручку предприятия и сформулировать выводы';
+ const echoPacket={...packet,passport:{items:[{...packet.passport.items[0],text:'Проанализировать выручку предприятия и сформулировать выводы'},packet.passport.items[1]]},
+  materials:[{id:'source-1',text:echoed+'.'}],word:{text:'Введение. '+echoed+'. Далее рассматривается другая тема.'}};
+ const echoRow={...requirements[0],sourceQuote:echoed,wordQuote:echoed,wordLocator:'Введение, предложение 2'};
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[echoRow,requirements[1]]}),reviewHash,echoPacket),null);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0],{...requirements[1],status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',wordQuote:'анализ выручки и выводы',wordLocator:'раздел 2',explanation:'Внешняя проверка прошла'}]}),reviewHash,packet),null);
 });
 test('server archives validated per-item review evidence for the current Word only',async()=>{
- const excerpt='анализ выручки и выводы',rows=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',
-  sourceQuote:excerpt,wordQuote:excerpt,wordLocator:'раздел 2',explanation:'Сверены анализ выручки и итоговые выводы'}];
- const packet={word:{text:'В разделе 2 есть '+excerpt},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true,source_attachment_id:'source-1'}]},
+ const excerpt='анализ выручки и выводы',wordExcerpt='анализ выручки показывает рост на 7 процентов';
+ const rows=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',
+  sourceQuote:excerpt,wordQuote:wordExcerpt,wordLocator:'раздел 2',explanation:'Сверены анализ выручки и итоговые выводы'}];
+ const packet={word:{text:'В разделе 2 '+wordExcerpt},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true,source_attachment_id:'source-1'}]},
   materials:[{id:'source-1',text:'В задании требуется '+excerpt}]};
  const calls=[],stored=JSON.stringify({...JSON.parse(report),requirements:rows});
  const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
