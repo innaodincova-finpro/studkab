@@ -34,7 +34,7 @@ const criteria=genericLabels.map((_,i)=>i<13?'C'+String(i+1).padStart(2,'0'):'S0
 // rendered pages or an actual Word open and cannot be certified by this pass.
 const visualOnly=['C11','C12','S02'];
 
-export function parseReviewReport(raw,hash){
+export function parseReviewReport(raw,hash,packet){
  let data;try{data=JSON.parse(raw);}catch{return null;}
  if(!data||data.wordHash!==hash||!Array.isArray(data.findings)||data.findings.length>32)return null;
  const allowed=new Set(criteria),checked=data.coverage?.checked,notChecked=data.coverage?.notChecked;
@@ -43,8 +43,33 @@ export function parseReviewReport(raw,hash){
   visualOnly.some(code=>!notChecked.includes(code)))return null;
  if(data.findings.some(f=>!f||!allowed.has(f.code)||!['fail','needs_evidence'].includes(f.status)||
   ![f.location,f.requirement,f.observation].every(s=>typeof s==='string'&&s.trim().length>0&&s.length<=4000)))return null;
+ let requirements;
+ if(packet){
+  const expected=packet.passport?.items,rows=data.requirements;
+  if(!Array.isArray(expected)||!expected.length||!Array.isArray(rows)||rows.length!==expected.length||
+   new Set(rows.map(r=>r?.id)).size!==expected.length||
+   rows.some(r=>!expected.some(item=>item.id===r?.id)))return null;
+  const materials=new Map((packet.materials||[]).map(m=>[m.id,m]));
+  requirements=[];
+  for(const item of expected){
+   const r=rows.find(row=>row.id===item.id);
+   if(!['pass','fail','not_checked'].includes(r.status)||
+    !['sourceId','sourceQuote','wordQuote','wordLocator','explanation'].every(k=>typeof r[k]==='string'&&r[k].length<=2000))return null;
+   if(r.status==='pass'){
+    const source=materials.get(r.sourceId);
+    // Exact excerpts are necessary evidence, but not a proof of visual layout,
+    // external originality, or the semantic correctness of a calculation.
+    if(['ANTIPLAGIARISM','CALCULATIONS'].includes(item.id)||/оформлен|страниц|визуаль|шрифт|поля|нумерац|pdf|антиплагиат/i.test(item.text||'')||
+     !source||r.sourceQuote.trim().length<12||r.wordQuote.trim().length<12||
+     !source.text.includes(r.sourceQuote)||!packet.word.text.includes(r.wordQuote)||
+     r.wordLocator.trim().length<3||r.explanation.trim().length<10)return null;
+   }
+   requirements.push({id:item.id,status:r.status,sourceId:r.sourceId,sourceQuote:r.sourceQuote,
+    wordQuote:r.wordQuote,wordLocator:r.wordLocator,explanation:r.explanation});
+  }
+ }
  return {wordHash:hash,findings:data.findings.map(f=>({code:f.code,location:f.location,requirement:f.requirement,
-  observation:f.observation,status:f.status})),coverage:{checked,notChecked}};
+  observation:f.observation,status:f.status})),coverage:{checked,notChecked},...(requirements?{requirements}:{})};
 }
 
 // Every byte of the review context comes from the server. A cached browser
@@ -64,7 +89,7 @@ export async function reviewPacket(db,request,versionId,inspect=inspectWord){
   throw Error('REVIEW_SYNTHETIC_PAID_BLOCKED');
  if(!attachments.some(row=>row.category==='assignment'||row.category==='methodology'))throw Error('REVIEW_MATERIALS_MISSING');
  if(attachments.some(row=>!row.extracted_text?.trim()))throw Error('REVIEW_MATERIALS_UNREADABLE');
- const materials=attachments.map(row=>({category:row.category,fileHash:row.file_hash,text:row.extracted_text}));
+ const materials=attachments.map(row=>({id:row.id,category:row.category,fileHash:row.file_hash,text:row.extracted_text}));
  const packet={word:{revision:version.revision,fileHash:version.file_hash,documentHash:version.document_hash,text:word.text},
   passport:{revision:passport.revision,sourceFingerprint:passport.source_fingerprint,items:passport.items},materials};
  if(new TextEncoder().encode(JSON.stringify(packet)).byteLength>155000)throw Error('REVIEW_CONTEXT_TOO_BIG');
@@ -85,6 +110,12 @@ export function reviewPrompt(packet,financeProfile=false){
   criteria.map((code,i)=>code+' — '+labels[i]).join('; ')+'. '+
   'Извлечённый текст сам по себе не подтверждает открытие и редактирование в Microsoft Word (C11), '+
   'фактические страницы и объём (C12), визуальное оформление (S02). Укажи их в notChecked, если в пакете нет прямых доказательств. '+
-  'Если приложение содержит только библиографические записи, нельзя считать прочитанными полные тексты источников (C10).';
+  'Если приложение содержит только библиографические записи, нельзя считать прочитанными полные тексты источников (C10). '+
+  'Для КАЖДОГО пункта passport.items также верни requirements: [{"id":"...","status":"pass|fail|not_checked",'+
+  '"sourceId":"id приложения","sourceQuote":"дословная выдержка из текста приложения",'+
+  '"wordQuote":"дословная выдержка из Word","wordLocator":"раздел и место",'+
+  '"explanation":"что именно подтверждено или что мешает"}]. '+
+  'pass только при достаточном проверяемом текстовом свидетельстве из обоих документов; если оно отсутствует, not_checked. '+
+  'Внешний PDF, страницы, визуальное оформление и правильность вычисления по одному тексту не подтверждай.';
  return {system,user:JSON.stringify(packet)};
 }

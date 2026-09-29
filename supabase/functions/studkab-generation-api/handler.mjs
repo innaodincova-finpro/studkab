@@ -176,8 +176,15 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     if(!uuid.test(input.request||'')||!uuid.test(input.versionId||''))return reply({error:'INVALID_INPUT'},400);
     const [version]=await db('studkab_result_versions?request_id=eq.'+input.request+'&select=id,file_hash&order=revision.desc&limit=1');
     if(!version||version.id!==input.versionId)return reply({error:'REVIEW_VERSION_STALE'},409);
-    const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&select=id,status&order=revision.desc&limit=1');
+    const [passport]=await db('studkab_requirement_passports?request_id=eq.'+input.request+'&select=id,status,items&order=revision.desc&limit=1');
     if(!passport||passport.status!=='approved')return reply({error:'PASSPORT_REQUIRED'},409);
+    let reviewContext=null;
+    if(Array.isArray(passport.items)&&passport.items.length){
+     try{reviewContext=await readReviewPacket(db,input.request,input.versionId);}
+     catch{return reply({error:'REVIEW_UNAVAILABLE'},409);}
+     if(reviewContext.passport.id!==passport.id||reviewContext.version.file_hash!==version.file_hash)
+      return reply({error:'REVIEW_VERSION_STALE'},409);
+    }
     // The DB gate includes every matching job, including old owners and old
     // passports for these bytes. Paginate so an early failure cannot vanish.
     const jobs=[];
@@ -194,9 +201,15 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
      const target=job.snapshot?.input?.review_target;
      if(target?.fileHash!==version.file_hash)continue;
      const [part]=await db('studkab_gen_parts?job_id=eq.'+job.id+'&spec->>id=eq.quality_review&select=state,result&limit=1');
-     const report=part?.state==='done'?parseReviewReport(part.result,version.file_hash):null;
+     const report=part?.state==='done'?parseReviewReport(part.result,version.file_hash,reviewContext?.packet):null;
+     const current=target.versionId===version.id&&target.passportId===passport.id;
+     if(report?.requirements&&current&&job.status==='complete'){
+      try{await db('rpc/studkab_requirement_review_ingest',{p_request:input.request,p_version:version.id,
+       p_job:job.id,p_actor:user.id,p_requirements:report.requirements});}
+      catch{return reply({error:'REQUIREMENT_REVIEW_UNAVAILABLE'},409);}
+     }
      reports.push({jobId:job.id,createdAt:job.created_at,passportId:target.passportId,
-      current:target.versionId===version.id&&target.passportId===passport.id,
+      current,
       status:job.status==='unknown'||part?.state==='unknown'?'unknown':
        part?.state==='done'?(report?'complete':'invalid'):
        job.status==='complete'?'invalid':job.status,report});

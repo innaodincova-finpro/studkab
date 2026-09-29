@@ -55,11 +55,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 36 then
-    raise exception 'Expected 36 STUDKAB tables, found %', table_count;
+  if table_count <> 38 then
+    raise exception 'Expected 38 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 36 then
-    raise exception 'RLS enabled on only % of 36 STUDKAB tables', rls_count;
+  if rls_count <> 38 then
+    raise exception 'RLS enabled on only % of 38 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -71,6 +71,10 @@ begin
     or to_regclass('public.studkab_result_review_bindings') is null
     or to_regclass('public.studkab_quality_evidence_bindings') is null then
     raise exception 'C109 binding tables are missing';
+  end if;
+  if to_regclass('public.studkab_result_requirement_snapshots') is null
+    or to_regclass('public.studkab_result_requirement_evidence') is null then
+    raise exception 'C177 requirement coverage tables are missing';
   end if;
 end
 $$;
@@ -97,6 +101,8 @@ begin
      or to_regprocedure('public.studkab_gen_settle(uuid,integer,uuid,uuid,text,jsonb)') is null
      or to_regprocedure('public.studkab_requirement_passport_save(uuid,uuid,text,text,jsonb,text,integer,jsonb)') is null
      or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer,jsonb)') is null
+     or to_regprocedure('public.studkab_requirement_coverage_check(uuid,uuid)') is null
+     or to_regprocedure('public.studkab_requirement_review_ingest(uuid,uuid,uuid,uuid,jsonb)') is null
      or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null
      or to_regprocedure('public.studkab_gen_cancel(uuid,uuid)') is null
      or to_regprocedure('public.claim_studkab_dialog_telegram()') is null then

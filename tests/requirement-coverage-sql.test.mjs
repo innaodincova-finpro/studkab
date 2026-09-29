@@ -47,6 +47,19 @@ test('current passport items need independent, version-bound evidence before any
   assert.equal((await rpc('studkab_quality_check',[request,version])).eligible,false);
   assert.equal((await one('select count(*)::int n from studkab_result_requirement_snapshots where version_id=$1',[version])).n,1);
   assert.equal((await one('select file_hash from studkab_result_requirement_snapshots where version_id=$1',[version])).file_hash,receipt.fileHash);
+  const job=randomUUID(),reviewRows=requirements.map((item,index)=>({id:item.id,
+   status:item.id==='ANTIPLAGIARISM'?'not_checked':'pass',sourceId:'source-'+(index+1),
+   sourceQuote:'Точное основание из материала '+(index+1),wordQuote:'Проверяемый фрагмент точного Word '+(index+1),
+   wordLocator:'раздел '+(index+1),explanation:'Сверено с исходным материалом и текущим Word'}));
+  const snapshot={input:{review_target:{versionId:version,fileHash:receipt.fileHash,passportId:p.id}}};
+  await db.query("insert into studkab_gen_jobs(id,owner_id,request_id,version,snapshot,passport_id,work_kind,max_cost_microusd,status) values($1,$2,$3,$4,$5,$6,'coursework',250000,'complete')",[job,actor.executor,request,randomUUID(),snapshot,p.id]);
+  await db.query("insert into studkab_gen_parts(job_id,ordinal,spec,state,result) values($1,0,'{\"id\":\"quality_review\"}','done',$2)",[job,JSON.stringify({requirements:reviewRows})]);
+  await assert.rejects(()=>rpc('studkab_requirement_review_ingest',[request,version,job,actor.other,reviewRows]),/FORBIDDEN/);
+  await assert.rejects(()=>rpc('studkab_requirement_review_ingest',[request,version,job,actor.executor,reviewRows.slice(1)]),/REQUIREMENT_REVIEW_STALE/);
+  assert.equal((await rpc('studkab_requirement_review_ingest',[request,version,job,actor.executor,reviewRows])).items,requirements.length);
+  await rpc('studkab_requirement_review_ingest',[request,version,job,actor.executor,reviewRows]);
+  assert.equal((await one('select count(*)::int n from studkab_result_requirement_evidence where review_job_id=$1',[job])).n,requirements.length);
+  assert.deepEqual((await rpc('studkab_requirement_coverage_check',[request,version])).blockingCodes,['ANTIPLAGIARISM']);
   await db.exec('reset role');
   assert.equal((await one("select has_table_privilege('service_role','public.studkab_result_requirement_evidence','INSERT') allowed")).allowed,false);
   assert.equal((await one("select has_function_privilege('authenticated','public.studkab_requirement_evidence_record(uuid,uuid,uuid,text,text,text,text,text)','EXECUTE') allowed")).allowed,false);

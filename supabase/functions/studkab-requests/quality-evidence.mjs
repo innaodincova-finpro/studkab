@@ -56,7 +56,9 @@ export async function qualityAction(input,user,{db,config}){
   if(input.action==='quality-state'){
    const kinds=['internal_borrowing','external_originality'];
    const rows=(await Promise.all(kinds.map(k=>db('studkab_quality_evidence?select=id,kind,payload,created_at,report_hash&version_id=eq.'+input.versionId+'&kind=eq.'+k+'&order=sequence.desc&limit=1')))).flat();
-   return {data:{bindings,thresholdRequirement:bindings.thresholdRequirement,eligible:state.eligible,blockingCodes:state.blockingCodes,latest:Object.fromEntries(['internal_borrowing','external_originality'].map(k=>[k,clean(rows.find(e=>e.kind===k))]))}};
+   return {data:{bindings,thresholdRequirement:bindings.thresholdRequirement,eligible:state.eligible,blockingCodes:state.blockingCodes,
+    requirementCoverage:state.requirementCoverage||null,
+    latest:Object.fromEntries(['internal_borrowing','external_originality'].map(k=>[k,clean(rows.find(e=>e.kind===k))]))}};
   }
   if(input.action==='quality-scan'){const computed=await scan(db,input.id,input.versionId,bindings);return {data:{scan:computed.scan,scanHash:computed.scanHash}};}
   if(input.action!=='quality-save'||!uuid.test(input.evidenceId||''))return fail('QUALITY_INVALID',400);

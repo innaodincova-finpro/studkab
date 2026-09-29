@@ -26,7 +26,7 @@
  function disposition(name){return '<label>Результат проверки<select data-q="'+name+'" style="width:100%"><option value="manual">Нужна ручная проверка</option><option value="fail">Не пройдено</option><option value="pass">Пройдено</option></select></label>';}
  function mount(host,options){
   var state=null,verified=false,dirty=false,scan=null,scanHash=null,busy=false,currentBinding=null,operations={},lastReady=false,aiJob=null,aiBusy=false,aiBinding=null;
-  host.innerHTML='<details data-ai-review><summary>ИИ проверка содержания Word</summary><p class="hint">Помощник проверяет сохранённую версию Word по паспорту и приложенным материалам. Он показывает замечания и пробелы доказательств; его ответ не ставит отметки «пройдено» и не передаёт файл студенту. Используется платный API с отдельным подтверждением расчётного предела.</p><button type="button" class="chip" data-ai-start>Оценить стоимость и запустить</button><button type="button" class="chip" data-ai-refresh>Проверить результат</button><button type="button" class="chip" data-ai-recover>Найти предыдущую проверку</button><p role="status" data-ai-status>Проверка ещё не запущена.</p><pre data-ai-result style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre></details><details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Они не заменяют проверку содержания по 16 критериям.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
+  host.innerHTML='<details data-ai-review><summary>ИИ проверка содержания Word</summary><p class="hint">Помощник сопоставляет условия этой заявки с точным Word и доступными текстами материалов. Сервер сохраняет только подтверждённые цитатами текстовые свидетельства; неподтверждённое остаётся открытым и блокирует обычную выдачу. Проверка платная и требует подтверждения предела.</p><button type="button" class="chip" data-ai-start>Оценить стоимость и запустить</button><button type="button" class="chip" data-ai-refresh>Проверить результат</button><button type="button" class="chip" data-ai-recover>Найти предыдущую проверку</button><p role="status" data-ai-status>Проверка ещё не запущена.</p><pre data-ai-result style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre></details><details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Внешний отчёт и недоступные помощнику проверки остаются отдельными условиями выдачи.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
   var msg=host.querySelector('[data-quality-status]'),body=host.querySelector('[data-quality-body]');
   var aiStatus=host.querySelector('[data-ai-status]'),aiResult=host.querySelector('[data-ai-result]');
   function guard(){options.guard();if(!host.isConnected)throw Error('Окно проверки закрыто.');}
@@ -95,6 +95,14 @@
     if(!findings.length){var empty=document.createElement('p');empty.textContent='Модель не указала доказанных замечаний. Это не положительная приёмка.';block.append(empty);}
     findings.forEach(function(f){var entry=document.createElement('p');entry.style.whiteSpace='pre-wrap';
      entry.textContent=f.code+' · '+(f.status==='fail'?'Замечание':'Нужны доказательства')+'\nМесто: '+f.location+'\nТребование: '+f.requirement+'\nНаблюдение: '+f.observation;block.append(entry);});
+    if(Array.isArray(item.report.requirements)){
+     var heading=document.createElement('h5');heading.textContent='Условия этой заявки';block.append(heading);
+     item.report.requirements.forEach(function(r){var entry=document.createElement('p');entry.style.whiteSpace='pre-wrap';
+      entry.textContent=r.id+' · '+(r.status==='pass'?'Текстовое свидетельство':r.status==='fail'?'Расхождение':'Не проверено')+
+       '\nОснование: '+(r.sourceId||'не подтверждено')+(r.sourceQuote?' — '+r.sourceQuote:'')+
+       '\nWord: '+(r.wordLocator||'не подтверждено')+(r.wordQuote?' — '+r.wordQuote:'')+
+       '\nВывод: '+(r.explanation||'недостаточно доказательств');block.append(entry);});
+    }
     var gaps=document.createElement('p');gaps.textContent='Не проверено: '+(item.report.coverage.notChecked.join(', ')||'не указано')+'.';block.append(gaps);aiResult.append(block);
    });
    aiStatus.textContent=unresolved.length?'Обычная выдача заблокирована: для этих байтов Word есть незакрытые ИИ замечания или неизвестный результат. Записей: '+unresolved.length+'.':
@@ -128,6 +136,10 @@
   function value(name){return body.querySelector('[data-q="'+name+'"]');}
   function put(name,v){var node=value(name);if(node)node.value=v===undefined||v===null?'':String(v);}
   function statusText(){
+   if(state?.blockingCodes?.includes('requirement_coverage')){
+    var gaps=state.requirementCoverage?.blockingCodes||[];
+    return 'Обычная выдача заблокирована: по условиям этой заявки нет подтверждения — '+(gaps.length?gaps.join(', '):'откройте ИИ проверку и обновите результат')+'.';
+   }
    if(state?.blockingCodes?.includes('ai_review_open'))return 'Обычная передача заблокирована: проверка этого Word ещё идёт, её результат неизвестен либо сохранены открытые замечания. Откройте ИИ-проверку для подробностей; после исправления Word потребуется новый отчёт.';
    if(state?.blockingCodes?.includes('ai_review_required'))return 'Обычная передача заблокирована: для текущих Word и паспорта нет завершённого подтверждённого ИИ-отчёта. Запустите проверку после подтверждения стоимости.';
    return ready()?'Внутренняя и внешняя проверки сохранены для этой версии Word. Завершите проверку содержания по критериям.':'Обычная передача заблокирована, пока обе проверки этой версии не пройдены. Тестовая передача не подтверждает качество.';

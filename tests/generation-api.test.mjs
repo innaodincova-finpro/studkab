@@ -37,6 +37,46 @@ test('saved AI report is validated before display, and malformed or wrong hash s
  assert.equal(parseReviewReport(report.replace('Задание',''),reviewHash),null);
  assert.equal(parseReviewReport('not json',reviewHash),null);
 });
+test('per-request review accepts only exact source and Word excerpts and leaves unverifiable items open',()=>{
+ const source='По заданию необходимо представить анализ выручки и выводы по результатам.';
+ const word='В разделе 2 представлен анализ выручки и выводы по результатам.';
+ const packet={word:{text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true},
+  {id:'ANTIPLAGIARISM',text:'Внешний PDF',required:true}]},materials:[{id:'source-1',text:source}]};
+ const requirements=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',
+  wordQuote:'анализ выручки и выводы',wordLocator:'раздел 2',explanation:'Описаны анализ выручки и итоговые выводы'},
+  {id:'ANTIPLAGIARISM',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Внешний отчёт проверяется отдельно'}];
+ const raw=JSON.stringify({...JSON.parse(report),requirements});
+ assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].status,'pass');
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0]]}),reviewHash,packet),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],sourceQuote:'вымышленное основание'},requirements[1]]}),reviewHash,packet),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],wordQuote:'несуществующий фрагмент'},requirements[1]]}),reviewHash,packet),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0],{...requirements[1],status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',wordQuote:'анализ выручки и выводы',wordLocator:'раздел 2',explanation:'Внешняя проверка прошла'}]}),reviewHash,packet),null);
+});
+test('server archives validated per-item review evidence for the current Word only',async()=>{
+ const excerpt='анализ выручки и выводы',rows=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',
+  sourceQuote:excerpt,wordQuote:excerpt,wordLocator:'раздел 2',explanation:'Сверены анализ выручки и итоговые выводы'}];
+ const packet={word:{text:'В разделе 2 есть '+excerpt},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true}]},
+  materials:[{id:'source-1',text:'В задании требуется '+excerpt}]};
+ const calls=[],stored=JSON.stringify({...JSON.parse(report),requirements:rows});
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
+  config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+  readReviewPacket:async()=>({packet,passport:{id:passportId},version:{file_hash:reviewHash}}),
+  db:async(path,args)=>{calls.push({path,args});
+   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
+   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved',items:packet.passport.items}];
+   if(path.startsWith('studkab_gen_jobs'))return [{id:job,created_at:'2026-09-29',status:'complete',
+    snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}];
+   if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:stored}];
+   if(path==='rpc/studkab_requirement_review_ingest')return {items:1};return [];
+  }});
+ const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},
+  body:JSON.stringify({action:'quality-review-reports',request:requestId,versionId:reviewVersion})}));
+ assert.equal(response.status,200);
+ assert.equal((await response.json()).reports[0].report.requirements[0].status,'pass');
+ const saved=calls.find(c=>c.path==='rpc/studkab_requirement_review_ingest');
+ assert.equal(saved.args.p_job,job);
+ assert.deepEqual(saved.args.p_requirements,rows);
+});
 test('AI report registry reads immutable parts for exact Word and marks the current passport',async()=>{
  const calls=[];
  const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),db:async path=>{
