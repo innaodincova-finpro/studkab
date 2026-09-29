@@ -103,6 +103,8 @@ begin
      or to_regprocedure('public.studkab_requirement_passport_approve(uuid,uuid,uuid,jsonb,text,integer,jsonb)') is null
      or to_regprocedure('public.studkab_requirement_coverage_check(uuid,uuid)') is null
      or to_regprocedure('public.studkab_requirement_review_ingest(uuid,uuid,uuid,uuid,jsonb)') is null
+     or to_regprocedure('public.studkab_valid_result_review(uuid,uuid,jsonb)') is null
+     or to_regprocedure('public.studkab_auto_review_result(uuid,uuid,uuid,uuid,uuid,text,text)') is null
      or to_regprocedure('public.deliver_studkab_result(uuid,uuid,jsonb)') is null
      or to_regprocedure('public.studkab_gen_cancel(uuid,uuid)') is null
      or to_regprocedure('public.claim_studkab_dialog_telegram()') is null then

@@ -142,7 +142,7 @@
    }
    if(state?.blockingCodes?.includes('ai_review_open'))return 'Обычная передача заблокирована: проверка этого Word ещё идёт, её результат неизвестен либо сохранены открытые замечания. Откройте ИИ-проверку для подробностей; после исправления Word потребуется новый отчёт.';
    if(state?.blockingCodes?.includes('ai_review_required'))return 'Обычная передача заблокирована: для текущих Word и паспорта нет завершённого подтверждённого ИИ-отчёта. Запустите проверку после подтверждения стоимости.';
-   return ready()?'Внутренняя и внешняя проверки сохранены для этой версии Word. Завершите проверку содержания по критериям.':'Обычная передача заблокирована, пока обе проверки этой версии не пройдены. Тестовая передача не подтверждает качество.';
+   return ready()?state.requirementCoverage?'Доказательства по всем условиям этого паспорта и отдельные проверки сохранены для текущего Word.':'Внутренняя и внешняя проверки сохранены для этой версии Word. Завершите проверку содержания по критериям.':'Обычная передача заблокирована, пока все проверки этой версии не пройдены. Тестовая передача не подтверждает качество.';
   }
   function summary(evidence){return evidence?esc(labels[evidence.payload&&evidence.payload.disposition]||'Результат не подтверждён')+' · '+esc(new Date(evidence.createdAt||evidence.created_at).toLocaleString('ru-RU')):'Проверка не сохранена';}
   function findingsView(){
@@ -174,6 +174,12 @@
   function render(){
    var latest=state.latest||{},internal=latest.internal_borrowing,external=latest.external_originality,req=state.thresholdRequirement||{};
    body.innerHTML='<details open><summary>1. Внутренняя проверка заимствований</summary><p data-internal-saved>'+summary(internal)+'</p><p class="hint">Бесплатное сравнение доступных источников и повторов внутри текста. Совпадения рассматривает исполнитель.</p><button type="button" class="chip" data-quality-scan>Сравнить текст с доступными источниками</button><div data-quality-findings></div>'+disposition('internalDisposition')+'<label style="display:block">Вывод исполнителя<textarea data-q="internalNotes" rows="3" maxlength="4000" style="width:100%;box-sizing:border-box"></textarea></label><button type="button" class="chip" data-quality-save-internal>Сохранить внутреннюю проверку</button></details><details><summary>2. Внешний отчёт об оригинальности</summary><p data-external-saved>'+summary(external)+'</p><p class="hint">Прикрепите полученный PDF-отчёт до 5 МБ. Приложение не заказывает платную проверку и не подтверждает подлинность отчёта автоматически.</p><p><b>Условие из паспорта</b></p><p data-quality-threshold style="white-space:pre-wrap;overflow-wrap:anywhere"></p>'+field('service','Система проверки')+field('checkId','Номер проверки или отчёта')+field('checkedAt','Дата проверки','date')+'<div data-quality-required-threshold>'+field('thresholdPercent','Подтверждённый вузом порог, %','number')+'</div>'+field('actualPercent','Оригинальность по отчёту, %','number')+'<label style="display:block"><input type="checkbox" data-q="requirementConfirmed"> Я сверил основание проверки с паспортом</label><label style="display:block"><input type="checkbox" data-q="wordBindingConfirmed"> Я проверил, что PDF относится именно к открытому точному Word</label><label style="display:block;margin:10px 0">PDF-отчёт<input type="file" data-q="report" accept=".pdf,application/pdf" style="width:100%"></label>'+disposition('externalDisposition')+'<label style="display:block">Вывод и сведения для проверки<textarea data-q="externalNotes" rows="3" maxlength="4000" style="width:100%;box-sizing:border-box"></textarea></label><button type="button" class="chip" data-quality-save-external>Сохранить внешний отчёт</button><button type="button" class="chip" data-quality-report '+(external?'':'hidden')+'>Скачать сохранённый PDF</button></details>';
+   if(state.requirementCoverage){
+    var coverage=state.requirementCoverage,items=Array.isArray(state.requirements)?state.requirements:[],covered=coverage.evidenceIds||{},list=document.createElement('details'),title=document.createElement('summary'),rows=document.createElement('ol');
+    title.textContent='Условия этой заявки · подтверждено '+Object.keys(covered).length+' из '+items.length;list.append(title);
+    items.forEach(function(item){var row=document.createElement('li'),ok=Object.hasOwn(covered,item.id);row.textContent=(ok?'Подтверждено: ':'Не проверено: ')+(item.text||item.id)+' · '+(item.source||'источник не указан');rows.append(row);});
+    list.append(rows);body.prepend(list);
+   }
    body.querySelector('[data-quality-threshold]').textContent=req.text||'Пункт оригинальности не подтверждён. Уточните и утвердите паспорт; порог по умолчанию не установлен.';
    body.querySelector('[data-quality-required-threshold]').hidden=!['university_threshold','university_threshold_no_service'].includes(req.mode);
    if(req.mode==='university_threshold'){put('service',req.service);put('thresholdPercent',req.thresholdPercent);value('service').readOnly=true;value('thresholdPercent').readOnly=true;}
@@ -234,7 +240,7 @@
   function changed(){dirty=true;msg.textContent='Есть несохранённые изменения проверки. Сохраните их или обновите проверки, чтобы отменить ввод. Обычная передача недоступна.';notify();}
   body.addEventListener('input',changed);body.addEventListener('change',changed);
   controls();
-  return {sync:function(){controls(true);},refresh:async function(){try{await refresh();}catch(e){state=null;msg.textContent=e.message||'Проверки недоступны.';}finally{controls();}},ready:function(){return lastReady;},reason:function(){return state?statusText():msg.textContent;},invalidate:function(){state=null;notify();}};
+  return {sync:function(){controls(true);},refresh:async function(){try{await refresh();}catch(e){state=null;msg.textContent=e.message||'Проверки недоступны.';}finally{controls();}},ready:function(){return lastReady;},coverage:function(){return state?.requirementCoverage||null;},reason:function(){return state?statusText():msg.textContent;},invalidate:function(){state=null;notify();}};
  }
  global.QualityEvidence={mount:mount,reviewSuggestions:reviewSuggestions};
 })(window);

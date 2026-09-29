@@ -134,7 +134,9 @@ begin
  if s.binding_id is null or not exists(select 1 from jsonb_array_elements(s.items) i where i->>'id'=p_item)
  or not exists(select 1 from public.studkab_result_versions v where v.id=p_version and v.file_hash=s.file_hash and v.document_hash=s.document_hash)
  then raise exception 'REQUIREMENT_BINDING_STALE'; end if;
- if p_disposition not in ('pass','fail','not_checked','not_applicable')
+ -- A free-form service operation cannot assert a positive result. Only the
+ -- completed job ingestion above can write a validated positive quotation.
+ if p_disposition not in ('fail','not_checked')
  or length(trim(coalesce(p_source_locator,''))) not between 3 and 500
  or length(coalesce(p_word_locator,''))>500 or length(coalesce(p_explanation,''))>2000
  or (p_disposition='pass' and length(trim(coalesce(p_word_locator,'')))<3)
@@ -249,6 +251,106 @@ begin
  if coverage->>'eligible' is distinct from 'true' then missing:=missing||jsonb_build_array('requirement_coverage'); end if;
  return jsonb_build_object('eligible',jsonb_array_length(missing)=0,
   'blockingCodes',missing,'evidenceIds',ids,'bindings',c,'requirementCoverage',coverage);
+end $$;
+
+-- The historic 16-item reviews remain readable. For a new review, the server
+-- snapshots the exact evidence IDs for every item of this passport. A caller
+-- cannot supply a positive status, invent a criterion, or reuse stale evidence.
+create function public.studkab_valid_result_review(p_request uuid,p_version uuid,p_criteria jsonb)
+returns boolean language plpgsql stable security invoker set search_path='' as $$
+declare coverage jsonb; expected jsonb;
+begin
+ coverage:=public.studkab_requirement_coverage_check(p_request,p_version);
+ if coverage->>'eligible' is distinct from 'true' then return false; end if;
+ expected:=jsonb_build_object('_mode','passport_coverage_v1',
+  'bindingId',coverage->'bindingId','evidenceIds',coverage->'evidenceIds');
+ return p_criteria=expected;
+end $$;
+
+create function public.studkab_auto_review_result(p_request uuid,p_version uuid,p_review uuid,p_reviewer uuid,
+ p_recipient uuid,p_file_hash text,p_document_hash text) returns jsonb
+language plpgsql security invoker set search_path='' as $$
+declare verdict jsonb; coverage jsonb; criteria jsonb;
+begin
+ perform pg_advisory_xact_lock(hashtextextended(p_request::text,713));
+ verdict:=public.studkab_quality_check(p_request,p_version);
+ coverage:=verdict->'requirementCoverage';
+ if verdict->>'eligible' is distinct from 'true' or coverage->>'eligible' is distinct from 'true'
+ then raise exception 'QUALITY_EVIDENCE_REQUIRED'; end if;
+ criteria:=jsonb_build_object('_mode','passport_coverage_v1',
+  'bindingId',coverage->'bindingId','evidenceIds',coverage->'evidenceIds');
+ return public.review_studkab_result(p_request,p_version,p_review,p_reviewer,p_recipient,
+  p_file_hash,p_document_hash,criteria);
+end $$;
+
+revoke all on function public.studkab_valid_result_review(uuid,uuid,jsonb),
+ public.studkab_auto_review_result(uuid,uuid,uuid,uuid,uuid,text,text)
+ from public,anon,authenticated;
+grant execute on function public.studkab_valid_result_review(uuid,uuid,jsonb),
+ public.studkab_auto_review_result(uuid,uuid,uuid,uuid,uuid,text,text) to service_role;
+
+
+-- Replace the three final C109 entry points so the new exact-evidence
+-- protocol is accepted while historical reviews keep their old contract.
+create or replace function public.review_studkab_result(request uuid,version uuid,review uuid,reviewer uuid,recipient uuid,file_hash text,document_hash text,criteria jsonb)
+returns jsonb language plpgsql security invoker set search_path=pg_catalog,public as $$
+declare v public.studkab_result_versions; r public.studkab_result_reviews; actual uuid;
+begin
+ perform pg_advisory_xact_lock(hashtextextended(request::text,713));
+ if public.studkab_quality_check(request,version)->>'eligible' is distinct from 'true' then raise exception 'QUALITY_EVIDENCE_REQUIRED'; end if;
+ if public.studkab_material_manifest_check(request) ? 'code' then raise exception 'MATERIAL_MANIFEST_REQUIRED'; end if;
+ if public.studkab_current_result_binding(request,version) is null then raise exception 'Review passport changed'; end if;
+ select student_id into actual from public.studkab_requests where id=request for share;
+ select * into v from public.studkab_result_versions where request_id=request order by revision desc limit 1;
+ if v.id is null or v.id<>version or v.recipient_id is distinct from actual or actual is distinct from recipient or v.file_hash is distinct from file_hash or v.document_hash is distinct from document_hash then return jsonb_build_object('error','stale'); end if;
+ if not public.studkab_valid_result_review(request,version,criteria) then return jsonb_build_object('error','criteria'); end if;
+ select * into r from public.studkab_result_reviews where id=review;
+ if found then
+  if r.quality_evidence_ids is distinct from public.studkab_quality_check(request,version)->'evidenceIds' then raise exception 'QUALITY_REVIEW_STALE'; end if;
+  if r.version_id<>version or r.reviewer_id<>reviewer or r.criteria<>criteria or not exists(select 1 from public.studkab_result_review_bindings rb where rb.review_id=r.id and rb.binding_id=public.studkab_current_result_binding(request,version)) then return jsonb_build_object('error','conflict'); end if;
+ else
+  insert into public.studkab_result_reviews(id,version_id,reviewer_id,criteria) values(review,version,reviewer,criteria) returning * into r;
+ end if;
+ return jsonb_build_object('reviewId',r.id,'versionId',r.version_id,'reviewedAt',r.created_at);
+end $$;
+
+create or replace function public.deliver_reviewed_studkab_result(request uuid,delivery uuid,version uuid,review uuid,recipient uuid,file_hash text,document_hash text)
+returns jsonb language plpgsql security invoker set search_path=pg_catalog,public as $$
+declare v public.studkab_result_versions; r public.studkab_result_reviews; old public.studkab_results; actual uuid;
+begin
+ perform pg_advisory_xact_lock(hashtextextended(request::text,713));
+ if public.studkab_quality_check(request,version)->>'eligible' is distinct from 'true' then raise exception 'QUALITY_EVIDENCE_REQUIRED'; end if;
+ if public.studkab_material_manifest_check(request) ? 'code' then raise exception 'MATERIAL_MANIFEST_REQUIRED'; end if;
+ if public.studkab_current_result_binding(request,version) is null then raise exception 'Review passport changed'; end if;
+ select student_id into actual from public.studkab_requests where id=request for share;
+ select * into v from public.studkab_result_versions where id=version and request_id=request;
+ if v.id is null or actual is distinct from recipient or v.recipient_id is distinct from actual or v.file_hash is distinct from file_hash or v.document_hash is distinct from document_hash then return jsonb_build_object('error','stale'); end if;
+ if (select quality_evidence_ids from public.studkab_result_reviews where id=review and version_id=version) is distinct from public.studkab_quality_check(request,version)->'evidenceIds' then raise exception 'QUALITY_REVIEW_STALE'; end if;
+ if not exists(select 1 from public.studkab_result_review_bindings rb where rb.review_id=review and rb.binding_id=public.studkab_current_result_binding(request,version)) then return jsonb_build_object('error','review_required'); end if;
+ select * into old from public.studkab_results where request_id=request and delivery_id=delivery;
+ if found then
+  if old.version_id is distinct from version or old.review_id is distinct from review then return jsonb_build_object('error','conflict'); end if;
+  return jsonb_build_object('deliveryId',old.delivery_id,'createdAt',old.created_at,'duplicate',true);
+ end if;
+ if version is distinct from (select id from public.studkab_result_versions where request_id=request order by revision desc limit 1) then return jsonb_build_object('error','stale'); end if;
+ select * into r from public.studkab_result_reviews where id=review and version_id=version;
+ if r.id is null or not public.studkab_valid_result_review(request,version,r.criteria) or not exists(select 1 from public.studkab_result_review_bindings rb where rb.review_id=r.id and rb.binding_id=public.studkab_current_result_binding(request,version)) then return jsonb_build_object('error','review_required'); end if;
+ insert into public.studkab_results(request_id,delivery_id,document,version_id,review_id) values(request,delivery,v.document,version,review) returning * into old;
+ return jsonb_build_object('deliveryId',old.delivery_id,'createdAt',old.created_at,'duplicate',false);
+end $$;
+
+create or replace function public.studkab_guard_result_delivery()
+returns trigger language plpgsql security invoker set search_path=pg_catalog,public as $$
+declare v public.studkab_result_versions; r public.studkab_result_reviews;
+ p public.studkab_requirement_passports; actual uuid; context jsonb;
+begin
+ perform pg_advisory_xact_lock(hashtextextended(new.request_id::text,713));
+ select student_id into actual from public.studkab_requests where id=new.request_id for share;
+ select * into v from public.studkab_result_versions where request_id=new.request_id order by revision desc limit 1;
+ select * into r from public.studkab_result_reviews where id=new.review_id;
+ if v.id is null or new.version_id is distinct from v.id or r.version_id is distinct from v.id or v.recipient_id is distinct from actual or new.document is distinct from v.document or not public.studkab_valid_result_review(new.request_id,new.version_id,r.criteria) then raise exception 'Versioned review required'; end if;
+ if public.studkab_current_result_binding(new.request_id,new.version_id) is null or not exists(select 1 from public.studkab_result_review_bindings rb where rb.review_id=new.review_id and rb.binding_id=public.studkab_current_result_binding(new.request_id,new.version_id)) then raise exception 'Review passport changed'; end if;
+ return new;
 end $$;
 
 commit;

@@ -45,6 +45,32 @@ async function fillReview(page){
  await page.locator('[data-criterion-status="C08"]').selectOption('not_applicable');
  await page.locator('[data-reviewed]').check();return download;
 }
+test('C177 new review uses passport evidence without manual 16-item form',async({page})=>{
+ await setupReview(page);
+ await page.evaluate(()=>{
+  const original=Oblako.requestApi;
+  Oblako.requestApi=async body=>{
+   if(body.action==='auto-review-result'){
+    remote.state='reviewed';remote.review={reviewId:body.reviewId,versionId:body.versionId,
+     criteria:{_mode:'passport_coverage_v1',bindingId:'11111111-1111-4111-8111-111111111111',
+      evidenceIds:{WORK_TYPE:'22222222-2222-4222-8222-222222222222'}}};calls.push(body);return remote.review;
+   }
+   const result=await original(body);
+   if(body.action==='quality-state')result.requirementCoverage={eligible:true,
+    bindingId:'11111111-1111-4111-8111-111111111111',
+    evidenceIds:{WORK_TYPE:'22222222-2222-4222-8222-222222222222'},blockingCodes:[]};
+   return result;
+  };
+ });
+ await page.locator('[data-quality-refresh]').click();
+ await expect(page.locator('[data-legacy-review]')).toBeHidden();
+ await expect(page.locator('[data-save-notes]')).toBeHidden();
+ await expect(page.locator('[data-save-review]')).toBeEnabled();
+ await page.locator('[data-save-review]').click();
+ await expect(page.locator('[data-result-status]')).toContainText('Проверка сохранена');
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='auto-review-result').length)).toBe(1);
+ expect(await page.evaluate(()=>calls.filter(c=>c.action==='review-result').length)).toBe(0);
+});
 test('C161 current AI findings annotate unfinished criteria without creating a positive review',async({page})=>{
  await setupReview(page);
  await page.evaluate(()=>{

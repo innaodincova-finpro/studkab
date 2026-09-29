@@ -118,11 +118,17 @@ async function readReviewState(input,request,db){
  let review=reviews[0],qualityReviewStale=false;
  const [delivery]=review?await db('studkab_results?select=delivery_id,review_id,created_at&request_id=eq.'+input.id+'&version_id=eq.'+version.id+'&review_id=eq.'+review.id+'&order=created_at.desc,id.desc&limit=1'):[];
  let changes=false;
- if(review){try{validateReview(review.criteria);}catch{try{validateReviewNotes(review.criteria);changes=true;}catch{return {status:409,data:{error:errors.criteria}};}}}
+ if(review){
+  if(review.criteria?._mode==='passport_coverage_v1'){
+   const coverage=await db('rpc/studkab_requirement_coverage_check','POST',{p_request:input.id,p_version:version.id});
+   if(coverage?.eligible!==true||review.criteria.bindingId!==coverage.bindingId||canonical(review.criteria.evidenceIds)!==canonical(coverage.evidenceIds))qualityReviewStale=true;
+  }else try{validateReview(review.criteria);}catch{try{validateReviewNotes(review.criteria);changes=true;}catch{return {status:409,data:{error:errors.criteria}};}}
+ }
  if(review&&!delivery&&!changes){
   const quality=await db('rpc/studkab_quality_check','POST',{p_request:input.id,p_version:version.id});
-  if(quality?.eligible!==true||canonical(quality.evidenceIds)!==canonical(review.quality_evidence_ids)){qualityReviewStale=true;review=null;}
+  if(quality?.eligible!==true||canonical(quality.evidenceIds)!==canonical(review.quality_evidence_ids))qualityReviewStale=true;
  }
+ if(qualityReviewStale&&!delivery)review=null;
  if(delivery&&changes)return {status:409,data:{error:errors.criteria}};
  if(delivery&&!review)return {status:409,data:{error:errors.review_required}};
  return {data:{...(qualityReviewStale?{reason:'quality_review_stale'}:{}),state:delivery?'delivered':changes?'changes_requested':review?'reviewed':'prepared',receipt,docxBase64:version.docx_base64,review:review?{reviewId:review.id,versionId:review.version_id,criteria:review.criteria,reviewedAt:review.created_at}:null,delivery:delivery?{deliveryId:delivery.delivery_id,createdAt:delivery.created_at}:null}};
@@ -137,7 +143,7 @@ async function resultActionV2(input,user,{db,config}) {
  if(!request)return {status:404,data:{error:'Заявка не найдена'}};
  // A historical request may have bypassed the current intake requirement.
  // Keep its saved Word available for correction, but never approve or deliver it.
- if(['prepare-result','review-result','deliver','rebind-result'].includes(input.action)&&!String(request.payload?.n||'').trim())
+ if(['prepare-result','review-result','auto-review-result','deliver','rebind-result'].includes(input.action)&&!String(request.payload?.n||'').trim())
   return {status:409,data:{error:'В заявке не указано ФИО студента. Уточните данные и подготовьте новую версию Word с правильным титульным листом.'}};
  if(input.action==='result'){
   if(request.student_id!==user.id)return {status:404,data:{error:'Заявка не найдена'}};
@@ -205,6 +211,9 @@ async function resultActionV2(input,user,{db,config}) {
   }else if(input.action==='review-result'){
    let criteria;try{criteria=validateReview(input.criteria);}catch(e){return {status:400,data:{error:e.message}};}
    result=await db('rpc/review_studkab_result','POST',{...args,reviewer:user.id,criteria});
+  }else if(input.action==='auto-review-result'){
+   if(input.criteria!==undefined)return {status:400,data:{error:'Протокол формируется сервером по доказательствам текущего паспорта.'}};
+   result=await db('rpc/studkab_auto_review_result','POST',{p_request:input.id,p_version:input.versionId,p_review:input.reviewId,p_reviewer:user.id,p_recipient:request.student_id,p_file_hash:input.fileHash,p_document_hash:input.documentHash});
   }else{
    if(!uuid.test(input.deliveryId||''))return {status:400,data:{error:'Неверный номер передачи'}};
    result=await db('rpc/deliver_reviewed_studkab_result','POST',{...args,delivery:input.deliveryId});
@@ -223,7 +232,7 @@ export async function resultAction(input,user,deps) {
  if((user.email||'').toLowerCase()!==(cfg.executor_email||'').toLowerCase())return {status:403,data:{error:'Передача и проверка доступны только исполнителю'}};
  const version=await deps.db('rpc/studkab_result_context_version');
  if(version===1){
-  if(input.action==='rebind-result')return {status:409,data:{error:'Повторная проверка прежнего Word станет доступна после обновления базы.'}};
+  if(input.action==='rebind-result'||input.action==='auto-review-result')return {status:409,data:{error:'Автоматическая проверка станет доступна после обновления базы.'}};
   return resultActionV1(input,user,deps);
  }
  if(version===2)return resultActionV2(input,user,deps);
