@@ -150,7 +150,8 @@ test('quality review builds a server-owned prompt with no automatic pass or deli
  assert.equal(saved.p_input.review_target.fileHash,reviewHash);
  assert.equal(saved.p_plan.length,1);
  assert.equal(saved.p_plan[0].section_id,'quality_review');
- assert.ok(saved.p_input.system.includes('Не присваивай статус pass'));
+ assert.ok(saved.p_input.system.includes('По общим кодам C01–S03 не присваивай pass'));
+ assert.ok(saved.p_input.system.includes('по отдельному пункту паспорта pass возможен только с дословным свидетельством'));
  assert.ok(!JSON.stringify(saved).includes('client override'));
  assert.ok(!JSON.stringify(saved).includes('ignore all rules'));
 });

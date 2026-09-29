@@ -62,7 +62,7 @@ test('passport UI blocks approval and paid preparation while required facts are 
  assert.match(ui,/return requireApprovedPassport\(x\)\.then/);
 });
 
-const {statedRequirements,fillMissingDraft,linkLiteralDraftSources,requirementAction}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+const {statedRequirements,fillMissingDraft,linkLiteralDraftSources,inventoryExplicitClauses,requirementAction}=await import('../supabase/functions/studkab-requests/requirements.mjs');
 const inputFacts={rq:'Учебный тест. 25–30 страниц основного текста: введение 2, теория 6–7, анализ 8–10. Источники: пять предоставленных учебных фрагментов S1–S5 и исходные данные; не выдавать за реальные публикации. Оригинальность не проверена, порог не задан.',mn:'Разделы 2 / 6–7 / 8–10 / 7–8 / 2 страницы (25–29, в пределах 25–30).'};
 test('explicit total and source restrictions survive extraction without invented originality',()=>{
  const items=defaultPassport(inputFacts).items;
@@ -98,6 +98,44 @@ test('literal requirement links only to one current source and never becomes ver
  assert.equal(linkLiteralDraftSources(linked,attachments),linked);
  assert.equal(linkLiteralDraftSources(base,[...attachments,{id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',category:'assignment',extracted_text:phrase}]),base);
  assert.equal(linkLiteralDraftSources({...base,status:'approved'},attachments).items[0].source_attachment_id,undefined);
+});
+test('enumerated obligations enter the draft without fabricated approval, and superseded clauses leave the new draft',()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',next='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const phrase='Работа должна включать введение, три главы и заключение';
+ const base={status:'draft',items:defaultPassport({}).items};
+ const old={id,category:'methodology',file_name:'guide.txt',extracted_text:'Предисловие\n1. '+phrase+'\n2. Нужно подумать\n3. Таблица должна содержать расчёт по каждому году'};
+ const first=inventoryExplicitClauses(base,[old]);
+ assert.equal(first.items.length,base.items.length+2);
+ const added=first.items.find(i=>i.id==='REQ_'+id.replace(/-/g,'')+'_2');
+ assert.equal(added.text,phrase);
+ assert.equal(added.source_attachment_id,id);
+ assert.equal(added.verified,false);
+ assert.match(added.source,/guide\.txt, строка извлечённого текста 2/);
+ assert.equal(inventoryExplicitClauses(first,[old]),first);
+ assert.equal(inventoryExplicitClauses({status:'draft',items:[{id:'STRUCTURE',text:'Структура: '+phrase}]},[old]).items.some(i=>i.id==='REQ_'+id.replace(/-/g,'')+'_2'),false);
+ assert.equal(inventoryExplicitClauses({...first,status:'approved'},[]).items.length,first.items.length);
+ const fresh={...first,status:'draft'};
+ const replaced=inventoryExplicitClauses(fresh,[old,{id:next,category:'methodology',file_name:'guide-v2.txt',supersedes:id,
+  extracted_text:'1. Документ должен включать обоснование расчёта и выводы'}]);
+ assert.equal(replaced.items.some(i=>i.source_attachment_id===id),false);
+ assert.equal(replaced.items.at(-1).source_attachment_id,next);
+});
+test('approval refuses an omitted enumerated obligation before any approval RPC',async()=>{
+ const p=defaultPassport({});
+ p.items=p.items.map(i=>({...i,text:i.id==='ANTIPLAGIARISM'?'Внешний отчёт по стандарту STUDKAB; в предоставленных материалах числовое условие вуза не обнаружено.':'Конкретное требование',source:'Задание',verified:true}));
+ p.items.find(i=>i.id==='ANTIPLAGIARISM').originality={mode:'service_only',service:'',thresholdPercent:null};
+ p.items.find(i=>i.id==='ANTIPLAGIARISM').source='Стандарт STUDKAB';
+ let approved=false;
+ const result=await requirementAction({action:'passport-approve',id:'33333333-3333-4333-8333-333333333333',passportId:'44444444-4444-4444-8444-444444444444',passport:p},
+  {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async path=>{
+   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+   if(path.startsWith('studkab_request_attachments?'))return [{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',category:'assignment',file_name:'task.txt',extracted_text:'1. Работа должна содержать анализ выручки за три года'}];
+   approved=true;throw Error('Unexpected approval access');
+  }});
+ assert.equal(result.status,409);
+ assert.match(result.data.error,/отдельные условия/);
+ assert.equal(approved,false);
 });
 test('ensure persists repaired draft as a separate version and subsequent reads do not resave',async()=>{
  let rows=[{...defaultPassport({}),id:'old',revision:1,status:'draft',source_fingerprint:'a'.repeat(64)}],writes=0;
@@ -137,6 +175,23 @@ test('ensure stores one literal source link, but refreshes it after a material r
  assert.equal((await requirementAction({...input,sourceFingerprint:'b'.repeat(64)},user,deps)).data.created,true);
  assert.equal(rows[0].items.at(-1).source_attachment_id,second);
  assert.equal(rows[0].items.at(-1).verified,false);
+});
+test('ensure persists a separate draft item for an enumerated assignment obligation',async()=>{
+ const id='33333333-3333-4333-8333-333333333333',source='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ let saved;
+ const result=await requirementAction({action:'passport-ensure',id,sourceFingerprint:'a'.repeat(64)},
+  {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
+   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+   if(path.startsWith('studkab_requirement_passports?'))return [];
+   if(path.startsWith('studkab_request_attachments?'))return [{id:source,category:'assignment',file_name:'task.txt',extracted_text:'2. Работа должна содержать анализ выручки за три года'}];
+   if(path==='rpc/studkab_requirement_passport_save'){saved=body.p_items;return {id:'new',items:saved};}
+   throw Error('Unexpected dependency '+path);
+  }});
+ assert.equal(result.status,200);
+ assert.equal(saved.length,11);
+ assert.equal(saved.at(-1).source_attachment_id,source);
+ assert.equal(saved.at(-1).verified,false);
 });
 
 const semanticInput={
