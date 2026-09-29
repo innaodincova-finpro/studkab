@@ -1145,9 +1145,9 @@ function openRequest(workId){
         var published=await Oblako.requestApi({action:'request-publish',id:result.id});
         if(!published.ready||published.number!==result.number)throw Error('Публикация заявки не подтверждена. Проверьте данные и повторите.');
         change(function(){r.contact=draft.contact;r.org=draft.org;r.notes=draft.notes;r.sent=today();r.sentBy="direct";r.attachments=uploaded;r.filesPending=false;r.pendingFiles=[];});
-        wrap.remove();render();toast(wasSubmitted?'Изменения заявки №'+result.number+' сохранены. Исполнитель увидит их после обновления реестра.':result.email==='not_configured' ?
-          'Заявка №'+result.number+' сохранена в реестре. Telegram поставлен в очередь, email исполнителю пока не настроен.' :
-          'Заявка №'+result.number+' сохранена в реестре. Проверьте уведомления отдельно.');
+        wrap.remove();render();toast(wasSubmitted?'Изменения заявки №'+result.number+' сохранены. Исполнитель увидит их после обновления реестра.':published.email==='not_configured' ?
+          'Заявка №'+result.number+' опубликована. Telegram поставлен в очередь, email пока не настроен.' :
+          'Заявка №'+result.number+' опубликована. Telegram и email поставлены в очередь; доставка ещё не подтверждена.');
       }).catch(function(e){
         if(D!==expectedData)return;
         var message=(wasSubmitted?'Изменения не сохранены. ':r.serverId?'Черновик заявки №'+r.number+' ещё не опубликован; исполнитель пока не уведомлён. ':'')+(e.message||'Не удалось отправить. Повторите попытку');

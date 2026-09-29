@@ -4,6 +4,7 @@ import {clarificationAction} from './clarifications.mjs';
 import {materialRevisionAction} from './material-revision.mjs';
 import {kindCorrectionAction} from './kind-correction.mjs';
 import {sameSecret} from '../_shared/secret-equal.mjs';
+import {emailConfigured} from './request-email.mjs';
 import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
 import {attachmentAction} from './attachments.mjs';
@@ -34,7 +35,7 @@ export function validatePayload(p,{newSubmission=false,previous=null}={}) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,invite,isMember,upload,download,remove,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -54,7 +55,24 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
       await db('studkab_requests?id=eq.'+row.id,'PATCH',{lease_until:null,retry_at:new Date(now()+Math.min(3600000,60000*2**row.telegram_attempts)).toISOString(),last_error:'Telegram: отправка не подтверждена'});
      }
     }
-    return json({sent,failed});
+    let email={configured:false,accepted:0,pending:0,unknown:0,failed:0};
+    await db('rpc/reconcile_studkab_request_emails','POST',{});
+    const settings=typeof emailSettings==='function'?emailSettings(cfg):null;
+    if(emailConfigured(settings||{})){
+     email.configured=true;
+     const letters=await db('rpc/claim_studkab_request_emails','POST',{});
+     for(const letter of letters){
+      let outcome;
+      try{outcome=await sendEmail(letter,settings);}catch{outcome={status:'unknown'};}
+      const status=['accepted','pending','failed','unknown'].includes(outcome?.status)?outcome.status:'unknown';
+      const confirmed=await db('rpc/finish_studkab_request_email','POST',{
+       p_request:letter.request_id,p_lease:letter.lease_id,p_status:status,p_message_id:outcome?.messageId||null
+      });
+      if(confirmed!==true)throw Error('Email queue state changed');
+      email[status]++;
+     }
+    }
+    return json({sent,failed,email});
    }
    const bearer=req.headers.get('authorization');
    const user=bearer?.startsWith('Bearer ') ? await auth(bearer) : null;
@@ -135,7 +153,7 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     const result=await db('rpc/submit_studkab_request','POST',{student:user.id,content:payload});
     if(result.conflict)return json({error:'Эта заявка уже передана. Для изменения условий свяжитесь с исполнителем.'},409);
     if(result.limited)return json({error:'Достигнут дневной лимит заявок. Попробуйте завтра.'},429);
-    return json({...result,saved:true,telegram:'awaiting_materials',email:'not_configured'});
+    return json({...result,saved:true,telegram:'awaiting_materials',email:'awaiting_materials'});
    }
    if(input.action==='request-publish'){
     if(typeof isMember!=='function'||await isMember(user.id)!==true)return json({error:'Нет доступа'},403);
@@ -143,7 +161,8 @@ export function handler({auth,config,db,send,invite,isMember,upload,download,rem
     const result=await db('rpc/studkab_request_publish','POST',{p_request:input.id,p_student:user.id});
     if(result.missing)return json({error:'Заявка не найдена'},404);
     if(result.incomplete)return json({error:'Приложите задание либо опишите задачу и недостающие сведения (от 15 знаков)'},409);
-    return json({...result,telegram:'queued',email:'not_configured'});
+    const cfg=typeof emailSettings==='function'?await config():null;
+    return json({...result,telegram:'queued',email:emailConfigured(typeof emailSettings==='function'?emailSettings(cfg):{})?'queued':'not_configured'});
    }
    if(input.action==='invite'||input.action==='recover'){
     if(input.action==='recover'&&input.identityVerified!==true)return json({error:'Сначала подтвердите личность получателя'},400);

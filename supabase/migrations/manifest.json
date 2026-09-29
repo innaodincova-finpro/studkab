@@ -414,6 +414,12 @@
       "name": "c157_review_dispatch_unknown",
       "file": "20260928070000_c157_review_dispatch_unknown.sql",
       "sha256": "6a8960cffeded351cbb04a992640b1606fc99961fa33724073e76d9af4be3c03"
+    },
+    {
+      "file": "20260928163000_c172_request_email_notifications.sql",
+      "version": "20260928163000",
+      "name": "c172_request_email_notifications",
+      "sha256": "ecbeccf12be7d94bad41e22f54a319be63e9ffb6d3ba95dd26f72b64ae5f07fa"
     }
   ],
   "production_reconciled_at": "2026-09-23"

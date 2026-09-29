@@ -91,7 +91,8 @@ test('executor cannot prepare a passport while the student is still uploading',a
 test('Telegram failure leaves request pending with retry, successful send marks accepted',async()=>{
  const patches=[];let fail=true;
  const app=handler({config:async()=>({cron_token:'job'}),db:async(path,method,body)=>{
-  if(path.startsWith('rpc/claim'))return [{id:'row',telegram_attempts:1}];
+  if(path==='rpc/claim_studkab_requests')return [{id:'row',telegram_attempts:1}];
+  if(path==='rpc/reconcile_studkab_request_emails')return 0;
   patches.push(body);return[];
  },send:async()=>{if(fail)throw Error('failed');},now:()=>1000000});
  assert.equal((await app(request({}, {'x-job-key':'bad'}))).status,403);
