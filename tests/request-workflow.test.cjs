@@ -6,6 +6,7 @@ test('request workflow has one ordered stage and action',()=>{
  const cases=[
   [{},['intake','Проверить комплект']],
   [{hasPassport:true,passportUnresolved:true,passportBlocker:'Не указано: объём'},['passport','Уточнить требования']],
+  [{hasPassport:true,passportAwaitingAnswer:true},['passport','Вопросы студенту']],
   [{hasPassport:true},['passport','Утвердить паспорт']],
   [{hasPassport:true,passportApproved:true},['preparation','Выбрать способ подготовки']],
   [{hasPassport:true,passportApproved:true,hasServerJob:true},['preparation','Продолжить подготовку']],

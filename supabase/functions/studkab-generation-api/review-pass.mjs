@@ -51,8 +51,8 @@ export function parseReviewReport(raw,hash,packet){
    rows.some(r=>!expected.some(item=>item.id===r?.id)))return null;
   const materials=new Map((packet.materials||[]).map(m=>[m.id,m]));
   requirements=[];
-  for(const item of expected){
-   const r=rows.find(row=>row.id===item.id);
+  for(const r of rows){
+   const item=expected.find(item=>item.id===r.id);
    if(!['pass','fail','not_checked'].includes(r.status)||
     !['sourceId','sourceQuote','wordQuote','wordLocator','explanation'].every(k=>typeof r[k]==='string'&&r[k].length<=2000))return null;
    if(r.status==='pass'){

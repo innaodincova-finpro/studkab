@@ -37,9 +37,10 @@ test('numbering conflict needs a student answer even after a local resolution',a
  await dialog.getByRole('button',{name:'Сохранить уточнения'}).click();
  await expect(dialog).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>structureItem.structureFindings?.[0]?.resolved)).toBe(true);
- await expect(page.locator('[data-act="passport-approve"]')).toBeEnabled();
- await page.locator('[data-act="passport-approve"]').click();
- await expect(page.locator('[data-act="passport-approve"]')).toBeDisabled();
+ await expect(page.locator('.workflow-next [data-act="passport-approve"]')).toBeEnabled();
+ await page.locator('.workflow-next [data-act="passport-approve"]').click();
+ await expect(page.locator('.workflow-next [data-act="executor-clarifications"]')).toBeVisible();
+ await expect(page.locator('.chip.ok[data-act="passport-approve"]')).toBeDisabled();
  await expect(page.getByText('Есть вопросы без ответа или ответы, ещё не учтённые в этой версии требований.')).toBeVisible();
  const saved=await page.evaluate(()=>structureCalls.find(c=>c.action==='passport-save').passport.items.find(q=>q.id==='STRUCTURE'));
  expect(saved.structure_resolutions[0].chosenNumber).toBe('2.4');

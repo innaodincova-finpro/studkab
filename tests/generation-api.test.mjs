@@ -47,6 +47,7 @@ test('per-request review accepts only exact source and Word excerpts and leaves 
   {id:'ANTIPLAGIARISM',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Внешний отчёт проверяется отдельно'}];
  const raw=JSON.stringify({...JSON.parse(report),requirements});
  assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].status,'pass');
+ assert.deepEqual(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:requirements.toReversed()}),reviewHash,packet).requirements.map(r=>r.id),['ANTIPLAGIARISM','ANALYSIS']);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0]]}),reviewHash,packet),null);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],sourceQuote:'вымышленное основание'},requirements[1]]}),reviewHash,packet),null);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],sourceId:'другой-файл'},requirements[1]]}),reviewHash,packet),null);
