@@ -37,7 +37,7 @@ async function scan(db,id,version,bindings){
  report.textScope='word/document.xml body paragraphs; excludes headers, footnotes and images';
  const sourceBindings=sources.map(a=>({id:a.id,fileHash:a.file_hash}));
  const scanHash=await digest({report,sourceBindings});
- return {scan:report,scanHash,sourceBindings};
+ return {scan:report,scanHash,sourceBindings,linkAudit:extracted.linkAudit};
 }
 export async function qualityAction(input,user,{db,config}){
  const cfg=await config();if(!user.email||user.email.toLowerCase()!==cfg.executor_email?.toLowerCase())return fail('QUALITY_FORBIDDEN',403);
@@ -63,7 +63,7 @@ export async function qualityAction(input,user,{db,config}){
     requirementCoverage:coverage||null,requirements:Array.isArray(snapshot?.items)?snapshot.items.map(i=>({id:i.id,text:i.text,source:i.source,required:i.required!==false})):[],
     latest:Object.fromEntries(['internal_borrowing','external_originality'].map(k=>[k,clean(rows.find(e=>e.kind===k))]))}};
   }
-  if(input.action==='quality-scan'){const computed=await scan(db,input.id,input.versionId,bindings);return {data:{scan:computed.scan,scanHash:computed.scanHash}};}
+  if(input.action==='quality-scan'){const computed=await scan(db,input.id,input.versionId,bindings);return {data:{scan:computed.scan,scanHash:computed.scanHash,linkAudit:computed.linkAudit,fileHash:bindings.fileHash}};}
   if(input.action!=='quality-save'||!uuid.test(input.evidenceId||''))return fail('QUALITY_INVALID',400);
   for(const k of ['recipientId','passportId','fileHash','documentHash','sourceFingerprint'])if(input[k]!==bindings[k])return fail('QUALITY_STALE');
   const p=input.payload;if(!p||!['pass','fail','manual'].includes(p.disposition)||typeof p.notes!=='string'||p.notes.trim().length<10||p.notes.length>4000)return fail('QUALITY_INVALID',400);

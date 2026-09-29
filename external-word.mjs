@@ -51,6 +51,19 @@ export async function inspectWord(bytes){
  ).filter(t=>t.trim());
  const text=paragraphs.join('\n');
  if(!text.trim()||text.length>500000)throw Error('В Word нет доступного текста или текст превышает допустимый размер.');
+ const printed=[...new Set((text.match(/https?:\/\/[^\s<>«»]+/gi)||[]).map(u=>u.replace(/[.,;!?]+$/,'')))];
+ const rels=entries.has('word/_rels/document.xml.rels')?await read('word/_rels/document.xml.rels'):'';
+ const targets=new Map();
+ for(const tag of rels.match(/<Relationship\b[^>]*\/?\s*>/g)||[]){
+  const attrs=Object.fromEntries([...tag.matchAll(/\b(Id|Type|Target|TargetMode)="([^"]*)"/g)].map(a=>[a[1],decodeXml(a[2])]));
+  if(attrs.Type==='http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink'&&attrs.TargetMode==='External')targets.set(attrs.Id,attrs.Target);
+ }
+ const active=new Set();
+ for(const link of xml.match(/<w:hyperlink\b[^>]*>[\s\S]*?<\/w:hyperlink>/g)||[]){
+  const id=/\br:id="([^"]+)"/.exec(link)?.[1],target=targets.get(id);
+  const shown=[...link.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(t=>decodeXml(t[1])).join('').trim();
+  if(target&&shown===target)active.add(target);
+ }
  const fileHash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
- return {text,fileHash};
+ return {text,fileHash,linkAudit:{printedCount:printed.length,activeCount:printed.filter(u=>active.has(u)).length,missing:printed.filter(u=>!active.has(u))}};
 }

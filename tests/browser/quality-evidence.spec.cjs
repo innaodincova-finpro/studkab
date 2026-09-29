@@ -14,7 +14,7 @@ async function setup(page,{reset=true,unavailable=false}={}){
    if(qUnavailable)throw Error('Проверки временно недоступны');
    let latest=JSON.parse(sessionStorage.getItem('quality-fixture')||'{}');
    if(body.action==='quality-state')return {bindings:qBinding,thresholdRequirement:{itemId:'ANTIPLAGIARISM',text:'Оригинальность не менее 70 процентов',mode:'university_threshold',service:'Учебная система',thresholdPercent:70},latest,eligible:['internal_borrowing','external_originality'].every(k=>latest[k]?.payload.disposition==='pass'),blockingCodes:['internal_borrowing','external_originality'].filter(k=>latest[k]?.payload.disposition!=='pass')};
-   if(body.action==='quality-scan'){if(window.qDeferred)await new Promise(resolve=>window.qRelease=resolve);return {scan:qScan,scanHash:'d'.repeat(64)};}
+   if(body.action==='quality-scan'){if(window.qDeferred)await new Promise(resolve=>window.qRelease=resolve);return {scan:qScan,scanHash:'d'.repeat(64),fileHash:qBinding.fileHash,linkAudit:{printedCount:1,activeCount:0,missing:['https://example.org/article']}};}
    if(body.action==='quality-save'){
     if(body.versionId!==qBinding.versionId||body.fileHash!==qBinding.fileHash)throw Error('QUALITY_STALE');
     const payload={...body.payload};let reportHash=null;
@@ -45,6 +45,8 @@ async function externalForm(page){
 test('C102 internal scan shows limited corpus and needs individual decisions; it is not originality',async({page})=>{
  await setup(page);expect(await page.evaluate(()=>qReady)).toBe(false);
  await page.locator('[data-quality-scan]').click();await expect(page.locator('[data-quality-scope]')).toContainText('Пригодных для сравнения: 1');await expect(page.locator('[data-quality-scope]')).toContainText('source-one');
+ await expect(page.locator('[data-word-links]')).toContainText('Активных ссылок с тем же адресом: 0');
+ await expect(page.locator('[data-word-links]')).toContainText('https://example.org/article');
  await expect(page.locator('[data-quality-findings]')).toContainText('не подтверждает оригинальность');
  await page.locator('[data-q="internalDisposition"]').selectOption('pass');await page.locator('[data-q="internalNotes"]').fill('Проверка имеет нерешённое совпадение.');await page.locator('[data-quality-save-internal]').click();
  await expect(page.locator('[data-quality-status]')).toContainText('каждого совпадения');expect(await page.evaluate(()=>qCalls.filter(x=>x.action==='quality-save').length)).toBe(0);

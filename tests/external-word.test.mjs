@@ -30,6 +30,10 @@ test('C083 inspects real DOCX and preserves exact bytes/hash',async()=>{
  const bytes=await fixture(),before=Buffer.from(bytes),r=await inspectWord(bytes);
  assert.match(r.text,/Текст учебного документа & данные/);assert.match(r.fileHash,/^[a-f0-9]{64}$/);assert.deepEqual(Buffer.from(bytes),before);
 });
+test('plain source address in Word is reported as lacking an active hyperlink',async()=>{
+ const r=await inspectWord(await fixture('Источник: https://example.org/article'));
+ assert.deepEqual(r.linkAudit,{printedCount:1,activeCount:0,missing:['https://example.org/article']});
+});
 test('C083 rejects renamed non-Word, damaged ZIP and excessive size',async()=>{
  await assert.rejects(inspectWord(new Uint8Array(MAX_WORD_BYTES+1)),/3 МБ/);
  await assert.rejects(inspectWord(new TextEncoder().encode('Not a Word file but some ordinary plain text')));
