@@ -51,5 +51,5 @@ async function remove(path:string){
  if(!r.ok&&r.status!==404)throw Error('Storage cleanup unavailable');
 }
 Deno.serve(handler({auth,db,send,sendEmail:sendRequestEmail,
- emailSettings:(cfg:any)=>requestEmailSettings(cfg,{from:Deno.env.get('STUDKAB_EMAIL_FROM'),password:Deno.env.get('STUDKAB_MAILRU_APP_PASSWORD')}),
+ emailSettings:(cfg:any)=>requestEmailSettings(cfg,{host:Deno.env.get('STUDKAB_SMTP_HOST'),port:Deno.env.get('STUDKAB_SMTP_PORT'),username:Deno.env.get('STUDKAB_SMTP_USERNAME'),password:Deno.env.get('STUDKAB_SMTP_PASSWORD'),from:Deno.env.get('STUDKAB_EMAIL_FROM')}),
  invite,isMember,upload,download,remove,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
