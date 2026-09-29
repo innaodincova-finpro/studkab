@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {handler} from '../supabase/functions/studkab-requests/handler.mjs';
-import {sendRequestEmail} from '../supabase/functions/studkab-requests/request-email.mjs';
+import {sendRequestEmail,requestEmailSettings} from '../supabase/functions/studkab-requests/request-email.mjs';
 
 const student='11111111-1111-4111-8111-111111111111',id='33333333-3333-4333-8333-333333333333';
-const settings={apiKey:'test-key',from:'sender@example.test',to:'executor@example.test'};
+const settings={password:'test-password',from:'sender@example.test',to:'executor@example.test'};
 
 test('email is queued once at publication, never for draft/old request; separate from Telegram',async()=>{
  const db=new PGlite();
@@ -45,15 +45,30 @@ test('email is queued once at publication, never for draft/old request; separate
  }finally{await db.close();}
 });
 
-test('email API sends only the request number and authenticated registry link; ambiguous errors are not blindly retried',async()=>{
- let body,headers;
- const request=async(url,options)=>{assert.equal(url,'https://api.brevo.com/v3/smtp/email');body=JSON.parse(options.body);headers=options.headers;return Response.json({messageId:'msg-1'},{status:201});};
- assert.deepEqual(await sendRequestEmail({request_id:id,number:7}, {...settings,request}),{status:'accepted',messageId:'msg-1'});
- assert.equal(body.to[0].email,settings.to);assert.equal(body.sender.email,settings.from);
- assert.ok(body.textContent.includes('reestr.html#request='+id));assert.equal(headers['api-key'],settings.apiKey);
- assert.equal(JSON.stringify(body).includes('Тестовый студент'),false);
- assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,request:async()=>{throw Error('timeout');}}),{status:'unknown'});
- assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,request:async()=>Response.json({},{status:429})}),{status:'pending'});
+test('Mail.ru SMTP sends only the request number and authenticated link to the separate notification address',async()=>{
+ const cfg={executor_email:'login@example.test',notification_email:'inbox@example.test'};
+ const chosen=requestEmailSettings(cfg,{from:settings.from,password:settings.password});
+ assert.equal(chosen.to,cfg.notification_email);
+ assert.notEqual(chosen.to,cfg.executor_email);
+ const writes=[],responses=['220 ready','250-smtp.mail.ru','250 AUTH LOGIN','334 username','334 password','235 authenticated','250 sender','250 recipient','354 go ahead','250 accepted'];
+ const connect=async()=>({read:async b=>{const s=responses.shift();if(!s)return null;const v=new TextEncoder().encode(s+'\\r\\n');b.set(v);return v.length;},
+  write:async b=>{writes.push(new TextDecoder().decode(b));return b.length;},close:()=>{}});
+ assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...chosen,connect}),{status:'accepted'});
+ assert.ok(writes.some(x=>x.includes('RCPT TO:<inbox@example.test>')));
+ assert.ok(writes.some(x=>x.includes('AUTH LOGIN')));
+ assert.ok(writes.some(x=>x.includes('reestr.html#request=')===false));
+ const mime=writes.find(x=>x.includes('Content-Transfer-Encoding: base64'));
+ assert.ok(mime);assert.ok(mime.includes('To: <inbox@example.test>'));
+ assert.ok(new TextDecoder().decode(Uint8Array.from(atob(mime.split('\\r\\n\\r\\n')[1].replace(/\\s|\\./g,'')),x=>x.charCodeAt(0))).includes('reestr.html#request='+id));
+ assert.ok(!mime.includes('Тестовый студент'));
+});
+
+test('SMTP failure before DATA is bounded; uncertain result after DATA is never retried',async()=>{
+ const fake=(codes)=>async()=>({read:async b=>{const s=codes.shift();if(!s)return null;const v=new TextEncoder().encode(s+'\\r\\n');b.set(v);return v.length;},write:async b=>b.length,close:()=>{}});
+ const prefix=['220 ready','250 hello','334 username','334 password','235 authenticated','250 sender'];
+ assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:fake([...prefix,'451 later'])}),{status:'pending'});
+ assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:fake(['220 ready','250 hello','334 username','334 password','535 invalid'])}),{status:'failed'});
+ assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:fake([...prefix,'250 recipient','354 go ahead'])}),{status:'unknown'});
 });
 
 test('cron records email independently; missing provider never claims email',async()=>{
