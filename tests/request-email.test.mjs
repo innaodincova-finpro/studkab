@@ -6,7 +6,7 @@ import {handler} from '../supabase/functions/studkab-requests/handler.mjs';
 import {sendRequestEmail,requestEmailSettings} from '../supabase/functions/studkab-requests/request-email.mjs';
 
 const student='11111111-1111-4111-8111-111111111111',id='33333333-3333-4333-8333-333333333333';
-const settings={password:'test-password',from:'sender@example.test',to:'executor@example.test'};
+const settings={host:'smtp.example.test',port:465,username:'smtp-login@example.test',password:'test-password',from:'sender@example.test',to:'executor@example.test'};
 
 test('email is queued once at publication, never for draft/old request; separate from Telegram',async()=>{
  const db=new PGlite();
@@ -45,21 +45,25 @@ test('email is queued once at publication, never for draft/old request; separate
  }finally{await db.close();}
 });
 
-test('Mail.ru SMTP sends only the request number and authenticated link to the separate notification address',async()=>{
+test('SMTP uses independent sender credentials and delivers only the request link to the notification address',async()=>{
  const cfg={executor_email:'login@example.test',notification_email:'inbox@example.test'};
- const chosen=requestEmailSettings(cfg,{from:settings.from,password:settings.password});
+ const chosen=requestEmailSettings(cfg,{...settings,port:'465'});
  assert.equal(chosen.to,cfg.notification_email);
  assert.notEqual(chosen.to,cfg.executor_email);
- const writes=[],responses=['220 ready','250-smtp.mail.ru','250 AUTH LOGIN','334 username','334 password','235 authenticated','250 sender','250 recipient','354 go ahead','250 accepted'];
+ assert.equal(chosen.port,465);
+ const writes=[],responses=['220 ready','250-smtp.example.test','250 AUTH LOGIN','334 username','334 password','235 authenticated','250 sender','250 recipient','354 go ahead','250 accepted'];
  const connect=async()=>({read:async b=>{const s=responses.shift();if(!s)return null;const v=new TextEncoder().encode(s+'\r\n');b.set(v);return v.length;},
   write:async b=>{writes.push(new TextDecoder().decode(b));return b.length;},close:()=>{}});
  assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...chosen,connect}),{status:'accepted'});
  assert.ok(writes.some(x=>x.includes('RCPT TO:<inbox@example.test>')));
  assert.ok(writes.some(x=>x.includes('AUTH LOGIN')));
+ assert.ok(writes.some(x=>x.trim()===btoa(settings.username)));
+ assert.ok(!writes.some(x=>x.trim()===btoa(chosen.to)));
  const mime=writes.find(x=>x.includes('Content-Transfer-Encoding: base64'));
  assert.ok(mime);assert.ok(mime.includes('To: <inbox@example.test>'));
  assert.ok(new TextDecoder().decode(Uint8Array.from(atob(mime.split('\r\n\r\n')[1].replace(/\s|\./g,'')),x=>x.charCodeAt(0))).includes('reestr.html#request='+id));
  assert.ok(!mime.includes('Тестовый студент'));
+ assert.equal(requestEmailSettings(cfg,{from:cfg.notification_email,password:'personal-password'}).host,undefined);
 });
 
 test('SMTP failure before DATA is bounded; uncertain result after DATA is never retried',async()=>{

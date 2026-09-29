@@ -1,15 +1,16 @@
 const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const enc=new TextEncoder(),dec=new TextDecoder();
-export function requestEmailSettings(cfg,{from,password}={}){
- return {from,password,to:cfg?.notification_email};
+export function requestEmailSettings(cfg,{host,port,username,password,from}={}){
+ return {host,port:Number(port),username,password,from,to:cfg?.notification_email};
 }
-export function emailConfigured({from,password,to}){
- return Boolean(password&&EMAIL.test(from||'')&&EMAIL.test(to||''));
+export function emailConfigured({host,port,username,password,from,to}){
+ return Boolean(/^[a-z0-9.-]+$/i.test(host||'')&&Number.isInteger(port)&&port>0&&port<65536&&
+  username&&password&&EMAIL.test(from||'')&&EMAIL.test(to||''));
 }
 const b64=value=>btoa(Array.from(enc.encode(value),b=>String.fromCharCode(b)).join(''));
 const fold=value=>value.match(/.{1,76}/g)?.join('\r\n')||'';
-export async function sendRequestEmail(row,{from,password,to,connect=()=>Deno.connectTls({hostname:'smtp.mail.ru',port:465})}){
- if(!emailConfigured({from,password,to}))throw Error('Email not configured');
+export async function sendRequestEmail(row,{host,port,username,password,from,to,connect=()=>Deno.connectTls({hostname:host,port})}){
+ if(!emailConfigured({host,port,username,password,from,to}))throw Error('Email not configured');
  const id=String(row.request_id||'');
  if(!/^[a-f0-9-]{36}$/i.test(id)||!Number.isSafeInteger(Number(row.number)))throw Error('Invalid request');
  const url='https://innaodincova-finpro.github.io/studkab/reestr.html#request='+encodeURIComponent(id);
@@ -58,7 +59,7 @@ export async function sendRequestEmail(row,{from,password,to,connect=()=>Deno.co
   let outcome=await step(null,[220]);if(outcome)return outcome;
   outcome=await step('EHLO studkab.local',[250]);if(outcome)return outcome;
   outcome=await step('AUTH LOGIN',[334]);if(outcome)return outcome;
-  outcome=await step(b64(from),[334]);if(outcome)return outcome;
+  outcome=await step(b64(username),[334]);if(outcome)return outcome;
   outcome=await step(b64(password),[235]);if(outcome)return outcome;
   outcome=await step('MAIL FROM:<'+from+'>',[250]);if(outcome)return outcome;
   outcome=await step('RCPT TO:<'+to+'>',[250,251]);if(outcome)return outcome;
