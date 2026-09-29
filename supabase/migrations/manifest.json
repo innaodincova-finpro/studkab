@@ -426,6 +426,12 @@
       "version": "20260929051225",
       "name": "c175_request_push",
       "sha256": "2f38ae8268b5d8f2c238be751d8d6986a9672c3a5d1b89307c43b65732436fde"
+    },
+    {
+      "file": "20260929062054_c177_passport_coverage.sql",
+      "version": "20260929062054",
+      "name": "c177_passport_coverage",
+      "sha256": "c764f3a8679ca239ae13fe51941ba9d166db808f31ed16b04b5e994866db709c"
     }
   ],
   "production_reconciled_at": "2026-09-23"
