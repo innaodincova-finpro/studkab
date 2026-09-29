@@ -15,6 +15,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from PIL import Image
+
 
 MAX_DOCX_BYTES = 20 * 1024 * 1024
 MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
@@ -40,12 +42,24 @@ def check_docx(path):
             raise ValueError('DOCX_EXPANDED_TOO_LARGE')
 
 
+def check_image(path):
+    if not path.is_file() or path.stat().st_size == 0:
+        raise RuntimeError('PAGE_IMAGE_MISSING')
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            image.load()
+    except Exception as exc:
+        raise RuntimeError('PAGE_IMAGE_CORRUPT') from exc
+
+
 def render(source, destination):
     source = source.resolve(strict=True)
     check_docx(source)
     if destination.exists():
         raise ValueError('OUTPUT_ALREADY_EXISTS')
-    for name in ('soffice', 'pdfinfo', 'pdftoppm'):
+    for name in ('soffice', 'pdfinfo', 'pdftocairo'):
         if shutil.which(name) is None:
             raise RuntimeError(f'MISSING_RENDERER:{name}')
 
@@ -69,17 +83,43 @@ def render(source, destination):
         destination.mkdir(parents=True)
         try:
             rendered = []
+            def rasterize(number, target):
+                for attempt in range(3):
+                    target.unlink(missing_ok=True)
+                    run(['pdftocairo', '-f', str(number), '-l', str(number),
+                         '-singlefile', '-r', '120', '-png', str(pdf),
+                         str(target.with_suffix(''))])
+                    try:
+                        check_image(target)
+                        return
+                    except RuntimeError:
+                        if attempt == 2:
+                            raise
+
             for number in range(1, pages + 1):
                 name = f'page-{number:03d}.png'
                 target = destination / name
-                run(['pdftoppm', '-f', str(number), '-l', str(number),
-                     '-singlefile', '-r', '120', '-png', str(pdf), str(target.with_suffix(''))])
-                if not target.is_file() or target.stat().st_size == 0:
-                    raise RuntimeError('PAGE_IMAGE_MISSING')
+                rasterize(number, target)
                 rendered.append({'page': number, 'file': name, 'sha256': digest(target)})
+            # Recheck the complete set after conversion: a truncated PNG may
+            # appear even if a converter returned a successful process status.
+            for page in rendered:
+                target = destination / page['file']
+                try:
+                    check_image(target)
+                    if digest(target) != page['sha256']:
+                        raise RuntimeError('PAGE_IMAGE_CHANGED')
+                except RuntimeError:
+                    rasterize(page['page'], target)
+                    page['sha256'] = digest(target)
+            for page in rendered:
+                target = destination / page['file']
+                check_image(target)
+                if digest(target) != page['sha256']:
+                    raise RuntimeError('PAGE_IMAGE_CHANGED')
             manifest = {'source_sha256': digest(source), 'source_bytes': source.stat().st_size,
                         'renderer': version, 'page_count': pages, 'pdf_sha256': digest(pdf),
-                        'rasterizer': 'pdftoppm 120 dpi PNG',
+                        'rasterizer': 'pdftocairo 120 dpi PNG',
                         'pages': rendered,
                         'scope': 'synthetic local pilot; no visual or Microsoft Word certification'}
             (destination / 'manifest.json').write_text(
