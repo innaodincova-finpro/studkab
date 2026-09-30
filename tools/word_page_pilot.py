@@ -63,6 +63,35 @@ def check_image(path, text_chars=0):
         raise RuntimeError('PAGE_IMAGE_CORRUPT') from exc
 
 
+def verify_output(source, destination):
+    """Recheck stored page files at the time they are about to be used."""
+    source = source.resolve(strict=True)
+    check_docx(source)
+    manifest = json.loads((destination / 'manifest.json').read_text(encoding='utf-8'))
+    if (manifest.get('source_sha256') != digest(source)
+            or manifest.get('source_bytes') != source.stat().st_size):
+        raise ValueError('PAGE_MANIFEST_STALE')
+    count = manifest.get('page_count')
+    pages = manifest.get('pages')
+    if (type(count) is not int or not 1 <= count <= MAX_PAGES
+            or not isinstance(pages, list) or len(pages) != count):
+        raise ValueError('PAGE_SET_INCOMPLETE')
+    for number, page in enumerate(pages, 1):
+        name = f'page-{number:03d}.png'
+        if (not isinstance(page, dict) or page.get('page') != number
+                or page.get('file') != name
+                or not re.fullmatch(r'[a-f0-9]{64}', str(page.get('sha256', '')))
+                or type(page.get('pdf_text_chars')) is not int
+                or page['pdf_text_chars'] < 0):
+            raise ValueError('PAGE_SET_INCOMPLETE')
+        target = destination / name
+        check_image(target, page['pdf_text_chars'])
+        if digest(target) != page['sha256']:
+            raise RuntimeError('PAGE_IMAGE_CHANGED')
+    return {'source_sha256': manifest['source_sha256'], 'page_count': count,
+            'output_dir': str(destination)}
+
+
 def render(source, destination):
     source = source.resolve(strict=True)
     check_docx(source)
@@ -136,6 +165,7 @@ def render(source, destination):
                         'scope': 'synthetic local pilot; no visual or Microsoft Word certification'}
             (destination / 'manifest.json').write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+            verify_output(source, destination)
             return manifest
         except BaseException:
             shutil.rmtree(destination)
@@ -146,8 +176,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('docx', type=Path)
     parser.add_argument('output_dir', type=Path)
+    parser.add_argument('--verify-existing', action='store_true',
+                        help='Recheck a previously rendered page set before use')
     args = parser.parse_args()
-    result = render(args.docx, args.output_dir)
+    result = (verify_output(args.docx, args.output_dir) if args.verify_existing
+              else render(args.docx, args.output_dir))
     print(json.dumps({'source_sha256': result['source_sha256'],
                       'page_count': result['page_count'], 'output_dir': str(args.output_dir)},
                      ensure_ascii=False))
