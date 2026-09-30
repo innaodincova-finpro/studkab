@@ -14,7 +14,7 @@ async function setup(page,{reset=true,unavailable=false}={}){
    if(qUnavailable)throw Error('Проверки временно недоступны');
    let latest=JSON.parse(sessionStorage.getItem('quality-fixture')||'{}');
    if(body.action==='quality-state')return {bindings:qBinding,thresholdRequirement:{itemId:'ANTIPLAGIARISM',text:'Оригинальность не менее 70 процентов',mode:'university_threshold',service:'Учебная система',thresholdPercent:70},latest,eligible:['internal_borrowing','external_originality'].every(k=>latest[k]?.payload.disposition==='pass'),blockingCodes:['internal_borrowing','external_originality'].filter(k=>latest[k]?.payload.disposition!=='pass')};
-   if(body.action==='quality-scan'){if(window.qDeferred)await new Promise(resolve=>window.qRelease=resolve);return {scan:qScan,scanHash:'d'.repeat(64)};}
+   if(body.action==='quality-scan'){if(window.qDeferred)await new Promise(resolve=>window.qRelease=resolve);return {scan:qScan,scanHash:'d'.repeat(64),fileHash:qBinding.fileHash,linkAudit:{printedCount:1,activeCount:0,missing:['https://example.org/article']},declaredLayout:{sections:[{width:11906,height:16838,left:1701,right:567,top:850,bottom:1134}],sectionLimitReached:false,normalStyle:{font:'Times New Roman',sizeHalfPoints:28,line:360,lineRule:'auto',firstLine:850}},inspection:{...qBinding,bindingId:'66666666-6666-4666-8666-666666666666',scanHash:'d'.repeat(64),sha256:'e'.repeat(64)}};}
    if(body.action==='quality-save'){
     if(body.versionId!==qBinding.versionId||body.fileHash!==qBinding.fileHash)throw Error('QUALITY_STALE');
     const payload={...body.payload};let reportHash=null;
@@ -45,6 +45,12 @@ async function externalForm(page){
 test('C102 internal scan shows limited corpus and needs individual decisions; it is not originality',async({page})=>{
  await setup(page);expect(await page.evaluate(()=>qReady)).toBe(false);
  await page.locator('[data-quality-scan]').click();await expect(page.locator('[data-quality-scope]')).toContainText('Пригодных для сравнения: 1');await expect(page.locator('[data-quality-scope]')).toContainText('source-one');
+ await expect(page.locator('[data-word-links]')).toContainText('Активных ссылок с тем же адресом: 0');
+ await expect(page.locator('[data-word-links]')).toContainText('https://example.org/article');
+ await expect(page.locator('[data-word-layout]')).toContainText('Times New Roman, 14 пт');
+ await expect(page.locator('[data-word-layout]')).toContainText('не визуальная проверка');
+ await expect(page.locator('[data-word-inspection]')).toContainText('паспорт '+await page.evaluate(()=>qBinding.passportId));
+ await expect(page.locator('[data-word-inspection]')).toContainText('не итоговая приёмка');
  await expect(page.locator('[data-quality-findings]')).toContainText('не подтверждает оригинальность');
  await page.locator('[data-q="internalDisposition"]').selectOption('pass');await page.locator('[data-q="internalNotes"]').fill('Проверка имеет нерешённое совпадение.');await page.locator('[data-quality-save-internal]').click();
  await expect(page.locator('[data-quality-status]')).toContainText('каждого совпадения');expect(await page.evaluate(()=>qCalls.filter(x=>x.action==='quality-save').length)).toBe(0);
@@ -138,6 +144,35 @@ test('AI review estimates before payment and binds returned notes to the exact W
  await expect(page.locator('[data-ai-status]')).toContainText('изменились');
  await expect(page.locator('[data-ai-result]')).toBeEmpty();
 });
+test('formula inventory shows missing coverage without payment, pass or stale reuse',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  window.aiCalls=[];
+  Oblako.generationApi=async body=>{
+   aiCalls.push(body);
+   if(body.action!=='quality-review-reports')throw Error('Unexpected paid action');
+   return {versionId:qBinding.versionId,fileHash:qBinding.fileHash,passportId:qBinding.passportId,
+    reports:[{jobId:'55555555-5555-4555-8555-555555555555',current:true,reviewPasses:2,createdAt:'2026-09-30T07:00:00Z',status:'complete',report:{wordHash:qBinding.fileHash,
+     findings:[],coverage:{checked:[],notChecked:['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03']},
+     calculationInventory:{complete:false,status:'not_checked',gaps:['duplicate_formula_number'],entries:[
+      {formulaNumber:'21',sourceId:'method-1',sourceLine:87,sourceHash:'d'.repeat(64),sourceQuote:'Выручка = sum(Q*price)/1000 (21)'}]},
+     calculationDiagnostics:[{requirementId:'FIN',status:'verified_arithmetic',reason:'single_operation_only'}]}}]};
+  };
+ });
+ await page.locator('[data-ai-review]').evaluate(el=>el.open=true);
+ await page.locator('[data-ai-recover]').click();
+ await expect(page.locator('[data-ai-result]')).toContainText('Найдено формул: 1');
+ await expect(page.locator('[data-ai-result]')).toContainText('Полнота всех расчётов, их применение и округление не подтверждены');
+ await expect(page.locator('[data-ai-result]')).toContainText('весь расчётный пункт не принят');
+ expect(await page.evaluate(()=>qReady)).toBe(false);
+ await page.locator('[data-ai-result] summary').click();
+ await expect(page.locator('[data-ai-result]')).toContainText('Формула 21 · не проверено');
+ await expect(page.locator('[data-ai-result]')).toContainText('Номера формул повторяются');
+ expect(await page.evaluate(()=>aiCalls.every(c=>c.action==='quality-review-reports'))).toBe(true);
+ await page.evaluate(()=>qBinding={...qBinding,fileHash:'f'.repeat(64)});
+ await page.locator('[data-ai-refresh]').click();
+ await expect(page.locator('[data-ai-result]')).toBeEmpty();
+});
 test('AI review explains why a test assignment cannot start a paid job',async({page})=>{
  await setup(page);
  await page.evaluate(()=>{
@@ -161,5 +196,30 @@ test('open AI findings visibly block readiness of the current Word',async({page}
  });
  await page.locator('[data-quality-refresh]').click();
  await expect(page.locator('[data-quality-status]')).toContainText('сохранены открытые замечания');
+ expect(await page.evaluate(()=>qReady)).toBe(false);
+});
+
+test('two-pass history shows the retained first review and a first-pass failure stays visible',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  window.aiCalls=[];
+  const row={id:'ANALYSIS',status:'fail',sourceQuote:'Условие задания',wordQuote:'Фрагмент Word',wordLocator:'абзац 1',explanation:'Вывод не подтверждён'};
+  const codes=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
+  Oblako.generationApi=async body=>{
+   aiCalls.push(body);
+   if(body.action!=='quality-review-reports')throw Error('Must not pay while reading history');
+   return {versionId:qBinding.versionId,fileHash:qBinding.fileHash,passportId:qBinding.passportId,reports:[
+    {jobId:'55555555-5555-4555-8555-555555555555',current:true,reviewPasses:2,createdAt:'2026-09-30',status:'complete',report:{wordHash:qBinding.fileHash,
+     findings:[],coverage:{checked:[],notChecked:codes},requirements:[{...row,status:'not_checked'}],
+     firstPass:{requirements:[row]}}}]};
+  };
+ });
+ await page.locator('[data-ai-review]').evaluate(el=>el.open=true);
+ await page.locator('[data-ai-recover]').click();
+ await expect(page.locator('[data-ai-status]')).toContainText('выдача заблокирована');
+ await expect(page.locator('[data-ai-result]')).toContainText('два прохода');
+ await page.getByText('Результат первого прохода',{exact:true}).click();
+ await expect(page.locator('[data-ai-result]')).toContainText('Вывод не подтверждён');
+ expect(await page.evaluate(()=>aiCalls.length)).toBe(1);
  expect(await page.evaluate(()=>qReady)).toBe(false);
 });

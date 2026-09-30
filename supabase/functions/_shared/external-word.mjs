@@ -46,11 +46,43 @@ export async function inspectWord(bytes){
  if(!types.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml')||/macroEnabled/i.test(types))fail();
  const xml=await read('word/document.xml');
  if(!/<w:document\b/.test(xml)||!/<w:body\b/.test(xml)||/<w:altChunk\b/.test(xml))fail();
+ const unreadParts=[];
+ if(/<w:(?:ins|del|delText|moveFrom|moveTo)\b/.test(xml))unreadParts.push('word/document.xml:tracked_changes');
+ if(/<w:txbxContent\b|<v:textbox\b/.test(xml))unreadParts.push('word/document.xml:textbox');
+ for(const name of entries.keys()){
+  if(!/^word\/(?:header\d+|footer\d+|footnotes|endnotes|comments)\.xml$/.test(name))continue;
+  const part=await read(name);
+  if([...part.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+   .some(m=>decodeXml(m[1]).trim()))unreadParts.push(name);
+ }
  const paragraphs=[...xml.matchAll(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g)].map(m=>
   [...m[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(t=>decodeXml(t[1])).join('')
  ).filter(t=>t.trim());
  const text=paragraphs.join('\n');
  if(!text.trim()||text.length>500000)throw Error('В Word нет доступного текста или текст превышает допустимый размер.');
+ const printed=[...new Set((text.match(/https?:\/\/[^\s<>«»]+/gi)||[]).map(u=>u.replace(/[.,;!?]+$/,'')))];
+ const rels=entries.has('word/_rels/document.xml.rels')?await read('word/_rels/document.xml.rels'):'';
+ const targets=new Map();
+ for(const tag of rels.match(/<Relationship\b[^>]*\/?\s*>/g)||[]){
+  const attrs=Object.fromEntries([...tag.matchAll(/\b(Id|Type|Target|TargetMode)="([^"]*)"/g)].map(a=>[a[1],decodeXml(a[2])]));
+  if(attrs.Type==='http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink'&&attrs.TargetMode==='External')targets.set(attrs.Id,attrs.Target);
+ }
+ const active=new Set();
+ for(const link of xml.match(/<w:hyperlink\b[^>]*>[\s\S]*?<\/w:hyperlink>/g)||[]){
+  const id=/\br:id="([^"]+)"/.exec(link)?.[1],target=targets.get(id);
+  const shown=[...link.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(t=>decodeXml(t[1])).join('').trim();
+  if(target&&shown===target)active.add(target);
+ }
+ const attr=(tag,name)=>tag&&new RegExp('\\bw:'+name+'="([^"]*)"').exec(tag)?.[1];
+ const twips=(tag,name)=>{const value=attr(tag,name);return value!==undefined&&/^-?\d{1,7}$/.test(value)?Number(value):null;};
+ const sections=[...xml.matchAll(/<w:sectPr\b[^>]*>[\s\S]*?<\/w:sectPr>/g)].slice(0,32).map(m=>{
+  const size=/<w:pgSz\b[^>]*\/?\s*>/.exec(m[0])?.[0],margin=/<w:pgMar\b[^>]*\/?\s*>/.exec(m[0])?.[0];
+  return {width:twips(size,'w'),height:twips(size,'h'),left:twips(margin,'left'),right:twips(margin,'right'),top:twips(margin,'top'),bottom:twips(margin,'bottom')};
+ });
+ const styles=entries.has('word/styles.xml')?await read('word/styles.xml'):'';
+ const normal=[...styles.matchAll(/<w:style\b[^>]*>[\s\S]*?<\/w:style>/g)].find(m=>attr(m[0].slice(0,m[0].indexOf('>')+1),'styleId')==='Normal')?.[0]||'';
+ const font=/<w:rFonts\b[^>]*\/?\s*>/.exec(normal)?.[0],size=/<w:sz\b[^>]*\/?\s*>/.exec(normal)?.[0],spacing=/<w:spacing\b[^>]*\/?\s*>/.exec(normal)?.[0],indent=/<w:ind\b[^>]*\/?\s*>/.exec(normal)?.[0];
+ const normalStyle=normal?{font:(attr(font,'ascii')||attr(font,'hAnsi')||'').slice(0,100),sizeHalfPoints:twips(size,'val'),line:twips(spacing,'line'),lineRule:attr(spacing,'lineRule')||'',firstLine:twips(indent,'firstLine')}:null;
  const fileHash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
- return {text,fileHash};
+ return {text,fileHash,textCoverage:{unreadParts},linkAudit:{printedCount:printed.length,activeCount:printed.filter(u=>active.has(u)).length,missing:printed.filter(u=>!active.has(u))},declaredLayout:{sections,sectionLimitReached:[...xml.matchAll(/<w:sectPr\b/g)].length>32,normalStyle}};
 }

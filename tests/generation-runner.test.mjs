@@ -112,3 +112,22 @@ test('test runner refuses underfunded immutable parts before dispatch',async()=>
  for(const value of [undefined,0,7000,'250000',NaN])assert.throws(()=>checkReserve({...base,spec:{...base.spec,max_cost_microusd:value}}));
  const c={...base,spec:{...base.spec,max_cost_microusd:10000}};assert.equal(checkReserve(c),c);
 });
+
+test('invalid or unknown first review blocks before a second provider dispatch',async()=>{
+ const hash='b'.repeat(64),word='Анализ выручки показывает рост и объясняет причины изменений.';
+ const packet={word:{fileHash:hash,text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',source_attachment_id:'source'}]},materials:[{id:'source',text:'Задание требует анализ выручки и выводы'}]};
+ const codes=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
+ const raw=JSON.stringify({wordHash:hash,findings:[],coverage:{checked:[],notChecked:codes},requirements:[{id:'ANALYSIS',status:'pass',sourceId:'source',sourceQuote:'анализ выручки и выводы',wordQuote:word,wordLocator:'абзац 1',explanation:'Проверен анализ выручки'}]});
+ const c={job_id:'job',ordinal:1,input:{system:'Проверка',review_protocol:2,review_packet:packet,review_target:{fileHash:hash}},spec:{id:'quality_review',section_id:'quality_review',prompt:'Второй проход'}};
+ const part={ordinal:0,state:'done',spec:{id:'quality_evidence',section_id:'quality_review'},result:raw};
+ assert.ok(withContext(c,[part]).spec.prompt.includes(raw));
+ for(const rows of [[],[{...part,state:'unknown'}],[{...part,result:'invalid'}],[{...part,result:raw.replace(word,'Вымышленный текст')}],
+  [{...part,spec:{...part.spec,section_id:'another'}}]]){
+  let dispatched=false,paid=false,blocked;
+  const h=handler({authorize:async()=>true,config:async()=>({cron_token:'test-only'}),ready:()=>true,
+   rpc:async name=>{if(name==='studkab_gen_claim')return c;dispatched=true;},provider:async()=>{paid=true;},
+   prepare:async current=>withContext(current,rows),failClaim:async(current,code)=>{blocked=code;}});
+  const response=await h(new Request('https://internal',{method:'POST',headers:{'X-Studkab-Runner':'test-only'}}));
+  assert.equal(response.status,409);assert.equal(blocked,'REVIEW_FIRST_INVALID');assert.equal(dispatched,false);assert.equal(paid,false);
+ }
+});

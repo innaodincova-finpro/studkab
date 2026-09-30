@@ -1,3 +1,5 @@
+import {inventoryExplicitClauses,missingExplicitClauses} from '../_shared/explicit-requirements.mjs';
+export {inventoryExplicitClauses} from '../_shared/explicit-requirements.mjs';
 import {validateMaterialManifest,resetMaterialEvidence,materialManifestGuard} from '../_shared/material-manifest.mjs';
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 import {structureFindings} from '../_shared/structure-conflict.mjs';
@@ -59,7 +61,9 @@ export function validatePassport(input){
      return {fileHash,number,chosenNumber,first:text(r.first,180,'первый заголовок',true),second:text(r.second,180,'второй заголовок',true),reason:text(r.reason,1000,'основание исправления'),verified:r.verified===true};
     });
    }
-   return {verified:item.verified===true,answer_ids,id,category:item.category,required:item.required!==false,text:text(item.text,2000,'текст пункта',true),source:text(item.source,1000,'источник'),...(id==='ANTIPLAGIARISM'?{originality:originality(item)}:{}),...(id==='STRUCTURE'?{structure_resolutions}:{})};
+   const source_attachment_id=item.source_attachment_id==null?null:text(item.source_attachment_id,36,'связь с исходным файлом');
+   if(source_attachment_id&&!/^[a-f0-9-]{36}$/i.test(source_attachment_id))throw Error('Проверьте связь требования с исходным файлом');
+   return {verified:item.verified===true,answer_ids,id,category:item.category,required:item.required!==false,text:text(item.text,2000,'текст пункта',true),source:text(item.source,1000,'источник'),...(source_attachment_id?{source_attachment_id}:{}),...(id==='ANTIPLAGIARISM'?{originality:originality(item)}:{}),...(id==='STRUCTURE'?{structure_resolutions}:{})};
   })
  };
 }
@@ -111,6 +115,48 @@ export function fillMissingDraft(passport,payload){
   changed=true;return {...item,verified:false,answer_ids:[],text:label+': '+fact.text,source:fact.source};
  });
  return changed?{...passport,items}:passport;
+}
+
+// A source link is only a locator, never an approval. Ambiguous or paraphrased
+// requirements stay open for clarification instead of acquiring a guessed file.
+export function linkLiteralDraftSources(passport,attachments){
+ if(passport.status&&passport.status!=='draft')return passport;
+ const leaves=currentAttachments(attachments).filter(a=>['assignment','methodology'].includes(a.category)&&typeof a.extracted_text==='string');
+ let changed=false;
+ const items=passport.items.map(item=>{
+  if(item.verified||item.source_attachment_id)return item;
+  const literal=String(item.text||'').replace(/^[^:]{1,50}:\s*/u,'').trim();
+  if(literal.length<20||/Не указано|требуется уточнить/iu.test(literal))return item;
+  const matches=leaves.filter(a=>a.extracted_text.includes(literal));
+  if(matches.length!==1)return item;
+  changed=true;
+  const row=matches[0],line=row.extracted_text.slice(0,row.extracted_text.indexOf(literal)).split('\n').length;
+  return {...item,source_attachment_id:row.id,source:`${row.file_name || 'Приложение'}, строка извлечённого текста ${line}: ${literal.slice(0,300)}`.slice(0,1000)};
+ });
+ return changed?{...passport,items}:passport;
+}
+
+async function structureQuestionId(request,fileHash,question){
+ const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(request+'\n'+fileHash+'\n'+question)));
+ hash[6]=(hash[6]&15)|64;hash[8]=(hash[8]&63)|128;
+ const hex=Array.from(hash.slice(0,16),b=>b.toString(16).padStart(2,'0')).join('');
+ return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+}
+
+async function askUnresolvedStructure(db,request,actor,attachments,items,{requireAnswered=false}={}){
+ // Approval cannot trust a client-supplied resolution. Ask for each conflict
+ // even when the submitted passport claims it is already resolved.
+ const findings=structureFindings(currentAttachments(attachments),requireAnswered?[]:items);
+ if(findings.some(i=>i.tooMany))return {status:409,data:{error:'Слишком много неоднозначных номеров. Нужна исправленная методичка'}};
+ const issues=findings.filter(i=>!i.resolved);
+ for(const issue of issues){
+  const question=`В файле «${issue.fileName}» номер ${issue.number} указан для двух разделов: «${issue.first}» и «${issue.second}». Уточните у преподавателя правильную нумерацию этих разделов и укажите основание ответа.`;
+  const result=await db('rpc/studkab_clarification_ask','POST',{p_request:request,p_actor:actor,p_id:await structureQuestionId(request,issue.fileHash,question),p_item:'STRUCTURE',p_question:question});
+  if(!result?.id||result.error)return {status:409,data:{error:'Не удалось сохранить вопрос студенту: '+(result?.error||'сервер не подтвердил запись')}};
+  if(requireAnswered&&(!String(result.answer||'').trim()||!String(result.answer_source||'').trim()))
+   return {status:409,data:{error:'Ожидается ответ студента по повтору номера '+issue.number+'. После ответа создайте новую версию паспорта и свяжите её с ответом.'}};
+ }
+ return null;
 }
 
 // Interpret only explicit section lists. Never infer research methods or waive checks.
@@ -192,11 +238,25 @@ export async function requirementAction(input,user,{db,config}){
   if(!/^[a-f0-9]{64}$/.test(input.sourceFingerprint||''))return {status:400,data:{error:'Сначала сохраните актуальные материалы'}};
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,material_manifest,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
-  if(rows.length&&rows[0].status!=='stale'&&rows[0].source_fingerprint===input.sourceFingerprint&&filled===rows[0])return {status:200,data:{passports:rows,created:false,materialRevision:row.revision}};
-  const passport=rows.length?{title:rows[0].title,summary:filled!==rows[0]?'Требования уточнены по исходной заявке без изменения исходных сведений. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:rows[0].status==='stale'||rows[0].source_fingerprint!==input.sourceFingerprint?filled.items.map(item=>({...item,verified:false,answer_ids:[]})):filled.items}:defaultPassport(row.payload);
+  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
+  if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
+  const sameSource=rows.length&&rows[0].status!=='stale'&&rows[0].source_fingerprint===input.sourceFingerprint;
+  let linked;
+  try{linked=sameSource?inventoryExplicitClauses(linkLiteralDraftSources(filled,attachments),attachments):filled;}
+  catch(e){return {status:409,data:{error:e.message}};}
+  if(sameSource&&linked===rows[0]){
+   const questionError=await askUnresolvedStructure(db,request,user.id,attachments,rows[0].items);
+   if(questionError)return questionError;
+   return {status:200,data:{passports:rows,created:false,materialRevision:row.revision}};
+  }
+  let passport=rows.length?{title:rows[0].title,summary:linked!==rows[0]?'Требования уточнены по исходным материалам. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:sameSource?linked.items:filled.items.map(item=>{const {source_attachment_id,...rest}=item;return {...rest,verified:false,answer_ids:[]};})}:defaultPassport(row.payload);
+  if(!sameSource)try{passport=inventoryExplicitClauses(linkLiteralDraftSources(passport,attachments),attachments);}
+   catch(e){return {status:409,data:{error:e.message}};}
   passport.material_manifest=rows.length?(rows[0].status==='stale'||rows[0].source_fingerprint!==input.sourceFingerprint?resetMaterialEvidence(rows[0].material_manifest):rows[0].material_manifest):null;
   const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_material_manifest:passport.material_manifest??null,p_source_fingerprint:input.sourceFingerprint,p_expected_revision:input.expectedRevision??null});
   if(created.error)return {status:409,data:created};
+  const questionError=await askUnresolvedStructure(db,request,user.id,attachments,created.items||passport.items);
+  if(questionError)return questionError;
   return {status:200,data:{passports:[created].concat(rows),created:true,materialRevision:row.revision}};
  }
  let passport;
@@ -213,6 +273,15 @@ export async function requirementAction(input,user,{db,config}){
   if(required.some(id=>!passport.items.some(q=>q.id===id))||passport.items.some(item=>(item.required||required.includes(item.id))&&(!item.verified||!item.source||(/не указано|требуется уточнить|порог не задан|ожидается ответ/i.test(item.text)&&!(item.id==='ANTIPLAGIARISM'&&item.originality?.mode==='university_threshold_no_service'&&item.text===originalityText(item.originality))))))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
   const anti=passport.items.find(item=>item.id==='ANTIPLAGIARISM');
   if(!anti.originality||anti.text!==originalityText(anti.originality)||anti.originality.mode==='service_only'&&!/STUDKAB/i.test(anti.source)||['university_threshold','university_no_threshold'].includes(anti.originality.mode)&&!anti.originality.service)return {status:409,data:{error:'Укажите подтверждённое основание проверки оригинальности'}};
+  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
+  if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
+  let missing;
+  try{missing=missingExplicitClauses(passport.items,attachments);}
+  catch(e){return {status:409,data:{error:e.message}};}
+  if(missing.length)
+   return {status:409,data:{error:'В задании или методичке найдены отдельные условия, которых нет в паспорте. Обновите черновик и уточните их.'}};
+  const questionError=await askUnresolvedStructure(db,request,user.id,attachments,passport.items,{requireAnswered:true});
+  if(questionError)return questionError;
   const [saved]=await db('studkab_requirement_passports?request_id=eq.'+request+'&id=eq.'+version+'&select=items&limit=1');
   if(!saved)return {status:409,data:{error:'Версия паспорта не найдена'}};
   const materials=await materialManifestGuard(db,request,version);

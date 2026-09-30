@@ -22,3 +22,11 @@ test('AI assistance transfers only unresolved evidence for exact Word, never a p
  assert.equal(window.QualityEvidence.reviewSuggestions({...report,coverage:{checked:codes.filter(c=>c!=='C12'),notChecked:['C12']}},hash),null);
  assert.equal(window.QualityEvidence.reviewSuggestions({...report,findings:[{...report.findings[0],code:'X01'}]},hash),null);
 });
+
+test('combined findings retain both passes without opening a positive mark',()=>{
+ const findings=Array.from({length:40},(_,i)=>({code:'C05',status:'fail',location:'Раздел '+i,requirement:'Условие '+i,observation:'Открытое замечание '+i}));
+ const report={wordHash:hash,findings,reviewPasses:2,coverage:{checked:[],notChecked:codes}};
+ assert.equal(window.QualityEvidence.reviewSuggestions(report,hash).C05.status,'fail');
+ assert.equal(window.QualityEvidence.reviewSuggestions({...report,reviewPasses:1},hash),null);
+ assert.equal(window.QualityEvidence.reviewSuggestions({...report,findings:[...findings,...findings]},hash),null);
+});

@@ -64,6 +64,7 @@ function passportFixture({open=false,conflict=false}={}){
   calls.push({path,method,body});
   if(path.startsWith('studkab_requests?'))return [{id:request,payload:{},revision:12,studkab_material_revisions:[{id:cycle,closed_at:open?null:'2026-09-22T00:00:00Z'}]}];
   if(path.startsWith('studkab_requirement_passports?'))return [old];
+  if(path.startsWith('studkab_request_attachments?'))return [];
   if(path==='rpc/studkab_material_revision_state')return {materials:{state:'open',requestRevision:12,cycleId:cycle}};
   if(path==='rpc/studkab_requirement_passport_save')return conflict?{error:'Материалы изменились. Откройте паспорт заново'}:{id:randomUUID(),status:'draft',revision:2,items:body.p_items,source_fingerprint:body.p_source_fingerprint};
   throw Error('Unexpected dependency '+path);

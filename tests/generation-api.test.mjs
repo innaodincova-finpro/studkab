@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {handler,prepare,failure,diagnostic,workKind} from '../supabase/functions/studkab-generation-api/handler.mjs';
 import {reserveMicrousd} from '../supabase/functions/_shared/deepseek-cost.mjs';
-import {reviewPacket,reviewPrompt,parseReviewReport} from '../supabase/functions/studkab-generation-api/review-pass.mjs';
+import {reviewPacket,reviewPrompt,parseReviewReport,parseTwoPassReview} from '../supabase/functions/studkab-generation-api/review-pass.mjs';
 import DraftQuality from '../draft-quality.js';
 const uid='11111111-1111-4111-8111-111111111111',job='22222222-2222-4222-8222-222222222222';
 const requestId='33333333-3333-4333-8333-333333333333',passportId='44444444-4444-4444-8444-444444444444',materialFingerprint='a'.repeat(64);
@@ -37,6 +37,193 @@ test('saved AI report is validated before display, and malformed or wrong hash s
  assert.equal(parseReviewReport(report.replace('Задание',''),reviewHash),null);
  assert.equal(parseReviewReport('not json',reviewHash),null);
 });
+test('per-request review accepts only exact source and Word excerpts and leaves unverifiable items open',()=>{
+ const source='По заданию необходимо представить анализ выручки и выводы по результатам.';
+ const word='В разделе 2 анализ выручки показывает рост на 7 процентов; выводы объясняют причины изменения.';
+ const packet={word:{text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true,source_attachment_id:'source-1'},
+  {id:'ANTIPLAGIARISM',text:'Внешний PDF',required:true}]},materials:[{id:'source-1',text:source}]};
+ const requirements=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',
+  wordQuote:word,wordLocator:'абзац 1',explanation:'Описаны анализ выручки и итоговые выводы'},
+  {id:'ANTIPLAGIARISM',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Внешний отчёт проверяется отдельно'}];
+ const raw=JSON.stringify({...JSON.parse(report),requirements});
+ assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].status,'pass');
+ assert.equal(parseReviewReport(raw,reviewHash,{...packet,word:{...packet.word,
+  textCoverage:{unreadParts:['word/footnotes.xml']}}}),null);
+ assert.ok(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[
+  {...requirements[0],status:'not_checked'},requirements[1]]}),reviewHash,{...packet,
+  word:{...packet.word,textCoverage:{unreadParts:['word/footnotes.xml']}}}));
+ assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].wordLocator,'абзац 1');
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],wordLocator:'раздел 2'},requirements[1]]}),reviewHash,packet),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],wordQuote:'анализ выручки показывает рост на 7 процентов'},requirements[1]]}),reviewHash,packet),null);
+ assert.deepEqual(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:requirements.toReversed()}),reviewHash,packet).requirements.map(r=>r.id),['ANTIPLAGIARISM','ANALYSIS']);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0]]}),reviewHash,packet),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],sourceQuote:'вымышленное основание'},requirements[1]]}),reviewHash,packet),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],sourceId:'другой-файл'},requirements[1]]}),reviewHash,packet),null);
+ assert.equal(parseReviewReport(raw,reviewHash,{...packet,passport:{items:[{...packet.passport.items[0],source_attachment_id:undefined},packet.passport.items[1]]}}),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],wordQuote:'несуществующий фрагмент'},requirements[1]]}),reviewHash,packet),null);
+ const irrelevant='Ознакомиться с общими правилами оформления работы';
+ const unrelated={...packet,word:{text:word+' '+irrelevant},materials:[{id:'source-1',text:source+' '+irrelevant}]};
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],sourceQuote:irrelevant,wordQuote:irrelevant},requirements[1]]}),reviewHash,unrelated),null);
+ const wrongSubject={...packet,word:{text:'В разделе 2 представлен анализ расходов и выводы по результатам.'}};
+ const mismatched={...requirements[0],sourceQuote:'анализ выручки и выводы',wordQuote:'анализ расходов и выводы'};
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[mismatched,requirements[1]]}),reviewHash,wrongSubject),null);
+ const echoed='В задании требуется проанализировать выручку предприятия и сформулировать выводы';
+ const echoPacket={...packet,passport:{items:[{...packet.passport.items[0],text:'Проанализировать выручку предприятия и сформулировать выводы'},packet.passport.items[1]]},
+  materials:[{id:'source-1',text:echoed+'.'}],word:{text:'Введение. '+echoed+'. Далее рассматривается другая тема.'}};
+ const echoRow={...requirements[0],sourceQuote:echoed,wordQuote:echoed,wordLocator:'Введение, предложение 2'};
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[echoRow,requirements[1]]}),reviewHash,echoPacket),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0],{...requirements[1],status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',wordQuote:'анализ выручки и выводы',wordLocator:'раздел 2',explanation:'Внешняя проверка прошла'}]}),reviewHash,packet),null);
+});
+test('arbitrary passport IDs cannot turn calculations or visual requirements into text-only passes',()=>{
+ const cases=[
+  {text:'Рассчитать коэффициент ликвидности',source:'Необходимо рассчитать коэффициент ликвидности по данным отчётности.',
+   word:'Коэффициент ликвидности рассчитан по данным отчётности: значение 1,5.',
+   sourceQuote:'рассчитать коэффициент ликвидности по данным отчётности',wordQuote:'Коэффициент ликвидности рассчитан по данным отчётности'},
+  {text:'Представить таблицу с результатами',source:'Необходимо представить таблицу с результатами исследования.',
+   word:'В разделе 2 приведена таблица с результатами исследования.',
+   sourceQuote:'представить таблицу с результатами исследования',wordQuote:'таблица с результатами исследования'}
+ ];
+ for(const c of cases){
+  const packet={word:{text:c.word},passport:{items:[{id:'REQ_custom_42',text:c.text,required:true,source_attachment_id:'source-1'}]},
+   materials:[{id:'source-1',text:c.source}]};
+  const row={id:'REQ_custom_42',status:'pass',sourceId:'source-1',sourceQuote:c.sourceQuote,wordQuote:c.wordQuote,
+   wordLocator:'раздел 2',explanation:'Условие исполнено, доказательство содержится в тексте'};
+  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,c.text);
+ }
+});
+test('review report independently checks proposed arithmetic and never upgrades a calculation item to pass',()=>{
+ const source='Выручка 2024, млн руб.: 120,00. Затраты 2024, млн руб.: 35,00.';
+ const word='В 2024 году, млн руб., прибыль равна 85,00.';
+ const packet={word:{fileHash:reviewHash,text:word},passport:{sourceFingerprint:'b'.repeat(64),
+  items:[{id:'FIN',text:'Рассчитать прибыль за 2024 год',required:true,source_attachment_id:'data-1'}]},
+  materials:[{id:'data-1',text:source}]};
+ const row={id:'FIN',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Весь расчётный пункт не доказан'};
+ const calc={requirementId:'FIN',wordHash:reviewHash,passportFingerprint:'b'.repeat(64),operation:'subtract',
+  period:'2024',unit:'млн руб.',decimals:2,
+  operands:[{sourceId:'data-1',sourceQuote:'Выручка 2024, млн руб.: 120,00',value:'120,00'},
+   {sourceId:'data-1',sourceQuote:'Затраты 2024, млн руб.: 35,00',value:'35,00'}],
+  result:'85,00',wordQuote:word};
+ const base={...JSON.parse(report),requirements:[row],calculations:[calc]};
+ const checked=parseReviewReport(JSON.stringify(base),reviewHash,packet);
+ assert.equal(checked.calculationDiagnostics[0].status,'verified_arithmetic');
+ assert.equal(checked.requirements[0].status,'not_checked');
+ assert.equal(parseReviewReport(JSON.stringify({...base,calculations:[{...calc,operation:'add'}]}),
+  reviewHash,packet).calculationDiagnostics[0].reason,'arithmetic_mismatch');
+ assert.equal(parseReviewReport(JSON.stringify({...base,calculations:[{...calc,wordHash:'c'.repeat(64)}]}),
+  reviewHash,packet).calculationDiagnostics[0].status,'not_checked');
+ assert.equal(parseReviewReport(JSON.stringify({...base,requirements:[{...row,status:'pass'}]}),reviewHash,packet),null);
+ assert.deepEqual(parseReviewReport(JSON.stringify({...base,calculations:undefined}),reviewHash,packet).calculationDiagnostics,[]);
+});
+test('numbered calculation inventory is computed from server materials, not model claims',()=>{
+ const packet={word:{fileHash:reviewHash,text:'Текст Word.'},passport:{sourceFingerprint:'b'.repeat(64),
+  items:[{id:'FIN',text:'Расчёты по методичке',source_attachment_id:'method-1'}]},
+  materials:[{id:'method-1',category:'methodology',fileHash:'d'.repeat(64),
+   text:'P = A - B (1)\n\n\nR = P / V (2)'}]};
+ const row={id:'FIN',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Не проверено'};
+ const raw={...JSON.parse(report),requirements:[row],calculations:[],
+  calculationInventory:{complete:true,status:'pass',entries:[]}};
+ const parsed=parseReviewReport(JSON.stringify(raw),reviewHash,packet);
+ assert.equal(parsed.calculationInventory.entries.length,2);
+ assert.equal(parsed.calculationInventory.complete,false);
+ assert.equal(parsed.calculationInventory.status,'not_checked');
+ assert.equal(parsed.requirements[0].status,'not_checked');
+ const changed={...packet,materials:[{...packet.materials[0],fileHash:'e'.repeat(64)}]};
+ assert.equal(parseReviewReport(JSON.stringify(raw),reviewHash,changed).calculationInventory.entries[0].sourceHash,'e'.repeat(64));
+});
+test('textual evidence cannot quote only the harmless part of a negative Word paragraph',()=>{
+ const paragraph='Анализ выручки за год и выводы не представлены в работе.';
+ const packet={word:{text:'Введение.\n'+paragraph},
+  passport:{items:[{id:'REQ_custom',text:'Анализ выручки и выводы',required:true,source_attachment_id:'source-1'}]},
+  materials:[{id:'source-1',text:'Требуется анализ выручки за год и содержательные выводы.'}]};
+ const row={id:'REQ_custom',status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки за год и содержательные выводы',
+  wordQuote:'Анализ выручки за год и выводы',wordLocator:'абзац 2',explanation:'Заявлено, что анализ и выводы представлены'};
+ const parsed=JSON.parse(report);
+ assert.equal(parseReviewReport(JSON.stringify({...parsed,requirements:[row]}),reviewHash,packet),null);
+ // The full paragraph passes only when the reported position matches the
+ // server's position in the stored Word body.
+ const positive='Анализ выручки за год и выводы представлены с объяснением результатов.';
+ const accepted=parseReviewReport(JSON.stringify({...parsed,requirements:[{...row,wordQuote:positive}]}),
+  reviewHash,{...packet,word:{text:'Введение.\n'+positive}});
+ assert.equal(accepted.requirements[0].wordLocator,'абзац 2');
+ assert.equal(parseReviewReport(JSON.stringify({...parsed,requirements:[{...row,wordQuote:positive}]}),
+  reviewHash,{...packet,word:{text:positive+'\n'+positive}}),null);
+});
+test('an explicit statement that the required work is absent cannot become a positive text verdict',()=>{
+ const examples=[
+  {requirement:'Анализ выручки и выводы',source:'Требуется анализ выручки и содержательные выводы.',
+   word:'Анализ выручки не выполнен, выводы отсутствуют.'},
+  {requirement:'Описание методики исследования',source:'Необходимо описание методики исследования и процедуры отбора.',
+   word:'Описание методики исследования не представлено в документе.'}
+ ];
+ for(const example of examples){
+  const packet={word:{text:example.word},passport:{items:[{id:'REQ_custom',text:example.requirement,
+   required:true,source_attachment_id:'source-1'}]},materials:[{id:'source-1',text:example.source}]};
+  const row={id:'REQ_custom',status:'pass',sourceId:'source-1',sourceQuote:example.source,
+   wordQuote:example.word,wordLocator:'абзац 1',explanation:'Помощник ошибочно объявил условие выполненным'};
+  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,example.requirement);
+ }
+});
+test('a passport period must be evidenced in both cited passages before text pass',()=>{
+ const cases=[
+  {requirement:'Сравнить выручку за 2023 и 2024 годы',source:'Сравнить выручку за 2023 и 2024 годы.',
+   word:'Сравнение выручки за 2022 и 2024 годы выполнено в разделе анализа.',
+   positive:'Сравнение выручки за 2023 и 2024 годы выполнено в разделе анализа.'},
+  {requirement:'Описать выборку за 2021–2023 годы',source:'Описать выборку за 2021–2023 годы.',
+   word:'Выборка за 2021–2022 годы описана с указанием процедуры отбора.',
+   positive:'Выборка за 2021–2023 годы описана с указанием процедуры отбора.'}
+ ];
+ for(const c of cases){
+  const packet={word:{text:c.word},passport:{items:[{id:'REQ_PERIOD',text:c.requirement,required:true,
+   source_attachment_id:'source-1'}]},materials:[{id:'source-1',text:c.source}]};
+  const row={id:'REQ_PERIOD',status:'pass',sourceId:'source-1',sourceQuote:c.source,
+   wordQuote:c.word,wordLocator:'абзац 1',explanation:'Период ошибочно объявлен соответствующим заданию'};
+  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,c.requirement);
+  assert.ok(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...row,wordQuote:c.positive}]}),
+   reviewHash,{...packet,word:{text:c.positive}}));
+ }
+});
+test('a risk finding tied to a passport item cannot coexist with its pass',()=>{
+ const source='Необходимо описать методику исследования и процедуру отбора.';
+ const word='Методика исследования и процедура отбора описаны в этой главе.';
+ const packet={word:{text:word},passport:{items:[{id:'REQ_METHOD',text:'Описание методики исследования',required:true,
+  source_attachment_id:'source-1'}]},materials:[{id:'source-1',text:source}]};
+ const row={id:'REQ_METHOD',status:'pass',sourceId:'source-1',sourceQuote:source,
+  wordQuote:word,wordLocator:'абзац 1',explanation:'Методика исследования представлена в главе работы'};
+ for(const status of ['fail','needs_evidence']){
+  const finding={code:'C05',requirementId:'REQ_METHOD',location:'Глава 2',requirement:'Описание методики исследования',
+   observation:'Описание методики расходится с исходным заданием',status};
+  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),findings:[finding],requirements:[row]}),
+   reviewHash,packet),null,status);
+  assert.ok(parseReviewReport(JSON.stringify({...JSON.parse(report),findings:[finding],requirements:[{...row,status:'fail'}]}),
+   reviewHash,packet));
+ }
+});
+test('server archives validated per-item review evidence for the current Word only',async()=>{
+ const excerpt='анализ выручки и выводы',wordExcerpt='анализ выручки показывает рост на 7 процентов';
+ const rows=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',
+  sourceQuote:excerpt,wordQuote:'В разделе 2 '+wordExcerpt,wordLocator:'абзац 1',explanation:'Сверены анализ выручки и итоговые выводы'}];
+ const packet={word:{text:'В разделе 2 '+wordExcerpt},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true,source_attachment_id:'source-1'}]},
+  materials:[{id:'source-1',text:'В задании требуется '+excerpt}]};
+ const calls=[],stored=JSON.stringify({...JSON.parse(report),requirements:rows});
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
+  config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+  readReviewPacket:async()=>({packet,passport:{id:passportId},version:{file_hash:reviewHash}}),
+  db:async(path,args)=>{calls.push({path,args});
+   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
+   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved',items:packet.passport.items}];
+   if(path.startsWith('studkab_gen_jobs'))return [{id:job,created_at:'2026-09-29',status:'complete',
+    snapshot:{input:{review_protocol:2,review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}];
+   if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:stored}];
+   if(path==='rpc/studkab_requirement_review_ingest')return {items:1};return [];
+  }});
+ const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},
+  body:JSON.stringify({action:'quality-review-reports',request:requestId,versionId:reviewVersion})}));
+ assert.equal(response.status,200);
+ assert.equal((await response.json()).reports[0].report.requirements[0].status,'pass');
+ const saved=calls.find(c=>c.path==='rpc/studkab_requirement_review_ingest');
+ assert.equal(saved.args.p_job,job);
+ assert.deepEqual(saved.args.p_requirements,rows);
+});
 test('AI report registry reads immutable parts for exact Word and marks the current passport',async()=>{
  const calls=[];
  const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),db:async path=>{
@@ -55,6 +242,29 @@ test('AI report registry reads immutable parts for exact Word and marks the curr
  assert.ok(calls.find(p=>p.startsWith('studkab_gen_jobs')).includes('snapshot->input->review_target->>fileHash'));
  assert.equal(calls.filter(p=>p.startsWith('studkab_gen_parts')).length,2);
  assert.equal((await request({action:'quality-review-reports',request:requestId,versionId:passportId})).status,409);
+});
+test('current formula inventory cannot be attached to a historical passport report',async()=>{
+ const packet={word:{fileHash:reviewHash,text:'Текст Word'},
+  passport:{items:[{id:'FIN',text:'Проверить расчёты',source_attachment_id:'method'}]},
+  materials:[{id:'method',category:'methodology',fileHash:'d'.repeat(64),text:'P = A - B (1)'}]};
+ const stored=JSON.stringify({...JSON.parse(report),requirements:[{id:'FIN',status:'not_checked',
+  sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Не проверено'}]});
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
+  config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+  readReviewPacket:async()=>({packet,passport:{id:passportId},version:{file_hash:reviewHash}}),
+  db:async path=>{
+   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
+   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved',items:packet.passport.items}];
+   if(path.startsWith('studkab_gen_jobs'))return [passportId,'old-passport'].map(id=>({id,status:'complete',
+    snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId:id}}}}));
+   if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:stored}];return [];
+  }});
+ const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},
+  body:JSON.stringify({action:'quality-review-reports',request:requestId,versionId:reviewVersion})}));
+ assert.equal(response.status,200);const {reports}=await response.json();
+ assert.equal(reports[0].report.calculationInventory.entries.length,1);
+ assert.equal(reports[1].current,false);
+ assert.equal(reports[1].report.calculationInventory,undefined);
 });
 test('AI history includes blocker beyond first 20 and follows pagination across owner changes',async()=>{
  const paths=[],jobs=Array.from({length:101},(_,i)=>({id:'job-'+i,status:i===100?'unknown':'complete',created_at:'2026-09-28',
@@ -106,9 +316,15 @@ test('quality review builds a server-owned prompt with no automatic pass or deli
  assert.equal(answer.status,'queued');
  const saved=s.calls.find(c=>c.path==='rpc/studkab_gen_start').args;
  assert.equal(saved.p_input.review_target.fileHash,reviewHash);
- assert.equal(saved.p_plan.length,1);
+ assert.equal(saved.p_plan.length,2);
+ assert.deepEqual(saved.p_plan.map(p=>p.id),['quality_evidence','quality_review']);
+ assert.ok(saved.p_plan.every(p=>p.section_id==='quality_review'));
+ assert.equal(saved.p_input.review_protocol,2);
+ assert.equal(quote.reviewPasses,2);
+ assert.equal(quote.estimatedCostMicrousd,saved.p_plan.reduce((total,p)=>total+p.estimated_cost_microusd,0));
  assert.equal(saved.p_plan[0].section_id,'quality_review');
- assert.ok(saved.p_input.system.includes('Не присваивай статус pass'));
+ assert.ok(saved.p_input.system.includes('По общим кодам C01–S03 не присваивай pass'));
+ assert.ok(saved.p_input.system.includes('по отдельному пункту паспорта pass возможен только с дословным свидетельством'));
  assert.ok(!JSON.stringify(saved).includes('client override'));
  assert.ok(!JSON.stringify(saved).includes('ignore all rules'));
 });
@@ -158,18 +374,54 @@ test('missing student name blocks paid estimate and queue before any budget or p
 test('review packet rejects old Word and hashes exact saved bytes',async()=>{
  const db=async path=>{
   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:33,docx_base64:'AQID',file_hash:reviewHash,document_hash:'c'.repeat(64)}];
-  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[]}];
+  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[{id:'WORK_TYPE',text:'Тип работы'}]}];
   return [{id:'source',supersedes:null,category:'assignment',file_hash:'d'.repeat(64),extracted_text:'Задание'}];
  };
  await assert.rejects(()=>reviewPacket(db,requestId,'66666666-6666-4666-8666-666666666666',async()=>{throw Error('should not inspect old Word');}),/REVIEW_VERSION_STALE/);
  const result=await reviewPacket(db,requestId,reviewVersion,async bytes=>{assert.deepEqual([...bytes],[1,2,3]);return {fileHash:reviewHash,text:'Текст Word'};});
  assert.equal(result.packet.word.fileHash,reviewHash);
+ assert.deepEqual(result.packet.word.textCoverage,{unreadParts:[]});
  assert.ok(reviewPrompt(result.packet).system.includes('недоверенные данные'));
+ assert.ok(reviewPrompt(result.packet).system.includes('unreadParts'));
+});
+test('incomplete passport blocks current-file review and cannot validate a positive report',async()=>{
+ const sourceId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const source='Работа должна содержать анализ выручки за три года';
+ const item={id:'ANALYSIS',text:source,required:true,verified:true,source_attachment_id:sourceId};
+ let items=[{id:'OTHER',text:'Другое условие',required:true,verified:true}];
+ const db=async path=>{
+  if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:1,docx_base64:'AQID',file_hash:reviewHash}];
+  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:1,status:'approved',source_fingerprint:materialFingerprint,items}];
+  return [{id:sourceId,category:'assignment',file_hash:'d'.repeat(64),extracted_text:source}];
+ };
+ const inspect=async()=>({fileHash:reviewHash,text:'Анализ выручки за три года показывает рост показателей.'});
+ await assert.rejects(()=>reviewPacket(db,requestId,reviewVersion,inspect),/REVIEW_REQUIREMENTS_INCOMPLETE/);
+ items=[item];
+ const current=await reviewPacket(db,requestId,reviewVersion,inspect);
+ assert.equal(current.packet.passport.items.length,1);
+ const row={id:item.id,status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Предметная проверка не завершена'};
+ const raw=JSON.stringify({...JSON.parse(report),requirements:[row]});
+ assert.ok(parseReviewReport(raw,reviewHash,current.packet));
+ const changed={...current.packet,materials:[{...current.packet.materials[0],text:source+'\nПостроить график изменения температуры по результатам измерений.'}]};
+ assert.equal(parseReviewReport(raw,reviewHash,changed),null);
+ for(const action of ['quality-review-estimate','quality-review-start']){
+  const calls=[];
+  const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
+   config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+   readReviewPacket:async()=>{throw Error('REVIEW_REQUIREMENTS_INCOMPLETE');},
+   db:async path=>{calls.push(path);if(path.startsWith('studkab_requests'))return [{payload:{k:'Курсовая работа',n:'Студент Тестов'}}];
+    if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];throw Error('Must stop before budget or queue');}});
+  const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},
+   body:JSON.stringify({action,request:requestId,versionId:reviewVersion})}));
+  assert.equal(response.status,409);
+  assert.equal((await response.json()).error,'REVIEW_REQUIREMENTS_INCOMPLETE');
+  assert.equal(calls.some(path=>path.includes('budget')||path.includes('gen_start')),false);
+ }
 });
 test('test assignment cannot reach paid quality-review queue',async()=>{
  const db=async path=>{
   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:33,docx_base64:'AQID',file_hash:reviewHash}];
-  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[]}];
+  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[{id:'WORK_TYPE',text:'Тип работы'}]}];
   return [{id:'source',supersedes:null,category:'assignment',file_hash:'d'.repeat(64),extracted_text:'ТЕСТОВОЕ ЗАДАНИЕ НА КУРСОВУЮ РАБОТУ\nУчебный вариант 1'}];
  };
  await assert.rejects(()=>reviewPacket(db,requestId,reviewVersion,async()=>({fileHash:reviewHash,text:'Текст Word'})),/REVIEW_SYNTHETIC_PAID_BLOCKED/);
@@ -336,4 +588,51 @@ test('R1 diagnostics expose bounded operational fields and omit arbitrary detail
  assert.deepEqual(diagnostic({ordinal:2,section:'chapter-2',stage:'provider',attempt:1,request_id:'11111111-1111-4111-8111-111111111111',reason:'RESULT_UNKNOWN',finish_reason:'length',started_at:'2026-09-17T12:00:00Z',finished_at:null,promptTokens:10,completionTokens:20,secret:'x'}),
   {ordinal:2,section:'chapter-2',stage:'provider',attempt:1,requestId:'11111111-1111-4111-8111-111111111111',reason:'RESULT_UNKNOWN',finishReason:'length',startedAt:'2026-09-17T12:00:00Z',finishedAt:null,promptTokens:10,completionTokens:20});
  assert.equal(diagnostic({stage:'private-stage'}),null);
+});
+
+test('two passes must agree on every positive item, and the first finding cannot disappear',()=>{
+ const word='Анализ выручки показывает рост доходов и объясняет причины изменений.';
+ const packet={word:{fileHash:reviewHash,text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',source_attachment_id:'source',required:true}]},
+  materials:[{id:'source',text:'По заданию нужен анализ выручки и выводы'}]};
+ const row={id:'ANALYSIS',status:'pass',sourceId:'source',sourceQuote:'анализ выручки и выводы',wordQuote:word,
+  wordLocator:'абзац 1',explanation:'Выполнено сопоставление анализа выручки'};
+ const output=(rows,findings=[])=>JSON.stringify({...JSON.parse(report),findings,requirements:rows});
+ const good=output([row]);
+ assert.equal(parseTwoPassReview(good,good,reviewHash,packet).reviewPasses,2);
+ for(const status of ['fail','not_checked'])assert.equal(parseTwoPassReview(output([{...row,status}]),good,reviewHash,packet),null);
+ assert.equal(parseTwoPassReview(good,good,'f'.repeat(64),packet),null);
+ assert.equal(parseTwoPassReview(output([{...row,sourceQuote:'Вымышленное основание'}]),good,reviewHash,packet),null);
+ const finding={code:'C05',location:'абзац 1',requirement:'Задание',observation:'Не обоснован общий вывод',status:'fail'};
+ assert.equal(parseTwoPassReview(output([row],[finding]),good,reviewHash,packet).findings[0].observation,finding.observation);
+ assert.equal(parseTwoPassReview(good,output([{...row,status:'not_checked'}]),reviewHash,packet).requirements[0].status,'not_checked');
+});
+test('two-pass estimate includes both calls and retained first output without increasing the work ceiling',async()=>{
+ const s=reviewSetup(),request={request:requestId,versionId:reviewVersion};
+ const quote=await (await s.request({...request,action:'quality-review-estimate'})).json();
+ const single=reserveMicrousd(twoPassSystem(),JSON.stringify(reviewContext.packet),4000);
+ assert.ok(quote.estimatedCostMicrousd>2*single);
+ assert.equal(quote.maxCostMicrousd,250000);
+ const blocked=reviewSetup({budget:quote.estimatedCostMicrousd-1});
+ const rejected=await blocked.request({...request,action:'quality-review-start',confirmedEstimateMicrousd:quote.estimatedCostMicrousd,
+  confirmedFileHash:reviewHash,confirmedPassportId:passportId});
+ assert.equal((await rejected.json()).error,'BUDGET_BLOCKED');
+ assert.equal(blocked.calls.some(c=>c.path==='rpc/studkab_gen_start'),false);
+ function twoPassSystem(){return reviewPrompt(reviewContext.packet).system;}
+});
+test('legacy single-pass report remains readable without new positive ingest',async()=>{
+ const source='В задании нужен анализ выручки и выводы',word='Анализ выручки показывает рост и объясняет причины изменений.';
+ const packet={word:{text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',source_attachment_id:'source'}]},materials:[{id:'source',text:source}]};
+ const raw=JSON.stringify({...JSON.parse(report),requirements:[{id:'ANALYSIS',status:'pass',sourceId:'source',sourceQuote:'анализ выручки и выводы',wordQuote:word,wordLocator:'абзац 1',explanation:'Подтверждается анализом выручки'}]});
+ let ingested=false;
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+  readReviewPacket:async()=>({packet,passport:{id:passportId},version:{file_hash:reviewHash}}),db:async(path,args)=>{
+   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
+   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved',items:packet.passport.items}];
+   if(path.startsWith('studkab_gen_jobs'))return [{id:job,status:'complete',snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}];
+   if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:raw}];
+   if(path==='rpc/studkab_requirement_review_ingest')ingested=true;return [];
+  }});
+ const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify({action:'quality-review-reports',request:requestId,versionId:reviewVersion})}));
+ const saved=(await response.json()).reports[0];
+ assert.equal(saved.status,'complete');assert.equal(saved.reviewPasses,1);assert.equal(ingested,false);
 });

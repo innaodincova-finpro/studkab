@@ -285,6 +285,18 @@ test('per-criterion evidence is required; stale and recipient conflicts block de
  error='stale';assert.equal((await app(request({...binding,action:'deliver',deliveryId}))).status,409);
  error='review_required';assert.equal((await app(request({...binding,action:'deliver',deliveryId}))).status,428);
 });
+test('C177 automatic review accepts only server evidence and sends no client criteria',async()=>{
+ let received=null;
+ const app=resultApp(async(path,method,body)=>{
+  assert.equal(path,'rpc/studkab_auto_review_result');received=body;return {reviewId,versionId};
+ });
+ const input={...binding,action:'auto-review-result'};
+ assert.equal((await app(request({...input,criteria:criteria}))).status,400);
+ assert.equal(received,null);
+ assert.equal((await app(request(input))).status,200);
+ assert.deepEqual(received,{p_request:requestId,p_version:versionId,p_review:reviewId,p_reviewer:owner.id,
+  p_recipient:recipientId,p_file_hash:binding.fileHash,p_document_hash:binding.documentHash});
+});
 test('student receives stored bytes only for the current server recipient',async()=>{
  let allowed=true;
  const app=handler({auth:async()=>({...student,id:recipientId}),db:async(path)=>{
@@ -306,13 +318,14 @@ async function reviewStateApp(options={}){
   calls.push({path,method,body});
   if(path==='rpc/studkab_material_manifest_check')return {valid:true};
   if(path==='rpc/studkab_quality_check'){assert.equal(method,'POST');assert.deepEqual(body,{p_request:requestId,p_version:versionId});if(options.qualityUnavailable)throw Error('Quality unavailable');return {eligible:!options.qualityMissing,evidenceIds:options.qualityChanged?{...qualityEvidenceIds,internal_borrowing:requestId}:qualityEvidenceIds};}
+  if(path==='rpc/studkab_requirement_coverage_check')return {eligible:!options.coverageStale,bindingId:versionId,evidenceIds:{ITEM:reviewId}};
   if(path==='rpc/studkab_result_context_version')return options.guardMissing?null:options.legacy?1:2;
   if(path.startsWith('studkab_requests?'))return [{id:requestId,student_id:recipientId,payload:{n:'Тестовый студент'}}];
   if(path.startsWith('studkab_requirement_passports?'))return [{id:passportId,status:options.stalePassport?'stale':'approved',source_fingerprint:reviewContext.sourceFingerprint}];
   if(path.startsWith('studkab_result_versions?'))return options.empty?[]:[{id:versionId,revision:1,recipient_id:options.otherRecipient?requestId:recipientId,document:options.storedDocument||(options.changed?{...document,topic:'Changed'}:document),file_hash:binding.fileHash,document_hash:binding.documentHash,docx_base64:'UEsDBAAAAAA='}];
   if(path.startsWith('studkab_result_passport_bindings?'))return [{id:versionId,document_fingerprint:options.storedDocument?.reviewContext?.fingerprint||reviewContext.fingerprint,passport_id:passportId}];
   if(path.startsWith('studkab_results?'))return options.delivered?[{delivery_id:versionId,review_id:reviewId,created_at:'2026-09-19'}]:[];
-  if(path.startsWith('studkab_result_reviews?'))return options.prepared?[]:[{id:reviewId,version_id:versionId,quality_evidence_ids:qualityEvidenceIds,criteria:options.badReview?{...criteria,C01:{status:'fail',evidence:'Failed content check'}}:criteria,created_at:'2026-09-19'}];
+  if(path.startsWith('studkab_result_reviews?'))return options.prepared?[]:[{id:reviewId,version_id:versionId,quality_evidence_ids:qualityEvidenceIds,criteria:options.dynamicReview?{_mode:'passport_coverage_v1',bindingId:versionId,evidenceIds:options.badCoverage?{ITEM:requestId}:{ITEM:reviewId}}:options.badReview?{...criteria,C01:{status:'fail',evidence:'Failed content check'}}:criteria,created_at:'2026-09-19'}];
   throw Error('Unexpected write or query: '+path);
  }});return {app,document,calls};
 }
@@ -362,6 +375,15 @@ test('C102 stale quality evidence reopens exact Word review while historical del
  }
  const historical=await reviewStateApp({delivered:true,qualityUnavailable:true});const response=await historical.app(request({action:'result-review-state',id:requestId,document:historical.document}));assert.equal(response.status,200);assert.equal((await response.json()).state,'delivered');assert(!historical.calls.some(c=>c.path==='rpc/studkab_quality_check'));
  const unavailable=await reviewStateApp({qualityUnavailable:true});assert.equal((await unavailable.app(request({action:'result-review-state',id:requestId,document:unavailable.document}))).status,503);
+});
+test('C177 dynamic review reopens when any passport evidence changes',async()=>{
+ const current=await reviewStateApp({dynamicReview:true});
+ assert.equal((await (await current.app(request({action:'result-review-state',id:requestId,document:current.document}))).json()).state,'reviewed');
+ for(const options of [{dynamicReview:true,badCoverage:true},{dynamicReview:true,coverageStale:true}]){
+  const {app,document}=await reviewStateApp(options);
+  const state=await (await app(request({action:'result-review-state',id:requestId,document}))).json();
+  assert.equal(state.state,'prepared');assert.equal(state.reason,'quality_review_stale');
+ }
 });
 test('C-071 stale passport and failed stored review block recovery',async()=>{
  for(const options of [{stalePassport:true},{badReview:true}]){

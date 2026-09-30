@@ -426,6 +426,18 @@
       "version": "20260929051225",
       "name": "c175_request_push",
       "sha256": "2f38ae8268b5d8f2c238be751d8d6986a9672c3a5d1b89307c43b65732436fde"
+    },
+    {
+      "file": "20260929062054_c177_passport_coverage.sql",
+      "version": "20260929062054",
+      "name": "c177_passport_coverage",
+      "sha256": "1d1dc862678d1b17ef8766db642c4cd59b72caa69413cf42267021cdf55263ad"
+    },
+    {
+      "version": "20260930095451",
+      "name": "c177_two_pass_review",
+      "file": "20260930095451_c177_two_pass_review.sql",
+      "sha256": "1a8771da785d8eb17a9c2ad215f3d76e3b21a79b42ee3beb8fbd218b08ff3a67"
     }
   ],
   "production_reconciled_at": "2026-09-23"

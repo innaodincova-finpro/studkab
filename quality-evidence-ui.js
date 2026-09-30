@@ -4,7 +4,7 @@
  var labels={pass:'Пройдено',fail:'Не пройдено',manual:'Нужна ручная проверка'};
  var REVIEW_CODES=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
  function reviewSuggestions(report,hash){
-  if(!report||report.wordHash!==hash||!Array.isArray(report.findings)||report.findings.length>32)return null;
+  if(!report||report.wordHash!==hash||!Array.isArray(report.findings)||report.findings.length>(report.reviewPasses===2?64:32))return null;
   var coverage=report.coverage||{},checked=coverage.checked,missing=coverage.notChecked;
   if(!Array.isArray(checked)||!Array.isArray(missing)||checked.length+missing.length!==16||
    new Set(checked.concat(missing)).size!==16||checked.concat(missing).some(function(code){return !REVIEW_CODES.includes(code);})||
@@ -25,8 +25,8 @@
  function field(name,label,type){return '<label style="display:block;margin:10px 0">'+esc(label)+'<input data-q="'+name+'" type="'+(type||'text')+'" style="width:100%;box-sizing:border-box"'+(type==='number'?' min="0" max="100" step="0.01"':' maxlength="1000"')+'></label>';}
  function disposition(name){return '<label>Результат проверки<select data-q="'+name+'" style="width:100%"><option value="manual">Нужна ручная проверка</option><option value="fail">Не пройдено</option><option value="pass">Пройдено</option></select></label>';}
  function mount(host,options){
-  var state=null,verified=false,dirty=false,scan=null,scanHash=null,busy=false,currentBinding=null,operations={},lastReady=false,aiJob=null,aiBusy=false,aiBinding=null;
-  host.innerHTML='<details data-ai-review><summary>ИИ проверка содержания Word</summary><p class="hint">Помощник проверяет сохранённую версию Word по паспорту и приложенным материалам. Он показывает замечания и пробелы доказательств; его ответ не ставит отметки «пройдено» и не передаёт файл студенту. Используется платный API с отдельным подтверждением расчётного предела.</p><button type="button" class="chip" data-ai-start>Оценить стоимость и запустить</button><button type="button" class="chip" data-ai-refresh>Проверить результат</button><button type="button" class="chip" data-ai-recover>Найти предыдущую проверку</button><p role="status" data-ai-status>Проверка ещё не запущена.</p><pre data-ai-result style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre></details><details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Они не заменяют проверку содержания по 16 критериям.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
+  var state=null,verified=false,dirty=false,scan=null,scanHash=null,linkAudit=null,declaredLayout=null,inspection=null,busy=false,currentBinding=null,operations={},lastReady=false,aiJob=null,aiBusy=false,aiBinding=null;
+  host.innerHTML='<details data-ai-review><summary>ИИ проверка содержания Word</summary><p class="hint">Два последовательных прохода помощника сопоставляют условия этой заявки с точным Word и доступными текстами материалов. Сервер сохраняет только подтверждённые цитатами текстовые свидетельства; неподтверждённое остаётся открытым и блокирует обычную выдачу. Проверка платная и требует подтверждения предела.</p><button type="button" class="chip" data-ai-start>Оценить стоимость и запустить</button><button type="button" class="chip" data-ai-refresh>Проверить результат</button><button type="button" class="chip" data-ai-recover>Найти предыдущую проверку</button><p role="status" data-ai-status>Проверка ещё не запущена.</p><pre data-ai-result style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre></details><details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Внешний отчёт и недоступные помощнику проверки остаются отдельными условиями выдачи.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
   var msg=host.querySelector('[data-quality-status]'),body=host.querySelector('[data-quality-body]');
   var aiStatus=host.querySelector('[data-ai-status]'),aiResult=host.querySelector('[data-ai-result]');
   function guard(){options.guard();if(!host.isConnected)throw Error('Окно проверки закрыто.');}
@@ -37,7 +37,8 @@
   function check(after){guard();if(!equal(captured(),after))throw Error('Word, паспорт или получатель изменились. Откройте проверку заново.');}
   async function aiRun(fn){if(aiBusy)return;aiBusy=true;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=true;});
    try{guard();await fn();}catch(e){aiStatus.textContent=e.message==='REVIEW_SYNTHETIC_PAID_BLOCKED'?
-    'Платная ИИ проверка учебной тестовой заявки запрещена. Расходов нет.':e.message==='STUDENT_NAME_REQUIRED'?
+    'Платная ИИ проверка учебной тестовой заявки запрещена. Расходов нет.':e.message==='REVIEW_REQUIREMENTS_INCOMPLETE'?
+    'В текущем задании или методичке есть неподтверждённые условия. Обновите паспорт требований и уточните их до запуска проверки.':e.message==='STUDENT_NAME_REQUIRED'?
     'В заявке отсутствует ФИО студента. Платная ИИ проверка закрыта; уточните данные перед подготовкой Word.':(e.message||'ИИ проверка недоступна.');}
    finally{aiBusy=false;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=false;});}}
   async function aiRefresh(){
@@ -50,7 +51,8 @@
    if(answer.reviewTarget?.versionId!==expected.versionId||answer.reviewTarget?.fileHash!==expected.fileHash)
     throw Error('Ответ ИИ относится к другой версии Word. Запустите проверку текущего файла.');
    var part=answer.parts?.find(function(p){return p.id==='quality_review';});
-   if(answer.job?.status==='complete'&&part?.state==='done'&&typeof part.text==='string'){
+   var first=answer.parts?.find(function(p){return p.id==='quality_evidence';});
+   if(answer.job?.status==='complete'&&part?.state==='done'&&(answer.reviewPasses!==2||first?.state==='done')&&typeof part.text==='string'){
     var parsed;try{parsed=JSON.parse(part.text);}catch{throw Error('Модель вернула ответ не в согласованном формате. Положительное заключение недоступно.');}
     var codes=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
     var checked=parsed.coverage?.checked,notChecked=parsed.coverage?.notChecked;
@@ -62,11 +64,16 @@
       [...checked,...notChecked].some(function(code){return !codes.includes(code);}))
      throw Error('Модель не подтвердила версию или состав отчёта. Положительное заключение недоступно.');
     await aiLoadSaved();
-   }else if(answer.job?.status==='unknown'||part?.state==='unknown')
+   }else if(answer.reviewPasses===2&&part?.failure?.code==='REVIEW_FIRST_INVALID')
+    aiStatus.textContent='Первый отчёт не подтверждён. Второй платный запрос не отправлялся; автоматического повтора нет. Выдача заблокирована.';
+   else if(answer.job?.status==='unknown'||part?.state==='unknown'||first?.state==='unknown')
     aiStatus.textContent='Результат платного запроса неизвестен. Выдача заблокирована; повторная оплата и повторный запуск не выполняются автоматически. Требуется сверка попытки и расходов.';
    else if(answer.job?.status==='stale')
     aiStatus.textContent='Word или паспорт изменился. Эта проверка остановлена; результат не относится к текущему файлу.';
-   else aiStatus.textContent='Состояние проверки: '+(answer.job?.status||'неизвестно')+'. Обновите результат позже.';
+   else if(answer.reviewPasses===2){
+    var names={queued:'ожидает',running:'выполняется',claimed:'выполняется',done:'сохранён',unknown:'результат неизвестен'};
+    aiStatus.textContent='Первый проход: '+(names[first?.state]||'не подтверждён')+'. Второй проход: '+(names[part?.state]||'не подтверждён')+'. Положительный итог ещё не подтверждён.';
+   }else aiStatus.textContent='Состояние проверки: '+(answer.job?.status||'неизвестно')+'. Обновите результат позже.';
   }
   async function aiLoadSaved(){
    var expected=captured(),saved=await Oblako.generationApi({action:'quality-review-reports',request:options.id,versionId:expected.versionId});check(expected);
@@ -74,27 +81,67 @@
     throw Error('Не удалось подтвердить историю ИИ проверки для этого Word.');
    aiResult.replaceChildren();
    var complete=saved.reports.filter(function(r){return r.status==='complete'&&r.report;});
-   var currentComplete=complete.filter(function(r){return r.current;});
-   var unresolved=saved.reports.filter(function(r){return r.status==='unknown'||r.status==='invalid'||
-    (r.status==='complete'&&r.report.findings.some(function(f){return f.status==='fail';}));});
+   var currentComplete=complete.filter(function(r){return r.current&&r.reviewPasses===2;});
+   var currentEvidence=complete.filter(function(r){return r.current;});
+   var unresolved=saved.reports.filter(function(r){
+    if(r.status==='unknown'||r.status==='invalid')return true;
+    return r.status==='complete'&&((r.report.requirements||[]).some(function(item){return item.status==='fail';})||
+     (r.report.firstPass?.requirements||[]).some(function(item){return item.status==='fail';})||r.report.findings.some(function(f){return f.status==='fail';})||
+     (r.report.calculationDiagnostics||[]).some(function(c){return c.status==='fail';}));
+   });
    if(!complete.length){aiStatus.textContent=saved.reports.some(function(r){return r.status==='unknown'})?
     'Результат платного запроса неизвестен. Выдача заблокирована до сверки попытки и расходов; автоматического платного повтора нет.':
     saved.reports.some(function(r){return r.status==='invalid'})?
-    'Ответ ИИ сохранён, но формат не подтверждён. Нужна повторная проверка; положительный вывод недоступен.':
+    (saved.reports.some(function(r){return r.status==='invalid'&&r.reviewPasses===2;})?
+     'Не удалось подтвердить оба прохода: отчёт неполон, недостоверен или выводы расходятся. Положительный вывод недоступен.':
+     'Ответ ИИ сохранён, но формат не подтверждён. Нужна повторная проверка; положительный вывод недоступен.'):
     saved.reports.length?'ИИ проверка этой версии ещё выполняется.':'Для текущего Word и паспорта ИИ проверка не запускалась.';return;}
    if(currentComplete.length){aiJob=currentComplete[0].jobId;aiBinding=expected;}
-   if(currentComplete.length&&options.onReviewSuggestions){
-    var suggestions=reviewSuggestions(currentComplete[0].report,expected.fileHash);
+   if(currentEvidence.length&&options.onReviewSuggestions){
+    var suggestions=reviewSuggestions(currentEvidence[0].report,expected.fileHash);
     if(!suggestions)throw Error('Состав ИИ отчёта не подтверждён. Протокол не заполнен.');
     options.onReviewSuggestions(suggestions,expected);
    }
    complete.forEach(function(item){
     var block=document.createElement('section'),title=document.createElement('h4');
-    title.textContent='Версия Word '+expected.fileHash.slice(0,12)+'… · '+new Date(item.createdAt).toLocaleString('ru-RU')+(item.current?' · текущий паспорт':' · прежний паспорт');block.append(title);
+    title.textContent='Версия Word '+expected.fileHash.slice(0,12)+'… · '+new Date(item.createdAt).toLocaleString('ru-RU')+(item.current?' · текущий паспорт':' · прежний паспорт')+(item.reviewPasses===2?' · два прохода':' · один проход, исторический формат');block.append(title);
+    if(item.reviewPasses===2&&item.report.firstPass){
+     var details=document.createElement('details'),summary=document.createElement('summary'),initial=document.createElement('pre');
+     summary.textContent='Результат первого прохода';initial.style.whiteSpace='pre-wrap';initial.style.overflowWrap='anywhere';
+     initial.textContent=(item.report.firstPass.requirements||[]).map(function(r){return r.id+' · '+(r.status==='pass'?'Текстовое свидетельство':r.status==='fail'?'Расхождение':'Не проверено')+'\nОснование: '+(r.sourceQuote||'не подтверждено')+'\nWord: '+(r.wordLocator||'не подтверждено')+' — '+(r.wordQuote||'')+'\nВывод: '+r.explanation;}).join('\n\n');details.append(summary,initial);block.append(details);
+    }
     var findings=item.report.findings;
     if(!findings.length){var empty=document.createElement('p');empty.textContent='Модель не указала доказанных замечаний. Это не положительная приёмка.';block.append(empty);}
     findings.forEach(function(f){var entry=document.createElement('p');entry.style.whiteSpace='pre-wrap';
      entry.textContent=f.code+' · '+(f.status==='fail'?'Замечание':'Нужны доказательства')+'\nМесто: '+f.location+'\nТребование: '+f.requirement+'\nНаблюдение: '+f.observation;block.append(entry);});
+    if(Array.isArray(item.report.requirements)){
+     var heading=document.createElement('h5');heading.textContent='Условия этой заявки';block.append(heading);
+     item.report.requirements.forEach(function(r){var entry=document.createElement('p');entry.style.whiteSpace='pre-wrap';
+      entry.textContent=r.id+' · '+(r.status==='pass'?'Текстовое свидетельство':r.status==='fail'?'Расхождение':'Не проверено')+
+       '\nОснование: '+(r.sourceId||'не подтверждено')+(r.sourceQuote?' — '+r.sourceQuote:'')+
+       '\nWord: '+(r.wordLocator||'не подтверждено')+(r.wordQuote?' — '+r.wordQuote:'')+
+      '\nВывод: '+(r.explanation||'недостаточно доказательств');block.append(entry);});
+    }
+    if(item.report.calculationInventory){
+     var inventory=item.report.calculationInventory,invTitle=document.createElement('h5');
+     invTitle.textContent='Перечень нумерованных формул из материалов';block.append(invTitle);
+     var invStatus=document.createElement('p');
+     invStatus.textContent='Найдено формул: '+inventory.entries.length+'. Полнота всех расчётов, их применение и округление не подтверждены. Передача по этому перечню не разрешается.';block.append(invStatus);
+     var invDetails=document.createElement('details'),invSummary=document.createElement('summary');
+     invSummary.textContent='Показать основания и непроверенные формулы';invDetails.append(invSummary);
+     inventory.entries.forEach(function(row){var line=document.createElement('p');
+      line.style.whiteSpace='pre-wrap';line.textContent='Формула '+row.formulaNumber+' · не проверено\nФайл: '+row.sourceId+' · строка '+row.sourceLine+' · хеш '+row.sourceHash.slice(0,12)+'…\n'+row.sourceQuote;invDetails.append(line);});
+     if(inventory.gaps.includes('duplicate_formula_number')){var duplicate=document.createElement('p');duplicate.textContent='Номера формул повторяются: требуется разбор противоречия.';invDetails.append(duplicate);}
+     block.append(invDetails);
+    }
+    if(item.report.calculationDiagnostics&&item.report.calculationDiagnostics.length){
+     var calcHeading=document.createElement('h5');calcHeading.textContent='Пересчёт отдельных действий';block.append(calcHeading);
+     item.report.calculationDiagnostics.forEach(function(c){var line=document.createElement('p');
+      line.textContent=(c.requirementId||'Пункт не подтверждён')+' · '+
+       (c.status==='verified_arithmetic'?'Число совпало при указанной операции; весь расчётный пункт не принят':
+        c.status==='fail'?'Арифметическое расхождение: '+c.reason:
+        'Не проверено: '+c.reason);block.append(line);});
+    }
     var gaps=document.createElement('p');gaps.textContent='Не проверено: '+(item.report.coverage.notChecked.join(', ')||'не указано')+'.';block.append(gaps);aiResult.append(block);
    });
    aiStatus.textContent=unresolved.length?'Обычная выдача заблокирована: для этих байтов Word есть незакрытые ИИ замечания или неизвестный результат. Записей: '+unresolved.length+'.':
@@ -108,7 +155,7 @@
    if(!/^[a-f0-9-]{36}$/i.test(quote.passportId||''))throw Error('Сервер не подтвердил версию паспорта. Обновите проверку.');
    if(!quote.canStart)throw Error('Бюджет не позволяет запуск проверки. Предельный расход не подтверждён.');
    var cost=(quote.estimatedCostMicrousd/1000000).toFixed(4),max=(quote.maxCostMicrousd/1000000).toFixed(4);
-   if(!global.confirm('Запустить платную ИИ проверку этой версии Word по паспорту №'+quote.passportRevision+'? Расчётный резерв: $'+cost+'. Предел для работы: $'+max+'.')){
+   if(!global.confirm('Запустить '+(quote.reviewPasses===2?'два платных прохода ИИ проверки':'платную ИИ проверку')+' этой версии Word по паспорту №'+quote.passportRevision+'? Расчётный резерв: $'+cost+'. Предел для работы: $'+max+'.')){
     aiStatus.textContent='Запуск отменён. Расходов нет.';return;}
    check(expected);
    var answer=await Oblako.generationApi({action:'quality-review-start',request:options.id,versionId:expected.versionId,
@@ -128,13 +175,30 @@
   function value(name){return body.querySelector('[data-q="'+name+'"]');}
   function put(name,v){var node=value(name);if(node)node.value=v===undefined||v===null?'':String(v);}
   function statusText(){
+   if(state?.blockingCodes?.includes('requirement_coverage')){
+    var gaps=state.requirementCoverage?.blockingCodes||[];
+    return 'Обычная выдача заблокирована: по условиям этой заявки нет подтверждения — '+(gaps.length?gaps.join(', '):'откройте ИИ проверку и обновите результат')+'.';
+   }
    if(state?.blockingCodes?.includes('ai_review_open'))return 'Обычная передача заблокирована: проверка этого Word ещё идёт, её результат неизвестен либо сохранены открытые замечания. Откройте ИИ-проверку для подробностей; после исправления Word потребуется новый отчёт.';
    if(state?.blockingCodes?.includes('ai_review_required'))return 'Обычная передача заблокирована: для текущих Word и паспорта нет завершённого подтверждённого ИИ-отчёта. Запустите проверку после подтверждения стоимости.';
-   return ready()?'Внутренняя и внешняя проверки сохранены для этой версии Word. Завершите проверку содержания по критериям.':'Обычная передача заблокирована, пока обе проверки этой версии не пройдены. Тестовая передача не подтверждает качество.';
+   return ready()?state.requirementCoverage?'Доказательства по всем условиям этого паспорта и отдельные проверки сохранены для текущего Word.':'Внутренняя и внешняя проверки сохранены для этой версии Word. Завершите проверку содержания по критериям.':'Обычная передача заблокирована, пока все проверки этой версии не пройдены. Тестовая передача не подтверждает качество.';
   }
   function summary(evidence){return evidence?esc(labels[evidence.payload&&evidence.payload.disposition]||'Результат не подтверждён')+' · '+esc(new Date(evidence.createdAt||evidence.created_at).toLocaleString('ru-RU')):'Проверка не сохранена';}
   function findingsView(){
    var target=body.querySelector('[data-quality-findings]');if(!target)return;
+   var links=body.querySelector('[data-word-links]');
+   if(links)links.textContent=linkAudit?'Адресов в тексте Word: '+linkAudit.printedCount+'. Активных ссылок с тем же адресом: '+linkAudit.activeCount+'.'+(linkAudit.missing.length?' Неактивные адреса: '+linkAudit.missing.join('; '):' Неактивных адресов не найдено.')+' Проверка касается только ссылок в основном тексте Word.':'Проверка активных ссылок ещё не выполнена.';
+   var receipt=body.querySelector('[data-word-inspection]');
+   if(receipt)receipt.textContent=inspection?'Диагностика текущего Word и паспорта: Word SHA-256 '+inspection.fileHash+'; паспорт '+inspection.passportId+'; связка '+(inspection.bindingId||'не создана')+'; отпечаток проверки '+inspection.sha256+'. Это сведения для сверки, не итоговая приёмка.':'Диагностика этой версии Word ещё не выполнена.';
+   var layout=body.querySelector('[data-word-layout]');
+   if(layout){
+    var mm=function(v){return typeof v==='number'?Math.round(v/56.6929133858*10)/10+' мм':'не определено';};
+    var sections=declaredLayout?.sections||[],first=sections[0],same=sections.every(function(s){return JSON.stringify(s)===JSON.stringify(first);}),normal=declaredLayout?.normalStyle;
+    layout.textContent=!declaredLayout?'Параметры оформления DOCX ещё не прочитаны.':
+     'Параметры файла DOCX (не визуальная проверка): '+sections.length+' секц.; '+(first?'страница '+mm(first.width)+' × '+mm(first.height)+', поля слева/справа/сверху/снизу '+[first.left,first.right,first.top,first.bottom].map(mm).join(' / '):'размеры не определены')+
+     (same?'':' · настройки секций различаются')+(declaredLayout.sectionLimitReached?' · часть секций не прочитана':'')+
+     (normal?'; стиль Normal: '+(normal.font||'шрифт не определён')+', '+(typeof normal.sizeHalfPoints==='number'?normal.sizeHalfPoints/2+' пт':'размер не определён')+', строка '+(normal.lineRule==='auto'&&typeof normal.line==='number'?normal.line/240+' интервала':'не определена')+', отступ '+mm(normal.firstLine):'; стиль Normal не определён')+'. Отдельные абзацы и фактические страницы могут отличаться.';
+   }
    if(!scan){var pass=value('internalDisposition').querySelector('option[value="pass"]');pass.disabled=true;target.innerHTML='<p class="hint">Сравнение ещё не выполнено. Процент оригинальности здесь не рассчитывается.</p>';return;}
    var findings=Array.isArray(scan.matches)?scan.matches:[],scope=scan.scope||{};
    target.innerHTML='<p><b>Область проверки</b></p><p class="hint">Только извлечённый текст этого Word и доступные тексты приложенных источников. Интернет и закрытые базы не проверяются; отсутствие совпадений не подтверждает оригинальность.</p><pre data-quality-scope style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre>'+(findings.length?'<p>Совпадений для рассмотрения: '+findings.length+'</p>':'<p>В проверенной области совпадений не найдено. Это не результат внешнего антиплагиата.</p>')+findings.map(function(f,i){return '<fieldset data-finding="'+i+'" style="margin:12px 0;min-width:0"><legend>Совпадение '+(i+1)+'</legend><p data-finding-description style="white-space:pre-wrap;overflow-wrap:anywhere"></p><label>Решение<select data-finding-disposition style="width:100%"><option value="">Не рассмотрено</option><option value="explained">Объяснено: цитата или обоснованное совпадение</option><option value="needs_revision">Нужна доработка Word</option></select></label><label>Обоснование и место в документе<textarea data-finding-notes rows="2" maxlength="2000" style="width:100%;box-sizing:border-box"></textarea></label></fieldset>';}).join('');
@@ -161,7 +225,14 @@
   function findingText(f){var d=f.document||{},source=f.source||{};return [f.kind==='internal'?'Повтор внутри Word':'Совпадение с источником '+(source.name||source.id||''),'Текст Word, строки '+d.lineStart+'–'+d.lineEnd+':',d.excerpt,'Сопоставленный фрагмент, строки '+source.lineStart+'–'+source.lineEnd+':',source.excerpt].filter(Boolean).join('\n');}
   function render(){
    var latest=state.latest||{},internal=latest.internal_borrowing,external=latest.external_originality,req=state.thresholdRequirement||{};
-   body.innerHTML='<details open><summary>1. Внутренняя проверка заимствований</summary><p data-internal-saved>'+summary(internal)+'</p><p class="hint">Бесплатное сравнение доступных источников и повторов внутри текста. Совпадения рассматривает исполнитель.</p><button type="button" class="chip" data-quality-scan>Сравнить текст с доступными источниками</button><div data-quality-findings></div>'+disposition('internalDisposition')+'<label style="display:block">Вывод исполнителя<textarea data-q="internalNotes" rows="3" maxlength="4000" style="width:100%;box-sizing:border-box"></textarea></label><button type="button" class="chip" data-quality-save-internal>Сохранить внутреннюю проверку</button></details><details><summary>2. Внешний отчёт об оригинальности</summary><p data-external-saved>'+summary(external)+'</p><p class="hint">Прикрепите полученный PDF-отчёт до 5 МБ. Приложение не заказывает платную проверку и не подтверждает подлинность отчёта автоматически.</p><p><b>Условие из паспорта</b></p><p data-quality-threshold style="white-space:pre-wrap;overflow-wrap:anywhere"></p>'+field('service','Система проверки')+field('checkId','Номер проверки или отчёта')+field('checkedAt','Дата проверки','date')+'<div data-quality-required-threshold>'+field('thresholdPercent','Подтверждённый вузом порог, %','number')+'</div>'+field('actualPercent','Оригинальность по отчёту, %','number')+'<label style="display:block"><input type="checkbox" data-q="requirementConfirmed"> Я сверил основание проверки с паспортом</label><label style="display:block"><input type="checkbox" data-q="wordBindingConfirmed"> Я проверил, что PDF относится именно к открытому точному Word</label><label style="display:block;margin:10px 0">PDF-отчёт<input type="file" data-q="report" accept=".pdf,application/pdf" style="width:100%"></label>'+disposition('externalDisposition')+'<label style="display:block">Вывод и сведения для проверки<textarea data-q="externalNotes" rows="3" maxlength="4000" style="width:100%;box-sizing:border-box"></textarea></label><button type="button" class="chip" data-quality-save-external>Сохранить внешний отчёт</button><button type="button" class="chip" data-quality-report '+(external?'':'hidden')+'>Скачать сохранённый PDF</button></details>';
+   body.innerHTML='<details open><summary>1. Внутренняя проверка заимствований</summary><p data-internal-saved>'+summary(internal)+'</p><p class="hint">Бесплатное сравнение доступных источников и повторов внутри текста. Совпадения рассматривает исполнитель.</p><button type="button" class="chip" data-quality-scan>Сравнить текст с доступными источниками</button><p data-word-inspection class="hint" style="overflow-wrap:anywhere"></p><p data-word-links class="hint" style="overflow-wrap:anywhere"></p><div data-quality-findings></div>'+disposition('internalDisposition')+'<label style="display:block">Вывод исполнителя<textarea data-q="internalNotes" rows="3" maxlength="4000" style="width:100%;box-sizing:border-box"></textarea></label><button type="button" class="chip" data-quality-save-internal>Сохранить внутреннюю проверку</button></details><details><summary>2. Внешний отчёт об оригинальности</summary><p data-external-saved>'+summary(external)+'</p><p class="hint">Прикрепите полученный PDF-отчёт до 5 МБ. Приложение не заказывает платную проверку и не подтверждает подлинность отчёта автоматически.</p><p><b>Условие из паспорта</b></p><p data-quality-threshold style="white-space:pre-wrap;overflow-wrap:anywhere"></p>'+field('service','Система проверки')+field('checkId','Номер проверки или отчёта')+field('checkedAt','Дата проверки','date')+'<div data-quality-required-threshold>'+field('thresholdPercent','Подтверждённый вузом порог, %','number')+'</div>'+field('actualPercent','Оригинальность по отчёту, %','number')+'<label style="display:block"><input type="checkbox" data-q="requirementConfirmed"> Я сверил основание проверки с паспортом</label><label style="display:block"><input type="checkbox" data-q="wordBindingConfirmed"> Я проверил, что PDF относится именно к открытому точному Word</label><label style="display:block;margin:10px 0">PDF-отчёт<input type="file" data-q="report" accept=".pdf,application/pdf" style="width:100%"></label>'+disposition('externalDisposition')+'<label style="display:block">Вывод и сведения для проверки<textarea data-q="externalNotes" rows="3" maxlength="4000" style="width:100%;box-sizing:border-box"></textarea></label><button type="button" class="chip" data-quality-save-external>Сохранить внешний отчёт</button><button type="button" class="chip" data-quality-report '+(external?'':'hidden')+'>Скачать сохранённый PDF</button></details>';
+   var layoutNote=document.createElement('p');layoutNote.dataset.wordLayout='';layoutNote.className='hint';body.querySelector('[data-word-links]').after(layoutNote);
+   if(state.requirementCoverage){
+    var coverage=state.requirementCoverage,items=Array.isArray(state.requirements)?state.requirements:[],covered=coverage.evidenceIds||{},list=document.createElement('details'),title=document.createElement('summary'),rows=document.createElement('ol');
+    title.textContent='Условия этой заявки · подтверждено '+Object.keys(covered).length+' из '+items.length;list.append(title);
+    items.forEach(function(item){var row=document.createElement('li'),ok=Object.hasOwn(covered,item.id);row.textContent=(ok?'Подтверждено: ':'Не проверено: ')+(item.text||item.id)+' · '+(item.source||'источник не указан');rows.append(row);});
+    list.append(rows);body.prepend(list);
+   }
    body.querySelector('[data-quality-threshold]').textContent=req.text||'Пункт оригинальности не подтверждён. Уточните и утвердите паспорт; порог по умолчанию не установлен.';
    body.querySelector('[data-quality-required-threshold]').hidden=!['university_threshold','university_threshold_no_service'].includes(req.mode);
    if(req.mode==='university_threshold'){put('service',req.service);put('thresholdPercent',req.thresholdPercent);value('service').readOnly=true;value('thresholdPercent').readOnly=true;}
@@ -170,7 +241,7 @@
    if(internal){put('internalDisposition',internal.payload.disposition);put('internalNotes',internal.payload.notes);if(internal.payload.scan){scan=internal.payload.scan;scanHash=internal.payload.scanHash;}}
    if(external){['service','checkId','thresholdPercent','actualPercent'].forEach(function(k){put(k,external.payload[k]);});put('checkedAt',(external.payload.checkedAt||'').slice(0,10));put('externalDisposition',external.payload.disposition);put('externalNotes',external.payload.notes);}
    findingsView();
-   body.querySelector('[data-quality-scan]').onclick=function(){dirty=true;notify();return run(async function(){var expected=captured();var result=await Oblako.requestApi({action:'quality-scan',id:options.id,versionId:expected.versionId});check(expected);if(!result||!result.scan||typeof result.scanHash!=='string'||!(/^[a-f0-9]{64}$/).test(result.scanHash)||!Array.isArray(result.scan.matches))throw Error('Сервер не подтвердил результат сравнения.');scan=result.scan;scanHash=result.scanHash;findingsView();msg.textContent='Сравнение выполнено. Рассмотрите каждое совпадение и сохраните вывод.';});};
+   body.querySelector('[data-quality-scan]').onclick=function(){dirty=true;notify();return run(async function(){var expected=captured();var result=await Oblako.requestApi({action:'quality-scan',id:options.id,versionId:expected.versionId});check(expected);var proof=result?.inspection;if(!result||!result.scan||typeof result.scanHash!=='string'||!(/^[a-f0-9]{64}$/).test(result.scanHash)||!Array.isArray(result.scan.matches)||result.fileHash!==expected.fileHash||result.linkAudit&&!Array.isArray(result.linkAudit.missing)||!proof||proof.versionId!==expected.versionId||proof.passportId!==expected.passportId||proof.fileHash!==expected.fileHash||proof.documentHash!==expected.documentHash||proof.sourceFingerprint!==expected.sourceFingerprint||proof.scanHash!==result.scanHash||!(/^[a-f0-9]{64}$/).test(proof.sha256))throw Error('Сервер не подтвердил результат сравнения.');scan=result.scan;scanHash=result.scanHash;linkAudit=result.linkAudit;declaredLayout=result.declaredLayout;inspection=proof;findingsView();msg.textContent='Сравнение выполнено. Рассмотрите каждое совпадение и сохраните вывод.';});};
    body.querySelector('[data-quality-save-internal]').onclick=function(){return run(async function(){
     if(!scan||!scanHash)throw validation('Сначала выполните сравнение текста.');var disposition=value('internalDisposition').value,notes=value('internalNotes').value.trim();
     var decisions=scan.matches.map(function(f,i){var node=body.querySelector('[data-finding="'+i+'"]');return {findingId:f.id,disposition:node.querySelector('select').value,notes:node.querySelector('textarea').value.trim()};});
@@ -202,8 +273,8 @@
    });};
   }
   async function refresh(){
-   guard();state=null;notify();var proposed=options.getBinding();if(!proposed){body.innerHTML='';scan=null;scanHash=null;msg.textContent='Нажмите «Начать проверки», чтобы сохранить точную версию Word.';return;}
-   var expected=binding(proposed);if(currentBinding&&!equal(currentBinding,expected)){scan=null;scanHash=null;operations={};aiJob=null;aiResult.textContent='';aiStatus.textContent='Word или паспорт изменился. Выполните новую ИИ проверку.';}currentBinding=expected;
+   guard();state=null;notify();var proposed=options.getBinding();if(!proposed){body.innerHTML='';scan=null;scanHash=null;linkAudit=null;declaredLayout=null;inspection=null;msg.textContent='Нажмите «Начать проверки», чтобы сохранить точную версию Word.';return;}
+   var expected=binding(proposed);if(currentBinding&&!equal(currentBinding,expected)){scan=null;scanHash=null;linkAudit=null;declaredLayout=null;inspection=null;operations={};aiJob=null;aiResult.textContent='';aiStatus.textContent='Word или паспорт изменился. Выполните новую ИИ проверку.';}currentBinding=expected;
    var result=await Oblako.requestApi({action:'quality-state',id:options.id,versionId:expected.versionId});check(expected);
    if(!result||!equal(result.bindings,expected)||!result.latest||!Array.isArray(result.blockingCodes)||typeof result.eligible!=='boolean')throw Error('Сервер не подтвердил проверки этой версии Word.');
    state=result;verified=true;dirty=false;render();msg.textContent=statusText();notify();
@@ -222,7 +293,7 @@
   function changed(){dirty=true;msg.textContent='Есть несохранённые изменения проверки. Сохраните их или обновите проверки, чтобы отменить ввод. Обычная передача недоступна.';notify();}
   body.addEventListener('input',changed);body.addEventListener('change',changed);
   controls();
-  return {sync:function(){controls(true);},refresh:async function(){try{await refresh();}catch(e){state=null;msg.textContent=e.message||'Проверки недоступны.';}finally{controls();}},ready:function(){return lastReady;},reason:function(){return state?statusText():msg.textContent;},invalidate:function(){state=null;notify();}};
+  return {sync:function(){controls(true);},refresh:async function(){try{await refresh();}catch(e){state=null;msg.textContent=e.message||'Проверки недоступны.';}finally{controls();}},ready:function(){return lastReady;},coverage:function(){return state?.requirementCoverage||null;},reason:function(){return state?statusText():msg.textContent;},invalidate:function(){state=null;notify();}};
  }
  global.QualityEvidence={mount:mount,reviewSuggestions:reviewSuggestions};
 })(window);

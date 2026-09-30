@@ -1,3 +1,4 @@
+import {missingExplicitClauses} from '../supabase/functions/_shared/explicit-requirements.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -62,7 +63,7 @@ test('passport UI blocks approval and paid preparation while required facts are 
  assert.match(ui,/return requireApprovedPassport\(x\)\.then/);
 });
 
-const {statedRequirements,fillMissingDraft,requirementAction}=await import('../supabase/functions/studkab-requests/requirements.mjs');
+const {statedRequirements,fillMissingDraft,linkLiteralDraftSources,inventoryExplicitClauses,requirementAction}=await import('../supabase/functions/studkab-requests/requirements.mjs');
 const inputFacts={rq:'Учебный тест. 25–30 страниц основного текста: введение 2, теория 6–7, анализ 8–10. Источники: пять предоставленных учебных фрагментов S1–S5 и исходные данные; не выдавать за реальные публикации. Оригинальность не проверена, порог не задан.',mn:'Разделы 2 / 6–7 / 8–10 / 7–8 / 2 страницы (25–29, в пределах 25–30).'};
 test('explicit total and source restrictions survive extraction without invented originality',()=>{
  const items=defaultPassport(inputFacts).items;
@@ -82,11 +83,130 @@ test('repair only fills standard placeholders of a draft without mutating histor
  const manual={...before,items:[{id:'VOLUME',text:'Объём: 33 страницы'},{id:'SOURCES',text:'Источники: уточнить у преподавателя'}]};
  assert.equal(fillMissingDraft(manual,inputFacts),manual);
 });
+test('literal requirement links only to one current source and never becomes verified',()=>{
+ const phrase='Обязательно представить анализ выручки за три отчётных периода';
+ const base={status:'draft',items:[{id:'ANALYSIS',text:'Требование: '+phrase,source:'Методичка',verified:false},
+  {id:'CALCULATIONS',text:'Расчёты: Не указано — требуется уточнить',verified:false}]};
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',old='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const attachments=[{id:old,category:'methodology',extracted_text:phrase,supersedes:null},
+  {id,category:'methodology',file_name:'method.txt',extracted_text:'Введение\n'+phrase,supersedes:old}];
+ const linked=linkLiteralDraftSources(base,attachments);
+ assert.equal(base.items[0].source_attachment_id,undefined);
+ assert.equal(linked.items[0].source_attachment_id,id);
+ assert.match(linked.items[0].source,/method\.txt, строка извлечённого текста 2/);
+ assert.equal(linked.items[0].verified,false);
+ assert.equal(linked.items[1].source_attachment_id,undefined);
+ assert.equal(linkLiteralDraftSources(linked,attachments),linked);
+ assert.equal(linkLiteralDraftSources(base,[...attachments,{id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',category:'assignment',extracted_text:phrase}]),base);
+ assert.equal(linkLiteralDraftSources({...base,status:'approved'},attachments).items[0].source_attachment_id,undefined);
+});
+test('enumerated obligations enter the draft without fabricated approval, and superseded clauses leave the new draft',()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',next='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const phrase='Работа должна включать введение, три главы и заключение';
+ const base={status:'draft',items:defaultPassport({}).items};
+ const old={id,category:'methodology',file_name:'guide.txt',extracted_text:'Предисловие\n1. '+phrase+'\n2. Нужно подумать\n3. Таблица должна содержать расчёт по каждому году'};
+ const first=inventoryExplicitClauses(base,[old]);
+ assert.equal(first.items.length,base.items.length+2);
+ const added=first.items.find(i=>i.id==='REQ_'+id.replace(/-/g,'')+'_2');
+ assert.equal(added.text,phrase);
+ assert.equal(added.source_attachment_id,id);
+ assert.equal(added.verified,false);
+ assert.match(added.source,/guide\.txt, строка извлечённого текста 2/);
+ assert.equal(inventoryExplicitClauses(first,[old]),first);
+ assert.equal(inventoryExplicitClauses({status:'draft',items:[{id:'STRUCTURE',source_attachment_id:id,text:'Структура: '+phrase}]},[old]).items.some(i=>i.id==='REQ_'+id.replace(/-/g,'')+'_2'),false);
+ assert.equal(inventoryExplicitClauses({...first,status:'approved'},[]).items.length,first.items.length);
+ const fresh={...first,status:'draft'};
+ const replaced=inventoryExplicitClauses(fresh,[old,{id:next,category:'methodology',file_name:'guide-v2.txt',supersedes:id,
+  extracted_text:'1. Документ должен включать обоснование расчёта и выводы'}]);
+ assert.equal(replaced.items.some(i=>i.source_attachment_id===id),false);
+ assert.equal(replaced.items.at(-1).source_attachment_id,next);
+});
+test('short unnumbered obligations are inventoried while background prose stays out',()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const text='Введение в учебную дисциплину\nРабота должна содержать сравнение показателей за три года.\nНеобходимо привести таблицу исходных данных и указать её источник.\nОписание исходных данных для учебного примера.';
+ const result=inventoryExplicitClauses({status:'draft',items:[]},[{id,category:'assignment',file_name:'task.txt',extracted_text:text}]);
+ assert.equal(result.items.length,2);
+ assert.deepEqual(result.items.map(i=>i.source_attachment_id),[id,id]);
+ assert.ok(result.items.every(i=>i.verified===false));
+});
+test('explicit operations from different disciplines become separate unverified passport items',()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const source={id,category:'assignment',file_name:'task.txt',extracted_text:[
+  '1. Рассчитать себестоимость каждого изделия по исходным данным.',
+  '2. Определить коэффициент ликвидности за каждый отчётный год.',
+  '3. Построить график температуры по результатам измерений.',
+  'Проанализировать причины изменения показателя и сформулировать вывод.',
+  'В примере ниже студент рассчитывает известный показатель.',
+  '4. Расчёт себестоимости в теории управления.'
+ ].join('\n')};
+ const base={status:'draft',items:[]};
+ const result=inventoryExplicitClauses(base,[source]);
+ assert.deepEqual(result.items.map(i=>i.text),source.extracted_text.split('\n').slice(0,4).map((line,i)=>i<3?line.replace(/^\d+\. /,''):line));
+ assert.deepEqual(result.items.map(i=>i.source_attachment_id),[id,id,id,id]);
+ assert.ok(result.items.every(i=>i.required===true&&i.verified===false));
+ assert.equal(inventoryExplicitClauses(result,[source]),result);
+ assert.equal(inventoryExplicitClauses({...result,status:'approved'},[]).items.length,4);
+});
+test('approval refuses an omitted enumerated obligation before any approval RPC',async()=>{
+ const p=defaultPassport({});
+ p.items=p.items.map(i=>({...i,text:i.id==='ANTIPLAGIARISM'?'Внешний отчёт по стандарту STUDKAB; в предоставленных материалах числовое условие вуза не обнаружено.':'Конкретное требование',source:'Задание',verified:true}));
+ p.items.find(i=>i.id==='ANTIPLAGIARISM').originality={mode:'service_only',service:'',thresholdPercent:null};
+ p.items.find(i=>i.id==='ANTIPLAGIARISM').source='Стандарт STUDKAB';
+ let approved=false;
+ const result=await requirementAction({action:'passport-approve',id:'33333333-3333-4333-8333-333333333333',passportId:'44444444-4444-4444-8444-444444444444',passport:p},
+  {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async path=>{
+   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+   if(path.startsWith('studkab_request_attachments?'))return [{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',category:'assignment',file_name:'task.txt',extracted_text:'1. Рассчитать себестоимость изделий по исходным данным'}];
+   approved=true;throw Error('Unexpected approval access');
+  }});
+ assert.equal(result.status,409);
+ assert.match(result.data.error,/отдельные условия/);
+ assert.equal(approved,false);
+});
+test('approval refuses to downgrade an inventoried obligation to optional',async()=>{
+ const p=defaultPassport({}),source='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ p.items=p.items.map(i=>({...i,text:i.id==='ANTIPLAGIARISM'?originalityText({mode:'service_only',service:'',thresholdPercent:null}):'Конкретное требование',source:i.id==='ANTIPLAGIARISM'?'Стандарт STUDKAB':'Задание',verified:true}));
+ p.items.find(i=>i.id==='ANTIPLAGIARISM').originality={mode:'service_only',service:'',thresholdPercent:null};
+ p.items.push({id:'REQ_'+source.replace(/-/g,'')+'_1',category:'method',required:false,verified:false,
+  text:'Работа должна содержать анализ выручки за три года',source:'task.txt, строка 1',source_attachment_id:source,answer_ids:[]});
+ const result=await requirementAction({action:'passport-approve',id:'33333333-3333-4333-8333-333333333333',passportId:'44444444-4444-4444-8444-444444444444',passport:p},
+  {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async path=>{
+   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+   if(path.startsWith('studkab_request_attachments?'))return [{id:source,category:'assignment',file_name:'task.txt',extracted_text:'1. Работа должна содержать анализ выручки за три года'}];
+   throw Error('Approval must stop before database mutation: '+path);
+  }});
+ assert.equal(result.status,409);assert.match(result.data.error,/отдельные условия/);
+});
+test('approval asks the student despite a client-supplied structure resolution',async()=>{
+ const p=defaultPassport({}),id='33333333-3333-4333-8333-333333333333',actor='22222222-2222-4222-8222-222222222222';
+ const file={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',category:'methodology',file_name:'guide.txt',file_hash:'f'.repeat(64),
+  extracted_text:'2.3 Анализ выручки по периодам\n2.3 Анализ себестоимости по периодам'};
+ p.items=p.items.map(i=>({...i,text:i.id==='ANTIPLAGIARISM'?originalityText({mode:'service_only',service:'',thresholdPercent:null}):'Конкретное требование',source:i.id==='ANTIPLAGIARISM'?'Стандарт STUDKAB':'Задание',verified:true}));
+ p.items.find(i=>i.id==='ANTIPLAGIARISM').originality={mode:'service_only',service:'',thresholdPercent:null};
+ const structure=p.items.find(i=>i.id==='STRUCTURE');
+ structure.text='Структура: Анализ себестоимости по периодам — 2.4';
+ structure.structure_resolutions=[{fileHash:file.file_hash,number:'2.3',chosenNumber:'2.4',first:'Анализ выручки по периодам',second:'Анализ себестоимости по периодам',verified:true,reason:'Подтверждено преподавателем'}];
+ let asked=0;
+ const result=await requirementAction({action:'passport-approve',id,passportId:'44444444-4444-4444-8444-444444444444',passport:p},
+  {id:actor,email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
+   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+   if(path.startsWith('studkab_request_attachments?')){assert.match(path,/\bfile_hash\b/);return [file];}
+   if(path==='rpc/studkab_clarification_ask'){
+    asked++;assert.equal(body.p_item,'STRUCTURE');assert.equal(body.p_actor,actor);return {id:body.p_id,answer:null};
+   }
+   throw Error('Approval must wait for the student: '+path);
+  }});
+ assert.equal(asked,1);assert.equal(result.status,409);assert.match(result.data.error,/Ожидается ответ студента/);
+});
 test('ensure persists repaired draft as a separate version and subsequent reads do not resave',async()=>{
  let rows=[{...defaultPassport({}),id:'old',revision:1,status:'draft',source_fingerprint:'a'.repeat(64)}],writes=0;
  const deps={config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
   if(path.startsWith('studkab_requests?'))return [{payload:inputFacts}];
   if(path.startsWith('studkab_requirement_passports?'))return rows;
+  if(path.startsWith('studkab_request_attachments?'))return [];
   assert.equal(path,'rpc/studkab_requirement_passport_save');writes++;
   const next={id:'new',revision:2,status:'draft',items:body.p_items,source_fingerprint:body.p_source_fingerprint};rows=[next,...rows];return next;
  }};
@@ -95,6 +215,83 @@ test('ensure persists repaired draft as a separate version and subsequent reads 
  const first=await requirementAction(request,user,deps);assert.equal(first.data.created,true);assert.equal(rows[1].items.find(x=>x.id==='VOLUME').text,'Объём: Не указано — требуется уточнить');
  assert.equal((await requirementAction(request,user,deps)).data.created,false);assert.equal(writes,1);
  assert.equal((await requirementAction(request,{...user,email:'student@example.test'},deps)).status,403);
+});
+test('ensure stores one literal source link, but refreshes it after a material revision',async()=>{
+ const id='33333333-3333-4333-8333-333333333333',actor='22222222-2222-4222-8222-222222222222';
+ const first='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',second='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const phrase='Обязательно представить анализ выручки за три отчётных периода';
+ const base=defaultPassport({});base.items.push({id:'ANALYSIS',category:'method',required:true,text:phrase,source:'Задание',verified:false});
+ let rows=[{...base,status:'draft',source_fingerprint:'a'.repeat(64)}],attachments=[{id:first,category:'assignment',file_name:'task.txt',extracted_text:phrase}];
+ const db=async(path,method,body)=>{
+  if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+  if(path.startsWith('studkab_requirement_passports?'))return rows;
+  if(path.startsWith('studkab_request_attachments?'))return attachments;
+  assert.equal(path,'rpc/studkab_requirement_passport_save');
+  const saved={...base,status:'draft',source_fingerprint:body.p_source_fingerprint,items:body.p_items};rows=[saved,...rows];return saved;
+ };
+ const deps={config:async()=>({executor_email:'executor@example.test'}),db};
+ const user={id:actor,email:'executor@example.test'};
+ const input={action:'passport-ensure',id,sourceFingerprint:'a'.repeat(64)};
+ assert.equal((await requirementAction(input,user,deps)).data.created,true);
+ assert.equal(rows[0].items.at(-1).source_attachment_id,first);
+ assert.equal((await requirementAction(input,user,deps)).data.created,false);
+ attachments=[{...attachments[0],id:second,supersedes:first}];
+ assert.equal((await requirementAction({...input,sourceFingerprint:'b'.repeat(64)},user,deps)).data.created,true);
+ assert.equal(rows[0].items.at(-1).source_attachment_id,second);
+ assert.equal(rows[0].items.at(-1).verified,false);
+});
+test('ensure persists a separate draft item for an enumerated assignment obligation',async()=>{
+ const id='33333333-3333-4333-8333-333333333333',source='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ let saved;
+ const result=await requirementAction({action:'passport-ensure',id,sourceFingerprint:'a'.repeat(64)},
+  {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
+  {config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
+   if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+   if(path.startsWith('studkab_requirement_passports?'))return [];
+   if(path.startsWith('studkab_request_attachments?'))return [{id:source,category:'assignment',file_name:'task.txt',extracted_text:'2. Работа должна содержать анализ выручки за три года'}];
+   if(path==='rpc/studkab_requirement_passport_save'){saved=body.p_items;return {id:'new',items:saved};}
+   throw Error('Unexpected dependency '+path);
+  }});
+ assert.equal(result.status,200);
+ assert.equal(saved.length,11);
+ assert.equal(saved.at(-1).source_attachment_id,source);
+ assert.equal(saved.at(-1).verified,false);
+});
+test('duplicate section number creates one stable question for the student on repeated ensure',async()=>{
+ const id='33333333-3333-4333-8333-333333333333',actor='22222222-2222-4222-8222-222222222222';
+ const file={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',category:'methodology',file_name:'guide.txt',file_hash:'f'.repeat(64),
+  extracted_text:'2.3 Анализ выручки по периодам\n2.3 Анализ себестоимости по периодам'};
+ let rows=[],savedQuestions=new Map(),acknowledge=false;
+ const deps={config:async()=>({executor_email:'executor@example.test'}),db:async(path,method,body)=>{
+  if(path.startsWith('studkab_requests?'))return [{payload:{}}];
+  if(path.startsWith('studkab_requirement_passports?'))return rows;
+  if(path.startsWith('studkab_request_attachments?')){assert.match(path,/\bfile_hash\b/);return [file];}
+  if(path==='rpc/studkab_requirement_passport_save'){
+   const created={id:'44444444-4444-4444-8444-444444444444',status:'draft',source_fingerprint:'a'.repeat(64),items:body.p_items};rows=[created];return created;
+  }
+  if(path==='rpc/studkab_clarification_ask'){
+   assert.equal(body.p_item,'STRUCTURE');assert.equal(body.p_actor,actor);
+   assert.match(body.p_question,/Анализ выручки.*Анализ себестоимости/s);
+   savedQuestions.set(body.p_id,body.p_question);return acknowledge?{id:body.p_id}:undefined;
+  }
+  throw Error('Unexpected dependency '+path);
+ }};
+ const input={action:'passport-ensure',id,sourceFingerprint:'a'.repeat(64)};
+ const user={id:actor,email:'executor@example.test'};
+ assert.equal((await requirementAction(input,user,deps)).status,409);
+ acknowledge=true;
+  assert.equal((await requirementAction(input,user,deps)).data.created,false);
+  assert.equal((await requirementAction(input,user,deps)).data.created,false);
+  assert.equal(savedQuestions.size,1);
+  const structure=rows[0].items.find(item=>item.id==='STRUCTURE');
+  Object.assign(structure,{verified:true,source:'Ответ преподавателя',text:'Структура: Анализ себестоимости по периодам — 2.4',structure_resolutions:[{
+   fileHash:file.file_hash,number:'2.3',chosenNumber:'2.4',first:'Анализ выручки по периодам',second:'Анализ себестоимости по периодам',verified:true,reason:'Подтверждено преподавателем'
+  }]});
+  assert.equal((await requirementAction(input,user,deps)).status,200);
+  assert.equal(savedQuestions.size,1);
+  file.file_hash='e'.repeat(64);
+  assert.equal((await requirementAction(input,user,deps)).status,200);
+  assert.equal(savedQuestions.size,2);
 });
 
 const semanticInput={
@@ -133,4 +330,24 @@ test('C082 absence of originality threshold remains blocked even for a test',asy
  assert.equal(result.status,409);assert.equal(saved,false);
  const conflicting=defaultPassport({...semanticInput,mn:semanticInput.mn+' Оригинальность не менее 70%.'});
  assert.match(conflicting.items.find(x=>x.id==='ANTIPLAGIARISM').text,/Не указано/);
+});
+
+test('explicit coverage preserves distinct sources and rejects optional, unverified or wrongly linked clauses',()=>{
+ const ids=['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
+ const clause='Проанализировать причины изменения показателей и сформулировать вывод.';
+ const sources=ids.map(id=>({id,category:'assignment',extracted_text:clause}));
+ const first=inventoryExplicitClauses({status:'draft',items:[]},sources);
+ assert.equal(first.items.length,2);
+ assert.deepEqual(first.items.map(item=>item.source_attachment_id),ids);
+ const verified=first.items.map(item=>({...item,verified:true}));
+ assert.deepEqual(missingExplicitClauses(verified,sources),[]);
+ assert.equal(missingExplicitClauses([verified[0]],sources)[0].source_attachment_id,ids[1]);
+ for(const patch of [{required:false},{verified:false},{source_attachment_id:ids[1]}])
+  assert.equal(missingExplicitClauses([{...verified[0],...patch}],sources.slice(0,1)).length,1);
+ const freeText={id:'METHODOLOGY',text:clause,required:true,verified:true};
+ assert.equal(inventoryExplicitClauses({status:'draft',items:[freeText]},sources).items.length,3);
+ assert.equal(missingExplicitClauses([freeText],sources).length,2);
+ assert.deepEqual(missingExplicitClauses(verified,[...sources,{...sources[0],id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  supersedes:ids[0],extracted_text:'Построить график температуры по результатам измерений.'}]).map(item=>item.text),
+  ['Построить график температуры по результатам измерений.']);
 });

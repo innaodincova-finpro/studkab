@@ -12,6 +12,7 @@ function editorFixture({fail=false,switchAccount=false}={}){
  const x={requirements:'Объём подтверждён заданием',clarifications:[{...fresh[0],answer:null}],passports:[{status:'approved',revision:3,material_manifest:{basis:'Задание',requirements:[{id:'M1',label:'Требования к объёму',required:true,attachment_ids:[],answer_ids:[],payload_fields:['rq'],not_applicable_reason:''}]},items:[{id:'VOLUME',text:'25–30 страниц',source:'Уточнение',verified:true,answer_ids:[questionId]}]}]};
  let identity='executor',opened=0;
  const context=vm.createContext({Oblako:{identity:()=>identity,requestApi:async()=>{if(fail)throw Error('offline');if(switchAccount)identity='other';return {questions:fresh};}},toast:()=>{},esc:s=>s||'',PASSPORT_ITEM_LABEL:{},PASSPORT_CATEGORY:{},passportUnresolved:()=>[],lab:s=>s,passportItemView:()=>'',openModal:()=>{opened++;return {addEventListener(){},querySelectorAll:()=>[]};}});
+ vm.runInContext(html.slice(html.indexOf('function passportItemLabel('),html.indexOf('function originalityPassportText(')),context);
  vm.runInContext(html.slice(html.indexOf('var MATERIAL_PAYLOAD_FIELDS='),html.indexOf('function passportContent(')),context);
  vm.runInContext(html.slice(html.indexOf('async function editPassport('),html.indexOf('\nfunction viewItem(',html.indexOf('async function editPassport('))),context);
  vm.runInContext(html.slice(html.indexOf('function passportContent('),html.indexOf('\nfunction passportCard(',html.indexOf('function passportContent('))),context);
@@ -52,7 +53,7 @@ test('C084 approval cannot be reached by changing unknown wording or omitting it
 test('C084 material changes reset verification in a new version, preserving old history',async()=>{
  const items=defaultPassport({}).items.map(x=>({...x,text:'Конкретное условие',verified:true,answer_ids:[questionId]}));const old={id:questionId,revision:1,status:'approved',title:'Требования',items,source_fingerprint:'a'.repeat(64)};
  let written;
- const result=await requirementAction({action:'passport-ensure',id,sourceFingerprint:'b'.repeat(64)},executor,{config:async()=>({executor_email:executor.email}),db:async(path,method,body)=>{if(path.startsWith('studkab_requests?'))return [{payload:{}}];if(path.startsWith('studkab_requirement_passports?'))return [old];written=body;return {items:body.p_items};}});
+ const result=await requirementAction({action:'passport-ensure',id,sourceFingerprint:'b'.repeat(64)},executor,{config:async()=>({executor_email:executor.email}),db:async(path,method,body)=>{if(path.startsWith('studkab_requests?'))return [{payload:{}}];if(path.startsWith('studkab_requirement_passports?'))return [old];if(path.startsWith('studkab_request_attachments?'))return [];written=body;return {items:body.p_items};}});
  assert.equal(result.data.created,true);assert.ok(written.p_items.every(x=>!x.verified&&x.answer_ids.length===0));assert.ok(old.items.every(x=>x.verified));
  assert.equal(validatePassport({items:[{id:'ONE',category:'method',text:'Test',source:'file',verified:'true'}]}).items[0].verified,false);
 });
