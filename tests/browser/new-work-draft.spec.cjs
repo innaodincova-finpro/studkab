@@ -19,7 +19,7 @@ async function restored(page){
 }
 for(const way of ['close','backdrop','escape','cancel'])test('new work draft survives '+way,async({page})=>{
  await start(page);await fill(page);
- if(way==='close')await page.locator('.sheet [data-x]').click();
+ if(way==='close')await page.locator('.sheet button.close[data-x]').click();
  if(way==='cancel')await page.getByRole('button',{name:'Отмена',exact:true}).click();
  if(way==='escape')await page.keyboard.press('Escape');
  if(way==='backdrop')await page.locator('.sheet').click({position:{x:2,y:2}});
