@@ -152,7 +152,7 @@ test('formula inventory shows missing coverage without payment, pass or stale re
    aiCalls.push(body);
    if(body.action!=='quality-review-reports')throw Error('Unexpected paid action');
    return {versionId:qBinding.versionId,fileHash:qBinding.fileHash,passportId:qBinding.passportId,
-    reports:[{createdAt:'2026-09-30T07:00:00Z',status:'complete',report:{wordHash:qBinding.fileHash,
+    reports:[{jobId:'55555555-5555-4555-8555-555555555555',current:true,createdAt:'2026-09-30T07:00:00Z',status:'complete',report:{wordHash:qBinding.fileHash,
      findings:[],coverage:{checked:[],notChecked:['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03']},
      calculationInventory:{complete:false,status:'not_checked',gaps:['duplicate_formula_number'],entries:[
       {formulaNumber:'21',sourceId:'method-1',sourceLine:87,sourceHash:'d'.repeat(64),sourceQuote:'Выручка = sum(Q*price)/1000 (21)'}]},
@@ -160,7 +160,7 @@ test('formula inventory shows missing coverage without payment, pass or stale re
   };
  });
  await page.locator('[data-ai-review]').evaluate(el=>el.open=true);
- await page.locator('[data-ai-refresh]').click();
+ await page.locator('[data-ai-recover]').click();
  await expect(page.locator('[data-ai-result]')).toContainText('Найдено формул: 1');
  await expect(page.locator('[data-ai-result]')).toContainText('Полнота всех расчётов, их применение и округление не подтверждены');
  await expect(page.locator('[data-ai-result]')).toContainText('весь расчётный пункт не принят');

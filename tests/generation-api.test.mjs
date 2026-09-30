@@ -243,6 +243,29 @@ test('AI report registry reads immutable parts for exact Word and marks the curr
  assert.equal(calls.filter(p=>p.startsWith('studkab_gen_parts')).length,2);
  assert.equal((await request({action:'quality-review-reports',request:requestId,versionId:passportId})).status,409);
 });
+test('current formula inventory cannot be attached to a historical passport report',async()=>{
+ const packet={word:{fileHash:reviewHash,text:'Текст Word'},
+  passport:{items:[{id:'FIN',text:'Проверить расчёты',source_attachment_id:'method'}]},
+  materials:[{id:'method',category:'methodology',fileHash:'d'.repeat(64),text:'P = A - B (1)'}]};
+ const stored=JSON.stringify({...JSON.parse(report),requirements:[{id:'FIN',status:'not_checked',
+  sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Не проверено'}]});
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
+  config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+  readReviewPacket:async()=>({packet,passport:{id:passportId},version:{file_hash:reviewHash}}),
+  db:async path=>{
+   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
+   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved',items:packet.passport.items}];
+   if(path.startsWith('studkab_gen_jobs'))return [passportId,'old-passport'].map(id=>({id,status:'complete',
+    snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId:id}}}}));
+   if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:stored}];return [];
+  }});
+ const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},
+  body:JSON.stringify({action:'quality-review-reports',request:requestId,versionId:reviewVersion})}));
+ assert.equal(response.status,200);const {reports}=await response.json();
+ assert.equal(reports[0].report.calculationInventory.entries.length,1);
+ assert.equal(reports[1].current,false);
+ assert.equal(reports[1].report.calculationInventory,undefined);
+});
 test('AI history includes blocker beyond first 20 and follows pagination across owner changes',async()=>{
  const paths=[],jobs=Array.from({length:101},(_,i)=>({id:'job-'+i,status:i===100?'unknown':'complete',created_at:'2026-09-28',
   snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}));

@@ -203,6 +203,9 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
      const [part]=await db('studkab_gen_parts?job_id=eq.'+job.id+'&spec->>id=eq.quality_review&select=state,result&limit=1');
      const report=part?.state==='done'?parseReviewReport(part.result,version.file_hash,reviewContext?.packet):null;
      const current=target.versionId===version.id&&target.passportId===passport.id;
+     // The inventory is derived from the current server packet. It must not
+     // appear as evidence of the materials used by an older passport/job.
+     if(report&&!current)delete report.calculationInventory;
      if(report?.requirements&&current&&job.status==='complete'){
       try{await db('rpc/studkab_requirement_review_ingest',{p_request:input.request,p_version:version.id,
        p_job:job.id,p_actor:user.id,p_requirements:report.requirements});}
