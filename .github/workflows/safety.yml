@@ -40,7 +40,7 @@ jobs:
               path.write_text(text)
               print('Excluded Chrome source from', path.name)
           PY
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - name: Check changed browser scenarios before the full safety run
         env:
           CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
