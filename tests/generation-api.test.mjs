@@ -43,10 +43,13 @@ test('per-request review accepts only exact source and Word excerpts and leaves 
  const packet={word:{text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true,source_attachment_id:'source-1'},
   {id:'ANTIPLAGIARISM',text:'Внешний PDF',required:true}]},materials:[{id:'source-1',text:source}]};
  const requirements=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки и выводы',
-  wordQuote:'анализ выручки показывает рост на 7 процентов; выводы объясняют причины изменения',wordLocator:'раздел 2',explanation:'Описаны анализ выручки и итоговые выводы'},
+  wordQuote:word,wordLocator:'абзац 1',explanation:'Описаны анализ выручки и итоговые выводы'},
   {id:'ANTIPLAGIARISM',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Внешний отчёт проверяется отдельно'}];
  const raw=JSON.stringify({...JSON.parse(report),requirements});
  assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].status,'pass');
+ assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].wordLocator,'абзац 1');
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],wordLocator:'раздел 2'},requirements[1]]}),reviewHash,packet),null);
+ assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],wordQuote:'анализ выручки показывает рост на 7 процентов'},requirements[1]]}),reviewHash,packet),null);
  assert.deepEqual(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:requirements.toReversed()}),reviewHash,packet).requirements.map(r=>r.id),['ANTIPLAGIARISM','ANALYSIS']);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[requirements[0]]}),reviewHash,packet),null);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],sourceQuote:'вымышленное основание'},requirements[1]]}),reviewHash,packet),null);
@@ -83,10 +86,28 @@ test('arbitrary passport IDs cannot turn calculations or visual requirements int
   assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,c.text);
  }
 });
+test('textual evidence cannot quote only the harmless part of a negative Word paragraph',()=>{
+ const paragraph='Анализ выручки за год и выводы не представлены в работе.';
+ const packet={word:{text:'Введение.\n'+paragraph},
+  passport:{items:[{id:'REQ_custom',text:'Анализ выручки и выводы',required:true,source_attachment_id:'source-1'}]},
+  materials:[{id:'source-1',text:'Требуется анализ выручки за год и содержательные выводы.'}]};
+ const row={id:'REQ_custom',status:'pass',sourceId:'source-1',sourceQuote:'анализ выручки за год и содержательные выводы',
+  wordQuote:'Анализ выручки за год и выводы',wordLocator:'абзац 2',explanation:'Заявлено, что анализ и выводы представлены'};
+ const parsed=JSON.parse(report);
+ assert.equal(parseReviewReport(JSON.stringify({...parsed,requirements:[row]}),reviewHash,packet),null);
+ // The full paragraph passes only when the reported position matches the
+ // server's position in the stored Word body.
+ const positive='Анализ выручки за год и выводы представлены с объяснением результатов.';
+ const accepted=parseReviewReport(JSON.stringify({...parsed,requirements:[{...row,wordQuote:positive}]}),
+  reviewHash,{...packet,word:{text:'Введение.\n'+positive}});
+ assert.equal(accepted.requirements[0].wordLocator,'абзац 2');
+ assert.equal(parseReviewReport(JSON.stringify({...parsed,requirements:[{...row,wordQuote:positive}]}),
+  reviewHash,{...packet,word:{text:positive+'\n'+positive}}),null);
+});
 test('server archives validated per-item review evidence for the current Word only',async()=>{
  const excerpt='анализ выручки и выводы',wordExcerpt='анализ выручки показывает рост на 7 процентов';
  const rows=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',
-  sourceQuote:excerpt,wordQuote:wordExcerpt,wordLocator:'раздел 2',explanation:'Сверены анализ выручки и итоговые выводы'}];
+  sourceQuote:excerpt,wordQuote:'В разделе 2 '+wordExcerpt,wordLocator:'абзац 1',explanation:'Сверены анализ выручки и итоговые выводы'}];
  const packet={word:{text:'В разделе 2 '+wordExcerpt},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',required:true,source_attachment_id:'source-1'}]},
   materials:[{id:'source-1',text:'В задании требуется '+excerpt}]};
  const calls=[],stored=JSON.stringify({...JSON.parse(report),requirements:rows});

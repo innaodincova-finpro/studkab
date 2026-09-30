@@ -49,6 +49,13 @@ const normalizedQuote=text=>text.toLocaleLowerCase('ru').replace(/\s+/gu,' ').tr
 // not establish semantic correctness of a different excerpt.
 const quotesOnlyTheAssignment=(source,wordQuote)=>
  normalizedQuote(source).includes(normalizedQuote(wordQuote));
+// The server, rather than a model-provided section name, identifies the exact
+// paragraph in the stored DOCX body. A short matching substring can hide a
+// negation or a limitation in the rest of that paragraph.
+const exactWordParagraph=(text,quote)=>{
+ const positions=String(text||'').split('\n').flatMap((paragraph,index)=>paragraph===quote?[index+1]:[]);
+ return positions.length===1?'абзац '+positions[0]:null;
+};
 // A clause can be assigned any ID in the passport. Its ID cannot be used to
 // bypass checks that require arithmetic or a rendered view of the exact Word.
 const needsNonTextEvidence=item=>['ANTIPLAGIARISM','CALCULATIONS'].includes(item.id)||
@@ -77,15 +84,16 @@ export function parseReviewReport(raw,hash,packet){
     !['sourceId','sourceQuote','wordQuote','wordLocator','explanation'].every(k=>typeof r[k]==='string'&&r[k].length<=2000))return null;
    if(r.status==='pass'){
     const source=materials.get(r.sourceId);
+    const wordLocator=exactWordParagraph(packet.word.text,r.wordQuote);
     // Exact excerpts are necessary evidence, but not a proof of visual layout,
     // external originality, or the semantic correctness of a calculation.
     if(needsNonTextEvidence(item)||
      !item.source_attachment_id||item.source_attachment_id!==r.sourceId||
      !source||r.sourceQuote.trim().length<12||r.wordQuote.trim().length<12||
-     !source.text.includes(r.sourceQuote)||!packet.word.text.includes(r.wordQuote)||
+     !source.text.includes(r.sourceQuote)||!wordLocator||r.wordLocator!==wordLocator||
      quotesOnlyTheAssignment(source.text,r.wordQuote)||
      !quoteAddressesRequirement(item.text||'',r.sourceQuote,r.wordQuote)||
-     r.wordLocator.trim().length<3||r.explanation.trim().length<10)return null;
+     r.explanation.trim().length<10)return null;
    }
    requirements.push({id:item.id,status:r.status,sourceId:r.sourceId,sourceQuote:r.sourceQuote,
     wordQuote:r.wordQuote,wordLocator:r.wordLocator,explanation:r.explanation});
@@ -136,9 +144,9 @@ export function reviewPrompt(packet,financeProfile=false){
   'Если приложение содержит только библиографические записи, нельзя считать прочитанными полные тексты источников (C10). '+
   'Для КАЖДОГО пункта passport.items также верни requirements: [{"id":"...","status":"pass|fail|not_checked",'+
   '"sourceId":"id приложения","sourceQuote":"дословная выдержка из текста приложения",'+
-  '"wordQuote":"дословная выдержка из Word","wordLocator":"раздел и место",'+
+  '"wordQuote":"полный дословный абзац из Word","wordLocator":"абзац N",'+
   '"explanation":"что именно подтверждено или что мешает"}]. '+
-  'pass только если пункт паспорта содержит source_attachment_id, равный id цитируемого приложения, и есть достаточное текстовое свидетельство из обоих документов; иначе not_checked. '+
+  'pass только если пункт паспорта содержит source_attachment_id, равный id цитируемого приложения, и есть достаточное текстовое свидетельство из обоих документов. Для pass приведи один полный абзац Word без сокращений и его точный номер по порядку непустых абзацев в извлечённом тексте ("абзац 1", "абзац 2" и так далее). Иначе not_checked. '+
   'Внешний PDF, страницы, визуальное оформление и правильность вычисления по одному тексту не подтверждай.';
  return {system,user:JSON.stringify(packet)};
 }
