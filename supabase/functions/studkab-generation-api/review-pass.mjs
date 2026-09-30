@@ -56,6 +56,11 @@ const exactWordParagraph=(text,quote)=>{
  const positions=String(text||'').split('\n').flatMap((paragraph,index)=>paragraph===quote?[index+1]:[]);
  return positions.length===1?'абзац '+positions[0]:null;
 };
+// This catches an explicit denial in the cited paragraph. It is a conservative
+// rejection rule, not a general semantic classifier: less direct contradictions
+// still need subject-matter review.
+const explicitlyUnfulfilled=paragraph=>
+ /(?:^|[^\p{L}])(?:не\s+(?:выполнен[аоы]?|представлен[аоы]?|провед[её]н[аоы]?|сформулирован[аоы]?|описан[аоы]?|рассчитан[аоы]?|подтвержд[её]н[аоы]?|раскрыт[аоы]?)|отсутству(?:ет|ют))(?!\p{L})/iu.test(paragraph);
 // A clause can be assigned any ID in the passport. Its ID cannot be used to
 // bypass checks that require arithmetic or a rendered view of the exact Word.
 const needsNonTextEvidence=item=>['ANTIPLAGIARISM','CALCULATIONS'].includes(item.id)||
@@ -91,7 +96,7 @@ export function parseReviewReport(raw,hash,packet){
      !item.source_attachment_id||item.source_attachment_id!==r.sourceId||
      !source||r.sourceQuote.trim().length<12||r.wordQuote.trim().length<12||
      !source.text.includes(r.sourceQuote)||!wordLocator||r.wordLocator!==wordLocator||
-     quotesOnlyTheAssignment(source.text,r.wordQuote)||
+     quotesOnlyTheAssignment(source.text,r.wordQuote)||explicitlyUnfulfilled(r.wordQuote)||
      !quoteAddressesRequirement(item.text||'',r.sourceQuote,r.wordQuote)||
      r.explanation.trim().length<10)return null;
    }
@@ -146,7 +151,7 @@ export function reviewPrompt(packet,financeProfile=false){
   '"sourceId":"id приложения","sourceQuote":"дословная выдержка из текста приложения",'+
   '"wordQuote":"полный дословный абзац из Word","wordLocator":"абзац N",'+
   '"explanation":"что именно подтверждено или что мешает"}]. '+
-  'pass только если пункт паспорта содержит source_attachment_id, равный id цитируемого приложения, и есть достаточное текстовое свидетельство из обоих документов. Для pass приведи один полный абзац Word без сокращений и его точный номер по порядку непустых абзацев в извлечённом тексте ("абзац 1", "абзац 2" и так далее). Иначе not_checked. '+
+  'pass только если пункт паспорта содержит source_attachment_id, равный id цитируемого приложения, и есть достаточное текстовое свидетельство из обоих документов. Для pass приведи один полный абзац Word без сокращений и его точный номер по порядку непустых абзацев в извлечённом тексте ("абзац 1", "абзац 2" и так далее). Если абзац говорит, что требуемое не выполнено или отсутствует, укажи fail, а не pass. Иначе not_checked. '+
   'Внешний PDF, страницы, визуальное оформление и правильность вычисления по одному тексту не подтверждай.';
  return {system,user:JSON.stringify(packet)};
 }

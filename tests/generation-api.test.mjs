@@ -104,6 +104,21 @@ test('textual evidence cannot quote only the harmless part of a negative Word pa
  assert.equal(parseReviewReport(JSON.stringify({...parsed,requirements:[{...row,wordQuote:positive}]}),
   reviewHash,{...packet,word:{text:positive+'\n'+positive}}),null);
 });
+test('an explicit statement that the required work is absent cannot become a positive text verdict',()=>{
+ const examples=[
+  {requirement:'Анализ выручки и выводы',source:'Требуется анализ выручки и содержательные выводы.',
+   word:'Анализ выручки не выполнен, выводы отсутствуют.'},
+  {requirement:'Описание методики исследования',source:'Необходимо описание методики исследования и процедуры отбора.',
+   word:'Описание методики исследования не представлено в документе.'}
+ ];
+ for(const example of examples){
+  const packet={word:{text:example.word},passport:{items:[{id:'REQ_custom',text:example.requirement,
+   required:true,source_attachment_id:'source-1'}]},materials:[{id:'source-1',text:example.source}]};
+  const row={id:'REQ_custom',status:'pass',sourceId:'source-1',sourceQuote:example.source,
+   wordQuote:example.word,wordLocator:'абзац 1',explanation:'Помощник ошибочно объявил условие выполненным'};
+  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,example.requirement);
+ }
+});
 test('server archives validated per-item review evidence for the current Word only',async()=>{
  const excerpt='анализ выручки и выводы',wordExcerpt='анализ выручки показывает рост на 7 процентов';
  const rows=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',
