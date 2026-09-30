@@ -1493,6 +1493,8 @@ function openWorkEditor(workId){
 }
 
 function openNewWork(){
+  document.querySelectorAll('[data-new-work-draft]').forEach(function(el){el.remove();});
+  var ownerKey = KEY, draftKey = ownerKey + ':new-work-draft', completed = false;
   var st = D.settings;
   var wrap = openModal(
     '<button type="button" class="close" data-x="1">✕</button>'+
@@ -1507,13 +1509,44 @@ function openNewWork(){
       '<option value="">Общий ГОСТ (уточнить по методичке)</option>'+
       (D.templates||[]).map(function(t){ return '<option value="'+t.id+'">'+esc(t.name)+'</option>' }).join("")+
     '</select></div>'+
+    '<p class="hint" role="status" data-new-work-status>Заполнение сохраняется на этом устройстве. Закрытие окна не удаляет черновик.</p>'+
     '<div class="rowbtns">'+
       '<button type="button" class="b b-main" data-save="1">Создать</button>'+
       '<button type="button" class="b b-quiet" data-x="1">Отмена</button>'+
     '</div>'
   );
+  wrap.setAttribute('data-new-work-draft','');
+  var status = wrap.querySelector('[data-new-work-status]');
+  var draftFields = {topic:'#nTopic',type:'#nType',due:'#nDue',template:'#nTpl'};
+  try {
+    var restored = JSON.parse(localStorage.getItem(draftKey) || 'null');
+    if (restored && restored.version === 1 && restored.fields && typeof restored.fields === 'object') {
+      Object.keys(draftFields).forEach(function(k){
+        var field = wrap.querySelector(draftFields[k]), value = restored.fields[k];
+        if (typeof value !== 'string') return;
+        if (field.tagName === 'SELECT' && !Array.from(field.options).some(function(o){return o.value === value;})) return;
+        field.value = value;
+      });
+      status.textContent = 'Последнее заполнение восстановлено. Заявка ещё не отправлена.';
+    }
+  } catch(e) { status.textContent = 'Не удалось прочитать черновик. Проверьте поля перед созданием работы.'; }
+  function persistDraft(){
+    if (completed || KEY !== ownerKey || !wrap.isConnected) return;
+    var fields = {};
+    Object.keys(draftFields).forEach(function(k){fields[k] = wrap.querySelector(draftFields[k]).value;});
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({version:1,fields:fields}));
+      status.textContent = 'Черновик сохранён на этом устройстве. Заявка ещё не отправлена.';
+    } catch(e) { status.textContent = 'Черновик не сохранён: хранилище устройства недоступно. Не закрывайте окно до создания работы.'; }
+  }
+  wrap.addEventListener('input', persistDraft);
+  wrap.addEventListener('change', persistDraft);
+  window.addEventListener('pagehide', persistDraft);
+  var removeDraftWindow = wrap.remove.bind(wrap);
+  wrap.remove = function(){persistDraft();window.removeEventListener('pagehide',persistDraft);removeDraftWindow();};
   wrap.addEventListener("click", function(ev){
     if (!ev.target.closest("[data-save]")) return;
+    if (completed || KEY !== ownerKey) return;
     var topic = wrap.querySelector("#nTopic").value.trim();
     if (!topic) return toast("Впишите тему работы");
     var type = wrap.querySelector("#nType").value;
@@ -1533,6 +1566,11 @@ function openNewWork(){
         req:{ id:uid("rq"), contact: st.contact || "", org:"", notes:"", sent:"" }
       });
     });
+    completed = true;
+    try {
+      var stored = JSON.parse(localStorage.getItem(ownerKey) || 'null');
+      if (stored && Array.isArray(stored.works) && stored.works.some(function(w){return w.id === newId;})) localStorage.removeItem(draftKey);
+    } catch(e) {}
     wrap.remove(); go("works", newId); toast("Работа создана. Заявка исполнителю ещё не отправлена.");
   });
 }
@@ -2138,6 +2176,7 @@ var cloudNote = "";           /* короткая строка состояни�
 function cloudSwitchUser(id){
   var target = id ? CLOUD_LOCAL_KEY + ":user:" + id :
     (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped") ? CLOUD_LOCAL_KEY + ":guest" : CLOUD_LOCAL_KEY);
+  if (target !== KEY) document.querySelectorAll('[data-new-work-draft]').forEach(function(el){el.remove();});
   cloudGuestCandidate = null;
   var freshAccount = id && localStorage.getItem(target) === null;
   if (id && localStorage.getItem(target) === null && KEY === CLOUD_LOCAL_KEY + ":guest" && !cloudIsEmpty(D)) cloudGuestCandidate = JSON.parse(JSON.stringify(D));
