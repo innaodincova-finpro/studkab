@@ -82,6 +82,7 @@
    aiResult.replaceChildren();
    var complete=saved.reports.filter(function(r){return r.status==='complete'&&r.report;});
    var currentComplete=complete.filter(function(r){return r.current&&r.reviewPasses===2;});
+   var currentEvidence=complete.filter(function(r){return r.current;});
    var unresolved=saved.reports.filter(function(r){
     if(r.status==='unknown'||r.status==='invalid')return true;
     return r.status==='complete'&&((r.report.requirements||[]).some(function(item){return item.status==='fail';})||
@@ -96,8 +97,8 @@
      'Ответ ИИ сохранён, но формат не подтверждён. Нужна повторная проверка; положительный вывод недоступен.'):
     saved.reports.length?'ИИ проверка этой версии ещё выполняется.':'Для текущего Word и паспорта ИИ проверка не запускалась.';return;}
    if(currentComplete.length){aiJob=currentComplete[0].jobId;aiBinding=expected;}
-   if(currentComplete.length&&options.onReviewSuggestions){
-    var suggestions=reviewSuggestions(currentComplete[0].report,expected.fileHash);
+   if(currentEvidence.length&&options.onReviewSuggestions){
+    var suggestions=reviewSuggestions(currentEvidence[0].report,expected.fileHash);
     if(!suggestions)throw Error('Состав ИИ отчёта не подтверждён. Протокол не заполнен.');
     options.onReviewSuggestions(suggestions,expected);
    }
