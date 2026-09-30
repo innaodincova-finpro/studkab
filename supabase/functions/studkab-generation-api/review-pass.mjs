@@ -1,6 +1,7 @@
 import {inspectWord} from '../_shared/external-word.mjs';
 import {currentAttachments} from '../_shared/current-attachments.mjs';
 import {verifyCalculationEvidence} from './calculation-evidence.mjs';
+import {inventoryNumberedCalculations} from './calculation-inventory.mjs';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const categories=new Set(['assignment','methodology','data','sources']);
@@ -117,7 +118,8 @@ export function parseReviewReport(raw,hash,packet){
   ...verifyCalculationEvidence(packet,claim)})):[];
  return {wordHash:hash,findings:data.findings.map(f=>({code:f.code,location:f.location,requirement:f.requirement,
   observation:f.observation,status:f.status,...(f.requirementId?{requirementId:f.requirementId}:{})})),
-  coverage:{checked,notChecked},...(requirements?{requirements}:{}),calculationDiagnostics};
+  coverage:{checked,notChecked},...(requirements?{requirements}:{}),calculationDiagnostics,
+  ...(packet?{calculationInventory:inventoryNumberedCalculations(packet)}:{})};
 }
 
 // Every byte of the review context comes from the server. A cached browser
@@ -174,6 +176,7 @@ export function reviewPrompt(packet,financeProfile=false){
   '"decimals":2,"operands":[{"sourceId":"id файла","sourceQuote":"дословная выдержка с числом, годом и единицей","value":"число"},'+
   '{"sourceId":"id файла","sourceQuote":"дословная выдержка с числом, годом и единицей","value":"число"}],'+
   '"result":"число с указанным количеством знаков","wordQuote":"полный дословный абзац Word"}]. ' +
-  'Если исходные числа или метод не указаны явно, верни calculations: []. Это только кандидаты для серверного пересчёта, не основание для pass.';
+  'Если исходные числа или метод не указаны явно, верни calculations: []. Это только кандидаты для серверного пересчёта, не основание для pass. '+
+  'Восемь кандидатов не означают полный перечень расчётов. Непроверенные формулы, применение к каждому изделию/периоду, таблицы и правила округления перечисли как needs_evidence; не выдумывай правило округления из количества знаков в Word.';
  return {system,user:JSON.stringify(packet)};
 }

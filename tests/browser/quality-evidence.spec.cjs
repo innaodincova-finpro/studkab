@@ -144,6 +144,35 @@ test('AI review estimates before payment and binds returned notes to the exact W
  await expect(page.locator('[data-ai-status]')).toContainText('изменились');
  await expect(page.locator('[data-ai-result]')).toBeEmpty();
 });
+test('formula inventory shows missing coverage without payment, pass or stale reuse',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  window.aiCalls=[];
+  Oblako.generationApi=async body=>{
+   aiCalls.push(body);
+   if(body.action!=='quality-review-reports')throw Error('Unexpected paid action');
+   return {versionId:qBinding.versionId,fileHash:qBinding.fileHash,passportId:qBinding.passportId,
+    reports:[{createdAt:'2026-09-30T07:00:00Z',status:'complete',report:{wordHash:qBinding.fileHash,
+     findings:[],coverage:{checked:[],notChecked:['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03']},
+     calculationInventory:{complete:false,status:'not_checked',gaps:['duplicate_formula_number'],entries:[
+      {formulaNumber:'21',sourceId:'method-1',sourceLine:87,sourceHash:'d'.repeat(64),sourceQuote:'Выручка = sum(Q*price)/1000 (21)'}]},
+     calculationDiagnostics:[{requirementId:'FIN',status:'verified_arithmetic',reason:'single_operation_only'}]}}]};
+  };
+ });
+ await page.locator('[data-ai-review]').evaluate(el=>el.open=true);
+ await page.locator('[data-ai-refresh]').click();
+ await expect(page.locator('[data-ai-result]')).toContainText('Найдено формул: 1');
+ await expect(page.locator('[data-ai-result]')).toContainText('Полнота всех расчётов, их применение и округление не подтверждены');
+ await expect(page.locator('[data-ai-result]')).toContainText('весь расчётный пункт не принят');
+ expect(await page.evaluate(()=>qReady)).toBe(false);
+ await page.locator('[data-ai-result] summary').click();
+ await expect(page.locator('[data-ai-result]')).toContainText('Формула 21 · не проверено');
+ await expect(page.locator('[data-ai-result]')).toContainText('Номера формул повторяются');
+ expect(await page.evaluate(()=>aiCalls.every(c=>c.action==='quality-review-reports'))).toBe(true);
+ await page.evaluate(()=>qBinding={...qBinding,fileHash:'f'.repeat(64)});
+ await page.locator('[data-ai-refresh]').click();
+ await expect(page.locator('[data-ai-result]')).toBeEmpty();
+});
 test('AI review explains why a test assignment cannot start a paid job',async({page})=>{
  await setup(page);
  await page.evaluate(()=>{

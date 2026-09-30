@@ -106,6 +106,18 @@
        '\nWord: '+(r.wordLocator||'не подтверждено')+(r.wordQuote?' — '+r.wordQuote:'')+
       '\nВывод: '+(r.explanation||'недостаточно доказательств');block.append(entry);});
     }
+    if(item.report.calculationInventory){
+     var inventory=item.report.calculationInventory,invTitle=document.createElement('h5');
+     invTitle.textContent='Перечень нумерованных формул из материалов';block.append(invTitle);
+     var invStatus=document.createElement('p');
+     invStatus.textContent='Найдено формул: '+inventory.entries.length+'. Полнота всех расчётов, их применение и округление не подтверждены. Передача по этому перечню не разрешается.';block.append(invStatus);
+     var invDetails=document.createElement('details'),invSummary=document.createElement('summary');
+     invSummary.textContent='Показать основания и непроверенные формулы';invDetails.append(invSummary);
+     inventory.entries.forEach(function(row){var line=document.createElement('p');
+      line.style.whiteSpace='pre-wrap';line.textContent='Формула '+row.formulaNumber+' · не проверено\nФайл: '+row.sourceId+' · строка '+row.sourceLine+' · хеш '+row.sourceHash.slice(0,12)+'…\n'+row.sourceQuote;invDetails.append(line);});
+     if(inventory.gaps.includes('duplicate_formula_number')){var duplicate=document.createElement('p');duplicate.textContent='Номера формул повторяются: требуется разбор противоречия.';invDetails.append(duplicate);}
+     block.append(invDetails);
+    }
     if(item.report.calculationDiagnostics&&item.report.calculationDiagnostics.length){
      var calcHeading=document.createElement('h5');calcHeading.textContent='Пересчёт отдельных действий';block.append(calcHeading);
      item.report.calculationDiagnostics.forEach(function(c){var line=document.createElement('p');

@@ -5,10 +5,10 @@ const fs=require('node:fs');
 const base='https://example.test/studkab/';
 test('both entry pages and offline shell use the AI criterion assistance scripts',()=>{
  for(const page of ['index.html','reestr.html'])
-  assert.match(fs.readFileSync(page,'utf8'),/quality-evidence-ui\.js\?v=7.*results-ui\.js\?v=23/);
+  assert.match(fs.readFileSync(page,'utf8'),/quality-evidence-ui\.js\?v=8.*results-ui\.js\?v=23/);
  const shell=fs.readFileSync('sw.js','utf8');
- assert.match(shell,/studkab-v101-word-inspection/);
- assert.match(shell,/quality-evidence-ui\.js\?v=7/);
+ assert.match(shell,/studkab-v102-calculation-inventory/);
+ assert.match(shell,/quality-evidence-ui\.js\?v=8/);
 });
 function worker(fetch){
  const handlers={},entries=new Map(),pending=[];

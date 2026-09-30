@@ -114,6 +114,22 @@ test('review report independently checks proposed arithmetic and never upgrades 
  assert.equal(parseReviewReport(JSON.stringify({...base,requirements:[{...row,status:'pass'}]}),reviewHash,packet),null);
  assert.deepEqual(parseReviewReport(JSON.stringify({...base,calculations:undefined}),reviewHash,packet).calculationDiagnostics,[]);
 });
+test('numbered calculation inventory is computed from server materials, not model claims',()=>{
+ const packet={word:{fileHash:reviewHash,text:'Текст Word.'},passport:{sourceFingerprint:'b'.repeat(64),
+  items:[{id:'FIN',text:'Расчёты по методичке',source_attachment_id:'method-1'}]},
+  materials:[{id:'method-1',category:'methodology',fileHash:'d'.repeat(64),
+   text:'P = A - B (1)\n\n\nR = P / V (2)'}]};
+ const row={id:'FIN',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Не проверено'};
+ const raw={...JSON.parse(report),requirements:[row],calculations:[],
+  calculationInventory:{complete:true,status:'pass',entries:[]}};
+ const parsed=parseReviewReport(JSON.stringify(raw),reviewHash,packet);
+ assert.equal(parsed.calculationInventory.entries.length,2);
+ assert.equal(parsed.calculationInventory.complete,false);
+ assert.equal(parsed.calculationInventory.status,'not_checked');
+ assert.equal(parsed.requirements[0].status,'not_checked');
+ const changed={...packet,materials:[{...packet.materials[0],fileHash:'e'.repeat(64)}]};
+ assert.equal(parseReviewReport(JSON.stringify(raw),reviewHash,changed).calculationInventory.entries[0].sourceHash,'e'.repeat(64));
+});
 test('textual evidence cannot quote only the harmless part of a negative Word paragraph',()=>{
  const paragraph='Анализ выручки за год и выводы не представлены в работе.';
  const packet={word:{text:'Введение.\n'+paragraph},
