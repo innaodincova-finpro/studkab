@@ -4,7 +4,7 @@
  var labels={pass:'Пройдено',fail:'Не пройдено',manual:'Нужна ручная проверка'};
  var REVIEW_CODES=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
  function reviewSuggestions(report,hash){
-  if(!report||report.wordHash!==hash||!Array.isArray(report.findings)||report.findings.length>32)return null;
+  if(!report||report.wordHash!==hash||!Array.isArray(report.findings)||report.findings.length>(report.reviewPasses===2?64:32))return null;
   var coverage=report.coverage||{},checked=coverage.checked,missing=coverage.notChecked;
   if(!Array.isArray(checked)||!Array.isArray(missing)||checked.length+missing.length!==16||
    new Set(checked.concat(missing)).size!==16||checked.concat(missing).some(function(code){return !REVIEW_CODES.includes(code);})||
@@ -26,7 +26,7 @@
  function disposition(name){return '<label>Результат проверки<select data-q="'+name+'" style="width:100%"><option value="manual">Нужна ручная проверка</option><option value="fail">Не пройдено</option><option value="pass">Пройдено</option></select></label>';}
  function mount(host,options){
   var state=null,verified=false,dirty=false,scan=null,scanHash=null,linkAudit=null,declaredLayout=null,inspection=null,busy=false,currentBinding=null,operations={},lastReady=false,aiJob=null,aiBusy=false,aiBinding=null;
-  host.innerHTML='<details data-ai-review><summary>ИИ проверка содержания Word</summary><p class="hint">Помощник сопоставляет условия этой заявки с точным Word и доступными текстами материалов. Сервер сохраняет только подтверждённые цитатами текстовые свидетельства; неподтверждённое остаётся открытым и блокирует обычную выдачу. Проверка платная и требует подтверждения предела.</p><button type="button" class="chip" data-ai-start>Оценить стоимость и запустить</button><button type="button" class="chip" data-ai-refresh>Проверить результат</button><button type="button" class="chip" data-ai-recover>Найти предыдущую проверку</button><p role="status" data-ai-status>Проверка ещё не запущена.</p><pre data-ai-result style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre></details><details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Внешний отчёт и недоступные помощнику проверки остаются отдельными условиями выдачи.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
+  host.innerHTML='<details data-ai-review><summary>ИИ проверка содержания Word</summary><p class="hint">Два последовательных прохода помощника сопоставляют условия этой заявки с точным Word и доступными текстами материалов. Сервер сохраняет только подтверждённые цитатами текстовые свидетельства; неподтверждённое остаётся открытым и блокирует обычную выдачу. Проверка платная и требует подтверждения предела.</p><button type="button" class="chip" data-ai-start>Оценить стоимость и запустить</button><button type="button" class="chip" data-ai-refresh>Проверить результат</button><button type="button" class="chip" data-ai-recover>Найти предыдущую проверку</button><p role="status" data-ai-status>Проверка ещё не запущена.</p><pre data-ai-result style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit"></pre></details><details data-quality-panel><summary>Проверки заимствований и оригинальности</summary><p class="hint">Эти два результата относятся к сохранённой версии Word. Внешний отчёт и недоступные помощнику проверки остаются отдельными условиями выдачи.</p><button type="button" class="chip" data-quality-start>Начать проверки этой версии Word</button><button type="button" class="chip" data-quality-refresh>Обновить проверки</button><p role="status" data-quality-status>Сначала сохраните точную версию Word для проверки.</p><div data-quality-body></div></details>';
   var msg=host.querySelector('[data-quality-status]'),body=host.querySelector('[data-quality-body]');
   var aiStatus=host.querySelector('[data-ai-status]'),aiResult=host.querySelector('[data-ai-result]');
   function guard(){options.guard();if(!host.isConnected)throw Error('Окно проверки закрыто.');}
@@ -51,7 +51,8 @@
    if(answer.reviewTarget?.versionId!==expected.versionId||answer.reviewTarget?.fileHash!==expected.fileHash)
     throw Error('Ответ ИИ относится к другой версии Word. Запустите проверку текущего файла.');
    var part=answer.parts?.find(function(p){return p.id==='quality_review';});
-   if(answer.job?.status==='complete'&&part?.state==='done'&&typeof part.text==='string'){
+   var first=answer.parts?.find(function(p){return p.id==='quality_evidence';});
+   if(answer.job?.status==='complete'&&part?.state==='done'&&(answer.reviewPasses!==2||first?.state==='done')&&typeof part.text==='string'){
     var parsed;try{parsed=JSON.parse(part.text);}catch{throw Error('Модель вернула ответ не в согласованном формате. Положительное заключение недоступно.');}
     var codes=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
     var checked=parsed.coverage?.checked,notChecked=parsed.coverage?.notChecked;
@@ -63,11 +64,16 @@
       [...checked,...notChecked].some(function(code){return !codes.includes(code);}))
      throw Error('Модель не подтвердила версию или состав отчёта. Положительное заключение недоступно.');
     await aiLoadSaved();
-   }else if(answer.job?.status==='unknown'||part?.state==='unknown')
+   }else if(answer.reviewPasses===2&&part?.failure?.code==='REVIEW_FIRST_INVALID')
+    aiStatus.textContent='Первый отчёт не подтверждён. Второй платный запрос не отправлялся; автоматического повтора нет. Выдача заблокирована.';
+   else if(answer.job?.status==='unknown'||part?.state==='unknown'||first?.state==='unknown')
     aiStatus.textContent='Результат платного запроса неизвестен. Выдача заблокирована; повторная оплата и повторный запуск не выполняются автоматически. Требуется сверка попытки и расходов.';
    else if(answer.job?.status==='stale')
     aiStatus.textContent='Word или паспорт изменился. Эта проверка остановлена; результат не относится к текущему файлу.';
-   else aiStatus.textContent='Состояние проверки: '+(answer.job?.status||'неизвестно')+'. Обновите результат позже.';
+   else if(answer.reviewPasses===2){
+    var names={queued:'ожидает',running:'выполняется',claimed:'выполняется',done:'сохранён',unknown:'результат неизвестен'};
+    aiStatus.textContent='Первый проход: '+(names[first?.state]||'не подтверждён')+'. Второй проход: '+(names[part?.state]||'не подтверждён')+'. Положительный итог ещё не подтверждён.';
+   }else aiStatus.textContent='Состояние проверки: '+(answer.job?.status||'неизвестно')+'. Обновите результат позже.';
   }
   async function aiLoadSaved(){
    var expected=captured(),saved=await Oblako.generationApi({action:'quality-review-reports',request:options.id,versionId:expected.versionId});check(expected);
@@ -75,16 +81,19 @@
     throw Error('Не удалось подтвердить историю ИИ проверки для этого Word.');
    aiResult.replaceChildren();
    var complete=saved.reports.filter(function(r){return r.status==='complete'&&r.report;});
-   var currentComplete=complete.filter(function(r){return r.current;});
+   var currentComplete=complete.filter(function(r){return r.current&&r.reviewPasses===2;});
    var unresolved=saved.reports.filter(function(r){
     if(r.status==='unknown'||r.status==='invalid')return true;
-    return r.status==='complete'&&(r.report.findings.some(function(f){return f.status==='fail';})||
+    return r.status==='complete'&&((r.report.requirements||[]).some(function(item){return item.status==='fail';})||
+     (r.report.firstPass?.requirements||[]).some(function(item){return item.status==='fail';})||r.report.findings.some(function(f){return f.status==='fail';})||
      (r.report.calculationDiagnostics||[]).some(function(c){return c.status==='fail';}));
    });
    if(!complete.length){aiStatus.textContent=saved.reports.some(function(r){return r.status==='unknown'})?
     'Результат платного запроса неизвестен. Выдача заблокирована до сверки попытки и расходов; автоматического платного повтора нет.':
     saved.reports.some(function(r){return r.status==='invalid'})?
-    'Ответ ИИ сохранён, но формат не подтверждён. Нужна повторная проверка; положительный вывод недоступен.':
+    (saved.reports.some(function(r){return r.status==='invalid'&&r.reviewPasses===2;})?
+     'Не удалось подтвердить оба прохода: отчёт неполон, недостоверен или выводы расходятся. Положительный вывод недоступен.':
+     'Ответ ИИ сохранён, но формат не подтверждён. Нужна повторная проверка; положительный вывод недоступен.'):
     saved.reports.length?'ИИ проверка этой версии ещё выполняется.':'Для текущего Word и паспорта ИИ проверка не запускалась.';return;}
    if(currentComplete.length){aiJob=currentComplete[0].jobId;aiBinding=expected;}
    if(currentComplete.length&&options.onReviewSuggestions){
@@ -94,7 +103,12 @@
    }
    complete.forEach(function(item){
     var block=document.createElement('section'),title=document.createElement('h4');
-    title.textContent='Версия Word '+expected.fileHash.slice(0,12)+'… · '+new Date(item.createdAt).toLocaleString('ru-RU')+(item.current?' · текущий паспорт':' · прежний паспорт');block.append(title);
+    title.textContent='Версия Word '+expected.fileHash.slice(0,12)+'… · '+new Date(item.createdAt).toLocaleString('ru-RU')+(item.current?' · текущий паспорт':' · прежний паспорт')+(item.reviewPasses===2?' · два прохода':' · один проход, исторический формат');block.append(title);
+    if(item.reviewPasses===2&&item.report.firstPass){
+     var details=document.createElement('details'),summary=document.createElement('summary'),initial=document.createElement('pre');
+     summary.textContent='Результат первого прохода';initial.style.whiteSpace='pre-wrap';initial.style.overflowWrap='anywhere';
+     initial.textContent=(item.report.firstPass.requirements||[]).map(function(r){return r.id+' · '+(r.status==='pass'?'Текстовое свидетельство':r.status==='fail'?'Расхождение':'Не проверено')+'\nОснование: '+(r.sourceQuote||'не подтверждено')+'\nWord: '+(r.wordLocator||'не подтверждено')+' — '+(r.wordQuote||'')+'\nВывод: '+r.explanation;}).join('\n\n');details.append(summary,initial);block.append(details);
+    }
     var findings=item.report.findings;
     if(!findings.length){var empty=document.createElement('p');empty.textContent='Модель не указала доказанных замечаний. Это не положительная приёмка.';block.append(empty);}
     findings.forEach(function(f){var entry=document.createElement('p');entry.style.whiteSpace='pre-wrap';
@@ -140,7 +154,7 @@
    if(!/^[a-f0-9-]{36}$/i.test(quote.passportId||''))throw Error('Сервер не подтвердил версию паспорта. Обновите проверку.');
    if(!quote.canStart)throw Error('Бюджет не позволяет запуск проверки. Предельный расход не подтверждён.');
    var cost=(quote.estimatedCostMicrousd/1000000).toFixed(4),max=(quote.maxCostMicrousd/1000000).toFixed(4);
-   if(!global.confirm('Запустить платную ИИ проверку этой версии Word по паспорту №'+quote.passportRevision+'? Расчётный резерв: $'+cost+'. Предел для работы: $'+max+'.')){
+   if(!global.confirm('Запустить '+(quote.reviewPasses===2?'два платных прохода ИИ проверки':'платную ИИ проверку')+' этой версии Word по паспорту №'+quote.passportRevision+'? Расчётный резерв: $'+cost+'. Предел для работы: $'+max+'.')){
     aiStatus.textContent='Запуск отменён. Расходов нет.';return;}
    check(expected);
    var answer=await Oblako.generationApi({action:'quality-review-start',request:options.id,versionId:expected.versionId,

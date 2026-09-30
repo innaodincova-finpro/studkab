@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {handler,prepare,failure,diagnostic,workKind} from '../supabase/functions/studkab-generation-api/handler.mjs';
 import {reserveMicrousd} from '../supabase/functions/_shared/deepseek-cost.mjs';
-import {reviewPacket,reviewPrompt,parseReviewReport} from '../supabase/functions/studkab-generation-api/review-pass.mjs';
+import {reviewPacket,reviewPrompt,parseReviewReport,parseTwoPassReview} from '../supabase/functions/studkab-generation-api/review-pass.mjs';
 import DraftQuality from '../draft-quality.js';
 const uid='11111111-1111-4111-8111-111111111111',job='22222222-2222-4222-8222-222222222222';
 const requestId='33333333-3333-4333-8333-333333333333',passportId='44444444-4444-4444-8444-444444444444',materialFingerprint='a'.repeat(64);
@@ -212,7 +212,7 @@ test('server archives validated per-item review evidence for the current Word on
    if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
    if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved',items:packet.passport.items}];
    if(path.startsWith('studkab_gen_jobs'))return [{id:job,created_at:'2026-09-29',status:'complete',
-    snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}];
+    snapshot:{input:{review_protocol:2,review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}];
    if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:stored}];
    if(path==='rpc/studkab_requirement_review_ingest')return {items:1};return [];
   }});
@@ -316,7 +316,12 @@ test('quality review builds a server-owned prompt with no automatic pass or deli
  assert.equal(answer.status,'queued');
  const saved=s.calls.find(c=>c.path==='rpc/studkab_gen_start').args;
  assert.equal(saved.p_input.review_target.fileHash,reviewHash);
- assert.equal(saved.p_plan.length,1);
+ assert.equal(saved.p_plan.length,2);
+ assert.deepEqual(saved.p_plan.map(p=>p.id),['quality_evidence','quality_review']);
+ assert.ok(saved.p_plan.every(p=>p.section_id==='quality_review'));
+ assert.equal(saved.p_input.review_protocol,2);
+ assert.equal(quote.reviewPasses,2);
+ assert.equal(quote.estimatedCostMicrousd,saved.p_plan.reduce((total,p)=>total+p.estimated_cost_microusd,0));
  assert.equal(saved.p_plan[0].section_id,'quality_review');
  assert.ok(saved.p_input.system.includes('По общим кодам C01–S03 не присваивай pass'));
  assert.ok(saved.p_input.system.includes('по отдельному пункту паспорта pass возможен только с дословным свидетельством'));
@@ -369,7 +374,7 @@ test('missing student name blocks paid estimate and queue before any budget or p
 test('review packet rejects old Word and hashes exact saved bytes',async()=>{
  const db=async path=>{
   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:33,docx_base64:'AQID',file_hash:reviewHash,document_hash:'c'.repeat(64)}];
-  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[]}];
+  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[{id:'WORK_TYPE',text:'Тип работы'}]}];
   return [{id:'source',supersedes:null,category:'assignment',file_hash:'d'.repeat(64),extracted_text:'Задание'}];
  };
  await assert.rejects(()=>reviewPacket(db,requestId,'66666666-6666-4666-8666-666666666666',async()=>{throw Error('should not inspect old Word');}),/REVIEW_VERSION_STALE/);
@@ -383,7 +388,7 @@ test('incomplete passport blocks current-file review and cannot validate a posit
  const sourceId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
  const source='Работа должна содержать анализ выручки за три года';
  const item={id:'ANALYSIS',text:source,required:true,verified:true,source_attachment_id:sourceId};
- let items=[];
+ let items=[{id:'OTHER',text:'Другое условие',required:true,verified:true}];
  const db=async path=>{
   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:1,docx_base64:'AQID',file_hash:reviewHash}];
   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:1,status:'approved',source_fingerprint:materialFingerprint,items}];
@@ -416,7 +421,7 @@ test('incomplete passport blocks current-file review and cannot validate a posit
 test('test assignment cannot reach paid quality-review queue',async()=>{
  const db=async path=>{
   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:33,docx_base64:'AQID',file_hash:reviewHash}];
-  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[]}];
+  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:4,status:'approved',source_fingerprint:materialFingerprint,items:[{id:'WORK_TYPE',text:'Тип работы'}]}];
   return [{id:'source',supersedes:null,category:'assignment',file_hash:'d'.repeat(64),extracted_text:'ТЕСТОВОЕ ЗАДАНИЕ НА КУРСОВУЮ РАБОТУ\nУчебный вариант 1'}];
  };
  await assert.rejects(()=>reviewPacket(db,requestId,reviewVersion,async()=>({fileHash:reviewHash,text:'Текст Word'})),/REVIEW_SYNTHETIC_PAID_BLOCKED/);
@@ -583,4 +588,51 @@ test('R1 diagnostics expose bounded operational fields and omit arbitrary detail
  assert.deepEqual(diagnostic({ordinal:2,section:'chapter-2',stage:'provider',attempt:1,request_id:'11111111-1111-4111-8111-111111111111',reason:'RESULT_UNKNOWN',finish_reason:'length',started_at:'2026-09-17T12:00:00Z',finished_at:null,promptTokens:10,completionTokens:20,secret:'x'}),
   {ordinal:2,section:'chapter-2',stage:'provider',attempt:1,requestId:'11111111-1111-4111-8111-111111111111',reason:'RESULT_UNKNOWN',finishReason:'length',startedAt:'2026-09-17T12:00:00Z',finishedAt:null,promptTokens:10,completionTokens:20});
  assert.equal(diagnostic({stage:'private-stage'}),null);
+});
+
+test('two passes must agree on every positive item, and the first finding cannot disappear',()=>{
+ const word='Анализ выручки показывает рост доходов и объясняет причины изменений.';
+ const packet={word:{fileHash:reviewHash,text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',source_attachment_id:'source',required:true}]},
+  materials:[{id:'source',text:'По заданию нужен анализ выручки и выводы'}]};
+ const row={id:'ANALYSIS',status:'pass',sourceId:'source',sourceQuote:'анализ выручки и выводы',wordQuote:word,
+  wordLocator:'абзац 1',explanation:'Выполнено сопоставление анализа выручки'};
+ const output=(rows,findings=[])=>JSON.stringify({...JSON.parse(report),findings,requirements:rows});
+ const good=output([row]);
+ assert.equal(parseTwoPassReview(good,good,reviewHash,packet).reviewPasses,2);
+ for(const status of ['fail','not_checked'])assert.equal(parseTwoPassReview(output([{...row,status}]),good,reviewHash,packet),null);
+ assert.equal(parseTwoPassReview(good,good,'f'.repeat(64),packet),null);
+ assert.equal(parseTwoPassReview(output([{...row,sourceQuote:'Вымышленное основание'}]),good,reviewHash,packet),null);
+ const finding={code:'C05',location:'абзац 1',requirement:'Задание',observation:'Не обоснован общий вывод',status:'fail'};
+ assert.equal(parseTwoPassReview(output([row],[finding]),good,reviewHash,packet).findings[0].observation,finding.observation);
+ assert.equal(parseTwoPassReview(good,output([{...row,status:'not_checked'}]),reviewHash,packet).requirements[0].status,'not_checked');
+});
+test('two-pass estimate includes both calls and retained first output without increasing the work ceiling',async()=>{
+ const s=reviewSetup(),request={request:requestId,versionId:reviewVersion};
+ const quote=await (await s.request({...request,action:'quality-review-estimate'})).json();
+ const single=reserveMicrousd(twoPassSystem(),JSON.stringify(reviewContext.packet),4000);
+ assert.ok(quote.estimatedCostMicrousd>2*single);
+ assert.equal(quote.maxCostMicrousd,250000);
+ const blocked=reviewSetup({budget:quote.estimatedCostMicrousd-1});
+ const rejected=await blocked.request({...request,action:'quality-review-start',confirmedEstimateMicrousd:quote.estimatedCostMicrousd,
+  confirmedFileHash:reviewHash,confirmedPassportId:passportId});
+ assert.equal((await rejected.json()).error,'BUDGET_BLOCKED');
+ assert.equal(blocked.calls.some(c=>c.path==='rpc/studkab_gen_start'),false);
+ function twoPassSystem(){return reviewPrompt(reviewContext.packet).system;}
+});
+test('legacy single-pass report remains readable without new positive ingest',async()=>{
+ const source='В задании нужен анализ выручки и выводы',word='Анализ выручки показывает рост и объясняет причины изменений.';
+ const packet={word:{text:word},passport:{items:[{id:'ANALYSIS',text:'Анализ выручки',source_attachment_id:'source'}]},materials:[{id:'source',text:source}]};
+ const raw=JSON.stringify({...JSON.parse(report),requirements:[{id:'ANALYSIS',status:'pass',sourceId:'source',sourceQuote:'анализ выручки и выводы',wordQuote:word,wordLocator:'абзац 1',explanation:'Подтверждается анализом выручки'}]});
+ let ingested=false;
+ const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+  readReviewPacket:async()=>({packet,passport:{id:passportId},version:{file_hash:reviewHash}}),db:async(path,args)=>{
+   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,file_hash:reviewHash}];
+   if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,status:'approved',items:packet.passport.items}];
+   if(path.startsWith('studkab_gen_jobs'))return [{id:job,status:'complete',snapshot:{input:{review_target:{versionId:reviewVersion,fileHash:reviewHash,passportId}}}}];
+   if(path.startsWith('studkab_gen_parts'))return [{state:'done',result:raw}];
+   if(path==='rpc/studkab_requirement_review_ingest')ingested=true;return [];
+  }});
+ const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},body:JSON.stringify({action:'quality-review-reports',request:requestId,versionId:reviewVersion})}));
+ const saved=(await response.json()).reports[0];
+ assert.equal(saved.status,'complete');assert.equal(saved.reviewPasses,1);assert.equal(ingested,false);
 });

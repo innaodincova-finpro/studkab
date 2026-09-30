@@ -22,7 +22,7 @@ export function handler({config,rpc,provider,ready,authorize,readiness,prepare,f
   if(!c)return reply({status:'idle'});
   if(prepare){
    try{c=await prepare(c);}catch(e){
-    const code=e.message==='CONTEXT_TOO_BIG'?'CONTEXT_TOO_BIG':'PREPARATION_UNAVAILABLE';
+    const code=['CONTEXT_TOO_BIG','REVIEW_FIRST_INVALID'].includes(e.message)?e.message:'PREPARATION_UNAVAILABLE';
     try{if(failClaim)await failClaim(c,code);}catch{return reply({status:'block_unconfirmed',code},503);}
     return reply({status:'blocked',code,job:c.job_id},409);
    }

@@ -2,7 +2,7 @@ import {materialManifestGuard} from '../_shared/material-manifest.mjs';
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 import {expandParts} from './plan.mjs';
 import {reserveMicrousd,MAX_OUTPUT_TOKENS} from '../_shared/deepseek-cost.mjs';
-import {reviewPacket,reviewPrompt,parseReviewReport} from './review-pass.mjs';
+import {reviewPacket,twoPassReviewPrompt,parseReviewReport,parseTwoPassReview} from './review-pass.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store',
  'Access-Control-Allow-Origin':'https://innaodincova-finpro.github.io',
  'Access-Control-Allow-Headers':'authorization,content-type,apikey',
@@ -52,27 +52,32 @@ export function prepare(input,workLimit){
  });
  if(!validated.length)throw Error('INVALID_INPUT');
  const plan=input.reviewMode===true
-  ? validated.map(p=>({id:p.id,section_id:p.id,part_index:0,part_count:1,prompt:p.prompt,
+  ? validated.map((p,index)=>({id:p.id,section_id:'quality_review',part_index:index,part_count:validated.length,prompt:p.prompt,
     max_cost_microusd:workLimit,max_output_tokens:MAX_OUTPUT_TOKENS,target_chars:3000}))
   : expandParts(validated,workLimit,MAX_OUTPUT_TOKENS);
  const snapshot={system:input.system,prompts:{},material_fingerprint:input.materialFingerprint};
  if(input.reviewMode===true){
-  if(validated.length!==1||validated[0].id!=='quality_review'||!input.reviewTarget)throw Error('INVALID_REVIEW');
+  if(validated.length!==2||validated[0].id!=='quality_evidence'||validated[1].id!=='quality_review'||!input.reviewTarget||!input.reviewPacket||
+   !fingerprint.test(input.reviewTarget.fileHash||'')||input.reviewPacket.word?.fileHash!==input.reviewTarget.fileHash||
+   input.reviewPacket.passport?.sourceFingerprint!==input.materialFingerprint)throw Error('INVALID_REVIEW');
   snapshot.review_target=input.reviewTarget;
+  snapshot.review_protocol=2;
+  snapshot.review_packet=input.reviewPacket;
  }
  for(const part of validated)snapshot.prompts[part.id]=part.prompt;
  for(const part of plan){
-  const original=snapshot.prompts[part.section_id];
+  const ref=input.reviewMode===true?part.id:part.section_id;
+  const original=snapshot.prompts[ref];
   if(!part.prompt.startsWith(original))throw Error('INVALID_PLAN');
   part.prompt=part.prompt.slice(original.length);
-  part.prompt_ref=part.section_id;
+  part.prompt_ref=ref;
  }
  const precedingBytesBySection=new Map();let estimatedTotal=0;
  for(const part of plan){
   const precedingBytes=precedingBytesBySection.get(part.section_id)||0;
   part.estimated_cost_microusd=reserveMicrousd(input.system,snapshot.prompts[part.prompt_ref]+part.prompt,part.max_output_tokens,precedingBytes);
   estimatedTotal+=part.estimated_cost_microusd;
-  precedingBytesBySection.set(part.section_id,precedingBytes+part.target_chars*4+96);
+  precedingBytesBySection.set(part.section_id,precedingBytes+(input.reviewMode===true?100000:part.target_chars*4)+96);
  }
  if(new TextEncoder().encode(JSON.stringify({input:snapshot,plan})).byteLength>900000)throw Error('INPUT_TOO_BIG');
  return {snapshot,plan,estimatedTotal};
@@ -147,17 +152,17 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     const conflict=await sourceMinimumGuard(db,input.request,context.passport.items);
     if(conflict)return reply(conflict,409);
     const financeProfile=/FIN-UAT-01/.test([requestRow.payload?.rq,requestRow.payload?.mn].filter(Boolean).join('\n'));
-    const prompt=reviewPrompt(context.packet,financeProfile);
+    const prompt=twoPassReviewPrompt(context.packet,financeProfile);
     let prepared;
     try{prepared=prepare({request:input.request,materialFingerprint:context.passport.source_fingerprint,
-      system:prompt.system,parts:[{id:'quality_review',prompt:prompt.user}],reviewMode:true,
+      system:prompt.system,parts:prompt.parts,reviewMode:true,reviewPacket:context.packet,
       reviewTarget:{versionId:context.version.id,fileHash:context.version.file_hash,passportId:context.passport.id}},Number(limit.max_cost_microusd));}
     catch(e){return reply({error:e.message==='INPUT_TOO_BIG'?'REVIEW_CONTEXT_TOO_BIG':'REVIEW_UNAVAILABLE'},409);}
     const [b]=await db('studkab_gen_budget?id=eq.true&select=limit_microusd,reserved_microusd');
     const [policy]=await db('studkab_gen_policy?id=eq.true&select=temporary_total_microusd');
     const remaining=!!b&&!!policy?Math.min(Number(b.limit_microusd),Number(policy.temporary_total_microusd))-Number(b.reserved_microusd):0;
     const canStart=remaining>0&&prepared.estimatedTotal<=Number(limit.max_cost_microusd)&&prepared.estimatedTotal<=remaining;
-    const estimate={status:'estimate',versionId:context.version.id,fileHash:context.version.file_hash,
+    const estimate={status:'estimate',reviewPasses:2,versionId:context.version.id,fileHash:context.version.file_hash,
       passportId:context.passport.id,passportRevision:context.passport.revision,canStart,maxCostMicrousd:Number(limit.max_cost_microusd),
       estimatedCostMicrousd:prepared.estimatedTotal,remainingMicrousd:Math.max(0,remaining)};
     if(input.action==='quality-review-estimate')return reply(estimate);
@@ -201,19 +206,22 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
      const target=job.snapshot?.input?.review_target;
      if(target?.fileHash!==version.file_hash)continue;
      const [part]=await db('studkab_gen_parts?job_id=eq.'+job.id+'&spec->>id=eq.quality_review&select=state,result&limit=1');
-     const report=part?.state==='done'?parseReviewReport(part.result,version.file_hash,reviewContext?.packet):null;
+     const dual=job.snapshot?.input?.review_protocol===2;
+     const [first]=dual?await db('studkab_gen_parts?job_id=eq.'+job.id+'&spec->>id=eq.quality_evidence&select=state,result&limit=1'):[];
+     const report=part?.state==='done'?(dual&&first?.state==='done'?parseTwoPassReview(first.result,part.result,version.file_hash,reviewContext?.packet):
+      !dual?parseReviewReport(part.result,version.file_hash,reviewContext?.packet):null):null;
      const current=target.versionId===version.id&&target.passportId===passport.id;
      // The inventory is derived from the current server packet. It must not
      // appear as evidence of the materials used by an older passport/job.
-     if(report&&!current)delete report.calculationInventory;
-     if(report?.requirements&&current&&job.status==='complete'){
+     if(report&&!current){delete report.calculationInventory;if(report.firstPass)delete report.firstPass.calculationInventory;}
+     if(report?.requirements&&dual&&current&&job.status==='complete'){
       try{await db('rpc/studkab_requirement_review_ingest',{p_request:input.request,p_version:version.id,
        p_job:job.id,p_actor:user.id,p_requirements:report.requirements});}
       catch{return reply({error:'REQUIREMENT_REVIEW_UNAVAILABLE'},409);}
      }
      reports.push({jobId:job.id,createdAt:job.created_at,passportId:target.passportId,
-      current,
-      status:job.status==='unknown'||part?.state==='unknown'?'unknown':
+      current,reviewPasses:dual?2:1,
+      status:job.status==='unknown'||part?.state==='unknown'||first?.state==='unknown'?'unknown':
        part?.state==='done'?(report?'complete':'invalid'):
        job.status==='complete'?'invalid':job.status,report});
     }
@@ -246,7 +254,7 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
      promptTokens:a.detail?.prompt_tokens,completionTokens:a.detail?.completion_tokens});if(d)diagnostics.push(d);}
     for(const p of parts)if(p.failure_stage==='preparation'){const d=diagnostic({ordinal:p.ordinal,section:p.spec?.section_id||p.spec?.id,stage:'preparation',
      attempt:p.failure_count,reason:p.failure_reason,started_at:p.failure_at,finished_at:p.failure_at});if(d)diagnostics.push(d);}
-    return reply({job,reviewTarget:stored?.snapshot?.input?.review_target||null,diagnostics,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,
+    return reply({job,reviewTarget:stored?.snapshot?.input?.review_target||null,reviewPasses:stored?.snapshot?.input?.review_protocol===2?2:1,diagnostics,parts:parts.map(p=>({ordinal:p.ordinal,id:p.spec?.id,section:p.spec?.section_id||p.spec?.id,state:p.state,text:p.state==='done'?p.result:null,
      failure:p.state==='unknown'?(p.failure_stage==='preparation'?{code:p.failure_reason}:failure(attempts.find(a=>a.ordinal===p.ordinal))):null}))});
    }
    return reply({error:'UNKNOWN_ACTION'},400);

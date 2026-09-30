@@ -432,6 +432,12 @@
       "version": "20260929062054",
       "name": "c177_passport_coverage",
       "sha256": "1d1dc862678d1b17ef8766db642c4cd59b72caa69413cf42267021cdf55263ad"
+    },
+    {
+      "version": "20260930095451",
+      "name": "c177_two_pass_review",
+      "file": "20260930095451_c177_two_pass_review.sql",
+      "sha256": "1a8771da785d8eb17a9c2ad215f3d76e3b21a79b42ee3beb8fbd218b08ff3a67"
     }
   ],
   "production_reconciled_at": "2026-09-23"

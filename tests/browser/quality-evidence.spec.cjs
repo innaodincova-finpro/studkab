@@ -152,7 +152,7 @@ test('formula inventory shows missing coverage without payment, pass or stale re
    aiCalls.push(body);
    if(body.action!=='quality-review-reports')throw Error('Unexpected paid action');
    return {versionId:qBinding.versionId,fileHash:qBinding.fileHash,passportId:qBinding.passportId,
-    reports:[{jobId:'55555555-5555-4555-8555-555555555555',current:true,createdAt:'2026-09-30T07:00:00Z',status:'complete',report:{wordHash:qBinding.fileHash,
+    reports:[{jobId:'55555555-5555-4555-8555-555555555555',current:true,reviewPasses:2,createdAt:'2026-09-30T07:00:00Z',status:'complete',report:{wordHash:qBinding.fileHash,
      findings:[],coverage:{checked:[],notChecked:['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03']},
      calculationInventory:{complete:false,status:'not_checked',gaps:['duplicate_formula_number'],entries:[
       {formulaNumber:'21',sourceId:'method-1',sourceLine:87,sourceHash:'d'.repeat(64),sourceQuote:'Выручка = sum(Q*price)/1000 (21)'}]},
@@ -196,5 +196,30 @@ test('open AI findings visibly block readiness of the current Word',async({page}
  });
  await page.locator('[data-quality-refresh]').click();
  await expect(page.locator('[data-quality-status]')).toContainText('сохранены открытые замечания');
+ expect(await page.evaluate(()=>qReady)).toBe(false);
+});
+
+test('two-pass history shows the retained first review and a first-pass failure stays visible',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  window.aiCalls=[];
+  const row={id:'ANALYSIS',status:'fail',sourceQuote:'Условие задания',wordQuote:'Фрагмент Word',wordLocator:'абзац 1',explanation:'Вывод не подтверждён'};
+  const codes=['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','C11','C12','C13','S01','S02','S03'];
+  Oblako.generationApi=async body=>{
+   aiCalls.push(body);
+   if(body.action!=='quality-review-reports')throw Error('Must not pay while reading history');
+   return {versionId:qBinding.versionId,fileHash:qBinding.fileHash,passportId:qBinding.passportId,reports:[
+    {jobId:'55555555-5555-4555-8555-555555555555',current:true,reviewPasses:2,createdAt:'2026-09-30',status:'complete',report:{wordHash:qBinding.fileHash,
+     findings:[],coverage:{checked:[],notChecked:codes},requirements:[{...row,status:'not_checked'}],
+     firstPass:{requirements:[row]}}}]};
+  };
+ });
+ await page.locator('[data-ai-review]').evaluate(el=>el.open=true);
+ await page.locator('[data-ai-recover]').click();
+ await expect(page.locator('[data-ai-status]')).toContainText('выдача заблокирована');
+ await expect(page.locator('[data-ai-result]')).toContainText('два прохода');
+ await page.getByText('Результат первого прохода',{exact:true}).click();
+ await expect(page.locator('[data-ai-result]')).toContainText('Вывод не подтверждён');
+ expect(await page.evaluate(()=>aiCalls.length)).toBe(1);
  expect(await page.evaluate(()=>qReady)).toBe(false);
 });
