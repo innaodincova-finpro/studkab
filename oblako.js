@@ -74,6 +74,30 @@
   Oblako.hasPending = function(){return pending || inFlight;};
   Oblako.retry = function(){return flush();};
 
+  // Abort the actual request: a race alone would leave a late login/write alive.
+  function cloudFetch(input, init) {
+    var controller = new AbortController();
+    var source = init && init.signal || input && input.signal;
+    var abort = function () { controller.abort(); };
+    if (source) {
+      if (source.aborted) abort();
+      else source.addEventListener("abort", abort, {once:true});
+    }
+    var timer = setTimeout(abort, 30000);
+    var options = Object.assign({}, init, {signal:controller.signal});
+    return Promise.resolve().then(function () { return global.fetch(input, options); })
+      .finally(function () {
+        clearTimeout(timer);
+        if (source) source.removeEventListener("abort", abort);
+      });
+  }
+
+  function accountChanged() {
+    if (!opts.onAccountChange) return;
+    // Reconciliation may wait for a version choice; authentication is already done.
+    Promise.resolve().then(function () { return opts.onAccountChange(); }).catch(fail);
+  }
+
   /* ---------- запуск ---------- */
   Oblako.init = function (o) {
     opts = o;
@@ -83,7 +107,8 @@
     if (!global.supabase || !global.supabase.createClient) { Oblako.ready = false; notify(); return Promise.resolve(); }
 
     client = global.supabase.createClient(cfg.url, cfg.key, {
-      auth: { persistSession: true, autoRefreshToken: true, storageKey: "oblako-" + o.app }
+      auth: { persistSession: true, autoRefreshToken: true, storageKey: "oblako-" + o.app },
+      global: { fetch: cloudFetch }
     });
     Oblako.ready = true;
     client.auth.onAuthStateChange(function (event, session) {
@@ -92,7 +117,7 @@
         setTimeout(function () {
           if (session.user.id === userId) return;
           useUser(session.user); Oblako.email = session.user.email || "";
-          if (opts.onAccountChange) opts.onAccountChange();
+          accountChanged();
         }, 0);
       }
     });
@@ -135,15 +160,19 @@
     email = String(email || "").trim().toLowerCase();
     if (!email || !password) throw new Error("Введите почту и пароль приложения");
     Oblako.busy = true; notify();
+    var changed = false;
     try {
       var r = await client.auth.signInWithPassword({email:email, password:password});
+      if (r.error && (r.error.name === "AuthRetryableFetchError" || r.error.name === "AbortError")) throw new Error("Сервис входа не ответил вовремя. Проверьте интернет и повторите вход.");
       if (r.error) throw new Error("Не удалось войти. Проверьте почту и пароль приложения. Для первого входа нужна персональная ссылка.");
-      var changed = userId !== r.data.user.id;
+      changed = userId !== r.data.user.id;
       useUser(r.data.user); Oblako.email = r.data.user.email || email;
-      Oblako.busy = false;
-      if (changed && opts.onAccountChange) await opts.onAccountChange();
-      return true;
+    } catch (e) {
+      if (e && e.name === "AbortError") throw new Error("Сервис входа не ответил вовремя. Проверьте интернет и повторите вход.");
+      throw e;
     } finally { Oblako.busy = false; notify(); }
+    if (changed) accountChanged();
+    return true;
   };
 
   function passwordFailure(e) {
@@ -319,8 +348,8 @@
       p_rev: expectedRev
     }).then(function (r) {
       inFlight = false;
-      if (requestEpoch !== epoch) return { status: "stale" };
       Oblako.busy = false;
+      if (requestEpoch !== epoch) { notify(); return { status: "stale" }; }
       if (r.error) { fail(r.error); return { status: "error", error: Oblako.lastError }; }
       var row = Array.isArray(r.data) ? r.data[0] : r.data;
       if (!row) { notify(); return { status: "error", error: "Пустой ответ базы" }; }
@@ -378,7 +407,7 @@
 
   function human(e) {
     var m = (e && (e.message || e.error_description || e.msg)) || String(e || "");
-    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Нет связи с облаком. Записи на устройстве сохранены; повторите синхронизацию после подключения";
+    if ((e && e.name === "AbortError") || /AbortError|Failed to fetch|NetworkError|Load failed/i.test(m)) return "Нет связи с облаком. Записи на устройстве сохранены; повторите синхронизацию после подключения";
     if (/JWT|token is expired|invalid claim/i.test(m)) return "Вход устарел — войдите заново";
     if (/row-level security|permission denied/i.test(m)) return "Нет доступа к этим записям";
     if (/relation .* does not exist|function .* does not exist/i.test(m)) return "База не настроена: выполните baza.sql";
