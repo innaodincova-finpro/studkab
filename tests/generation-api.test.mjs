@@ -91,6 +91,29 @@ test('arbitrary passport IDs cannot turn calculations or visual requirements int
   assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,c.text);
  }
 });
+test('review report independently checks proposed arithmetic and never upgrades a calculation item to pass',()=>{
+ const source='Выручка 2024, млн руб.: 120,00. Затраты 2024, млн руб.: 35,00.';
+ const word='В 2024 году, млн руб., прибыль равна 85,00.';
+ const packet={word:{fileHash:reviewHash,text:word},passport:{sourceFingerprint:'b'.repeat(64),
+  items:[{id:'FIN',text:'Рассчитать прибыль за 2024 год',required:true,source_attachment_id:'data-1'}]},
+  materials:[{id:'data-1',text:source}]};
+ const row={id:'FIN',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Весь расчётный пункт не доказан'};
+ const calc={requirementId:'FIN',wordHash:reviewHash,passportFingerprint:'b'.repeat(64),operation:'subtract',
+  period:'2024',unit:'млн руб.',decimals:2,
+  operands:[{sourceId:'data-1',sourceQuote:'Выручка 2024, млн руб.: 120,00',value:'120,00'},
+   {sourceId:'data-1',sourceQuote:'Затраты 2024, млн руб.: 35,00',value:'35,00'}],
+  result:'85,00',wordQuote:word};
+ const base={...JSON.parse(report),requirements:[row],calculations:[calc]};
+ const checked=parseReviewReport(JSON.stringify(base),reviewHash,packet);
+ assert.equal(checked.calculationDiagnostics[0].status,'verified_arithmetic');
+ assert.equal(checked.requirements[0].status,'not_checked');
+ assert.equal(parseReviewReport(JSON.stringify({...base,calculations:[{...calc,operation:'add'}]}),
+  reviewHash,packet).calculationDiagnostics[0].reason,'arithmetic_mismatch');
+ assert.equal(parseReviewReport(JSON.stringify({...base,calculations:[{...calc,wordHash:'c'.repeat(64)}]}),
+  reviewHash,packet).calculationDiagnostics[0].status,'not_checked');
+ assert.equal(parseReviewReport(JSON.stringify({...base,requirements:[{...row,status:'pass'}]}),reviewHash,packet),null);
+ assert.deepEqual(parseReviewReport(JSON.stringify({...base,calculations:undefined}),reviewHash,packet).calculationDiagnostics,[]);
+});
 test('textual evidence cannot quote only the harmless part of a negative Word paragraph',()=>{
  const paragraph='Анализ выручки за год и выводы не представлены в работе.';
  const packet={word:{text:'Введение.\n'+paragraph},

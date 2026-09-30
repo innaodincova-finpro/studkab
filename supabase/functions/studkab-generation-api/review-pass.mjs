@@ -1,5 +1,6 @@
 import {inspectWord} from '../_shared/external-word.mjs';
 import {currentAttachments} from '../_shared/current-attachments.mjs';
+import {verifyCalculationEvidence} from './calculation-evidence.mjs';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const categories=new Set(['assignment','methodology','data','sources']);
@@ -109,9 +110,14 @@ export function parseReviewReport(raw,hash,packet){
     wordQuote:r.wordQuote,wordLocator:r.wordLocator,explanation:r.explanation});
   }
  }
+ const calculationClaims=data.calculations;
+ if(calculationClaims!==undefined&&(!Array.isArray(calculationClaims)||calculationClaims.length>8))return null;
+ const calculationDiagnostics=packet?(calculationClaims||[]).map(claim=>({
+  requirementId:packet.passport.items.some(item=>item.id===claim?.requirementId)?claim.requirementId:'',
+  ...verifyCalculationEvidence(packet,claim)})):[];
  return {wordHash:hash,findings:data.findings.map(f=>({code:f.code,location:f.location,requirement:f.requirement,
   observation:f.observation,status:f.status,...(f.requirementId?{requirementId:f.requirementId}:{})})),
-  coverage:{checked,notChecked},...(requirements?{requirements}:{})};
+  coverage:{checked,notChecked},...(requirements?{requirements}:{}),calculationDiagnostics};
 }
 
 // Every byte of the review context comes from the server. A cached browser
@@ -161,6 +167,13 @@ export function reviewPrompt(packet,financeProfile=false){
   '"wordQuote":"полный дословный абзац из Word","wordLocator":"абзац N",'+
   '"explanation":"что именно подтверждено или что мешает"}]. '+
   'pass только если пункт паспорта содержит source_attachment_id, равный id цитируемого приложения, и есть достаточное текстовое свидетельство из обоих документов. Для pass приведи один полный абзац Word без сокращений и его точный номер по порядку непустых абзацев в извлечённом тексте ("абзац 1", "абзац 2" и так далее). Годы периода из условия должны присутствовать в обеих цитатах. Если абзац говорит, что требуемое не выполнено или отсутствует, укажи fail, а не pass. Иначе not_checked. '+
-  'Внешний PDF, страницы, визуальное оформление и правильность вычисления по одному тексту не подтверждай.';
+  'Внешний PDF, страницы, визуальное оформление и правильность вычисления по одному тексту не подтверждай. ' +
+  'Если в материалах и Word есть явно выписанная ограниченная арифметика, добавь calculations (не более 8): '+
+  '[{"requirementId":"id пункта","wordHash":"хеш из word.fileHash","passportFingerprint":"passport.sourceFingerprint",'+
+  '"operation":"add|subtract|multiply|divide","period":"год","unit":"единица",'+
+  '"decimals":2,"operands":[{"sourceId":"id файла","sourceQuote":"дословная выдержка с числом, годом и единицей","value":"число"},'+
+  '{"sourceId":"id файла","sourceQuote":"дословная выдержка с числом, годом и единицей","value":"число"}],'+
+  '"result":"число с указанным количеством знаков","wordQuote":"полный дословный абзац Word"}]. ' +
+  'Если исходные числа или метод не указаны явно, верни calculations: []. Это только кандидаты для серверного пересчёта, не основание для pass.';
  return {system,user:JSON.stringify(packet)};
 }

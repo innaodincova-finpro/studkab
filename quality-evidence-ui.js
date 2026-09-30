@@ -75,8 +75,11 @@
    aiResult.replaceChildren();
    var complete=saved.reports.filter(function(r){return r.status==='complete'&&r.report;});
    var currentComplete=complete.filter(function(r){return r.current;});
-   var unresolved=saved.reports.filter(function(r){return r.status==='unknown'||r.status==='invalid'||
-    (r.status==='complete'&&r.report.findings.some(function(f){return f.status==='fail';}));});
+   var unresolved=saved.reports.filter(function(r){
+    if(r.status==='unknown'||r.status==='invalid')return true;
+    return r.status==='complete'&&(r.report.findings.some(function(f){return f.status==='fail';})||
+     (r.report.calculationDiagnostics||[]).some(function(c){return c.status==='fail';}));
+   });
    if(!complete.length){aiStatus.textContent=saved.reports.some(function(r){return r.status==='unknown'})?
     'Результат платного запроса неизвестен. Выдача заблокирована до сверки попытки и расходов; автоматического платного повтора нет.':
     saved.reports.some(function(r){return r.status==='invalid'})?
@@ -101,7 +104,15 @@
       entry.textContent=r.id+' · '+(r.status==='pass'?'Текстовое свидетельство':r.status==='fail'?'Расхождение':'Не проверено')+
        '\nОснование: '+(r.sourceId||'не подтверждено')+(r.sourceQuote?' — '+r.sourceQuote:'')+
        '\nWord: '+(r.wordLocator||'не подтверждено')+(r.wordQuote?' — '+r.wordQuote:'')+
-       '\nВывод: '+(r.explanation||'недостаточно доказательств');block.append(entry);});
+      '\nВывод: '+(r.explanation||'недостаточно доказательств');block.append(entry);});
+    }
+    if(item.report.calculationDiagnostics&&item.report.calculationDiagnostics.length){
+     var calcHeading=document.createElement('h5');calcHeading.textContent='Пересчёт отдельных действий';block.append(calcHeading);
+     item.report.calculationDiagnostics.forEach(function(c){var line=document.createElement('p');
+      line.textContent=(c.requirementId||'Пункт не подтверждён')+' · '+
+       (c.status==='verified_arithmetic'?'Число совпало при указанной операции; весь расчётный пункт не принят':
+        c.status==='fail'?'Арифметическое расхождение: '+c.reason:
+        'Не проверено: '+c.reason);block.append(line);});
     }
     var gaps=document.createElement('p');gaps.textContent='Не проверено: '+(item.report.coverage.notChecked.join(', ')||'не указано')+'.';block.append(gaps);aiResult.append(block);
    });
