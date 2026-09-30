@@ -37,7 +37,8 @@
   function check(after){guard();if(!equal(captured(),after))throw Error('Word, паспорт или получатель изменились. Откройте проверку заново.');}
   async function aiRun(fn){if(aiBusy)return;aiBusy=true;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=true;});
    try{guard();await fn();}catch(e){aiStatus.textContent=e.message==='REVIEW_SYNTHETIC_PAID_BLOCKED'?
-    'Платная ИИ проверка учебной тестовой заявки запрещена. Расходов нет.':e.message==='STUDENT_NAME_REQUIRED'?
+    'Платная ИИ проверка учебной тестовой заявки запрещена. Расходов нет.':e.message==='REVIEW_REQUIREMENTS_INCOMPLETE'?
+    'В текущем задании или методичке есть неподтверждённые условия. Обновите паспорт требований и уточните их до запуска проверки.':e.message==='STUDENT_NAME_REQUIRED'?
     'В заявке отсутствует ФИО студента. Платная ИИ проверка закрыта; уточните данные перед подготовкой Word.':(e.message||'ИИ проверка недоступна.');}
    finally{aiBusy=false;host.querySelectorAll('[data-ai-review] button').forEach(function(b){b.disabled=false;});}}
   async function aiRefresh(){

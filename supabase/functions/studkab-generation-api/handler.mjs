@@ -141,7 +141,7 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     if(!limit)return reply({error:'WORK_LIMIT_NOT_CONFIGURED'},503);
     let context;
     try{context=await readReviewPacket(db,input.request,input.versionId);}
-    catch(e){const code=String(e.message);return reply({error:/^(INVALID_INPUT|REVIEW_VERSION_STALE|PASSPORT_REQUIRED|REVIEW_MATERIALS_MISSING|REVIEW_MATERIALS_UNREADABLE|REVIEW_SYNTHETIC_PAID_BLOCKED|REVIEW_CONTEXT_TOO_BIG)$/.test(code)?code:'REVIEW_UNAVAILABLE'},409);}
+    catch(e){const code=String(e.message);return reply({error:/^(INVALID_INPUT|REVIEW_VERSION_STALE|PASSPORT_REQUIRED|REVIEW_MATERIALS_MISSING|REVIEW_MATERIALS_UNREADABLE|REVIEW_REQUIREMENTS_INCOMPLETE|REVIEW_SYNTHETIC_PAID_BLOCKED|REVIEW_CONTEXT_TOO_BIG)$/.test(code)?code:'REVIEW_UNAVAILABLE'},409);}
     const materials=await materialManifestGuard((path,method,body)=>db(path,body),input.request,context.passport.id);
     if(materials)return reply(materials,409);
     const conflict=await sourceMinimumGuard(db,input.request,context.passport.items);
@@ -181,7 +181,7 @@ export function handler({auth,config,db,settings,readReviewPacket=reviewPacket})
     let reviewContext=null;
     if(Array.isArray(passport.items)&&passport.items.length){
      try{reviewContext=await readReviewPacket(db,input.request,input.versionId);}
-     catch{return reply({error:'REVIEW_UNAVAILABLE'},409);}
+     catch(e){return reply({error:e.message==='REVIEW_REQUIREMENTS_INCOMPLETE'?e.message:'REVIEW_UNAVAILABLE'},409);}
      if(reviewContext.passport.id!==passport.id||reviewContext.version.file_hash!==version.file_hash)
       return reply({error:'REVIEW_VERSION_STALE'},409);
     }

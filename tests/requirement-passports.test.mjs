@@ -1,3 +1,4 @@
+import {missingExplicitClauses} from '../supabase/functions/_shared/explicit-requirements.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -112,7 +113,7 @@ test('enumerated obligations enter the draft without fabricated approval, and su
  assert.equal(added.verified,false);
  assert.match(added.source,/guide\.txt, строка извлечённого текста 2/);
  assert.equal(inventoryExplicitClauses(first,[old]),first);
- assert.equal(inventoryExplicitClauses({status:'draft',items:[{id:'STRUCTURE',text:'Структура: '+phrase}]},[old]).items.some(i=>i.id==='REQ_'+id.replace(/-/g,'')+'_2'),false);
+ assert.equal(inventoryExplicitClauses({status:'draft',items:[{id:'STRUCTURE',source_attachment_id:id,text:'Структура: '+phrase}]},[old]).items.some(i=>i.id==='REQ_'+id.replace(/-/g,'')+'_2'),false);
  assert.equal(inventoryExplicitClauses({...first,status:'approved'},[]).items.length,first.items.length);
  const fresh={...first,status:'draft'};
  const replaced=inventoryExplicitClauses(fresh,[old,{id:next,category:'methodology',file_name:'guide-v2.txt',supersedes:id,
@@ -329,4 +330,24 @@ test('C082 absence of originality threshold remains blocked even for a test',asy
  assert.equal(result.status,409);assert.equal(saved,false);
  const conflicting=defaultPassport({...semanticInput,mn:semanticInput.mn+' Оригинальность не менее 70%.'});
  assert.match(conflicting.items.find(x=>x.id==='ANTIPLAGIARISM').text,/Не указано/);
+});
+
+test('explicit coverage preserves distinct sources and rejects optional, unverified or wrongly linked clauses',()=>{
+ const ids=['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
+ const clause='Проанализировать причины изменения показателей и сформулировать вывод.';
+ const sources=ids.map(id=>({id,category:'assignment',extracted_text:clause}));
+ const first=inventoryExplicitClauses({status:'draft',items:[]},sources);
+ assert.equal(first.items.length,2);
+ assert.deepEqual(first.items.map(item=>item.source_attachment_id),ids);
+ const verified=first.items.map(item=>({...item,verified:true}));
+ assert.deepEqual(missingExplicitClauses(verified,sources),[]);
+ assert.equal(missingExplicitClauses([verified[0]],sources)[0].source_attachment_id,ids[1]);
+ for(const patch of [{required:false},{verified:false},{source_attachment_id:ids[1]}])
+  assert.equal(missingExplicitClauses([{...verified[0],...patch}],sources.slice(0,1)).length,1);
+ const freeText={id:'METHODOLOGY',text:clause,required:true,verified:true};
+ assert.equal(inventoryExplicitClauses({status:'draft',items:[freeText]},sources).items.length,3);
+ assert.equal(missingExplicitClauses([freeText],sources).length,2);
+ assert.deepEqual(missingExplicitClauses(verified,[...sources,{...sources[0],id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  supersedes:ids[0],extracted_text:'Построить график температуры по результатам измерений.'}]).map(item=>item.text),
+  ['Построить график температуры по результатам измерений.']);
 });

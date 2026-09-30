@@ -379,6 +379,40 @@ test('review packet rejects old Word and hashes exact saved bytes',async()=>{
  assert.ok(reviewPrompt(result.packet).system.includes('недоверенные данные'));
  assert.ok(reviewPrompt(result.packet).system.includes('unreadParts'));
 });
+test('incomplete passport blocks current-file review and cannot validate a positive report',async()=>{
+ const sourceId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const source='Работа должна содержать анализ выручки за три года';
+ const item={id:'ANALYSIS',text:source,required:true,verified:true,source_attachment_id:sourceId};
+ let items=[];
+ const db=async path=>{
+  if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:1,docx_base64:'AQID',file_hash:reviewHash}];
+  if(path.startsWith('studkab_requirement_passports'))return [{id:passportId,revision:1,status:'approved',source_fingerprint:materialFingerprint,items}];
+  return [{id:sourceId,category:'assignment',file_hash:'d'.repeat(64),extracted_text:source}];
+ };
+ const inspect=async()=>({fileHash:reviewHash,text:'Анализ выручки за три года показывает рост показателей.'});
+ await assert.rejects(()=>reviewPacket(db,requestId,reviewVersion,inspect),/REVIEW_REQUIREMENTS_INCOMPLETE/);
+ items=[item];
+ const current=await reviewPacket(db,requestId,reviewVersion,inspect);
+ assert.equal(current.packet.passport.items.length,1);
+ const row={id:item.id,status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Предметная проверка не завершена'};
+ const raw=JSON.stringify({...JSON.parse(report),requirements:[row]});
+ assert.ok(parseReviewReport(raw,reviewHash,current.packet));
+ const changed={...current.packet,materials:[{...current.packet.materials[0],text:source+'\nПостроить график изменения температуры по результатам измерений.'}]};
+ assert.equal(parseReviewReport(raw,reviewHash,changed),null);
+ for(const action of ['quality-review-estimate','quality-review-start']){
+  const calls=[];
+  const h=handler({auth:async()=>({id:uid,email:'owner@example.test',email_confirmed_at:'yes'}),
+   config:async()=>({executor_email:'owner@example.test'}),settings:()=>({enabled:true}),
+   readReviewPacket:async()=>{throw Error('REVIEW_REQUIREMENTS_INCOMPLETE');},
+   db:async path=>{calls.push(path);if(path.startsWith('studkab_requests'))return [{payload:{k:'Курсовая работа',n:'Студент Тестов'}}];
+    if(path.startsWith('studkab_gen_limits'))return [{max_cost_microusd:250000}];throw Error('Must stop before budget or queue');}});
+  const response=await h(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer user'},
+   body:JSON.stringify({action,request:requestId,versionId:reviewVersion})}));
+  assert.equal(response.status,409);
+  assert.equal((await response.json()).error,'REVIEW_REQUIREMENTS_INCOMPLETE');
+  assert.equal(calls.some(path=>path.includes('budget')||path.includes('gen_start')),false);
+ }
+});
 test('test assignment cannot reach paid quality-review queue',async()=>{
  const db=async path=>{
   if(path.startsWith('studkab_result_versions'))return [{id:reviewVersion,revision:33,docx_base64:'AQID',file_hash:reviewHash}];
