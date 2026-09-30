@@ -41,7 +41,9 @@ const quoteAddressesRequirement=(requirement,sourceQuote,wordQuote)=>{
  // covers the requested subject (e.g. revenue rather than expenses).
  const terms=[...significantTerms(requirement)].filter(term=>!instructionTerms.has(term));
  const source=significantTerms(sourceQuote),word=significantTerms(wordQuote);
- return terms.length>0&&terms.every(term=>source.has(term)&&word.has(term));
+ const years=[...new Set(requirement.match(/(?<!\d)(?:19|20)\d{2}(?!\d)/gu)||[])];
+ return terms.length>0&&terms.every(term=>source.has(term)&&word.has(term))&&
+  years.every(year=>sourceQuote.includes(year)&&wordQuote.includes(year));
 };
 const normalizedQuote=text=>text.toLocaleLowerCase('ru').replace(/\s+/gu,' ').trim();
 // Repeating an instruction inside the Word is evidence of the instruction,
@@ -81,6 +83,9 @@ export function parseReviewReport(raw,hash,packet){
   if(!Array.isArray(expected)||!expected.length||!Array.isArray(rows)||rows.length!==expected.length||
    new Set(rows.map(r=>r?.id)).size!==expected.length||
    rows.some(r=>!expected.some(item=>item.id===r?.id)))return null;
+  if(data.findings.some(f=>f.requirementId!==undefined&&
+   (typeof f.requirementId!=='string'||!expected.some(item=>item.id===f.requirementId))))return null;
+  if(rows.some(r=>r.status==='pass'&&data.findings.some(f=>f.requirementId===r.id)))return null;
   const materials=new Map((packet.materials||[]).map(m=>[m.id,m]));
   requirements=[];
   for(const r of rows){
@@ -105,7 +110,8 @@ export function parseReviewReport(raw,hash,packet){
   }
  }
  return {wordHash:hash,findings:data.findings.map(f=>({code:f.code,location:f.location,requirement:f.requirement,
-  observation:f.observation,status:f.status})),coverage:{checked,notChecked},...(requirements?{requirements}:{})};
+  observation:f.observation,status:f.status,...(f.requirementId?{requirementId:f.requirementId}:{})})),
+  coverage:{checked,notChecked},...(requirements?{requirements}:{})};
 }
 
 // Every byte of the review context comes from the server. A cached browser
@@ -138,9 +144,10 @@ export function reviewPrompt(packet,financeProfile=false){
   'Проверь содержание и соответствие требованиям. Не повторяй полный расчёт, если он уже показан и нет признака ошибки; отмечай конкретные проверяемые расхождения. '+
   'Не объявляй источник прочитанным, если в пакете есть лишь его библиографическая запись. По общим кодам C01–S03 не присваивай pass; по отдельному пункту паспорта pass возможен только с дословным свидетельством из связанного файла и Word. Не разрешай выдачу. '+
   'Ответь на русском строго JSON-объектом: {"wordHash":"...","findings":[{"code":"C01","location":"раздел и короткая цитата",'+
-  '"requirement":"точное основание из материалов","observation":"проверяемое замечание","status":"fail|needs_evidence"}],'+
+  '"requirement":"точное основание из материалов","requirementId":"id пункта паспорта, если замечание относится к нему",'+
+  '"observation":"проверяемое замечание","status":"fail|needs_evidence"}],'+
   '"coverage":{"checked":["C01"],"notChecked":["C11"]}}. '+
-  'Укажи только доказанные замечания; если не хватает источника или Word-просмотра, используй needs_evidence. '+
+  'Укажи только доказанные замечания; если не хватает источника или Word-просмотра, используй needs_evidence. Если замечание относится к пункту паспорта, укажи его точный requirementId и не ставь этому пункту pass. Если не относится, опусти requirementId. '+
   'Для каждого из 16 кодов укажи checked или notChecked, без положительного вердикта. '+
   'checked означает рассмотрено по доступным данным, а не пройдено. Значения кодов: '+
   criteria.map((code,i)=>code+' — '+labels[i]).join('; ')+'. '+
@@ -151,7 +158,7 @@ export function reviewPrompt(packet,financeProfile=false){
   '"sourceId":"id приложения","sourceQuote":"дословная выдержка из текста приложения",'+
   '"wordQuote":"полный дословный абзац из Word","wordLocator":"абзац N",'+
   '"explanation":"что именно подтверждено или что мешает"}]. '+
-  'pass только если пункт паспорта содержит source_attachment_id, равный id цитируемого приложения, и есть достаточное текстовое свидетельство из обоих документов. Для pass приведи один полный абзац Word без сокращений и его точный номер по порядку непустых абзацев в извлечённом тексте ("абзац 1", "абзац 2" и так далее). Если абзац говорит, что требуемое не выполнено или отсутствует, укажи fail, а не pass. Иначе not_checked. '+
+  'pass только если пункт паспорта содержит source_attachment_id, равный id цитируемого приложения, и есть достаточное текстовое свидетельство из обоих документов. Для pass приведи один полный абзац Word без сокращений и его точный номер по порядку непустых абзацев в извлечённом тексте ("абзац 1", "абзац 2" и так далее). Годы периода из условия должны присутствовать в обеих цитатах. Если абзац говорит, что требуемое не выполнено или отсутствует, укажи fail, а не pass. Иначе not_checked. '+
   'Внешний PDF, страницы, визуальное оформление и правильность вычисления по одному тексту не подтверждай.';
  return {system,user:JSON.stringify(packet)};
 }

@@ -119,6 +119,41 @@ test('an explicit statement that the required work is absent cannot become a pos
   assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,example.requirement);
  }
 });
+test('a passport period must be evidenced in both cited passages before text pass',()=>{
+ const cases=[
+  {requirement:'Сравнить выручку за 2023 и 2024 годы',source:'Сравнить выручку за 2023 и 2024 годы.',
+   word:'Сравнение выручки за 2022 и 2024 годы выполнено в разделе анализа.',
+   positive:'Сравнение выручки за 2023 и 2024 годы выполнено в разделе анализа.'},
+  {requirement:'Описать выборку за 2021–2023 годы',source:'Описать выборку за 2021–2023 годы.',
+   word:'Выборка за 2021–2022 годы описана с указанием процедуры отбора.',
+   positive:'Выборка за 2021–2023 годы описана с указанием процедуры отбора.'}
+ ];
+ for(const c of cases){
+  const packet={word:{text:c.word},passport:{items:[{id:'REQ_PERIOD',text:c.requirement,required:true,
+   source_attachment_id:'source-1'}]},materials:[{id:'source-1',text:c.source}]};
+  const row={id:'REQ_PERIOD',status:'pass',sourceId:'source-1',sourceQuote:c.source,
+   wordQuote:c.word,wordLocator:'абзац 1',explanation:'Период ошибочно объявлен соответствующим заданию'};
+  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[row]}),reviewHash,packet),null,c.requirement);
+  assert.ok(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...row,wordQuote:c.positive}]}),
+   reviewHash,{...packet,word:{text:c.positive}}));
+ }
+});
+test('a risk finding tied to a passport item cannot coexist with its pass',()=>{
+ const source='Необходимо описать методику исследования и процедуру отбора.';
+ const word='Методика исследования и процедура отбора описаны в этой главе.';
+ const packet={word:{text:word},passport:{items:[{id:'REQ_METHOD',text:'Описание методики исследования',required:true,
+  source_attachment_id:'source-1'}]},materials:[{id:'source-1',text:source}]};
+ const row={id:'REQ_METHOD',status:'pass',sourceId:'source-1',sourceQuote:source,
+  wordQuote:word,wordLocator:'абзац 1',explanation:'Методика исследования представлена в главе работы'};
+ for(const status of ['fail','needs_evidence']){
+  const finding={code:'C05',requirementId:'REQ_METHOD',location:'Глава 2',requirement:'Описание методики исследования',
+   observation:'Описание методики расходится с исходным заданием',status};
+  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),findings:[finding],requirements:[row]}),
+   reviewHash,packet),null,status);
+  assert.ok(parseReviewReport(JSON.stringify({...JSON.parse(report),findings:[finding],requirements:[{...row,status:'fail'}]}),
+   reviewHash,packet));
+ }
+});
 test('server archives validated per-item review evidence for the current Word only',async()=>{
  const excerpt='анализ выручки и выводы',wordExcerpt='анализ выручки показывает рост на 7 процентов';
  const rows=[{id:'ANALYSIS',status:'pass',sourceId:'source-1',
