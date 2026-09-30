@@ -438,6 +438,14 @@
       "name": "c177_two_pass_review",
       "file": "20260930095451_c177_two_pass_review.sql",
       "sha256": "1a8771da785d8eb17a9c2ad215f3d76e3b21a79b42ee3beb8fbd218b08ff3a67"
+    },
+    {
+      "version": "20260930172312",
+      "name": "intake_private_drafts",
+      "file": "20260930172312_intake_private_drafts.sql",
+      "sha256": "a150c845213b135dcc5546393d54ee8855521503a8e5c2e5dd537e60cc45fb42",
+      "status": "pending",
+      "note": "INTAKE-01 steps 1–2; not installed in production"
     }
   ],
   "production_reconciled_at": "2026-09-23"

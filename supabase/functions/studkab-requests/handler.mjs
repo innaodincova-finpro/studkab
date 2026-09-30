@@ -8,6 +8,7 @@ import {emailConfigured} from './request-email.mjs';
 import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
 import {attachmentAction} from './attachments.mjs';
+import {intakeAction} from './intake.mjs';
 const fields={id:100,t:300,k:100,d:200,u:300,fc:300,kf:300,ct:100,n:200,g:100,pr:200,fo:100,co:50,s:200,dl:10,rq:500,org:1500,mn:1500,cn:200};
 const intakeFields={k:'вид работы',n:'ФИО студента',u:'вуз',d:'дисциплину',dl:'срок'};
 export function validatePayload(p,{newSubmission=false,previous=null}={}) {
@@ -35,7 +36,7 @@ export function validatePayload(p,{newSubmission=false,previous=null}={}) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,saveIntake,downloadIntake,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -79,6 +80,10 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
+   if(['intake-open','intake-notes','intake-upload','intake-download'].includes(input?.action)){
+    if(input.action!=='intake-upload'&&raw.length>16000)return json({error:'Запрос слишком большой'},413);
+    const r=await intakeAction(input,user,{db,isMember,saveIntake,downloadIntake});return json(r.data,r.status||200);
+   }
    if(input.action==='request-kind-correct'){
     const r=await kindCorrectionAction(input,user,{db,config});return json(r.data,r.status||200);
    }

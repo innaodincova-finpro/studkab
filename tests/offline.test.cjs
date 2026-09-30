@@ -7,7 +7,8 @@ test('both entry pages and offline shell use the AI criterion assistance scripts
  for(const page of ['index.html','reestr.html'])
   assert.match(fs.readFileSync(page,'utf8'),/quality-evidence-ui\.js\?v=8.*results-ui\.js\?v=23/);
  const shell=fs.readFileSync('sw.js','utf8');
- assert.match(shell,/studkab-v104-new-work-draft/);
+ assert.match(shell,/studkab-v105-intake-draft/);
+ assert.match(shell,/intake-ui\.js\?v=1/);
  assert.match(shell,/quality-evidence-ui\.js\?v=8/);
 });
 function worker(fetch){

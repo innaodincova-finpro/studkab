@@ -18,6 +18,7 @@
 <script src="oblako.js?v=17"></script>
 <script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script>
 <script src="push.js?v=3"></script>
+<script src="intake-ui.js?v=1"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1968,7 +1969,7 @@ function openNewTask(workId, dateIso){
 function viewWorks(){
   var filtered = D.works.filter(function(w){ return workFilter === "all" ? true : getStatus(w) === workFilter; });
   var chips = [{k:"all",t:"Все"}].concat(WORK_FILTERS.slice(1));
-  return '<div class="pick" style="margin-bottom:12px">' +
+  return '<div style="margin-bottom:14px"><button type="button" class="b b-main" data-act="intake-materials">Загрузить материалы</button><p class="small">Сохранить документы к будущей заявке или вернуться к загруженному комплекту.</p></div><div class="pick" style="margin-bottom:12px">' +
     chips.map(function(f){
       var n = f.k === "all" ? D.works.length : D.works.filter(function(w){ return getStatus(w) === f.k }).length;
       if (f.k !== "all" && !n) return "";
@@ -2176,7 +2177,7 @@ var cloudNote = "";           /* короткая строка состояни�
 function cloudSwitchUser(id){
   var target = id ? CLOUD_LOCAL_KEY + ":user:" + id :
     (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped") ? CLOUD_LOCAL_KEY + ":guest" : CLOUD_LOCAL_KEY);
-  if (target !== KEY) document.querySelectorAll('[data-new-work-draft]').forEach(function(el){el.remove();});
+  if (target !== KEY) document.querySelectorAll('[data-new-work-draft],[data-intake-dialog]').forEach(function(el){el.remove();});
   cloudGuestCandidate = null;
   var freshAccount = id && localStorage.getItem(target) === null;
   if (id && localStorage.getItem(target) === null && KEY === CLOUD_LOCAL_KEY + ":guest" && !cloudIsEmpty(D)) cloudGuestCandidate = JSON.parse(JSON.stringify(D));
@@ -2653,6 +2654,10 @@ document.addEventListener("click", function(ev){
   if (act === "open-work") return go("works", id);
   if (act === "work-filter"){ workFilter = el.getAttribute("data-k"); return render(); }
   if (act === "new-work") return openNewWork();
+  if (act === 'intake-materials') {
+    if (!window.Oblako || Oblako.mode !== 'cloud') return toast('Для сохранения материалов войдите в аккаунт кабинета');
+    return StudIntake.open({api:Oblako.requestApi,openModal:openModal,esc:esc,owner:function(){return KEY;},identity:Oblako.identity});
+  }
   if (act === "edit-work") return openWorkEditor(id);
   if (act === "edit-format") return openFormatEditor(id);
   if (act === "edit-chapter") return openChapterEditor(id, el.getAttribute("data-ch"));

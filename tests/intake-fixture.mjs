@@ -1,0 +1,37 @@
+import fs from 'node:fs';
+export const migration='supabase/migrations/20260930172312_intake_private_drafts.sql';
+export const student='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
+export const schema=()=>`do $$ begin
+ if not exists(select from pg_roles where rolname='anon') then create role anon; end if;
+ if not exists(select from pg_roles where rolname='authenticated') then create role authenticated; end if;
+ if not exists(select from pg_roles where rolname='service_role') then create role service_role bypassrls; end if;
+ end $$;
+ create schema auth;create table auth.users(id uuid primary key);
+ create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit integer,allowed_mime_types text[]);
+ create table storage.objects(bucket_id text,name text);alter table storage.objects enable row level security;
+ grant select,insert on storage.objects to anon,authenticated;
+ grant usage on schema storage to anon,authenticated;
+ create policy broad_existing_policy on storage.objects for all to anon,authenticated using(true) with check(true);
+ create table studkab_members(user_id uuid primary key);
+ insert into auth.users values('${student}'),('${other}');insert into studkab_members values('${student}'),('${other}');
+ grant usage on schema public,auth,storage to service_role;grant select on studkab_members to service_role;
+`+fs.readFileSync(new URL('../'+migration,import.meta.url),'utf8');
+export function apiDatabase(db){return async(path,method='GET',body)=>{
+ if(path.startsWith('rpc/')){
+  const name=path.slice(4);if(!/^studkab_intake_(open|reserve|finish|notes)$/.test(name))throw Error('unexpected RPC');
+  const vals=Object.values(body),placeholders=vals.map((_,i)=>'$'+(i+1)).join(',');
+  return (await db.query('select '+name+'('+placeholders+') result',vals)).rows[0].result;
+ }
+ if(path.startsWith('studkab_intake_drafts?')){
+  const q=new URLSearchParams(path.split('?')[1]);
+  return (await db.query("select * from studkab_intake_drafts where id=$1 and student_id=$2 and state='open'",[q.get('id').slice(3),q.get('student_id').slice(3)])).rows;
+ }
+ if(path.startsWith('studkab_intake_files?')){
+  const q=new URLSearchParams(path.split('?')[1]),vals=[q.get('draft_id').slice(3)];let where='draft_id=$1';
+  if(q.has('id')){vals.push(q.get('id').slice(3));where+=' and id=$2';}
+  if(q.has('state'))where+=" and state='saved'";
+  return (await db.query('select * from studkab_intake_files where '+where+' order by created_at,id',vals)).rows;
+ }
+ throw Error('unexpected path '+path);
+};}
+if(process.argv.includes('--print-sql'))process.stdout.write(schema());
