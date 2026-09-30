@@ -53,3 +53,26 @@ test('choice rejects stale local edit and keeps both records',async({page})=>{
  expect(await page.evaluate(()=>D.settings.name)).toBe('Edited while choosing');
  expect(await page.evaluate(()=>QA.rows[QA.user+':'+CLOUD_APP].data.settings.name)).toBe('Remote');
 });
+
+for(const file of ['index.html','reestr.html']){
+ test(file+': iPad login closes after authentication while cloud reconciliation is pending',async({page})=>{
+  await page.setViewportSize({width:768,height:1024});
+  await page.goto('http://127.0.0.1:4173/'+file);
+  await page.evaluate(()=>{
+   window.qaOriginalSync=CloudUI.sync;
+   CloudUI.sync=()=>new Promise(resolve=>{window.qaFinishSync=resolve;});
+  });
+  await page.locator('[data-tab="more"]').click();
+  await page.getByText('Хранение записей',{exact:true}).click();
+  await page.getByRole('button',{name:'Войти по почте и паролю',exact:true}).click();
+  await page.getByLabel('Электронная почта',{exact:true}).fill('login-pending@example.test');
+  await page.getByLabel('Пароль приложения',{exact:true}).fill('test-password-123');
+  await page.getByRole('button',{name:'Войти',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Вход в аккаунт',exact:true})).toHaveCount(0);
+  expect(await page.evaluate(()=>Oblako.mode)).toBe('cloud');
+  expect(await page.evaluate(()=>Oblako.canSync())).toBe(false);
+  expect(await page.evaluate(()=>QA.writes.length)).toBe(0);
+  await page.evaluate(()=>{qaFinishSync();CloudUI.sync=qaOriginalSync;CloudUI.sync();});
+  await expect.poll(()=>page.evaluate(()=>Oblako.canSync())).toBe(true);
+ });
+}
