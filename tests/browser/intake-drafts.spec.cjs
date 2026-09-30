@@ -1,4 +1,4 @@
-const {test,expect}=require('@playwright/test');
+const {test,expect,webkit}=require('@playwright/test');
 const pdf=n=>({name:n+'.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-'+n)});
 const word={name:'Задание.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from([80,75,3,4,1])};
 const excel={name:'Расчёты.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from([80,75,3,4,2])};
@@ -74,11 +74,10 @@ test('bad formats are explained and names are rendered as text; narrow screen an
  await expect(page.getByText('Предыдущие версии: 1',{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.querySelector('.sheet-in').scrollWidth<=document.querySelector('.sheet-in').clientWidth+1)).toBe(true);
 });
-test.describe('Safari file queue',()=>{
- test.use({browserName:'webkit'});
- test('Word and Excel originals survive network failure and page reload',async({page})=>{
+test('Safari Word and Excel originals survive network failure and page reload',async()=>{
+ const browser=await webkit.launch();try{const page=await browser.newPage();
   await setup(page);await page.evaluate(()=>{failUploads=true;});await open(page);
   await page.locator('#intakeFiles').setInputFiles([word,excel]);await expect(page.locator('[data-intake-status]')).toContainText('Часть файлов');
   await setup(page);await open(page);await saved(page,2);
- });
+ }finally{await browser.close();}
 });
