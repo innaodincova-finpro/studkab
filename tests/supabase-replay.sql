@@ -7,6 +7,8 @@ begin
   select array_agg(name order by name)
     into missing
   from unnest(array[
+    'studkab_intake_drafts',
+    'studkab_intake_files',
     'studkab_gen_attempts',
     'studkab_gen_budget',
     'studkab_gen_jobs',
@@ -55,11 +57,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 38 then
-    raise exception 'Expected 38 STUDKAB tables, found %', table_count;
+  if table_count <> 40 then
+    raise exception 'Expected 40 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 38 then
-    raise exception 'RLS enabled on only % of 38 STUDKAB tables', rls_count;
+  if rls_count <> 40 then
+    raise exception 'RLS enabled on only % of 40 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
