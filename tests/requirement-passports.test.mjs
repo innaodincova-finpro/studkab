@@ -128,6 +128,24 @@ test('short unnumbered obligations are inventoried while background prose stays 
  assert.deepEqual(result.items.map(i=>i.source_attachment_id),[id,id]);
  assert.ok(result.items.every(i=>i.verified===false));
 });
+test('explicit operations from different disciplines become separate unverified passport items',()=>{
+ const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const source={id,category:'assignment',file_name:'task.txt',extracted_text:[
+  '1. Рассчитать себестоимость каждого изделия по исходным данным.',
+  '2. Определить коэффициент ликвидности за каждый отчётный год.',
+  '3. Построить график температуры по результатам измерений.',
+  'Проанализировать причины изменения показателя и сформулировать вывод.',
+  'В примере ниже студент рассчитывает известный показатель.',
+  '4. Расчёт себестоимости в теории управления.'
+ ].join('\n')};
+ const base={status:'draft',items:[]};
+ const result=inventoryExplicitClauses(base,[source]);
+ assert.deepEqual(result.items.map(i=>i.text),source.extracted_text.split('\n').slice(0,4).map((line,i)=>i<3?line.replace(/^\d+\. /,''):line));
+ assert.deepEqual(result.items.map(i=>i.source_attachment_id),[id,id,id,id]);
+ assert.ok(result.items.every(i=>i.required===true&&i.verified===false));
+ assert.equal(inventoryExplicitClauses(result,[source]),result);
+ assert.equal(inventoryExplicitClauses({...result,status:'approved'},[]).items.length,4);
+});
 test('approval refuses an omitted enumerated obligation before any approval RPC',async()=>{
  const p=defaultPassport({});
  p.items=p.items.map(i=>({...i,text:i.id==='ANTIPLAGIARISM'?'Внешний отчёт по стандарту STUDKAB; в предоставленных материалах числовое условие вуза не обнаружено.':'Конкретное требование',source:'Задание',verified:true}));
@@ -138,7 +156,7 @@ test('approval refuses an omitted enumerated obligation before any approval RPC'
   {id:'22222222-2222-4222-8222-222222222222',email:'executor@example.test'},
   {config:async()=>({executor_email:'executor@example.test'}),db:async path=>{
    if(path.startsWith('studkab_requests?'))return [{payload:{}}];
-   if(path.startsWith('studkab_request_attachments?'))return [{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',category:'assignment',file_name:'task.txt',extracted_text:'1. Работа должна содержать анализ выручки за три года'}];
+   if(path.startsWith('studkab_request_attachments?'))return [{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',category:'assignment',file_name:'task.txt',extracted_text:'1. Рассчитать себестоимость изделий по исходным данным'}];
    approved=true;throw Error('Unexpected approval access');
   }});
  assert.equal(result.status,409);

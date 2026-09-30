@@ -148,9 +148,12 @@ export function inventoryExplicitClauses(passport,attachments){
   const lines=row.extracted_text.replace(/\r/g,'').split('\n');
   for(let n=0;n<lines.length;n++){
    const line=lines[n].trim(),match=/^(?:\d{1,2}(?:\.\d{1,2}){0,2}[.)]?|[•*–-])\s+(.+)$/u.exec(line);
-   const clause=(match?.[1]||(/^(?:в\s+работе\s+необходимо|работа\s+должна|документ\s+должен|отч[её]т\s+должен|необходимо|требуется|следует|обязательно)(?=\s|[:—–-])/iu.test(line)?line:'')).trim();
+   // Explicit commands often state a separate operation without saying
+   // "necessary" or "required". Keep each as an unverified source-bound item.
+   const imperative=/^(?:рассчита(?:ть|йте)|вычисли(?:ть|те)|определи(?:ть|те)|построи(?:ть|те)|сопостави(?:ть|те)|проанализирова(?:ть|йте))(?=\s|[:—–-])/iu;
+   const clause=(match?.[1]||(/^(?:в\s+работе\s+необходимо|работа\s+должна|документ\s+должен|отч[её]т\s+должен|необходимо|требуется|следует|обязательно)(?=\s|[:—–-])/iu.test(line)||imperative.test(line)?line:'')).trim();
    if(!clause)continue;
-   if(clause.length<20||clause.length>1000||!/должн|необходим|требует|обязател|не менее|не более|следует|включа|содерж|представ|оформ|указа/iu.test(clause))continue;
+   if(clause.length<20||clause.length>1000||!/должн|необходим|требует|обязател|не менее|не более|следует|включа|содерж|представ|оформ|указа|рассчита(?:ть|йте)|вычисли(?:ть|те)|определи(?:ть|те)|построи(?:ть|те)|сопостави(?:ть|те)|проанализирова(?:ть|йте)/iu.test(clause))continue;
    const normalized=clause.replace(/\s+/gu,' ').toLowerCase();
    if(seen.has(normalized)||items.some(i=>String(i.text).toLowerCase().includes(normalized)))continue;
    const id='REQ_'+row.id.replace(/-/g,'').toLowerCase()+'_'+(n+1);
