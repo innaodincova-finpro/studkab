@@ -489,7 +489,7 @@ test('C102 a changed quality record requires a fresh ordinary review of the same
   const previous=Oblako.requestApi;window.freshQuality=null;
   const scan={scope:{providedSources:1,usableSources:1,documentTokens:10,scannedDocumentTokens:10},sources:[{id:'synthetic',tokenCount:10,scannedTokenCount:10}],limits:{truncated:false,reasons:[]},matches:[]};
   Oblako.requestApi=async body=>{
-   if(body.action==='quality-scan')return {scan,scanHash:'d'.repeat(64)};
+   if(body.action==='quality-scan')return {scan,scanHash:'d'.repeat(64),fileHash:remote.receipt.fileHash,inspection:{versionId:remote.receipt.versionId,passportId:candidate.passports[0].id,fileHash:remote.receipt.fileHash,documentHash:remote.receipt.documentHash,sourceFingerprint:candidate.passports[0].source_fingerprint,bindingId:null,scanHash:'d'.repeat(64),sha256:'e'.repeat(64)}};
    if(body.action==='quality-save'){freshQuality={id:body.evidenceId,payload:{...body.payload,scan},createdAt:'2026-09-23T10:00:00Z'};remote.state='prepared';remote.reason='quality_review_stale';delete remote.review;return {evidence:freshQuality};}
    const result=await previous(body);if(body.action==='quality-state'&&freshQuality)result.latest.internal_borrowing=freshQuality;return result;
   };

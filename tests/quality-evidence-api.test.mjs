@@ -7,6 +7,16 @@ test('free scan returns a Word-bound link audit without changing the quality ver
  assert.deepEqual(r.data.linkAudit,{printedCount:0,activeCount:0,missing:[]});
  assert.ok(Array.isArray(r.data.declaredLayout.sections));
  assert.equal(r.data.scan.fileHash,s.bindings.fileHash);
+ assert.equal(r.data.inspection.versionId,versionId);
+ assert.equal(r.data.inspection.passportId,s.bindings.passportId);
+ assert.equal(r.data.inspection.fileHash,s.bindings.fileHash);
+ assert.equal(r.data.inspection.scanHash,r.data.scanHash);
+ assert.match(r.data.inspection.sha256,/^[a-f0-9]{64}$/);
+ const repeat=await qualityAction(input(s,'quality-scan'),user,s.deps);
+ assert.equal(repeat.data.inspection.sha256,r.data.inspection.sha256);
+ s.bindings.passportId=randomUUID();
+ const changed=await qualityAction(input(s,'quality-scan'),user,s.deps);
+ assert.notEqual(changed.data.inspection.sha256,r.data.inspection.sha256);
 });
 async function setup({sources=true,mode="university_threshold"}={}){const text='Первый второй третий четвертый пятый шестой седьмой восьмой девятый десятый одиннадцатый двенадцатый тринадцатый четырнадцатый.';const c={window:{},Blob,TextEncoder,Uint8Array,DataView};vm.runInNewContext(fs.readFileSync(new URL('../result-docx.js',import.meta.url),'utf8'),c);const doc={topic:'Synthetic',format:{},chapters:[{id:'intro',name:'Введение'}],structure:{intro:{text}}};const bytes=new Uint8Array(await c.window.ResultDocx(doc,doc.chapters).arrayBuffer()),info=await inspectWord(bytes);const bindings={versionId,recipientId:randomUUID(),passportId:randomUUID(),fileHash:info.fileHash,documentHash:'a'.repeat(64),sourceFingerprint:'b'.repeat(64),thresholdRequirement:{itemId:'ANTIPLAGIARISM',text:'Учебная система, не менее 70%',mode,service:mode==='service_only'?'':'Учебная система',thresholdPercent:mode==='university_threshold'?70:null}};const calls=[];const db=async(path,method,args)=>{calls.push({path,args});if(path==='rpc/studkab_quality_check')return {eligible:false,blockingCodes:['internal_borrowing','external_originality'],bindings};if(path.startsWith('studkab_result_versions?'))return [{docx_base64:Buffer.from(bytes).toString('base64'),file_hash:info.fileHash}];if(path.startsWith('studkab_request_attachments?'))return sources?[{id:sourceId,category:'sources',file_name:'source.txt',file_hash:'c'.repeat(64),extracted_text:text}]:[];if(path==='rpc/studkab_quality_save')return {id:args.p_id,kind:args.p_kind,payload:args.p_payload,created_at:'2026-01-01',report_hash:'d'.repeat(64)};if(path.startsWith('studkab_quality_evidence?'))return [];throw Error(path);};return {bindings,calls,deps:{db,config:async()=>({executor_email:user.email})}};}
 const input=(s,action)=>({action,id,versionId,...s.bindings});

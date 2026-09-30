@@ -63,7 +63,18 @@ export async function qualityAction(input,user,{db,config}){
     requirementCoverage:coverage||null,requirements:Array.isArray(snapshot?.items)?snapshot.items.map(i=>({id:i.id,text:i.text,source:i.source,required:i.required!==false})):[],
     latest:Object.fromEntries(['internal_borrowing','external_originality'].map(k=>[k,clean(rows.find(e=>e.kind===k))]))}};
   }
-  if(input.action==='quality-scan'){const computed=await scan(db,input.id,input.versionId,bindings);return {data:{scan:computed.scan,scanHash:computed.scanHash,linkAudit:computed.linkAudit,declaredLayout:computed.declaredLayout,fileHash:bindings.fileHash}};}
+  if(input.action==='quality-scan'){
+   const computed=await scan(db,input.id,input.versionId,bindings);
+   // A reproducible diagnostic for this exact stored Word and current passport.
+   // This is not a positive requirement review or a saved quality decision.
+   const inspection={versionId:input.versionId,passportId:bindings.passportId,
+    bindingId:state.requirementCoverage?.bindingId||null,fileHash:bindings.fileHash,
+    documentHash:bindings.documentHash,sourceFingerprint:bindings.sourceFingerprint,
+    scanHash:computed.scanHash,linkAudit:computed.linkAudit,declaredLayout:computed.declaredLayout};
+   return {data:{scan:computed.scan,scanHash:computed.scanHash,linkAudit:computed.linkAudit,
+    declaredLayout:computed.declaredLayout,fileHash:bindings.fileHash,
+    inspection:{...inspection,sha256:await digest(inspection)}}};
+  }
   if(input.action!=='quality-save'||!uuid.test(input.evidenceId||''))return fail('QUALITY_INVALID',400);
   for(const k of ['recipientId','passportId','fileHash','documentHash','sourceFingerprint'])if(input[k]!==bindings[k])return fail('QUALITY_STALE');
   const p=input.payload;if(!p||!['pass','fail','manual'].includes(p.disposition)||typeof p.notes!=='string'||p.notes.trim().length<10||p.notes.length>4000)return fail('QUALITY_INVALID',400);
