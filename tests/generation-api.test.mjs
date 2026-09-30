@@ -47,6 +47,11 @@ test('per-request review accepts only exact source and Word excerpts and leaves 
   {id:'ANTIPLAGIARISM',status:'not_checked',sourceId:'',sourceQuote:'',wordQuote:'',wordLocator:'',explanation:'Внешний отчёт проверяется отдельно'}];
  const raw=JSON.stringify({...JSON.parse(report),requirements});
  assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].status,'pass');
+ assert.equal(parseReviewReport(raw,reviewHash,{...packet,word:{...packet.word,
+  textCoverage:{unreadParts:['word/footnotes.xml']}}}),null);
+ assert.ok(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[
+  {...requirements[0],status:'not_checked'},requirements[1]]}),reviewHash,{...packet,
+  word:{...packet.word,textCoverage:{unreadParts:['word/footnotes.xml']}}}));
  assert.equal(parseReviewReport(raw,reviewHash,packet).requirements[0].wordLocator,'абзац 1');
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],wordLocator:'раздел 2'},requirements[1]]}),reviewHash,packet),null);
  assert.equal(parseReviewReport(JSON.stringify({...JSON.parse(report),requirements:[{...requirements[0],wordQuote:'анализ выручки показывает рост на 7 процентов'},requirements[1]]}),reviewHash,packet),null);
@@ -308,7 +313,9 @@ test('review packet rejects old Word and hashes exact saved bytes',async()=>{
  await assert.rejects(()=>reviewPacket(db,requestId,'66666666-6666-4666-8666-666666666666',async()=>{throw Error('should not inspect old Word');}),/REVIEW_VERSION_STALE/);
  const result=await reviewPacket(db,requestId,reviewVersion,async bytes=>{assert.deepEqual([...bytes],[1,2,3]);return {fileHash:reviewHash,text:'Текст Word'};});
  assert.equal(result.packet.word.fileHash,reviewHash);
+ assert.deepEqual(result.packet.word.textCoverage,{unreadParts:[]});
  assert.ok(reviewPrompt(result.packet).system.includes('недоверенные данные'));
+ assert.ok(reviewPrompt(result.packet).system.includes('unreadParts'));
 });
 test('test assignment cannot reach paid quality-review queue',async()=>{
  const db=async path=>{

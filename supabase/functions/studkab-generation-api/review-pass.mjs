@@ -97,7 +97,7 @@ export function parseReviewReport(raw,hash,packet){
     const wordLocator=exactWordParagraph(packet.word.text,r.wordQuote);
     // Exact excerpts are necessary evidence, but not a proof of visual layout,
     // external originality, or the semantic correctness of a calculation.
-    if(needsNonTextEvidence(item)||
+    if(needsNonTextEvidence(item)||packet.word?.textCoverage?.unreadParts?.length||
      !item.source_attachment_id||item.source_attachment_id!==r.sourceId||
      !source||r.sourceQuote.trim().length<12||r.wordQuote.trim().length<12||
      !source.text.includes(r.sourceQuote)||!wordLocator||r.wordLocator!==wordLocator||
@@ -132,7 +132,8 @@ export async function reviewPacket(db,request,versionId,inspect=inspectWord){
  if(!attachments.some(row=>row.category==='assignment'||row.category==='methodology'))throw Error('REVIEW_MATERIALS_MISSING');
  if(attachments.some(row=>!row.extracted_text?.trim()))throw Error('REVIEW_MATERIALS_UNREADABLE');
  const materials=attachments.map(row=>({id:row.id,category:row.category,fileHash:row.file_hash,text:row.extracted_text}));
- const packet={word:{revision:version.revision,fileHash:version.file_hash,documentHash:version.document_hash,text:word.text},
+ const packet={word:{revision:version.revision,fileHash:version.file_hash,documentHash:version.document_hash,
+   text:word.text,textCoverage:word.textCoverage||{unreadParts:[]}},
   passport:{revision:passport.revision,sourceFingerprint:passport.source_fingerprint,items:passport.items},materials};
  if(new TextEncoder().encode(JSON.stringify(packet)).byteLength>155000)throw Error('REVIEW_CONTEXT_TOO_BIG');
  return {packet,passport,version};
@@ -154,6 +155,7 @@ export function reviewPrompt(packet,financeProfile=false){
   'Извлечённый текст сам по себе не подтверждает открытие и редактирование в Microsoft Word (C11), '+
   'фактические страницы и объём (C12), визуальное оформление (S02). Укажи их в notChecked, если в пакете нет прямых доказательств. '+
   'Если приложение содержит только библиографические записи, нельзя считать прочитанными полные тексты источников (C10). '+
+  'Если word.textCoverage.unreadParts не пуст, часть точного Word не прочитана: не ставь pass ни одному пункту паспорта по этому текстовому проходу; укажи ограничение и not_checked. '+
   'Для КАЖДОГО пункта passport.items также верни requirements: [{"id":"...","status":"pass|fail|not_checked",'+
   '"sourceId":"id приложения","sourceQuote":"дословная выдержка из текста приложения",'+
   '"wordQuote":"полный дословный абзац из Word","wordLocator":"абзац N",'+

@@ -46,6 +46,15 @@ export async function inspectWord(bytes){
  if(!types.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml')||/macroEnabled/i.test(types))fail();
  const xml=await read('word/document.xml');
  if(!/<w:document\b/.test(xml)||!/<w:body\b/.test(xml)||/<w:altChunk\b/.test(xml))fail();
+ const unreadParts=[];
+ if(/<w:(?:ins|del|delText|moveFrom|moveTo)\b/.test(xml))unreadParts.push('word/document.xml:tracked_changes');
+ if(/<w:txbxContent\b|<v:textbox\b/.test(xml))unreadParts.push('word/document.xml:textbox');
+ for(const name of entries.keys()){
+  if(!/^word\/(?:header\d+|footer\d+|footnotes|endnotes|comments)\.xml$/.test(name))continue;
+  const part=await read(name);
+  if([...part.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+   .some(m=>decodeXml(m[1]).trim()))unreadParts.push(name);
+ }
  const paragraphs=[...xml.matchAll(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g)].map(m=>
   [...m[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(t=>decodeXml(t[1])).join('')
  ).filter(t=>t.trim());
@@ -75,5 +84,5 @@ export async function inspectWord(bytes){
  const font=/<w:rFonts\b[^>]*\/?\s*>/.exec(normal)?.[0],size=/<w:sz\b[^>]*\/?\s*>/.exec(normal)?.[0],spacing=/<w:spacing\b[^>]*\/?\s*>/.exec(normal)?.[0],indent=/<w:ind\b[^>]*\/?\s*>/.exec(normal)?.[0];
  const normalStyle=normal?{font:(attr(font,'ascii')||attr(font,'hAnsi')||'').slice(0,100),sizeHalfPoints:twips(size,'val'),line:twips(spacing,'line'),lineRule:attr(spacing,'lineRule')||'',firstLine:twips(indent,'firstLine')}:null;
  const fileHash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
- return {text,fileHash,linkAudit:{printedCount:printed.length,activeCount:printed.filter(u=>active.has(u)).length,missing:printed.filter(u=>!active.has(u))},declaredLayout:{sections,sectionLimitReached:[...xml.matchAll(/<w:sectPr\b/g)].length>32,normalStyle}};
+ return {text,fileHash,textCoverage:{unreadParts},linkAudit:{printedCount:printed.length,activeCount:printed.filter(u=>active.has(u)).length,missing:printed.filter(u=>!active.has(u))},declaredLayout:{sections,sectionLimitReached:[...xml.matchAll(/<w:sectPr\b/g)].length>32,normalStyle}};
 }
