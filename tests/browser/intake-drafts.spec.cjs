@@ -22,8 +22,8 @@ async function setup(page){
     state.submission={submitted:true,ready:true,id:crypto.randomUUID(),number:1,payload:{id:'intake_'+state.draft.id,t:analysisResult.fields.t.values[0].value,k:'Курсовая работа',u:'Учебный вуз',n:'Учебный студент',d:'Менеджмент',dl:'2026-10-30',cn:preview.contact,rq:'',org:'',mn:'',g:'',fc:'',kf:'',ct:'',s:'',pr:'',fo:'',co:''}};state.submissionWrites=(state.submissionWrites||0)+1;localStorage.setItem(key,JSON.stringify(state));
     if(window.loseSubmissionResponse)throw Error('Ответ потерян');return {submission:state.submission};
    }
-   if(body.action==='intake-analyze')return {analysis:{state:window.analysisResult?'done':'disabled'}};
-   if(body.action==='intake-analysis-state')return {analysis:window.analysisResult?{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',state:'done',result:window.analysisResult}:{state:'idle'}};
+   if(body.action==='intake-analyze')return {analysis:window.pausedAnalysis||{state:window.analysisResult?'done':'disabled'}};
+   if(body.action==='intake-analysis-state')return {analysis:window.pausedAnalysis||(window.analysisResult?{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',state:'done',result:window.analysisResult}:{state:'idle'})};
    if(body.action==='intake-confirmation-state'||body.action==='intake-confirmation-save'){
     const rules={};for(const [key,f] of Object.entries(window.analysisResult.fields)){
      if(!['structure','formatting','data','sources'].includes(key))rules['f:'+key]={kind:'field',field:key,required:['t','k','u','n','d','dl'].includes(key)&&!f.values.length||['conflict','needs_review'].includes(f.status)};
@@ -198,4 +198,16 @@ test('new local edits disable sending until reconfirmed; another account never s
  await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();
  const field=page.locator('[data-effective="f:n"]').locator('..');await field.getByText('Источники и исправление',{exact:true}).click();await field.locator('[data-answer="f:n"]').selectOption('custom');await field.locator('[data-custom="f:n"]').fill('Новый ответ');await expect(page.locator('[data-intake-send]')).toBeDisabled();await expect(page.locator('[data-answer-status]')).toContainText('Ответы сохранены в кабинете');await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();await page.locator('[data-intake-send]').click();await expect(page.locator('[data-intake-confirmation]')).toContainText('отправлена');
  await page.evaluate(()=>cloudSwitchUser('other-submit-owner'));await expect(page.locator('[data-intake-dialog]')).toHaveCount(0);await open(page);await expect(page.locator('[data-intake-status]')).not.toContainText('№1');expect(await page.evaluate(()=>calls.filter(c=>c.owner===KEY&&c.action==='intake-submission-state').length)).toBe(0);
+});
+
+test('prepared continuation is visibly paused and never offers confirmation or a paid restart',async({page})=>{
+ await setup(page);await page.evaluate(()=>window.pausedAnalysis={state:'paused',completed:2,parts:23});
+ await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
+ await expect(page.locator('[data-intake-analysis]')).toContainText('Продолжение подготовлено');
+ await expect(page.locator('[data-intake-analysis]')).toContainText('ожидают разрешения на расходы');
+ await expect(page.getByRole('button',{name:'Подтвердить сведения',exact:true})).toHaveCount(0);
+ await expect(page.locator('[data-intake-send]')).toHaveCount(0);
+ await page.locator('[data-intake-read]').click();
+ await expect(page.locator('[data-intake-analysis]')).toContainText('Продолжение подготовлено');
+ expect(await page.evaluate(()=>calls.some(c=>/continuation_activate|generation-start/.test(c.action)))).toBe(false);
 });

@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
 import {analysisPlan,verifyExtraction,distribute} from '../supabase/functions/_shared/intake-analysis.mjs';
+import {prepareIntakeContinuation} from '../supabase/functions/_shared/intake-continuation.mjs';
 import {runIntake} from '../supabase/functions/studkab-generation/intake-runner.mjs';
 import {handler as runnerHandler} from '../supabase/functions/studkab-generation/handler.mjs';
 import {intakeAction} from '../supabase/functions/studkab-requests/intake.mjs';
@@ -146,4 +147,102 @@ test('complete JSON code fence is formatting only; prose, malformed JSON and uns
  for(const invalid of ['Объяснение\n'+wrapped,wrapped+'\nИтог','```python\n'+json+'\n```',wrapped+'\n'+wrapped,'```json\n{\n```'])assert.throws(()=>verifyExtraction(invalid,part));
  const invented=structuredClone(value);invented.candidates[0].value='Чужая тема';invented.candidates[0].refs[0].quote='Чужая тема';
  assert.throws(()=>verifyExtraction('```json\n'+JSON.stringify(invented)+'\n```',part),/INVALID_SOURCE/);
+});
+
+async function stoppedFixture(){
+ const f=await fixture();
+ const blocks=Array.from({length:10},(_,i)=>({kind:'paragraph',text:text+' '+i+' '+'x'.repeat(900),source:{paragraph:i+1}}));
+ await f.db.query('update studkab_intake_files set read_result=$2 where id=$1',[f.f.id,{...file.read_result,blocks,fileId:f.f.id,fileHash:f.f.file_hash}]);
+ await f.start();await runIntake({rpc:f.rpc,provider:f.provider});
+ const c=await f.rpc('studkab_intake_analysis_claim',{}),id=await f.rpc('studkab_intake_analysis_dispatch',{p_job:c.job_id,p_claim:c.claim,p_cost:c.part.max_cost_microusd});
+ const raw='```json\n'+JSON.stringify(response(c.part))+'\n```';
+ await f.rpc('studkab_intake_analysis_finish',{p_job:c.job_id,p_claim:c.claim,p_request:id,p_part:null,p_result:null,p_raw:raw,p_error:'invalid'});
+ const old=(await f.db.query('select * from studkab_intake_analysis_jobs where id=$1',[c.job_id])).rows[0];
+ await f.db.exec('reset role;update studkab_intake_analysis_policy set enabled=false,limit_microusd=0;set role service_role');
+ return {...f,old};
+}
+test('free preparation creates one paused checkpoint; historical raw replies, sources and reserves remain unchanged',async()=>{
+ const f=await stoppedFixture();try{
+  const reserve=(await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd;
+  const a=await f.start(),b=await f.start();assert.equal(a.data.analysis.state,'paused');assert.equal(a.data.analysis.completed,2);assert.equal(a.data.analysis.id,b.data.analysis.id);
+  assert.equal((await f.state()).id,a.data.analysis.id);assert.equal((await f.rpc('studkab_intake_confirmation_state',{p_student:student,p_draft:f.draft.id})).state,'unavailable');
+  const child=(await f.db.query('select * from studkab_intake_analysis_jobs where id=$1',[a.data.analysis.id])).rows[0];
+  assert.equal(child.parent_job_id,f.old.id);assert.equal(child.reserved_microusd,0);assert.deepEqual(child.cached_request_ids,f.old.raw_outputs.map(r=>r.request_id));assert.equal(child.raw_outputs.length,0);
+  assert.deepEqual((await f.db.query('select * from studkab_intake_analysis_jobs where id=$1',[f.old.id])).rows[0],f.old);
+  assert.equal((await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd,reserve);
+  await f.db.exec('reset role;update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;set role service_role');
+  let paid=0;assert.equal(await runIntake({rpc:f.rpc,provider:async()=>{paid++;}}),null);assert.equal(paid,0);
+  await assert.rejects(()=>f.db.query("update studkab_intake_analysis_jobs set state='queued' where id=$1",[child.id]),/PAUSED/);
+  await assert.rejects(()=>f.db.query('select studkab_intake_continuation_activate($1)',[child.id]),/permission denied/);
+  await assert.rejects(()=>f.db.query('update studkab_intake_analysis_jobs set parent_job_id=null where id=$1',[child.id]),/IMMUTABLE/);
+  assert.equal((await f.rpc('studkab_intake_continuation_source',{p_student:other,p_draft:f.draft.id,p_job:f.old.id})).missing,true);
+  for(const role of ['anon','authenticated']){await f.db.exec('reset role;set role '+role);await assert.rejects(()=>f.db.query('select studkab_intake_continuation_source($1,$2,$3)',[student,f.draft.id,f.old.id]),/permission denied/);}
+ }finally{await f.db.close();}
+});
+test('separate authorized activation continues at the first unsent part; only remaining calls enter the ledger',async()=>{
+ const f=await stoppedFixture();try{
+  const a=await f.start(),child=a.data.analysis.id,total=a.data.analysis.parts;
+  const needed=f.old.plan.slice(2).reduce((n,p)=>n+p.max_cost_microusd,0),oldReserve=f.old.reserved_microusd;
+  await f.db.exec('reset role');
+  assert.equal((await f.db.query('select studkab_intake_continuation_activate($1) ok',[child])).rows[0].ok,false);
+  await f.db.query('update studkab_intake_analysis_policy set enabled=true,limit_microusd=$1',[oldReserve+needed-1]);
+  assert.equal((await f.db.query('select studkab_intake_continuation_activate($1) ok',[child])).rows[0].ok,false);
+  await f.db.query('update studkab_intake_analysis_policy set limit_microusd=$1',[oldReserve+needed]);
+  assert.equal((await f.db.query('select studkab_intake_continuation_activate($1) ok',[child])).rows[0].ok,true);
+  assert.equal((await f.db.query('select studkab_intake_continuation_activate($1) ok',[child])).rows[0].ok,false);
+  await f.db.exec('set role service_role');
+  const ordinals=[],requests=[];
+  const provider=async(c,id)=>{ordinals.push(JSON.parse(c.spec.prompt).part-1);requests.push(id);return {complete:true,text:JSON.stringify(response(c.spec))};};
+  for(let i=2;i<total;i++)await runIntake({rpc:f.rpc,provider});
+  const done=await f.state();assert.equal(done.state,'done');assert.equal(done.completed,total);assert.deepEqual(ordinals,Array.from({length:total-2},(_,i)=>i+2));
+  assert.ok(requests.every(id=>!f.old.raw_outputs.some(r=>r.request_id===id)));assert.equal(new Set(requests).size,total-2);
+  assert.equal((await f.start()).data.analysis.id,child);assert.equal(await runIntake({rpc:f.rpc,provider}),null);
+  assert.equal(done.result.fields.t.values[0].refs.length,total);
+  assert.equal((await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd,oldReserve+needed);
+  assert.deepEqual((await f.db.query('select * from studkab_intake_analysis_jobs where id=$1',[f.old.id])).rows[0],f.old);
+  assert.equal((await f.rpc('studkab_intake_confirmation_state',{p_student:student,p_draft:f.draft.id})).analysisId,child);
+ }finally{await f.db.close();}
+});
+test('cached verification refuses altered plan, manifest, unsupported text, duplicate receipts and uncertain outcomes',async()=>{
+ const f=await stoppedFixture();try{
+  const snapshot=await f.rpc('studkab_intake_analysis_snapshot',{p_student:student,p_draft:f.draft.id});
+  const prepared=prepareIntakeContinuation(f.old,snapshot);assert.equal(prepared.cachedParts,2);assert.equal(prepared.remainingParts,f.old.plan.length-2);
+  for(const change of [j=>j.state='unknown',j=>j.parent_job_id=f.old.id,j=>j.manifest='b'.repeat(64),j=>j.plan[0].prompt+=' ',j=>j.raw_outputs[1].request_id=j.raw_outputs[0].request_id,j=>j.raw_outputs[1].text='{}',j=>j.part_results[0].candidates[0].value='Подмена',j=>j.raw_outputs[1].error='length']){const j=structuredClone(f.old);change(j);assert.throws(()=>prepareIntakeContinuation(j,snapshot));}
+  const revision=(await f.rpc('studkab_intake_open',{p_student:student})).revision;
+  await f.rpc('studkab_intake_notes',{p_student:student,p_draft:f.draft.id,p_revision:revision,p_notes:'Новые материалы'});
+  assert.equal((await f.rpc('studkab_intake_continuation_prepare',{p_student:student,p_draft:f.draft.id,p_job:f.old.id,p_parts:prepared.parts,p_result:null})).conflict,true);
+  assert.equal((await f.db.query('select count(*)::integer n from studkab_intake_analysis_jobs where parent_job_id is not null')).rows[0].n,0);
+ }finally{await f.db.close();}
+});
+
+test('a fully saved verified plan completes without activation or any additional provider call',async()=>{
+ const f=await fixture();try{
+  await f.start();const c=await f.rpc('studkab_intake_analysis_claim',{}),id=await f.rpc('studkab_intake_analysis_dispatch',{p_job:c.job_id,p_claim:c.claim,p_cost:c.part.max_cost_microusd});
+  await f.rpc('studkab_intake_analysis_finish',{p_job:c.job_id,p_claim:c.claim,p_request:id,p_part:null,p_result:null,p_raw:'```json\n'+JSON.stringify(response(c.part))+'\n```',p_error:'invalid'});
+  await f.db.exec('reset role;update studkab_intake_analysis_policy set enabled=false,limit_microusd=0;set role service_role');
+  const a=await f.start();assert.equal(a.data.analysis.state,'done');assert.equal(a.data.analysis.completed,1);
+  const state=await f.state();assert.equal(state.result.status,'candidate');assert.equal(state.result.fields.t.values[0].value,'Управление персоналом');
+  assert.equal(await runIntake({rpc:f.rpc,provider:async()=>assert.fail('Paid call')}),null);
+  assert.equal((await f.db.query('select reserved_microusd from studkab_intake_analysis_jobs where parent_job_id is not null')).rows[0].reserved_microusd,0);
+ }finally{await f.db.close();}
+});
+
+test('Edge rollout before migration and a lost checkpoint reply preserve history without paid retry',async()=>{
+ for(const mode of ['migration_pending','lost_reply']){
+  const f=await stoppedFixture();try{
+   let writes=0;
+   const db=async(path,method,body)=>{
+    if(mode==='migration_pending'&&path==='rpc/studkab_intake_continuation_source')throw Error('RPC not installed');
+    const r=await f.sql(path,method,body);
+    if(path==='rpc/studkab_intake_continuation_prepare'){writes++;if(mode==='lost_reply')throw Error('reply lost after commit');}
+    return r;
+   };
+   const a=await intakeAction({action:'intake-analyze',id:f.draft.id},{id:student},{db,isMember:async()=>true});
+   assert.equal(a.data.analysis.id,f.old.id);assert.equal(a.data.analysis.state,'invalid');
+   if(mode==='migration_pending'){assert.equal(writes,0);assert.equal((await f.state()).state,'invalid');}
+   else{const state=await f.state();assert.equal(state.state,'paused');assert.equal((await f.start()).data.analysis.id,state.id);assert.equal(writes,1);}
+   assert.deepEqual((await f.db.query('select * from studkab_intake_analysis_jobs where id=$1',[f.old.id])).rows[0],f.old);
+   assert.equal(await runIntake({rpc:f.rpc,provider:async()=>assert.fail('paid retry')}),null);
+  }finally{await f.db.close();}
+ }
 });
