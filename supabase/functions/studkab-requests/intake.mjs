@@ -2,7 +2,7 @@ import {intakeRead} from './intake-reading.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
 const missing={status:404,data:{error:'Черновик не найден'}};
-const safeFile=f=>({id:f.id,file_name:f.file_name,content_type:f.content_type,size_bytes:f.size_bytes,file_hash:f.file_hash,state:f.state,supersedes:f.supersedes,created_at:f.created_at,saved_at:f.saved_at,roles:f.roles||[],read_status:f.read_status||'idle',read_version:f.read_version||null,read_summary:f.read_result?{status:f.read_result.status,summary:f.read_result.summary||{},warnings:f.read_result.warnings}:null});
+const safeFile=f=>({id:f.id,file_name:f.file_name,content_type:f.content_type,size_bytes:f.size_bytes,file_hash:f.file_hash,state:f.state,supersedes:f.supersedes,created_at:f.created_at,saved_at:f.saved_at,roles:f.roles||[],read_status:f.read_status||'idle',read_version:f.read_version||null,read_summary:f.read_result?{status:f.read_result.status,summary:f.read_result.summary||{},warnings:f.read_result.warnings}:f.read_version?{status:f.read_status,summary:f.read_summary||{},warnings:f.read_warnings||[]}:null});
 function resultError(r){
  if(r?.missing)return missing;
  if(r?.conflict)return {status:409,data:{error:'Черновик изменился. Откройте материалы заново'}};
@@ -31,7 +31,7 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   const draft=await db('rpc/studkab_intake_open','POST',{p_student:user.id});
   if(draft?.denied)return {status:403,data:{error:'Нет доступа'}};
   if(!uuid.test(draft?.id))throw Error('Intake unavailable');
-  const files=await db('studkab_intake_files?draft_id=eq.'+draft.id+'&order=created_at.asc,id.asc');
+  const files=await db('studkab_intake_files?draft_id=eq.'+draft.id+'&order=created_at.asc,id.asc&select=id,file_name,content_type,size_bytes,file_hash,state,supersedes,created_at,saved_at,roles,read_status,read_version,read_summary:read_result->summary,read_warnings:read_result->warnings');
   return {data:{draft:{id:draft.id,state:draft.state,revision:draft.revision,notes:draft.notes},files:files.map(safeFile),limits:{files:8,bytes:5242880,historyBytes:104857600}}};
  }
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный черновик'}};
