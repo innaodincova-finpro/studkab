@@ -333,7 +333,7 @@
       "version": "20261001031058",
       "name": "intake_semantic_analysis",
       "file": "20261001031058_intake_semantic_analysis.sql",
-      "sha256": "1fc0fd7caf47f5460604ca5cf2cfbb7f83d844c9ad7ce549f07768904575ba62",
+      "sha256": "661246fbdf59b4e172bcd76aae52f161e2c8a31aecfb5ccdb99d839ccf2c42a0",
       "status": "pending",
       "note": "INTAKE-01 step 4; disabled, not installed in production"
     }

@@ -131,7 +131,7 @@ begin
  +coalesce((select sum(x.reserved_microusd) from public.studkab_intake_analysis_jobs x),0)) then raise exception 'LEDGER_MISMATCH'; end if;
  select * into policy from public.studkab_intake_analysis_policy where id;
  select coalesce(sum(reserved_microusd),0) into total from public.studkab_intake_analysis_jobs;
- if not policy.enabled or p_cost>policy.limit_microusd-total or p_cost>b.limit_microusd-b.reserved_microusd then
+ if policy.enabled is distinct from true or policy.limit_microusd is null or p_cost>policy.limit_microusd-total or p_cost>b.limit_microusd-b.reserved_microusd then
   update public.studkab_intake_analysis_jobs set state='budget',claim=null,lease_until=null where id=j.id;return null;
  end if;
  rid=gen_random_uuid();update public.studkab_gen_budget set reserved_microusd=reserved_microusd+p_cost where id;

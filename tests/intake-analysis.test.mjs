@@ -104,3 +104,12 @@ test('saved parts resume after process restart and final distribution contains a
   const end=await f.state();assert.equal(end.state,'done');assert.equal(end.result.fields.t.values[0].refs.length,state.parts);assert.equal(f.paid,state.parts);
  }finally{await f.db.close();}
 });
+
+test('policy removed after claim still refuses paid dispatch, even with free global budget',async()=>{
+ const f=await fixture();try{
+  await f.start();const c=await f.rpc('studkab_intake_analysis_claim',{});
+  await f.db.exec('reset role;delete from studkab_intake_analysis_policy;set role service_role');
+  assert.equal(await f.rpc('studkab_intake_analysis_dispatch',{p_job:c.job_id,p_claim:c.claim,p_cost:c.part.max_cost_microusd}),null);
+  assert.equal((await f.state()).state,'budget');assert.equal((await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd,0);assert.equal(f.paid,0);
+ }finally{await f.db.close();}
+});
