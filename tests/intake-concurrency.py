@@ -88,6 +88,11 @@ try:
  snap2=call(f"studkab_intake_analysis_snapshot('{other}','{d2}')")
  call(f"studkab_intake_analysis_start('{other}','{d2}','{snap2['manifest']}','{plan}'::jsonb)")
  with concurrent.futures.ThreadPoolExecutor(2) as pool:pair=list(pool.map(lambda _:call('studkab_intake_analysis_claim()'),range(2)))
+ # SKIP LOCKED may return no work while the other cursor holds ready rows.
+ # The next scheduler tick must claim the remaining job, never the same lease.
+ pair=[x for x in pair if x is not None]
+ assert 1<=len(pair)<=2
+ if len(pair)==1:pair.append(call('studkab_intake_analysis_claim()'))
  assert all(pair) and pair[0]['job_id']!=pair[1]['job_id']
  with concurrent.futures.ThreadPoolExecutor(2) as pool:funded=list(pool.map(lambda x:call(f"studkab_intake_analysis_dispatch('{x['job_id']}','{x['claim']}',10000)"),pair))
  assert sum(x is not None for x in funded)==1
