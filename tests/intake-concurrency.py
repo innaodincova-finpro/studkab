@@ -98,6 +98,31 @@ try:
  assert sum(x is not None for x in funded)==1
  assert int(sql('select reserved_microusd from studkab_gen_budget'))==20000
  assert int(sql('select studkab_gen_expected_reserved()'))==20000
+ # Step 5: real concurrent transactions on one fresh confirmation snapshot.
+ third='33333333-3333-4333-8333-333333333333'
+ sql(f"insert into auth.users values('{third}');insert into studkab_members values('{third}');")
+ d3=call(f"studkab_intake_open('{third}')")['id']
+ f3=call(f"studkab_intake_reserve('{third}','{d3}','task.pdf','application/pdf',10,'"+'c'*64+"',null)")['file']
+ call(f"studkab_intake_finish('{third}','{d3}','{f3['id']}','{f3['file_hash']}')")
+ sql(f"update studkab_intake_files set read_status='ready',read_version='intake-reader-1',read_result='{{}}' where id='{f3['id']}';")
+ m3=call(f"studkab_intake_analysis_snapshot('{third}','{d3}')")['manifest']
+ r3=json.dumps({'fields':{k:{'label':k,'status':'candidate','values':[{'value':k,'condition':'','refs':[]}]} for k in ['t','k','u','n','d','dl']},'requirements':[]}).replace("'","''")
+ job3=sql(f"insert into studkab_intake_analysis_jobs(draft_id,manifest,version,plan,state,result) values('{d3}','{m3}','intake-analysis-1','[{{}}]','done','{r3}') returning id;")
+ def confirm3(answers,revision,confirmed=True):
+  encoded=json.dumps(answers).replace("'","''")
+  return call(f"studkab_intake_confirmation_save('{third}','{d3}','{job3}',{revision},'{encoded}',{str(confirmed).lower()})")
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:confirmations=list(pool.map(lambda _:confirm3({},0),range(2)))
+ assert all(x.get('state')=='confirmed' and x['revision']==1 for x in confirmations)
+ assert int(sql(f"select count(*) from studkab_intake_confirmations where draft_id='{d3}'"))==1
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:edits=list(pool.map(lambda value:confirm3({'f:n':{'type':'custom','value':value}},1,False),['first','second']))
+ assert sum(x.get('revision')==2 for x in edits)==1 and sum(x.get('conflict',False) for x in edits)==1
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:
+  futures=[pool.submit(lambda:confirm3({},2)),pool.submit(lambda:call(f"studkab_intake_reserve('{third}','{d3}','new.pdf','application/pdf',10,'"+'d'*64+"',null)"))]
+  changed=[x.result() for x in futures]
+ state3=call(f"studkab_intake_confirmation_state('{third}','{d3}')")
+ assert state3['state']=='stale' and state3['answers']=={}
+ assert changed[0].get('stale',False) or changed[0].get('state')=='confirmed'
+ print('PASS: confirmation duplicate concurrent save, edit conflict, immutable history and source-change invalidation')
  print('PASS: semantic duplicate start, exclusive claim/dispatch, stale-source refusal, retained reserve and unknown without retry')
  print('PASS: parallel draft creation, hash deduplication, eight-file limit, ownership, finish, one successor and persisted exclusive reading')
 finally:

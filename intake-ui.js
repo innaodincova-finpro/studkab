@@ -32,7 +32,7 @@
   document.querySelectorAll('[data-intake-dialog]').forEach(function(el){el.remove();});
   var readWarnings={archive_limit:'Файл превышает предел распаковки. Разделите документ на части',damaged_archive:'Файл повреждён: сохраните его заново в Word или Excel',damaged_pdf:'PDF повреждён: загрузите исправленную текстовую версию',encrypted_pdf:'PDF защищён паролем: нужна доступная текстовая версия',unsafe_xml:'Файл содержит неподдерживаемые XML-объявления: сохраните его заново',result_limit:'Документ слишком большой для чтения: разделите его на части',time_limit:'Чтение превысило допустимое время: разделите документ на части',pdf_annotations:'Поля или примечания PDF требуют текстовой версии',undecodable_text:'Часть символов не распознана: загрузите Word или исправленную текстовую версию',pdf_image_page:'На странице PDF есть изображение: нужна текстовая версия',pdf_nontext_page:'Содержимое страницы PDF не прочитано: нужна текстовая версия',no_readable_text:'Читаемый текст не найден',word_field_cache:'Поля Word содержат сохранённый результат: требуется проверка',document_comments:'Замечания Word сохранены вместе с текстом',equation_layout:'Формулы Word требуют отдельной проверки',formula_cache_unverified:'Сохранённые результаты формул требуют проверки',formula_result_missing:'В формуле отсутствует сохранённый результат',cell_error:'В ячейке ошибка Excel',external_formula:'Формула с внешними данными не выполнялась',external_link:'Внешняя ссылка не открывалась',shared_formula_reference:'Общая формула: требуется проверка диапазона',non_text_content:'Изображения не прочитаны: нужна текстовая версия',tracked_changes:'Есть исправления Word: нужна согласованная версия',text_box_layout:'Текстовые поля Word требуют текстовой версии',non_cell_content:'Рисунки или примечания Excel не прочитаны',external_or_embedded_parts:'Вложенные или внешние данные не прочитаны',reading_unavailable:'Не удалось завершить чтение. Повторите чтение сохранённого файла'};
  function readingLabel(f){var state=f.read_status||'idle';return {idle:'Ожидает чтения',reading:'Чтение выполняется — откройте материалы позже',ready:'Текст и структура прочитаны',blocked:'Чтение неполное — нужна другая версия документа',failed:'Чтение прервано — можно повторить'}[state]||'Чтение не подтверждено';}
- var owner=options.owner(),identity=options.identity(),draft=null,files=[],busy=false,analysisTimer=null;
+ var owner=options.owner(),identity=options.identity(),draft=null,files=[],busy=false,analysisTimer=null,confirmCleanup=null;
   var wrap=options.openModal('<button type="button" class="close" data-x>✕</button><h2>Материалы к заявке</h2>'+
    '<p class="small">Выберите все имеющиеся документы вместе. Не нужно распределять их по пунктам. Сохранённый комплект останется в вашем кабинете после выхода.</p>'+
    '<div class="field"><label for="intakeFiles">Документы Word, PDF или Excel</label><input id="intakeFiles" type="file" multiple accept=".docx,.pdf,.xlsx" disabled></div>'+
@@ -72,10 +72,11 @@
   function paintAnalysis(a){
    var box=wrap.querySelector('[data-intake-analysis]'),labels={idle:'Документы ещё не разобраны',disabled:'Материалы сохранены. Автоматический разбор пока не включён исполнителем',queued:'Документы ожидают разбора. Можно закрыть страницу',claimed:'Разбираем документы. Можно закрыть страницу',sent:'Разбираем документы. Можно закрыть страницу',budget:'Разбор остановлен: достигнут разрешённый предел расходов. Материалы сохранены',unknown:'Результат разбора не подтверждён. Автоматического платного повтора не будет; нужна проверка исполнителя',invalid:'Ответ помощника не прошёл проверку источников или полноты блоков. Нужна проверка исполнителя',stale:'Документы изменились. Прежние сведения больше не актуальны'};
    if(a.state!=='done'||!a.result){box.innerHTML='<p class="hint">'+options.esc(labels[a.state]||'Разбор не подтверждён')+'</p>';return;}
-   var r=a.result;
-   function evidence(value){return '<div class="small">'+options.esc(value.value)+(value.condition?'<br>Условие: '+options.esc(value.condition):'')+'</div><details><summary>Источники</summary>'+value.refs.map(function(ref){return '<p class="small"><b>'+options.esc(sourceLabel(ref))+'</b><br>'+options.esc(ref.quote)+'</p>';}).join('')+'</details>';}
-   box.innerHTML='<h3>Найдено в документах</h3><p class="hint">Сведения требуют подтверждения. Это ещё не утверждённый паспорт требований.</p>'+Object.keys(r.fields).map(function(key){var f=r.fields[key];return '<div class="field"><b>'+options.esc(f.label)+'</b>'+(['conflict','needs_review'].includes(f.status)?'<p class="hint">Требуется уточнение: разные значения или условия применимости</p>':'')+(f.values.length?f.values.map(evidence).join(''):'<p class="small">В документах не найдено</p>')+'</div>';}).join('')+(r.requirements.length?'<details><summary>Другие требования: '+r.requirements.length+'</summary>'+r.requirements.map(evidence).join('')+'</details>':'')+'<p class="hint">Сверка цитат подтверждает источник, но не полноту понимания методички. Формулы Excel ещё не проверены.</p>';
+   box.innerHTML='';
+   if(confirmCleanup)confirmCleanup();
+   global.StudIntakeConfirmation.render({box:box,result:a.result,analysisId:a.id,draftId:draft.id,owner:owner,api:options.api,esc:options.esc,same:same}).then(function(cleanup){if(!wrap.isConnected||!same())cleanup();else confirmCleanup=cleanup;});
   }
+
   async function analysis(start){
    clearTimeout(analysisTimer);current();
    if(!draft||!visible(files).length||visible(files).some(function(f){return f.state!=='saved'||f.read_status!=='ready';})||(await pending()).length){paintAnalysis({state:visible(files).length?'stale':'idle'});return;}
@@ -101,7 +102,7 @@
    await refresh();await readSaved();await analysis(true);status.textContent=errors.length?'Часть файлов не передана. Сохранённые файлы доступны; нажмите «Повторить сохранение». '+errors.join(' '):'Материалы сохранены в кабинете. '+(visible(files).some(function(f){return f.read_status!=='ready';})?'Для части документов чтение не подтверждено — смотрите пояснения у файлов. ':'Документы прочитаны; сведения заявки ещё не подтверждены. ')+'Заявка ещё не отправлена.';
   }
   async function run(selected,replaces){
-   if(busy)return;busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
+   if(busy)return;if(confirmCleanup){confirmCleanup();confirmCleanup=null;}wrap.querySelector('[data-intake-analysis]').innerHTML='';busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
    try{
     current();
     if(!draft)await refresh();
@@ -132,7 +133,7 @@
     var link=document.createElement('a');link.href=url.href;link.download=result.fileName;link.rel='noopener';link.click();
    }catch(e){if(same()&&wrap.isConnected)status.textContent=e.message;}finally{button.disabled=false;}
   });
-  wrap.addEventListener('click',function(e){if(e.target.closest('[data-x]'))clearTimeout(analysisTimer);});
+  wrap.addEventListener('click',function(e){if(e.target.closest('[data-x]')){clearTimeout(analysisTimer);if(confirmCleanup)confirmCleanup();}});
   await run([]);
   return wrap;
  }

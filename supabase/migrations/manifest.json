@@ -462,6 +462,14 @@
       "sha256": "18774a598ecbef55cd46caade87675d57423313422aab62573c1261f79e2de44",
       "status": "pending",
       "note": "INTAKE-01 step 3; not installed in production"
+    },
+    {
+      "version": "20261001051454",
+      "name": "intake_confirmation",
+      "file": "20261001051454_intake_confirmation.sql",
+      "sha256": "fe428bb4e6aeb17701f916c70e25691c794dd65dd9cd184acc58d12db8ba242c",
+      "status": "pending",
+      "note": "INTAKE-01 step 5; not installed in production"
     }
   ],
   "production_reconciled_at": "2026-09-23"

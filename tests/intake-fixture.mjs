@@ -22,10 +22,10 @@ export const schema=()=>`do $$ begin
  grant select on studkab_gen_budget,studkab_gen_attempts,studkab_gen_reconciliations to service_role;
  grant update(reserved_microusd) on studkab_gen_budget to service_role;
  alter default privileges in schema public grant all on tables to service_role;
-`+fs.readFileSync(new URL('../supabase/migrations/20261001031058_intake_semantic_analysis.sql',import.meta.url),'utf8');
+`+fs.readFileSync(new URL('../supabase/migrations/20261001031058_intake_semantic_analysis.sql',import.meta.url),'utf8')+fs.readFileSync(new URL('../supabase/migrations/20261001051454_intake_confirmation.sql',import.meta.url),'utf8');
 export function apiDatabase(db){return async(path,method='GET',body)=>{
  if(path.startsWith('rpc/')){
-  const name=path.slice(4);if(!/^studkab_intake_(open|reserve|finish|notes|read_begin|read_finish|analysis_snapshot|analysis_start|analysis_state|analysis_claim|analysis_dispatch|analysis_finish|analysis_fail_claim)$/.test(name))throw Error('unexpected RPC');
+  const name=path.slice(4);if(!/^studkab_intake_(open|reserve|finish|notes|read_begin|read_finish|analysis_snapshot|analysis_start|analysis_state|analysis_claim|analysis_dispatch|analysis_finish|analysis_fail_claim|confirmation_state|confirmation_save)$/.test(name))throw Error('unexpected RPC');
   const vals=Object.values(body),placeholders=vals.map((_,i)=>'$'+(i+1)).join(',');
   return (await db.query('select '+name+'('+placeholders+') result',vals)).rows[0].result;
  }

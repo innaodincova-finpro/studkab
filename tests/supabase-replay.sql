@@ -8,6 +8,7 @@ begin
     into missing
   from unnest(array[
     'studkab_intake_drafts',
+    'studkab_intake_confirmations',
     'studkab_intake_files',
     'studkab_intake_analysis_policy',
     'studkab_intake_analysis_jobs',
@@ -59,11 +60,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 42 then
-    raise exception 'Expected 42 STUDKAB tables, found %', table_count;
+  if table_count <> 43 then
+    raise exception 'Expected 43 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 42 then
-    raise exception 'RLS enabled on only % of 42 STUDKAB tables', rls_count;
+  if rls_count <> 43 then
+    raise exception 'RLS enabled on only % of 43 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -324,3 +325,14 @@ begin
  if has_table_privilege('service_role','public.studkab_intake_analysis_policy','update') then raise exception 'Runner can raise intake budget'; end if;
  if exists(select 1 from public.studkab_intake_analysis_policy where enabled or limit_microusd<>0) then raise exception 'Intake policy must start disabled'; end if;
 end $intake_analysis$;
+
+-- INTAKE-01 step 5: default grants cannot make answer history mutable/public.
+do $$ declare signature text; role_name text; begin
+ foreach role_name in array array['anon','authenticated'] loop
+  if has_table_privilege(role_name,'public.studkab_intake_confirmations','select,insert,update,delete') then raise exception 'Public confirmation history'; end if;
+ end loop;
+ if has_table_privilege('service_role','public.studkab_intake_confirmations','update,delete') then raise exception 'Mutable confirmation history'; end if;
+ foreach signature in array array['public.studkab_intake_confirmation_rules(jsonb)','public.studkab_intake_confirmation_state(uuid,uuid)','public.studkab_intake_confirmation_save(uuid,uuid,uuid,integer,jsonb,boolean)'] loop
+  if has_function_privilege('anon',signature,'execute') or has_function_privilege('authenticated',signature,'execute') or not has_function_privilege('service_role',signature,'execute') then raise exception 'Confirmation RPC grants: %',signature; end if;
+ end loop;
+end $$;

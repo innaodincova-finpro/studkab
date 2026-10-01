@@ -38,6 +38,13 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный черновик'}};
  const [draft]=await db('studkab_intake_drafts?id=eq.'+input.id+'&student_id=eq.'+user.id+'&state=eq.open&select=id,revision');
  if(!draft)return missing;
+ if(input.action==='intake-confirmation-state'||input.action==='intake-confirmation-save'){
+  if(input.action.endsWith('-save')&&(!uuid.test(input.analysisId||'')||!Number.isSafeInteger(input.revision)||input.revision<0||typeof input.confirm!=='boolean'||!input.answers||typeof input.answers!=='object'||Array.isArray(input.answers)||new TextEncoder().encode(JSON.stringify(input.answers)).length>262144))return {status:400,data:{error:'Проверьте ответы'}};
+  const r=await db('rpc/studkab_intake_confirmation_'+(input.action.endsWith('-save')?'save':'state'),'POST',input.action.endsWith('-save')?{p_student:user.id,p_draft:input.id,p_analysis:input.analysisId,p_revision:input.revision,p_answers:input.answers,p_confirm:input.confirm}:{p_student:user.id,p_draft:input.id});
+  if(r.stale)return {status:409,data:{error:'Материалы изменились. Откройте актуальную карточку'}};
+  if(r.incomplete)return {status:409,data:{error:'Ответьте на важные вопросы или выберите «Не знаю»'}};
+  return resultError(r)||{data:{confirmation:r}};
+ }
  if(input.action==='intake-analysis-state'){
   const r=await db('rpc/studkab_intake_analysis_state','POST',{p_student:user.id,p_draft:input.id});
   return r.missing?missing:{data:{analysis:r}};
