@@ -123,6 +123,29 @@ try:
  assert state3['state']=='stale' and state3['answers']=={}
  assert changed[0].get('stale',False) or changed[0].get('state')=='confirmed'
  print('PASS: confirmation duplicate concurrent save, edit conflict, immutable history and source-change invalidation')
+ # Step 6: real commit/commit and reserve/commit interleavings. This fixture
+ # has real original migrations/triggers but never calls Storage or a provider.
+ sql(subprocess.check_output(['node','tests/intake-fixture.mjs','--print-submission-sql'],cwd=root,text=True))
+ fourth='44444444-4444-4444-8444-444444444444'
+ sql(f"insert into auth.users values('{fourth}');insert into studkab_members values('{fourth}');")
+ d4=call(f"studkab_intake_open('{fourth}')")['id']
+ f4=call(f"studkab_intake_reserve('{fourth}','{d4}','task.pdf','application/pdf',10,'"+'e'*64+"',null)")['file']
+ call(f"studkab_intake_finish('{fourth}','{d4}','{f4['id']}','{f4['file_hash']}')")
+ sql(f"update studkab_intake_files set read_status='ready',read_version='intake-reader-1',read_result='{{}}',extracted_text='Synthetic task' where id='{f4['id']}';")
+ m4=call(f"studkab_intake_analysis_snapshot('{fourth}','{d4}')")['manifest']
+ result4={'fields':{k:{'status':'candidate','values':[{'value':v,'condition':'','refs':[]}]} for k,v in {'t':'Synthetic','k':'Курсовая работа','u':'Вуз','n':'Студент','d':'Менеджмент','dl':'2026-10-30'}.items()},'requirements':[],'roles':[{'role':'assignment','refs':[{'fileId':f4['id']}]}]}
+ encoded4=json.dumps(result4).replace("'","''")
+ job4=sql(f"insert into studkab_intake_analysis_jobs(draft_id,manifest,version,plan,state,result) values('{d4}','{m4}','intake-analysis-1','[{{}}]','done','{encoded4}') returning id;")
+ call(f"studkab_intake_confirmation_save('{fourth}','{d4}','{job4}',0,'{{}}',true)")
+ payload4=call(f"studkab_intake_submission_snapshot('{fourth}','{d4}','student@example.invalid')")['payload']
+ body4=json.dumps(payload4).replace("'","''")
+ def submit4():return call(f"studkab_intake_submit('{fourth}','{d4}','{job4}',1,'student@example.invalid','{body4}')")
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:sent4=list(pool.map(lambda _:submit4(),range(2)))
+ assert sent4[0]['id']==sent4[1]['id'] and sum(x.get('duplicate',False) for x in sent4)==1
+ assert int(sql('select count(*) from studkab_requests'))==1 and int(sql('select count(*) from studkab_request_attachments'))==1
+ assert call(f"studkab_intake_reserve('{fourth}','{d4}','late.pdf','application/pdf',10,'"+'f'*64+"',null)").get('missing',False)
+ assert sql(f"select ready_at is not null from studkab_requests where id='{sent4[0]['id']}'")=='t'
+ print('PASS: concurrent intake submission creates one published ordinary request, one complete file set and immutable receipt')
  print('PASS: semantic duplicate start, exclusive claim/dispatch, stale-source refusal, retained reserve and unknown without retry')
  print('PASS: parallel draft creation, hash deduplication, eight-file limit, ownership, finish, one successor and persisted exclusive reading')
 finally:

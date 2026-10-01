@@ -12,6 +12,16 @@ async function setup(page){
    let state=JSON.parse(localStorage.getItem(key)||'null');
    if(!state)state={draft:{id:crypto.randomUUID(),state:'open',revision:1,notes:''},files:[],writes:0};
    if(body.action==='intake-open'){localStorage.setItem(key,JSON.stringify(state));return state;}
+   if(['intake-submission-state','intake-submit'].includes(body.action)){
+    if(state.submission)return {submission:state.submission};
+    const c=state.confirmation;if(!c||c.state!=='confirmed')throw Error('Подтвердите актуальную карточку');
+    const missing=Object.keys(c.answers).filter(k=>['f:t','f:k','f:u','f:n','f:d','f:dl'].includes(k)&&c.answers[k].type==='unknown');
+    const preview={state:'confirmed',analysisId:c.analysisId,revision:c.revision,files:state.files.length,contact:'student@example.invalid',canSubmit:!missing.length&&!window.blockSubmit,error:missing.length?'Заполните перед отправкой: срок':window.blockSubmit?'Материалы изменились':undefined};
+    if(body.action==='intake-submission-state')return {submission:preview};
+    if(window.failSubmission)throw Error('Нет сети');if(!preview.canSubmit||body.revision!==c.revision)throw Error('Материалы изменились');
+    state.submission={submitted:true,ready:true,id:crypto.randomUUID(),number:1,payload:{id:'intake_'+state.draft.id,t:analysisResult.fields.t.values[0].value,k:'Курсовая работа',u:'Учебный вуз',n:'Учебный студент',d:'Менеджмент',dl:'2026-10-30',cn:preview.contact,rq:'',org:'',mn:'',g:'',fc:'',kf:'',ct:'',s:'',pr:'',fo:'',co:''}};state.submissionWrites=(state.submissionWrites||0)+1;localStorage.setItem(key,JSON.stringify(state));
+    if(window.loseSubmissionResponse)throw Error('Ответ потерян');return {submission:state.submission};
+   }
    if(body.action==='intake-analyze')return {analysis:{state:window.analysisResult?'done':'disabled'}};
    if(body.action==='intake-analysis-state')return {analysis:window.analysisResult?{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',state:'done',result:window.analysisResult}:{state:'idle'}};
    if(body.action==='intake-confirmation-state'||body.action==='intake-confirmation-save'){
@@ -170,4 +180,22 @@ test('clearing a custom correction restores the document value in the summary an
  await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
  const summary=page.locator('[data-effective="f:n"]'),field=summary.locator('..');await field.getByText('Источники и исправление',{exact:true}).click();await field.locator('[data-answer="f:n"]').selectOption('custom');await field.locator('[data-custom="f:n"]').fill('Уточнённое имя');await expect(summary).toHaveText('Уточнённое имя');
  await field.locator('[data-answer="f:n"]').selectOption('');await expect(summary).toHaveText('Сведение n');await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-answer-status]')).toContainText('Сведения подтверждены');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).confirmation.answers['f:n'])).toBeUndefined();
+});
+
+test('one send transfers the whole package and creates one linked work; lost reply and reopen recover the receipt',async({page})=>{
+ await setup(page);await knownAnalysis(page);await page.evaluate(()=>{tab='works';render();});await page.getByRole('button',{name:'Загрузить материалы',exact:true}).click();await expect(page.locator('#intakeFiles')).toBeEnabled();
+ await page.locator('#intakeFiles').setInputFiles([word,pdf('Методичка'),excel]);await saved(page,3);await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();
+ await page.evaluate(()=>{window.loseSubmissionResponse=true;});await page.locator('[data-intake-send]').click();await expect(page.locator('[data-intake-confirmation]')).toContainText('Заявка №1 отправлена');
+ expect(await page.evaluate(()=>D.works.length)).toBe(1);expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).submissionWrites)).toBe(1);await expect(page.locator('#intakeFiles')).toBeDisabled();
+ await page.locator('[data-intake-dialog] .close').click();await setup(page);await knownAnalysis(page);await page.evaluate(()=>{tab='works';render();});await page.getByRole('button',{name:'Загрузить материалы',exact:true}).click();await expect(page.locator('[data-intake-status]')).toContainText('уже отправлена');expect(await page.evaluate(()=>D.works.length)).toBe(1);expect(await page.evaluate(()=>calls.some(c=>c.action==='intake-submit'))).toBe(false);
+});
+test('offline sending retains confirmed package; retry sends once and unknown deadline is not submitted',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();
+ await page.evaluate(()=>{window.failSubmission=true;});await page.locator('[data-intake-send]').click();await expect(page.locator('[data-send-status]')).toContainText('повтор не создаст');await expect(page.locator('#intakeFiles')).toBeEnabled();await page.evaluate(()=>{window.failSubmission=false;});await page.locator('[data-intake-send]').click();await expect(page.locator('[data-intake-confirmation]')).toContainText('Заявка №1 отправлена');
+ await page.locator('[data-intake-dialog] .close').click();await page.evaluate(()=>{localStorage.removeItem('studkab-intake-submit:'+KEY);localStorage.removeItem('mock-intake:'+KEY);});await knownAnalysis(page,true);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.locator('[data-answer="f:n"]').selectOption('candidate:0');await page.locator('[data-answer="f:dl"]').selectOption('unknown');await page.locator('[data-answer="c:requirement:0"]').selectOption('unknown');await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeDisabled();await expect(page.locator('[data-submission]')).toContainText('срок');expect(await page.evaluate(()=>document.querySelector('.sheet-in').scrollWidth<=document.querySelector('.sheet-in').clientWidth+1)).toBe(true);
+});
+test('new local edits disable sending until reconfirmed; another account never sees a saved submission receipt',async({page})=>{
+ await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();
+ const field=page.locator('[data-effective="f:n"]').locator('..');await field.getByText('Источники и исправление',{exact:true}).click();await field.locator('[data-answer="f:n"]').selectOption('custom');await field.locator('[data-custom="f:n"]').fill('Новый ответ');await expect(page.locator('[data-intake-send]')).toBeDisabled();await expect(page.locator('[data-answer-status]')).toContainText('Ответы сохранены в кабинете');await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();await page.locator('[data-intake-send]').click();await expect(page.locator('[data-intake-confirmation]')).toContainText('отправлена');
+ await page.evaluate(()=>cloudSwitchUser('other-submit-owner'));await expect(page.locator('[data-intake-dialog]')).toHaveCount(0);await open(page);await expect(page.locator('[data-intake-status]')).not.toContainText('№1');expect(await page.evaluate(()=>calls.filter(c=>c.owner===KEY&&c.action==='intake-submission-state').length)).toBe(0);
 });

@@ -1,6 +1,7 @@
 // INTAKE-01: storage only; do not extract or discard unreadable originals here.
-export async function saveOriginal({base,key,path,type,bytes,hash,fetcher=fetch}){
- const url=base+'/storage/v1/object/studkab-intake-materials/'+path;
+export async function saveOriginal({base,key,path,type,bytes,hash,bucket='studkab-intake-materials',fetcher=fetch}){
+ if(!['studkab-intake-materials','studkab-request-materials'].includes(bucket))throw Error('Invalid storage');
+ const url=base+'/storage/v1/object/'+bucket+'/'+path;
  const headers={apikey:key,Authorization:'Bearer '+key};
  let uploaded;
  try{uploaded=await fetcher(url,{method:'POST',headers:{...headers,'Content-Type':type,'x-upsert':'false'},body:bytes,signal:AbortSignal.timeout(30000)});}catch{}

@@ -470,6 +470,14 @@
       "sha256": "fe428bb4e6aeb17701f916c70e25691c794dd65dd9cd184acc58d12db8ba242c",
       "status": "pending",
       "note": "INTAKE-01 step 5; not installed in production"
+    },
+    {
+      "version": "20261001062029",
+      "name": "intake_submission",
+      "file": "20261001062029_intake_submission.sql",
+      "sha256": "5c59144952c4a91e0d72e046f01d1897b3a0cfafb3a7851389ba199937847345",
+      "status": "pending",
+      "note": "INTAKE-01 step 6; not installed in production"
     }
   ],
   "production_reconciled_at": "2026-09-23"

@@ -74,7 +74,11 @@
    if(a.state!=='done'||!a.result){box.innerHTML='<p class="hint">'+options.esc(labels[a.state]||'Разбор не подтверждён')+'</p>';return;}
    box.innerHTML='';
    if(confirmCleanup)confirmCleanup();
-   global.StudIntakeConfirmation.render({box:box,result:a.result,analysisId:a.id,draftId:draft.id,owner:owner,api:options.api,esc:options.esc,same:same}).then(function(cleanup){if(!wrap.isConnected||!same())cleanup();else confirmCleanup=cleanup;});
+   global.StudIntakeConfirmation.render({box:box,result:a.result,analysisId:a.id,draftId:draft.id,owner:owner,api:options.api,esc:options.esc,same:same,
+    beforeSubmit:async function(){current();if(busy||(await pending()).length)throw Error('Сначала завершите сохранение выбранных файлов');busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=true;});},
+    afterSubmit:function(){if(draft.state!=='submitted'&&same()&&wrap.isConnected){busy=false;paint();}},
+    submitted:function(s){current();input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=true;});status.textContent='Заявка №'+s.number+' отправлена. Комплект сохранён.';draft.state='submitted';if(options.submitted)options.submitted(s);}
+   }).then(function(cleanup){if(!wrap.isConnected||!same())cleanup();else confirmCleanup=cleanup;});
   }
 
   async function analysis(start){
@@ -102,7 +106,7 @@
    await refresh();await readSaved();await analysis(true);status.textContent=errors.length?'Часть файлов не передана. Сохранённые файлы доступны; нажмите «Повторить сохранение». '+errors.join(' '):'Материалы сохранены в кабинете. '+(visible(files).some(function(f){return f.read_status!=='ready';})?'Для части документов чтение не подтверждено — смотрите пояснения у файлов. ':'Документы прочитаны; сведения заявки ещё не подтверждены. ')+'Заявка ещё не отправлена.';
   }
   async function run(selected,replaces){
-   if(busy)return;if(confirmCleanup){confirmCleanup();confirmCleanup=null;}wrap.querySelector('[data-intake-analysis]').innerHTML='';busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
+   if(busy||draft&&draft.state==='submitted')return;if(confirmCleanup){confirmCleanup();confirmCleanup=null;}wrap.querySelector('[data-intake-analysis]').innerHTML='';busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
    try{
     current();
     if(!draft)await refresh();
@@ -134,6 +138,15 @@
    }catch(e){if(same()&&wrap.isConnected)status.textContent=e.message;}finally{button.disabled=false;}
   });
   wrap.addEventListener('click',function(e){if(e.target.closest('[data-x]')){clearTimeout(analysisTimer);if(confirmCleanup)confirmCleanup();}});
+  var intent;try{intent=JSON.parse(localStorage.getItem('studkab-intake-submit:'+owner)||'null');}catch(_){}
+  if(intent&&intent.draftId)try{
+   var previous=(await options.api({action:'intake-submission-state',id:intent.draftId})).submission;current();
+   if(previous&&previous.submitted){
+    if(options.submitted)options.submitted(previous);status.textContent='Заявка №'+previous.number+' уже отправлена. Весь комплект сохранён.';
+    input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
+    var next=document.createElement('button');next.type='button';next.className='b b-main';next.textContent='Новая заявка';next.onclick=function(){localStorage.removeItem('studkab-intake-submit:'+owner);next.remove();run([]);};list.appendChild(next);return wrap;
+   }
+  }catch(e){if(!same())return wrap;status.textContent='Проверка прежней отправки не завершена: '+e.message+'. Повтор не создаёт новую заявку.';}
   await run([]);
   return wrap;
  }

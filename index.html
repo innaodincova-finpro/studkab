@@ -18,8 +18,8 @@
 <script src="oblako.js?v=18"></script>
 <script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script>
 <script src="push.js?v=3"></script>
-<script src="intake-confirmation-ui.js?v=1"></script>
-<script src="intake-ui.js?v=4"></script>
+<script src="intake-confirmation-ui.js?v=2"></script>
+<script src="intake-ui.js?v=5"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -2657,7 +2657,13 @@ document.addEventListener("click", function(ev){
   if (act === "new-work") return openNewWork();
   if (act === 'intake-materials') {
     if (!window.Oblako || Oblako.mode !== 'cloud') return toast('Для сохранения материалов войдите в аккаунт кабинета');
-    return StudIntake.open({api:Oblako.requestApi,openModal:openModal,esc:esc,owner:function(){return KEY;},identity:Oblako.identity});
+    return StudIntake.open({api:Oblako.requestApi,openModal:openModal,esc:esc,owner:function(){return KEY;},identity:Oblako.identity,submitted:function(s){
+      if(D.works.some(function(w){return w.req&&w.req.serverId===s.id;}))return;
+      var p=s.payload;if(!p)throw Error('Не получены сведения отправленной заявки');
+      change(function(){D.works.push({id:p.id,topic:p.t,student:p.n,group:p.g,created:today(),deadline:p.dl,requirements:p.rq,status:'draft',
+        format:{org:'',univ:p.u,faculty:p.fc,kafedra:p.kf,city:p.ct,year:'',workType:p.k,discipline:p.d,supervisor:p.s,program:p.pr,form:p.fo,course:p.co,font:'',size:null,mTop:null,mRight:null,mBottom:null,mLeft:null,spacing:null,indent:null},
+        structure:emptyStructure(),tasks:[],req:{id:p.id,serverId:s.id,number:s.number,contact:p.cn,org:p.org,notes:p.mn,sent:today(),sentBy:'direct',filesPending:false,preserveSubmittedFields:true,intake:true}});});
+    }});
   }
   if (act === "edit-work") return openWorkEditor(id);
   if (act === "edit-format") return openFormatEditor(id);

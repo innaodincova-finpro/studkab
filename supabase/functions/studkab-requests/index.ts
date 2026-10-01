@@ -52,10 +52,14 @@ const download=(path:string,name:string)=>downloadFrom(bucket,path,name);
 const downloadIntake=(path:string,name:string)=>downloadFrom('studkab-intake-materials',path,name);
 const saveIntake=(path:string,type:string,bytes:Uint8Array,hash:string)=>saveOriginal({base,key,path,type,bytes,hash});
 const loadIntake=(path:string,size:number,hash:string)=>loadOriginal({base,key,path,size,hash});
+const transferIntake=async(f:any)=>{
+ const bytes=await loadIntake(f.storage_path,f.size_bytes,f.file_hash);
+ await saveOriginal({base,key,bucket,path:f.storage_path,type:f.content_type,bytes,hash:f.file_hash});
+};
 async function remove(path:string){
  const r=await fetch(base+'/storage/v1/object/'+bucket+'/'+path,{method:'DELETE',headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000)});
  if(!r.ok&&r.status!==404)throw Error('Storage cleanup unavailable');
 }
 Deno.serve(handler({auth,db,send,
  emailSettings:()=>({}), // C175: email is superseded by app push; never claim its queue.
- invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
+ invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));

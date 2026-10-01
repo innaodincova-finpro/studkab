@@ -1,5 +1,6 @@
 import {intakeRead} from './intake-reading.mjs';
 import {analysisPlan} from '../_shared/intake-analysis.mjs';
+import {intakeSubmission} from './intake-submission.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
 const missing={status:404,data:{error:'Черновик не найден'}};
@@ -26,7 +27,7 @@ export async function intakeBytes(input){
  if(!signature)throw Error('Содержимое не соответствует формату файла');
  return {name,type,size,hash,bytes};
 }
-export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake}){
+export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,validatePayload}){
  if(typeof isMember!=='function'||await isMember(user.id)!==true)return {status:403,data:{error:'Загрузка доступна после входа по приглашению исполнителя'}};
  if(input.action==='intake-open'){
   const draft=await db('rpc/studkab_intake_open','POST',{p_student:user.id});
@@ -36,6 +37,7 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   return {data:{draft:{id:draft.id,state:draft.state,revision:draft.revision,notes:draft.notes},files:files.map(safeFile),limits:{files:8,bytes:5242880,historyBytes:104857600}}};
  }
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный черновик'}};
+ if(['intake-submission-state','intake-submit'].includes(input.action))return intakeSubmission(input,user,{db,transferIntake,validatePayload});
  const [draft]=await db('studkab_intake_drafts?id=eq.'+input.id+'&student_id=eq.'+user.id+'&state=eq.open&select=id,revision');
  if(!draft)return missing;
  if(input.action==='intake-confirmation-state'||input.action==='intake-confirmation-save'){

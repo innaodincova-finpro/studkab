@@ -25,7 +25,7 @@ export const schema=()=>`do $$ begin
 `+fs.readFileSync(new URL('../supabase/migrations/20261001031058_intake_semantic_analysis.sql',import.meta.url),'utf8')+fs.readFileSync(new URL('../supabase/migrations/20261001051454_intake_confirmation.sql',import.meta.url),'utf8');
 export function apiDatabase(db){return async(path,method='GET',body)=>{
  if(path.startsWith('rpc/')){
-  const name=path.slice(4);if(!/^studkab_intake_(open|reserve|finish|notes|read_begin|read_finish|analysis_snapshot|analysis_start|analysis_state|analysis_claim|analysis_dispatch|analysis_finish|analysis_fail_claim|confirmation_state|confirmation_save)$/.test(name))throw Error('unexpected RPC');
+  const name=path.slice(4);if(!/^studkab_intake_(open|reserve|finish|notes|read_begin|read_finish|analysis_snapshot|analysis_start|analysis_state|analysis_claim|analysis_dispatch|analysis_finish|analysis_fail_claim|confirmation_state|confirmation_save|submission_snapshot|submit|request_context)$/.test(name))throw Error('unexpected RPC');
   const vals=Object.values(body),placeholders=vals.map((_,i)=>'$'+(i+1)).join(',');
   return (await db.query('select '+name+'('+placeholders+') result',vals)).rows[0].result;
  }
@@ -42,3 +42,14 @@ export function apiDatabase(db){return async(path,method='GET',body)=>{
  throw Error('unexpected path '+path);
 };}
 if(process.argv.includes('--print-sql'))process.stdout.write(schema());
+export function submissionExtension(){return fs.readFileSync(new URL('../request-delivery.sql',import.meta.url),'utf8')+`
+ alter table studkab_requests add column revision integer not null default 1,add column ready_at timestamptz,add column deleting_at timestamptz;
+ create table studkab_material_revisions(id uuid,request_id uuid,closed_at timestamptz);
+ create table studkab_gen_jobs(request_id text);create table studkab_result_versions(request_id uuid);create table studkab_results(request_id uuid);
+ create table studkab_requirement_passports(request_id uuid,status text);
+ create table studkab_request_reassignments(request_id uuid,from_student_id uuid,to_student_id uuid);
+ grant select on studkab_material_revisions,studkab_gen_jobs,studkab_result_versions,studkab_results,studkab_requirement_passports,studkab_request_reassignments to service_role;
+ `+fs.readFileSync(new URL('../supabase/migrations/20260917144051_studkab_request_attachments.sql',import.meta.url),'utf8')+`
+ alter table studkab_request_attachments add column supersedes uuid references studkab_request_attachments(id),add column material_revision_id uuid;
+ `+fs.readFileSync(new URL('../supabase/migrations/20260926125807_c121_conditional_request_materials.sql',import.meta.url),'utf8')+fs.readFileSync(new URL('../supabase/migrations/20261001062029_intake_submission.sql',import.meta.url),'utf8');}
+if(process.argv.includes('--print-submission-sql'))process.stdout.write(submissionExtension());

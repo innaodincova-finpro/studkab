@@ -11,7 +11,7 @@
  var core=['t','k','u','n','d','dl','org'];
  function equal(a,b){return JSON.stringify(Object.keys(a).sort().map(function(k){return [k,a[k]];}))===JSON.stringify(Object.keys(b).sort().map(function(k){return [k,b[k]];}));}
  async function render(o){
-  var active=true,timer=null,localChain=Promise.resolve(),saving=false,dirty=false,edit=0,c=null,answers={},conflict=null;
+  var active=true,timer=null,localChain=Promise.resolve(),saving=false,dirty=false,edit=0,c=null,answers={},conflict=null,submitting=false;
   var section=document.createElement('section');section.setAttribute('data-intake-confirmation','');section.style.overflowWrap='anywhere';o.box.appendChild(section);
   function valid(){return active&&o.same()&&section.isConnected;}
   function cleanup(){active=false;clearTimeout(timer);}
@@ -36,7 +36,7 @@
   }
   function key(){return o.owner+':'+o.draftId+':'+c.analysisId;}
   function remember(){var record={key:key(),owner:o.owner,analysisId:c.analysisId,revision:c.revision,answers:JSON.parse(JSON.stringify(answers))};localChain=localChain.catch(function(){}).then(function(){return cache('put',record);});return localChain;}
-  function edited(){section.querySelectorAll('[data-effective]').forEach(function(p){var k=p.getAttribute('data-effective'),a=answers[k],f=o.result.fields[k.slice(2)];if(f)p.textContent=a?(a.type==='custom'?a.value:a.type==='unknown'?'Не знаю — уточнить у исполнителя':f.values[a.index].value):f.values.length===1?f.values[0].value:f.values.length?'Разные значения — требуется уточнение':'В документах не найдено';});dirty=true;edit++;clearTimeout(timer);message('Сохраняем ответы…');remember().then(function(){if(valid())message('Ответы сохранены на устройстве; передаём в кабинет…');}).catch(function(e){message(e.message+'. Оставьте окно открытым и повторите сохранение.');});timer=setTimeout(function(){save(false);},600);}
+  function edited(){if(section.querySelector('[data-intake-send]'))section.querySelector('[data-intake-send]').disabled=true;section.querySelectorAll('[data-effective]').forEach(function(p){var k=p.getAttribute('data-effective'),a=answers[k],f=o.result.fields[k.slice(2)];if(f)p.textContent=a?(a.type==='custom'?a.value:a.type==='unknown'?'Не знаю — уточнить у исполнителя':f.values[a.index].value):f.values.length===1?f.values[0].value:f.values.length?'Разные значения — требуется уточнение':'В документах не найдено';});dirty=true;edit++;clearTimeout(timer);message('Сохраняем ответы…');remember().then(function(){if(valid())message('Ответы сохранены на устройстве; передаём в кабинет…');}).catch(function(e){message(e.message+'. Оставьте окно открытым и повторите сохранение.');});timer=setTimeout(function(){save(false);},600);}
   function changed(e){var el=e.target;if(!el.matches('[data-answer]'))return;var k=el.getAttribute('data-answer'),v=el.value;
    if(v.startsWith('candidate:'))answers[k]={type:'candidate',index:Number(v.split(':')[1])};else if(v==='custom')answers[k]={type:'custom',value:section.querySelector('[data-custom="'+k+'"]').value};else if(v)answers[k]={type:v};else delete answers[k];
    var custom=section.querySelector('[data-custom="'+k+'"]');if(custom){custom.hidden=v!=='custom';custom.style.display=custom.hidden?'none':'';}edited();
@@ -59,8 +59,23 @@
      if(state.analysisId!==c.analysisId){section.querySelector('[data-confirm-card]').disabled=true;conflict=state;message('Документы изменились. Откройте материалы заново. Ответы прежней карточки сохранены на устройстве.');}
      else if(state.revision!==c.revision){if(equal(state.answers,sent)){c=state;if(version===edit){dirty=false;await cache('delete',key());message(state.state==='confirmed'?'Подтверждение сохранено в кабинете':'Ответы сохранены в кабинете');}}else{conflict=state;showConflict();}}
     }catch(_){}
-   }finally{saving=false;if(valid()&&!conflict){section.querySelector('[data-confirm-card]').disabled=false;if(dirty&&version!==edit)timer=setTimeout(function(){save(false);},600);}}
+   }finally{saving=false;if(valid()&&!conflict){section.querySelector('[data-confirm-card]').disabled=false;if(dirty&&version!==edit)timer=setTimeout(function(){save(false);},600);else if(!dirty&&c.state==='confirmed')submission();}}
   }
+  async function submission(){
+   if(!valid()||dirty||conflict||c.state!=='confirmed')return;
+   var box=section.querySelector('[data-submission]');if(!box){box=document.createElement('div');box.setAttribute('data-submission','');section.appendChild(box);}
+   var version=edit;
+   try{var s=(await o.api({action:'intake-submission-state',id:o.draftId})).submission;if(!valid()||version!==edit||dirty)return;
+    if(s.submitted){receipt(s);return;}
+    box.innerHTML='<p class="hint">Контакт для ответа: '+o.esc(s.contact||'не указан')+'. Весь комплект: '+s.files+' файлов.</p>'+(s.error?'<p role="status">'+o.esc(s.error)+'. Исправьте только эти сведения выше и подтвердите карточку заново.</p>':'')+'<button type="button" class="b b-main" data-intake-send'+(!s.canSubmit?' disabled':'')+'>Отправить заявку исполнителю</button><p data-send-status role="status" aria-live="polite"></p>';
+    box.querySelector('[data-intake-send]').onclick=async function(){if(submitting||saving||dirty||!valid())return;submitting=true;var button=this;button.disabled=true;var status=box.querySelector('[data-send-status]');status.textContent='Передаём весь комплект…';
+     try{if(o.beforeSubmit)await o.beforeSubmit();if(!valid())return;section.querySelectorAll('input,select,button').forEach(function(el){el.disabled=true;});localStorage.setItem('studkab-intake-submit:'+o.owner,JSON.stringify({draftId:o.draftId}));var result=(await o.api({action:'intake-submit',id:o.draftId,analysisId:s.analysisId,revision:s.revision})).submission;if(valid())receipt(result);}
+     catch(e){if(!valid())return;status.textContent='Отправка не подтверждена: '+e.message+'. Материалы сохранены. Проверяем результат…';try{var saved=(await o.api({action:'intake-submission-state',id:o.draftId})).submission;if(valid()&&saved.submitted){receipt(saved);return;}}catch(_){}if(valid())status.textContent='Отправка не подтверждена: '+e.message+'. Комплект сохранён; повтор не создаст вторую заявку.';}
+     finally{submitting=false;if(o.afterSubmit)o.afterSubmit();if(valid()&&!dirty)section.querySelectorAll('input,select,button').forEach(function(el){el.disabled=false;});}
+    };
+   }catch(e){if(valid())box.textContent='Состояние отправки не получено: '+e.message+'. Подтвердите сведения повторно для проверки.';}
+  }
+  function receipt(s){if(!s||!s.submitted||!s.id||!s.number)throw Error('Заявка не подтверждена');if(o.submitted)o.submitted(s);if(valid()){section.innerHTML='<h3>Заявка №'+s.number+' отправлена</h3><p role="status">Весь комплект сохранён в заявке. Повторная отправка не нужна. Получение уведомления исполнителем ещё не подтверждено.</p>';cleanup();}}
   function showConflict(){message('Карточка изменена в другой вкладке. Ваш ввод сохранён на устройстве. Сверьте ответы перед продолжением.');var box=section.querySelector('[data-answer-conflict]');box.innerHTML='<details open><summary>Ответы из другой вкладки</summary>'+Object.keys(conflict.answers).map(function(k){var a=conflict.answers[k],rule=c.rules[k],f=rule&&o.result.fields[rule.field],value=a.type==='custom'?a.value:a.type==='candidate'&&f?f.values[a.index].value:a.type==='unknown'?'Не знаю':a.type==='applies'?'Применяется':'Не применяется';return '<p class="small">'+o.esc(f?f.label:k)+': '+o.esc(value)+'</p>';}).join('')+'</details><button type="button" class="b b-quiet" data-use-local>Сохранить мои ответы вместо этих</button>';
    box.querySelector('[data-use-local]').onclick=function(){c=conflict;conflict=null;box.innerHTML='';dirty=true;save(false);};
   }
@@ -69,7 +84,7 @@
    if(!c.analysisId||c.analysisId!==o.analysisId){section.textContent='Карточка ещё недоступна или документы изменились. Откройте материалы заново.';return cleanup;}
    answers=c.answers||{};var local=await cache('get',key());if(!valid())return cleanup;
    if(local&&local.owner===o.owner&&local.analysisId===c.analysisId&&!equal(local.answers,answers)){answers=local.answers;dirty=true;if(local.revision!==c.revision)conflict=c;}
-   draw();if(conflict)showConflict();else if(dirty)save(false);
+   draw();if(conflict)showConflict();else if(dirty)save(false);else if(c.state==='confirmed')submission();
   }catch(e){if(valid())section.textContent='Карточка не загружена: '+e.message+'. Документы сохранены; откройте материалы заново.';}
   return cleanup;
  }

@@ -225,6 +225,19 @@ begin
  end if;
 end $$;
 
+do $intake_submission$
+declare signature text;role_name text;
+begin
+ foreach signature in array array['public.studkab_intake_submission_snapshot(uuid,uuid,text)','public.studkab_intake_submit(uuid,uuid,uuid,integer,text,jsonb)','public.studkab_intake_request_context(uuid)'] loop
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'Public intake submission RPC %',signature; end if;
+  end loop;
+  if not has_function_privilege('service_role',signature,'execute') then raise exception 'Missing service submission RPC %',signature; end if;
+ end loop;
+ if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_request_attachments' and column_name='intake_file_id') then raise exception 'No intake attachment provenance'; end if;
+ if not exists(select 1 from storage.buckets where id='studkab-request-materials' and not public and 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'=any(allowed_mime_types)) then raise exception 'No private XLSX destination'; end if;
+end $intake_submission$;
+
 -- C098: complete replay must install the evidence contract and every output guard.
 do $c098$
 declare

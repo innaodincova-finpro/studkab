@@ -4,6 +4,7 @@ import {validateMaterialManifest,resetMaterialEvidence,materialManifestGuard} fr
 import {sourceMinimumGuard} from '../_shared/source-minimum.mjs';
 import {structureFindings} from '../_shared/structure-conflict.mjs';
 import {currentAttachments} from '../_shared/current-attachments.mjs';
+import {addIntakeCandidates} from './intake-passport.mjs';
 const categories=new Set(['method','measurable','expert','assumption']);
 const statuses=new Set(['draft','approved','stale']);
 const originalityModes=new Set(['university_threshold','university_threshold_no_service','university_no_threshold','service_only']);
@@ -238,11 +239,12 @@ export async function requirementAction(input,user,{db,config}){
   if(!/^[a-f0-9]{64}$/.test(input.sourceFingerprint||''))return {status:400,data:{error:'Сначала сохраните актуальные материалы'}};
   const rows=await db('studkab_requirement_passports?select=id,request_id,revision,status,title,summary,items,material_manifest,source_fingerprint,created_at,approved_at&request_id=eq.'+request+'&order=revision.desc&limit=20');
   const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
-  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
+  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text,intake_file_id');
   if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
   const sameSource=rows.length&&rows[0].status!=='stale'&&rows[0].source_fingerprint===input.sourceFingerprint;
+  const intakeContext=attachments.some(a=>a.intake_file_id)?await db('rpc/studkab_intake_request_context','POST',{p_request:request}):null;
   let linked;
-  try{linked=sameSource?inventoryExplicitClauses(linkLiteralDraftSources(filled,attachments),attachments):filled;}
+  try{linked=sameSource?addIntakeCandidates(inventoryExplicitClauses(linkLiteralDraftSources(filled,attachments),attachments),intakeContext):filled;}
   catch(e){return {status:409,data:{error:e.message}};}
   if(sameSource&&linked===rows[0]){
    const questionError=await askUnresolvedStructure(db,request,user.id,attachments,rows[0].items);
@@ -252,6 +254,7 @@ export async function requirementAction(input,user,{db,config}){
   let passport=rows.length?{title:rows[0].title,summary:linked!==rows[0]?'Требования уточнены по исходным материалам. Проверьте новую версию перед утверждением.':'Материалы изменились. Проверьте новую версию перед утверждением.',items:sameSource?linked.items:filled.items.map(item=>{const {source_attachment_id,...rest}=item;return {...rest,verified:false,answer_ids:[]};})}:defaultPassport(row.payload);
   if(!sameSource)try{passport=inventoryExplicitClauses(linkLiteralDraftSources(passport,attachments),attachments);}
    catch(e){return {status:409,data:{error:e.message}};}
+  if(intakeContext)try{passport=addIntakeCandidates(passport,intakeContext);}catch(e){return {status:409,data:{error:e.message}};}
   passport.material_manifest=rows.length?(rows[0].status==='stale'||rows[0].source_fingerprint!==input.sourceFingerprint?resetMaterialEvidence(rows[0].material_manifest):rows[0].material_manifest):null;
   const created=await db('rpc/studkab_requirement_passport_save','POST',{p_request:request,p_actor:user.id,p_title:passport.title,p_summary:passport.summary,p_items:passport.items,p_material_manifest:passport.material_manifest??null,p_source_fingerprint:input.sourceFingerprint,p_expected_revision:input.expectedRevision??null});
   if(created.error)return {status:409,data:created};
@@ -273,8 +276,13 @@ export async function requirementAction(input,user,{db,config}){
   if(required.some(id=>!passport.items.some(q=>q.id===id))||passport.items.some(item=>(item.required||required.includes(item.id))&&(!item.verified||!item.source||(/не указано|требуется уточнить|порог не задан|ожидается ответ/i.test(item.text)&&!(item.id==='ANTIPLAGIARISM'&&item.originality?.mode==='university_threshold_no_service'&&item.text===originalityText(item.originality))))))return {status:409,data:{error:'Заполните все обязательные требования паспорта'}};
   const anti=passport.items.find(item=>item.id==='ANTIPLAGIARISM');
   if(!anti.originality||anti.text!==originalityText(anti.originality)||anti.originality.mode==='service_only'&&!/STUDKAB/i.test(anti.source)||['university_threshold','university_no_threshold'].includes(anti.originality.mode)&&!anti.originality.service)return {status:409,data:{error:'Укажите подтверждённое основание проверки оригинальности'}};
-  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text');
+  const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text,intake_file_id');
   if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
+  if(attachments.some(a=>a.intake_file_id)){
+   let expected;
+   try{expected=addIntakeCandidates({items:[]},await db('rpc/studkab_intake_request_context','POST',{p_request:request})).items;}catch(e){return {status:409,data:{error:e.message}};}
+   if(expected.some(e=>!passport.items.some(q=>q.id===e.id&&q.required&&q.verified&&q.text===e.text&&q.source===e.source&&q.source_attachment_id===e.source_attachment_id)))return {status:409,data:{error:'Не все требования общей загрузки подтверждены в паспорте. Сохраните и проверьте актуальную версию'}};
+  }
   let missing;
   try{missing=missingExplicitClauses(passport.items,attachments);}
   catch(e){return {status:409,data:{error:e.message}};}

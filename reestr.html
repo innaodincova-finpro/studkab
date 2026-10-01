@@ -2074,6 +2074,7 @@ async function loadAttachmentContext(x){
  doc.attachmentSources=sources.join('\n\n---\n\n');
  x.attachments=rows.map(function(a){return {id:a.id,category:a.category,file_name:a.file_name,size_bytes:a.size_bytes,file_hash:a.file_hash,created_at:a.created_at};});
  x.attachmentMaterialRevision=result.materialRevision;
+ x.intakeContext=result.intake||null;
  x._attachmentsLoaded=true;return x.attachments;
 }
 function passportItemView(q){
@@ -2342,6 +2343,7 @@ function viewItem(id){
   if(Array.isArray(x.attachments))materials += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
   else materials+='<p class="hint">'+(x.requestNumber?'Список файлов ещё не получен. Обновите материалы.':'У этой ручной заявки нет файлов из кабинета студента.')+'</p>';
   if(x.requestNumber)materials+='<button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить материалы</button>';
+  if(x.intakeContext){var ic=x.intakeContext;materials+='<details><summary>Сведения и требования из общей загрузки</summary><p class="hint">'+(ic.stale?'После отправки сведения изменились; исходный анализ показан только как история.':'Кандидаты из документов, не утверждённый паспорт. Ответы студента сохранены отдельно.')+'</p>'+(ic.analysis.requirements||[]).map(function(q){return '<p class="small">'+esc(q.value)+(q.condition?'<br>Условие: '+esc(q.condition):'')+'<br>'+q.refs.map(function(r){return esc(r.fileName||'Примечание студента')+': '+esc(r.quote);}).join('<br>')+'</p>';}).join('')+'</details>';}
   if(x.requestNumber)materials+='<div style="margin-top:12px"><p role="status">'+esc(x.materialRevision&&x.materialRevision.state==='open'?'Ожидаются дополнительные материалы: '+x.materialRevision.reason:x.materialRevision?(x.materialRevision.state==='initial'?'Первичный комплект ещё можно дополнить из кабинета студента.':'Комплект закрыт для изменений после начала проверки.'):'Состояние дополнения ещё не проверено.')+'</p><button type="button" class="chip" data-act="materials-reopen" data-id="'+esc(x.id)+'">'+(x.materialRevision&&x.materialRevision.state==='open'?'Посмотреть запрос дополнения':'Запросить дополнение материалов')+'</button></div>';
   h+=group('materials','Материалы',materials);
   if(x.requestNumber) requirements = passportContent(x)+'<details class="requirement-original"><summary>Исходные сведения заявки и требования вуза</summary>'+requirements+'</details>';
