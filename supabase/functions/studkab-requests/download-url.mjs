@@ -1,7 +1,8 @@
 // Storage REST returns a path relative to /storage/v1, not the project origin.
-export function attachmentDownloadUrl(base, signed, storagePath, fileName) {
+export function attachmentDownloadUrl(base, signed, storagePath, fileName, bucket='studkab-request-materials') {
+ if(!['studkab-request-materials','studkab-intake-materials'].includes(bucket))throw Error('Storage unavailable');
  if(typeof signed!=='string')throw Error('Storage unavailable');
- const expected='/object/sign/studkab-request-materials/'+storagePath;
+ const expected='/object/sign/'+bucket+'/'+storagePath;
  const relative=signed.startsWith('/storage/v1/')?signed.slice('/storage/v1'.length):signed;
  if(relative.split('?')[0]!==expected)throw Error('Storage unavailable');
  const url=new URL('/storage/v1'+relative,base);

@@ -7,6 +7,11 @@ begin
   select array_agg(name order by name)
     into missing
   from unnest(array[
+    'studkab_intake_drafts',
+    'studkab_intake_confirmations',
+    'studkab_intake_files',
+    'studkab_intake_analysis_policy',
+    'studkab_intake_analysis_jobs',
     'studkab_gen_attempts',
     'studkab_gen_budget',
     'studkab_gen_jobs',
@@ -55,11 +60,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 38 then
-    raise exception 'Expected 38 STUDKAB tables, found %', table_count;
+  if table_count <> 43 then
+    raise exception 'Expected 43 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 38 then
-    raise exception 'RLS enabled on only % of 38 STUDKAB tables', rls_count;
+  if rls_count <> 43 then
+    raise exception 'RLS enabled on only % of 43 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -220,6 +225,19 @@ begin
  end if;
 end $$;
 
+do $intake_submission$
+declare signature text;role_name text;
+begin
+ foreach signature in array array['public.studkab_intake_submission_snapshot(uuid,uuid,text)','public.studkab_intake_submit(uuid,uuid,uuid,integer,text,jsonb)','public.studkab_intake_request_context(uuid)'] loop
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'Public intake submission RPC %',signature; end if;
+  end loop;
+  if not has_function_privilege('service_role',signature,'execute') then raise exception 'Missing service submission RPC %',signature; end if;
+ end loop;
+ if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_request_attachments' and column_name='intake_file_id') then raise exception 'No intake attachment provenance'; end if;
+ if not exists(select 1 from storage.buckets where id='studkab-request-materials' and not public and 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'=any(allowed_mime_types)) then raise exception 'No private XLSX destination'; end if;
+end $intake_submission$;
+
 -- C098: complete replay must install the evidence contract and every output guard.
 do $c098$
 declare
@@ -296,4 +314,38 @@ do $$ begin
  if has_function_privilege('anon','public.studkab_quality_save(uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,jsonb,text)','EXECUTE')
  or has_function_privilege('authenticated','public.studkab_quality_save(uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,jsonb,text)','EXECUTE') then raise exception 'C102 RPC privileges'; end if;
  if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_result_reviews' and column_name='quality_evidence_ids') then raise exception 'C102 review evidence binding'; end if;
+end $$;
+
+-- INTAKE-01 step 3: both reading functions remain service-only after complete replay.
+do $$
+declare signature text;
+begin
+ foreach signature in array array['public.studkab_intake_read_begin(uuid,uuid,uuid,text)','public.studkab_intake_read_finish(uuid,uuid,uuid,uuid,text,jsonb)'] loop
+  if to_regprocedure(signature) is null or has_function_privilege('anon',signature,'EXECUTE')
+   or has_function_privilege('authenticated',signature,'EXECUTE') or not has_function_privilege('service_role',signature,'EXECUTE') then raise exception 'INTAKE reading function privileges: %',signature; end if;
+ end loop;
+ if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_intake_files' and column_name='read_result') then raise exception 'INTAKE persisted reading missing'; end if;
+end $$;
+
+do $intake_analysis$
+declare signature text; role_name text;
+begin
+ foreach signature in array array['public.studkab_intake_analysis_snapshot(uuid,uuid)','public.studkab_intake_analysis_start(uuid,uuid,text,jsonb)','public.studkab_intake_analysis_state(uuid,uuid)','public.studkab_intake_analysis_claim()','public.studkab_intake_analysis_fail_claim(uuid,uuid)','public.studkab_intake_analysis_dispatch(uuid,uuid,bigint)','public.studkab_intake_analysis_finish(uuid,uuid,uuid,jsonb,jsonb,text,text)'] loop
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'Public intake analysis RPC %',signature; end if;
+  end loop;
+ end loop;
+ if has_table_privilege('service_role','public.studkab_intake_analysis_policy','update') then raise exception 'Runner can raise intake budget'; end if;
+ if exists(select 1 from public.studkab_intake_analysis_policy where enabled or limit_microusd<>0) then raise exception 'Intake policy must start disabled'; end if;
+end $intake_analysis$;
+
+-- INTAKE-01 step 5: default grants cannot make answer history mutable/public.
+do $$ declare signature text; role_name text; begin
+ foreach role_name in array array['anon','authenticated'] loop
+  if has_table_privilege(role_name,'public.studkab_intake_confirmations','select,insert,update,delete') then raise exception 'Public confirmation history'; end if;
+ end loop;
+ if has_table_privilege('service_role','public.studkab_intake_confirmations','update,delete') then raise exception 'Mutable confirmation history'; end if;
+ foreach signature in array array['public.studkab_intake_confirmation_rules(jsonb)','public.studkab_intake_confirmation_state(uuid,uuid)','public.studkab_intake_confirmation_save(uuid,uuid,uuid,integer,jsonb,boolean)'] loop
+  if has_function_privilege('anon',signature,'execute') or has_function_privilege('authenticated',signature,'execute') or not has_function_privilege('service_role',signature,'execute') then raise exception 'Confirmation RPC grants: %',signature; end if;
+ end loop;
 end $$;

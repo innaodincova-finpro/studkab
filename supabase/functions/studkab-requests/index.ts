@@ -1,7 +1,10 @@
+import {readIntake} from './reader-runtime.ts';
+import {loadOriginal} from './intake-reading.mjs';
 import {accessLink} from './access-links.mjs';
 import {handler} from './handler.mjs';
 import {extract} from './extract.ts';
 import {attachmentDownloadUrl} from './download-url.mjs';
+import {saveOriginal} from './original-storage.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const bucket='studkab-request-materials';
 async function db(path:string,method='GET',body?:unknown){
@@ -39,16 +42,24 @@ async function upload(path:string,type:string,value:string,size:number,expectedH
  if(!r.ok)throw Error('Storage unavailable');
  return extractedText;
 }
-async function download(path:string,fileName:string){
- const r=await fetch(base+'/storage/v1/object/sign/'+bucket+'/'+path,{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:300,download:fileName}),signal:AbortSignal.timeout(10000)});
+async function downloadFrom(sourceBucket:string,path:string,fileName:string){
+ const r=await fetch(base+'/storage/v1/object/sign/'+sourceBucket+'/'+path,{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:300,download:fileName}),signal:AbortSignal.timeout(10000)});
  if(!r.ok)throw Error('Storage unavailable');const data=await r.json();
- const url=attachmentDownloadUrl(base,data.signedURL||data.signedUrl,path,fileName);
+ const url=attachmentDownloadUrl(base,data.signedURL||data.signedUrl,path,fileName,sourceBucket);
  return {url,fileName,expiresIn:300};
 }
+const download=(path:string,name:string)=>downloadFrom(bucket,path,name);
+const downloadIntake=(path:string,name:string)=>downloadFrom('studkab-intake-materials',path,name);
+const saveIntake=(path:string,type:string,bytes:Uint8Array,hash:string)=>saveOriginal({base,key,path,type,bytes,hash});
+const loadIntake=(path:string,size:number,hash:string)=>loadOriginal({base,key,path,size,hash});
+const transferIntake=async(f:any)=>{
+ const bytes=await loadIntake(f.storage_path,f.size_bytes,f.file_hash);
+ await saveOriginal({base,key,bucket,path:f.storage_path,type:f.content_type,bytes,hash:f.file_hash});
+};
 async function remove(path:string){
  const r=await fetch(base+'/storage/v1/object/'+bucket+'/'+path,{method:'DELETE',headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000)});
  if(!r.ok&&r.status!==404)throw Error('Storage cleanup unavailable');
 }
 Deno.serve(handler({auth,db,send,
  emailSettings:()=>({}), // C175: email is superseded by app push; never claim its queue.
- invite,isMember,upload,download,remove,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
+ invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
