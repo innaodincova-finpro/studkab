@@ -1,5 +1,6 @@
 import {intakeRead} from './intake-reading.mjs';
 import {analysisPlan} from '../_shared/intake-analysis.mjs';
+import {prepareIntakeContinuation} from '../_shared/intake-continuation.mjs';
 import {intakeSubmission} from './intake-submission.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
@@ -57,6 +58,15 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   if(src.unread)return {status:409,data:{error:'Сначала нужно полностью прочитать все документы. Сохранённые материалы остаются в кабинете'}};
   let plan;try{if(src.limited)throw Error('ANALYSIS_LIMIT');plan=analysisPlan(src);}catch{return {status:409,data:{error:'Комплект не подходит для автоматического разбора. Проверьте чтение или разделите большие документы'}};}
   const r=await db('rpc/studkab_intake_analysis_start','POST',{p_student:user.id,p_draft:input.id,p_manifest:src.manifest,p_plan:plan});
+  if(r.state==='invalid'){
+   // Free revalidation only. A failed cache check leaves the old terminal result visible.
+   const saved=await db('rpc/studkab_intake_continuation_source','POST',{p_student:user.id,p_draft:input.id,p_job:r.id});
+   let prepared;try{prepared=prepareIntakeContinuation(saved.job,saved.snapshot);}catch{}
+   if(prepared){
+    const c=await db('rpc/studkab_intake_continuation_prepare','POST',{p_student:user.id,p_draft:input.id,p_job:r.id,p_parts:prepared.parts,p_result:prepared.result});
+    return resultError(c)||{data:{analysis:c.unavailable?r:c}};
+   }
+  }
   if(r.disabled)return {data:{analysis:{state:'disabled'}}};
   if(r.unread||r.limited)return {status:409,data:{error:'Материалы изменились или комплект слишком велик для разбора. Сохранённые документы доступны'}};
   return resultError(r)||{data:{analysis:r}};

@@ -1,3 +1,7 @@
+## INTAKE-03 — R15/R3/R4, 01.10.2026
+
+Код: intake-continuation.mjs, requests/intake.mjs, intake-ui.js и 20261001122117_intake_cached_continuation.sql. Проверка: tests/intake-analysis.test.mjs (кеш/права/пауза/лимит/остаток/неизменность истории), tests/intake-concurrency.py (один checkpoint при двух workers), tests/browser/intake-drafts.spec.cjs (paused без подтверждения/отправки). Адресные Node/SQL проверки проходят; полный CI, установка и предметная приёмка ещё открыты. Бесплатная проверка сохранённого ответа не доказывает полный разбор всех документов.
+
 # Соответствие требований и доказательств
 
 ## INTAKE-02 — R15: ограниченный ответ DeepSeek, 01.10.2026

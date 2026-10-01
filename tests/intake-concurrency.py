@@ -146,6 +146,30 @@ try:
  assert call(f"studkab_intake_reserve('{fourth}','{d4}','late.pdf','application/pdf',10,'"+'f'*64+"',null)").get('missing',False)
  assert sql(f"select ready_at is not null from studkab_requests where id='{sent4[0]['id']}'")=='t'
  print('PASS: concurrent intake submission creates one published ordinary request, one complete file set and immutable receipt')
+ # SQL isolation test only: synthetic cached data never goes to a provider.
+ fifth='55555555-5555-4555-8555-555555555555'
+ sql(f"insert into auth.users values('{fifth}');insert into studkab_members values('{fifth}');")
+ d5=call(f"studkab_intake_open('{fifth}')")['id']
+ f5=call(f"studkab_intake_reserve('{fifth}','{d5}','task.pdf','application/pdf',10,'"+'f'*64+"',null)")['file']
+ call(f"studkab_intake_finish('{fifth}','{d5}','{f5['id']}','{f5['file_hash']}')")
+ sql(f"update studkab_intake_files set read_status='ready',read_version='intake-reader-1',read_result='{{}}' where id='{f5['id']}';")
+ m5=call(f"studkab_intake_analysis_snapshot('{fifth}','{d5}')")['manifest']
+ cache=json.dumps([{'covered':['b0'],'candidates':[],'roles':[]}])
+ raws=json.dumps([{'request_id':'66666666-6666-4666-8666-666666666666','text':'{}','error':'invalid'}])
+ plan5=json.dumps([{'max_cost_microusd':10000},{'max_cost_microusd':10000}])
+ j5=sql(f"insert into studkab_intake_analysis_jobs(draft_id,manifest,version,plan,state,raw_outputs) values('{d5}','{m5}','intake-analysis-2','{plan5}','invalid','{raws}') returning id;")
+ old5=sql(f"select to_jsonb(j)::text from studkab_intake_analysis_jobs j where id='{j5}'")
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:
+  prepared=list(pool.map(lambda _:call(f"studkab_intake_continuation_prepare('{fifth}','{d5}','{j5}','{cache}',null)"),range(2)))
+ assert prepared[0]['id']==prepared[1]['id'] and all(x['state']=='paused' for x in prepared)
+ assert int(sql(f"select count(*) from studkab_intake_analysis_jobs where parent_job_id='{j5}'"))==1
+ assert sql(f"select to_jsonb(j)::text from studkab_intake_analysis_jobs j where id='{j5}'")==old5
+ assert sql(f"select reserved_microusd||':'||ordinal from studkab_intake_analysis_jobs where id='{prepared[0]['id']}'")=='0:1'
+ try:
+  sql(f"set role service_role;select studkab_intake_continuation_activate('{prepared[0]['id']}');")
+  raise AssertionError('service_role activated paid continuation')
+ except subprocess.CalledProcessError: pass
+ print('PASS: concurrent cache preparations create one paused child, no old audit or reserve changes, no service activation')
  print('PASS: semantic duplicate start, exclusive claim/dispatch, stale-source refusal, retained reserve and unknown without retry')
  print('PASS: parallel draft creation, hash deduplication, eight-file limit, ownership, finish, one successor and persisted exclusive reading')
 finally:
