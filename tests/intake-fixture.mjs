@@ -21,6 +21,7 @@ export const schema=()=>`do $$ begin
  create table studkab_gen_reconciliations(request_ids uuid[],retained_microusd bigint);
  grant select on studkab_gen_budget,studkab_gen_attempts,studkab_gen_reconciliations to service_role;
  grant update(reserved_microusd) on studkab_gen_budget to service_role;
+ alter default privileges in schema public grant all on tables to service_role;
 `+fs.readFileSync(new URL('../supabase/migrations/20261001031058_intake_semantic_analysis.sql',import.meta.url),'utf8');
 export function apiDatabase(db){return async(path,method='GET',body)=>{
  if(path.startsWith('rpc/')){

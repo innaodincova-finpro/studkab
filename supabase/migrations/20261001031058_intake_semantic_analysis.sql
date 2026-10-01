@@ -23,7 +23,7 @@ create table public.studkab_intake_analysis_jobs (
 create index studkab_intake_analysis_queue on public.studkab_intake_analysis_jobs(created_at) where state in ('queued','claimed','sent','budget');
 alter table public.studkab_intake_analysis_policy enable row level security;
 alter table public.studkab_intake_analysis_jobs enable row level security;
-revoke all on public.studkab_intake_analysis_policy,public.studkab_intake_analysis_jobs from public,anon,authenticated;
+revoke all on public.studkab_intake_analysis_policy,public.studkab_intake_analysis_jobs from public,anon,authenticated,service_role;
 grant select on public.studkab_intake_analysis_policy to service_role;
 grant select,insert,update on public.studkab_intake_analysis_jobs to service_role;
 create function public.studkab_intake_analysis_immutable() returns trigger language plpgsql security invoker set search_path='' as $$
