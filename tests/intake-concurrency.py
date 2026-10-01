@@ -7,7 +7,7 @@ student='11111111-1111-4111-8111-111111111111'
 other='22222222-2222-4222-8222-222222222222'
 def sql(source):
  return subprocess.check_output(['psql','-X','-qAt','-v','ON_ERROR_STOP=1'],input=source,text=True,env=env).strip()
-def call(source):return json.loads(sql('set role service_role;select '+source+';'))
+def call(source):return json.loads(sql("set role service_role;select coalesce(to_jsonb("+source+"),'null'::jsonb);"))
 subprocess.run(['createdb',database],check=True)
 try:
  setup=subprocess.check_output(['node','tests/intake-fixture.mjs','--print-sql'],cwd=root,text=True)
