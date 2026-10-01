@@ -17,11 +17,11 @@ test('invented value, quote, address, skipped block, duplicate coverage and over
  const [part]=analysisPlan({files:[file]});
  for(const mutate of [x=>x.candidates[0].value='Вымысел',x=>x.candidates[0].refs[0].quote='Вымысел',x=>x.candidates[0].refs[0].blockId='another',x=>x.covered=[],x=>x.covered.push(x.covered[0])]){const x=response(part);mutate(x);assert.throws(()=>verifyExtraction(JSON.stringify(x),part));}
  assert.throws(()=>analysisPlan({files:[{...file,read_status:'blocked'}]}),/INCOMPLETE/);
- assert.throws(()=>analysisPlan({files:[{...file,read_result:{...file.read_result,blocks:[{text:'x'.repeat(30000)}]}}]}),/LIMIT/);
+ assert.throws(()=>analysisPlan({files:[{...file,read_result:{...file.read_result,blocks:[{text:'x'.repeat(500000)}]}}]}),/LIMIT/);
 });
 test('chunks retain every block; different topics are a conflict and repeated exact facts combine sources',()=>{
  const blocks=Array.from({length:6},(_,i)=>({kind:'paragraph',text:'x'.repeat(7000)+i,source:{paragraph:i+1}}));
- const plan=analysisPlan({files:[{...file,read_result:{...file.read_result,blocks}}]});assert.ok(plan.length>1);assert.equal(plan.flatMap(p=>p.blocks).length,6);
+ const plan=analysisPlan({files:[{...file,read_result:{...file.read_result,blocks}}]});assert.ok(plan.length>1);for(let i=0;i<6;i++)assert.equal(plan.flatMap(p=>p.blocks).filter(b=>b.originalBlockId===file.id+':'+i).map(b=>b.text).join(''),blocks[i].text);
  const [part]=analysisPlan({files:[file]}),x=verifyExtraction(JSON.stringify(response(part)),part);
  const r=distribute([x,x,{candidates:[{field:'t',value:'Другая тема',condition:'',refs:[]}],roles:[]}]);assert.equal(r.fields.t.status,'conflict');assert.equal(r.fields.t.values.length,2);assert.equal(r.fields.t.values[0].refs.length,2);
 });
@@ -97,7 +97,7 @@ test('provider transport uncertainty saves unknown once and material replacement
 
 test('saved parts resume after process restart and final distribution contains all chunks',async()=>{
  const f=await fixture();try{
-  const blocks=Array.from({length:7},(_,i)=>({kind:'paragraph',text:text+' '+String(i)+' '+'x'.repeat(6500),source:{paragraph:i+1}}));
+  const blocks=Array.from({length:7},(_,i)=>({kind:'paragraph',text:text+' '+String(i)+' '+'x'.repeat(500),source:{paragraph:i+1}}));
   await f.db.query('update studkab_intake_files set read_result=$2 where id=$1',[f.f.id,{...file.read_result,blocks,fileId:f.f.id,fileHash:f.f.file_hash}]);
   await f.start();assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_queued');assert.equal((await f.state()).completed,1);
   const state=await f.state();for(let i=1;i<state.parts;i++)await runIntake({rpc:f.rpc,provider:f.provider});
@@ -111,5 +111,27 @@ test('policy removed after claim still refuses paid dispatch, even with free glo
   await f.db.exec('reset role;delete from studkab_intake_analysis_policy;set role service_role');
   assert.equal(await f.rpc('studkab_intake_analysis_dispatch',{p_job:c.job_id,p_claim:c.claim,p_cost:c.part.max_cost_microusd}),null);
   assert.equal((await f.state()).state,'budget');assert.equal((await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd,0);assert.equal(f.paid,0);
+ }finally{await f.db.close();}
+});
+
+test('version 2 bounds text and block count while preserving Unicode, exact offsets and provenance',()=>{
+ const original=('Условие 🧠 с числами 2025 и 57.\n').repeat(180);
+ const plan=analysisPlan({files:[{...file,read_result:{...file.read_result,blocks:[{kind:'paragraph',text:original,source:{paragraph:7}}]}}]});
+ const blocks=plan.flatMap(p=>p.blocks);assert.equal(blocks.map(b=>b.text).join(''),original);
+ for(const [i,p] of plan.entries()){assert.ok(p.blocks.length<=12);assert.ok(p.blocks.reduce((n,b)=>n+new TextEncoder().encode(b.text).length,0)<=3000);assert.equal(p.analysis_version,'intake-analysis-2');const request=JSON.parse(p.prompt);assert.ok(request.blocks.every(b=>!('fileHash'in b)&&!('source'in b)));}
+ for(const b of blocks){assert.equal(original.slice(b.source.textStart,b.source.textEnd),b.text);assert.equal(b.source.paragraph,7);assert.equal(b.fileHash,file.file_hash);assert.ok(!b.text.includes('\uFFFD'));}
+});
+test('explicit provider length is output_limited, never yields candidates or triggers another paid call',async()=>{
+ const f=await fixture();try{await f.start();let paid=0;const provider=async()=>{paid++;return {complete:false,detail:{reason:'length'}};};
+ assert.equal((await runIntake({rpc:f.rpc,provider})).status,'intake_output_limited');assert.equal((await f.state()).state,'output_limited');assert.equal((await f.state()).result,null);
+ assert.equal(await runIntake({rpc:f.rpc,provider}),null);assert.equal(paid,1);
+ const reserve=(await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd;assert.ok(reserve>0);
+ }finally{await f.db.close();}
+});
+test('tampered oversized part fails before provider dispatch',async()=>{
+ const f=await fixture();try{await f.start();const real=f.rpc;let paid=0;
+ const rpc=async(name,args)=>{const c=await real(name,args);if(name==='studkab_intake_analysis_claim'&&c)c.part.blocks.push(...Array.from({length:13},()=>c.part.blocks[0]));return c;};
+ assert.equal((await runIntake({rpc,provider:async()=>{paid++;}})).status,'intake_preparation_blocked');assert.equal(paid,0);assert.equal((await f.state()).state,'invalid');
+ assert.equal((await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd,0);
  }finally{await f.db.close();}
 });
