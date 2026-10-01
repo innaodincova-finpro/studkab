@@ -446,6 +446,14 @@
       "sha256": "a150c845213b135dcc5546393d54ee8855521503a8e5c2e5dd537e60cc45fb42",
       "status": "pending",
       "note": "INTAKE-01 steps 1–2; not installed in production"
+    },
+    {
+      "version": "20261001015312",
+      "name": "intake_structured_reading",
+      "file": "20261001015312_intake_structured_reading.sql",
+      "sha256": "18774a598ecbef55cd46caade87675d57423313422aab62573c1261f79e2de44",
+      "status": "pending",
+      "note": "INTAKE-01 step 3; not installed in production"
     }
   ],
   "production_reconciled_at": "2026-09-23"

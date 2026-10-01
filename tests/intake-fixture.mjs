@@ -15,10 +15,10 @@ export const schema=()=>`do $$ begin
  create table studkab_members(user_id uuid primary key);
  insert into auth.users values('${student}'),('${other}');insert into studkab_members values('${student}'),('${other}');
  grant usage on schema public,auth,storage to service_role;grant select on studkab_members to service_role;
-`+fs.readFileSync(new URL('../'+migration,import.meta.url),'utf8');
+`+fs.readFileSync(new URL('../'+migration,import.meta.url),'utf8')+fs.readFileSync(new URL('../supabase/migrations/20261001015312_intake_structured_reading.sql',import.meta.url),'utf8');
 export function apiDatabase(db){return async(path,method='GET',body)=>{
  if(path.startsWith('rpc/')){
-  const name=path.slice(4);if(!/^studkab_intake_(open|reserve|finish|notes)$/.test(name))throw Error('unexpected RPC');
+  const name=path.slice(4);if(!/^studkab_intake_(open|reserve|finish|notes|read_begin|read_finish)$/.test(name))throw Error('unexpected RPC');
   const vals=Object.values(body),placeholders=vals.map((_,i)=>'$'+(i+1)).join(',');
   return (await db.query('select '+name+'('+placeholders+') result',vals)).rows[0].result;
  }

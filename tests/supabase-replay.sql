@@ -299,3 +299,14 @@ do $$ begin
  or has_function_privilege('authenticated','public.studkab_quality_save(uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,jsonb,text)','EXECUTE') then raise exception 'C102 RPC privileges'; end if;
  if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_result_reviews' and column_name='quality_evidence_ids') then raise exception 'C102 review evidence binding'; end if;
 end $$;
+
+-- INTAKE-01 step 3: both reading functions remain service-only after complete replay.
+do $$
+declare signature text;
+begin
+ foreach signature in array array['public.studkab_intake_read_begin(uuid,uuid,uuid,text)','public.studkab_intake_read_finish(uuid,uuid,uuid,uuid,text,jsonb)'] loop
+  if to_regprocedure(signature) is null or has_function_privilege('anon',signature,'EXECUTE')
+   or has_function_privilege('authenticated',signature,'EXECUTE') or not has_function_privilege('service_role',signature,'EXECUTE') then raise exception 'INTAKE reading function privileges: %',signature; end if;
+ end loop;
+ if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_intake_files' and column_name='read_result') then raise exception 'INTAKE persisted reading missing'; end if;
+end $$;

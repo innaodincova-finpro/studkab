@@ -1,7 +1,8 @@
+import {intakeRead} from './intake-reading.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
 const missing={status:404,data:{error:'Черновик не найден'}};
-const safeFile=f=>({id:f.id,file_name:f.file_name,content_type:f.content_type,size_bytes:f.size_bytes,file_hash:f.file_hash,state:f.state,supersedes:f.supersedes,created_at:f.created_at,saved_at:f.saved_at,roles:f.roles||[]});
+const safeFile=f=>({id:f.id,file_name:f.file_name,content_type:f.content_type,size_bytes:f.size_bytes,file_hash:f.file_hash,state:f.state,supersedes:f.supersedes,created_at:f.created_at,saved_at:f.saved_at,roles:f.roles||[],read_status:f.read_status||'idle',read_version:f.read_version||null,read_summary:f.read_result?{status:f.read_result.status,summary:f.read_result.summary||{},warnings:f.read_result.warnings}:null});
 function resultError(r){
  if(r?.missing)return missing;
  if(r?.conflict)return {status:409,data:{error:'Черновик изменился. Откройте материалы заново'}};
@@ -24,7 +25,7 @@ export async function intakeBytes(input){
  if(!signature)throw Error('Содержимое не соответствует формату файла');
  return {name,type,size,hash,bytes};
 }
-export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIntake}){
+export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake}){
  if(typeof isMember!=='function'||await isMember(user.id)!==true)return {status:403,data:{error:'Загрузка доступна после входа по приглашению исполнителя'}};
  if(input.action==='intake-open'){
   const draft=await db('rpc/studkab_intake_open','POST',{p_student:user.id});
@@ -40,6 +41,10 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   if(typeof input.notes!=='string'||input.notes.length>5000||!Number.isSafeInteger(input.revision)||input.revision<1)return {status:400,data:{error:'Проверьте сведения черновика'}};
   const r=await db('rpc/studkab_intake_notes','POST',{p_student:user.id,p_draft:input.id,p_revision:input.revision,p_notes:input.notes});
   return resultError(r)||{data:{draft:{id:r.id,state:r.state,revision:r.revision,notes:r.notes}}};
+ }
+ if(input.action==='intake-read'){
+  if(!uuid.test(input.fileId||''))return {status:400,data:{error:'Неверный файл'}};
+  return intakeRead(input,user,{db,loadIntake,readIntake});
  }
  if(input.action==='intake-download'){
   if(!uuid.test(input.fileId||''))return {status:400,data:{error:'Неверный файл'}};

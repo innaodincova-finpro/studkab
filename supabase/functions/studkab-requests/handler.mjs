@@ -36,7 +36,7 @@ export function validatePayload(p,{newSubmission=false,previous=null}={}) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,saveIntake,downloadIntake,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -80,9 +80,9 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
-   if(['intake-open','intake-notes','intake-upload','intake-download'].includes(input?.action)){
+   if(['intake-open','intake-notes','intake-upload','intake-download','intake-read'].includes(input?.action)){
     if(input.action!=='intake-upload'&&raw.length>16000)return json({error:'Запрос слишком большой'},413);
-    const r=await intakeAction(input,user,{db,isMember,saveIntake,downloadIntake});return json(r.data,r.status||200);
+    const r=await intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake});return json(r.data,r.status||200);
    }
    if(input.action==='request-kind-correct'){
     const r=await kindCorrectionAction(input,user,{db,config});return json(r.data,r.status||200);

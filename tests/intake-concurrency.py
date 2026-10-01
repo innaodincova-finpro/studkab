@@ -37,6 +37,18 @@ try:
   replacements=list(pool.map(lambda i:reserve(i,replaces=f['id']),[30,31]))
  assert sum('file' in row for row in replacements)==1
  assert sum(row.get('conflict',False) for row in replacements)==1
- print('PASS: parallel draft creation, hash deduplication, eight-file limit, ownership, finish and one successor')
+ def begin(_):return call(f"studkab_intake_read_begin('{student}','{draft}','{f['id']}','intake-reader-1')")
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:readers=list(pool.map(begin,range(2)))
+ assert sum('file' in row for row in readers)==1
+ assert sum(row.get('busy',False) for row in readers)==1
+ lease=next(row['file']['read_lease'] for row in readers if 'file' in row)
+ result={'schema':1,'status':'ready','readerVersion':'intake-reader-1','fileId':f['id'],'fileHash':f['file_hash'],'blocks':[],'warnings':[],'extracted_text':'2023'}
+ encoded=json.dumps(result).replace("'","''")
+ def finish_read(_):return call(f"studkab_intake_read_finish('{student}','{draft}','{f['id']}','{lease}','intake-reader-1','{encoded}'::jsonb)")
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:finished=list(pool.map(finish_read,range(2)))
+ assert sum('file' in row for row in finished)==1
+ assert sum(row.get('conflict',False) for row in finished)==1
+ assert begin(0).get('cached') is True
+ print('PASS: parallel draft creation, hash deduplication, eight-file limit, ownership, finish, one successor and persisted exclusive reading')
 finally:
  subprocess.run(['dropdb',database],check=True)

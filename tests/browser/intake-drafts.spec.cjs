@@ -18,6 +18,12 @@ async function setup(page){
     if(!file){file={id:crypto.randomUUID(),file_name:body.fileName,content_type:body.contentType,file_hash:body.fileHash,size_bytes:body.sizeBytes,state:'saved',supersedes:body.replacesId||null,roles:[]};state.files.push(file);state.writes++;localStorage.setItem(key,JSON.stringify(state));}
     if(loseResponse)throw Error('Ответ потерян');return {file,duplicate:state.files.some(f=>f.id===file.id)};
    }
+   if(body.action==='intake-read'){
+    const f=state.files.find(f=>f.id===body.fileId);if(!f)throw Error('missing');
+    if(window.failReads){f.read_status='failed';f.read_summary={status:'failed',warnings:[{code:'reading_unavailable',source:{}}]};}
+    else{f.read_status=f.file_name.includes('Скан')?'blocked':'ready';f.read_summary={status:f.read_status,summary:{},warnings:f.read_status==='blocked'?[{code:'pdf_image_page',source:{page:2}}]:[]};}
+    f.read_version='intake-reader-1';localStorage.setItem(key,JSON.stringify(state));return {reading:f.read_summary};
+   }
    throw Error('Unexpected '+body.action);
   };
  });
@@ -80,4 +86,13 @@ test('Safari Word and Excel originals survive network failure and page reload',a
   await page.locator('#intakeFiles').setInputFiles([word,excel]);await expect(page.locator('[data-intake-status]')).toContainText('Часть файлов');
   await setup(page);await open(page);await saved(page,2);
  }finally{await browser.close();}
+});
+
+test('automatic reading shows page-specific blockers and preserves saved originals on failed read and retry',async({page})=>{
+ await setup(page);await open(page);await page.locator('#intakeFiles').setInputFiles([word,pdf('Скан')]);await saved(page,2);
+ await expect(page.locator('[data-intake-files]')).toContainText('Текст и структура прочитаны');await expect(page.locator('[data-intake-files]')).toContainText('страница 2');
+ await page.evaluate(()=>{window.failReads=true;});await page.locator('#intakeFiles').setInputFiles(excel);await saved(page,3);await expect(page.locator('[data-intake-files]')).toContainText('Чтение прервано');
+ await page.evaluate(()=>{window.failReads=false;});await page.getByRole('button',{name:'Повторить чтение',exact:true}).click();await saved(page,3);await expect(page.locator('[data-intake-files]')).not.toContainText('Чтение прервано');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).writes)).toBe(3);
+ expect(await page.evaluate(()=>calls.some(c=>['submit','request-publish'].includes(c.action)))).toBe(false);
 });
