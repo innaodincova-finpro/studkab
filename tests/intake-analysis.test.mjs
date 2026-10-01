@@ -226,3 +226,23 @@ test('a fully saved verified plan completes without activation or any additional
   assert.equal((await f.db.query('select reserved_microusd from studkab_intake_analysis_jobs where parent_job_id is not null')).rows[0].reserved_microusd,0);
  }finally{await f.db.close();}
 });
+
+test('Edge rollout before migration and a lost checkpoint reply preserve history without paid retry',async()=>{
+ for(const mode of ['migration_pending','lost_reply']){
+  const f=await stoppedFixture();try{
+   let writes=0;
+   const db=async(path,method,body)=>{
+    if(mode==='migration_pending'&&path==='rpc/studkab_intake_continuation_source')throw Error('RPC not installed');
+    const r=await f.sql(path,method,body);
+    if(path==='rpc/studkab_intake_continuation_prepare'){writes++;if(mode==='lost_reply')throw Error('reply lost after commit');}
+    return r;
+   };
+   const a=await intakeAction({action:'intake-analyze',id:f.draft.id},{id:student},{db,isMember:async()=>true});
+   assert.equal(a.data.analysis.id,f.old.id);assert.equal(a.data.analysis.state,'invalid');
+   if(mode==='migration_pending'){assert.equal(writes,0);assert.equal((await f.state()).state,'invalid');}
+   else{const state=await f.state();assert.equal(state.state,'paused');assert.equal((await f.start()).data.analysis.id,state.id);assert.equal(writes,1);}
+   assert.deepEqual((await f.db.query('select * from studkab_intake_analysis_jobs where id=$1',[f.old.id])).rows[0],f.old);
+   assert.equal(await runIntake({rpc:f.rpc,provider:async()=>assert.fail('paid retry')}),null);
+  }finally{await f.db.close();}
+ }
+});

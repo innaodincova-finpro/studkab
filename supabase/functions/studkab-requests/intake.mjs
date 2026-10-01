@@ -60,11 +60,14 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   const r=await db('rpc/studkab_intake_analysis_start','POST',{p_student:user.id,p_draft:input.id,p_manifest:src.manifest,p_plan:plan});
   if(r.state==='invalid'){
    // Free revalidation only. A failed cache check leaves the old terminal result visible.
-   const saved=await db('rpc/studkab_intake_continuation_source','POST',{p_student:user.id,p_draft:input.id,p_job:r.id});
-   let prepared;try{prepared=prepareIntakeContinuation(saved.job,saved.snapshot);}catch{}
+   // Edge may deploy before the migration. Preserve the old terminal status then.
+   let saved;try{saved=await db('rpc/studkab_intake_continuation_source','POST',{p_student:user.id,p_draft:input.id,p_job:r.id});}catch{}
+   let prepared;try{prepared=prepareIntakeContinuation(saved?.job,saved?.snapshot);}catch{}
    if(prepared){
-    const c=await db('rpc/studkab_intake_continuation_prepare','POST',{p_student:user.id,p_draft:input.id,p_job:r.id,p_parts:prepared.parts,p_result:prepared.result});
-    return resultError(c)||{data:{analysis:c.unavailable?r:c}};
+    try{
+     const c=await db('rpc/studkab_intake_continuation_prepare','POST',{p_student:user.id,p_draft:input.id,p_job:r.id,p_parts:prepared.parts,p_result:prepared.result});
+     return resultError(c)||{data:{analysis:c.unavailable?r:c}};
+    }catch{} // A lost prepare reply is recovered by analysis-state / the next start.
    }
   }
   if(r.disabled)return {data:{analysis:{state:'disabled'}}};
