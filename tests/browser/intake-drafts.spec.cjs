@@ -12,6 +12,8 @@ async function setup(page){
    let state=JSON.parse(localStorage.getItem(key)||'null');
    if(!state)state={draft:{id:crypto.randomUUID(),state:'open',revision:1,notes:''},files:[],writes:0};
    if(body.action==='intake-open'){localStorage.setItem(key,JSON.stringify(state));return state;}
+   if(body.action==='intake-analyze')return {analysis:{state:window.analysisResult?'done':'disabled'}};
+   if(body.action==='intake-analysis-state')return {analysis:window.analysisResult?{state:'done',result:window.analysisResult}:{state:'idle'}};
    if(body.action==='intake-upload'){
     if(failUploads)throw Error('Нет сети');
     let file=state.files.find(f=>f.file_hash===body.fileHash);
@@ -95,4 +97,20 @@ test('automatic reading shows page-specific blockers and preserves saved origina
  await page.evaluate(()=>{window.failReads=false;});await page.getByRole('button',{name:'Повторить чтение',exact:true}).click();await saved(page,3);await expect(page.locator('[data-intake-files]')).not.toContainText('Чтение прервано');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).writes)).toBe(3);
  expect(await page.evaluate(()=>calls.some(c=>['submit','request-publish'].includes(c.action)))).toBe(false);
+});
+
+test('extracted fields show conflicts and source locations without creating a work; narrow layout escapes document content',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await setup(page);
+ await page.evaluate(()=>{
+  const value=(text,fileName,source)=>({value:text,condition:'',refs:[{fileName,source,quote:text}]});
+  window.analysisResult={
+   fields:{t:{label:'Тема',status:'conflict',values:[value('<img onerror=alert(1)>','Задание.docx',{paragraph:2}),value('Другая тема','Методичка.pdf',{page:3})]}},
+   requirements:[value('Не использовать ИИ','Методичка.pdf',{page:4})]
+  };
+ });
+ await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
+ const box=page.locator('[data-intake-analysis]');await expect(box).toContainText('Найдено в документах');await expect(box).toContainText('Требуется уточнение');await expect(box).toContainText('Другая тема');
+ await box.getByText('Источники',{exact:true}).first().click();await expect(box).toContainText('абзац 2');expect(await box.locator('img').count()).toBe(0);
+ expect(await page.evaluate(()=>D.works.length)).toBe(0);
+ expect(await page.evaluate(()=>document.querySelector('.sheet-in').scrollWidth<=document.querySelector('.sheet-in').clientWidth+1)).toBe(true);
 });

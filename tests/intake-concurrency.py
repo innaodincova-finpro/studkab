@@ -49,6 +49,51 @@ try:
  assert sum('file' in row for row in finished)==1
  assert sum(row.get('conflict',False) for row in finished)==1
  assert begin(0).get('cached') is True
+ # Semantic queue uses the same isolated DB, with a shared capped ledger.
+ sql("update studkab_intake_files set state='saved',read_status='ready',read_version='intake-reader-1',read_result='{}';update studkab_intake_analysis_policy set enabled=true,limit_microusd=15000;update studkab_gen_budget set limit_microusd=15000;")
+ snapshot=call(f"studkab_intake_analysis_snapshot('{student}','{draft}')")
+ plan=json.dumps([{'blocks':[],'prompt':'synthetic','max_output_tokens':4000,'max_cost_microusd':10000}]).replace("'","''")
+ def start(_):return call(f"studkab_intake_analysis_start('{student}','{draft}','{snapshot['manifest']}','{plan}'::jsonb)")
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:jobs=list(pool.map(start,range(2)))
+ assert jobs[0]['id']==jobs[1]['id']
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:claims=list(pool.map(lambda _:call('studkab_intake_analysis_claim()'),range(2)))
+ assert sum(c is not None for c in claims)==1
+ first=next(c for c in claims if c)
+ # A second source version competes for the same budget in another transaction.
+ sql(f"update studkab_intake_drafts set notes='changed' where id='{draft}'")
+ newer=call(f"studkab_intake_analysis_snapshot('{student}','{draft}')")
+ second=call(f"studkab_intake_analysis_start('{student}','{draft}','{newer['manifest']}','{plan}'::jsonb)")
+ # First claim is stale before dispatch and cannot reserve anything.
+ assert call(f"studkab_intake_analysis_dispatch('{first['job_id']}','{first['claim']}',10000)") is None
+ c=call('studkab_intake_analysis_claim()')
+ def dispatch(_):
+  try:return sql(f"set role service_role;select studkab_intake_analysis_dispatch('{c['job_id']}','{c['claim']}',10000);")
+  except subprocess.CalledProcessError:return 'STALE_CLAIM'
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:sent=list(pool.map(dispatch,range(2)))
+ assert sent.count('STALE_CLAIM')==1
+ assert int(sql('select reserved_microusd from studkab_gen_budget'))==10000
+ assert int(sql('select studkab_gen_expected_reserved()'))==10000
+ sql("update studkab_intake_analysis_jobs set lease_until=now()-interval '1 second' where state='sent'")
+ assert call('studkab_intake_analysis_claim()') is None
+ assert sql(f"select state from studkab_intake_analysis_jobs where id='{second['id']}'")=='unknown'
+ # Two independent drafts compete for the remaining 15,000 microUSD.
+ sql("update studkab_intake_analysis_policy set limit_microusd=25000;update studkab_gen_budget set limit_microusd=25000;")
+ sql(f"update studkab_intake_drafts set notes='third' where id='{draft}'")
+ third=call(f"studkab_intake_analysis_snapshot('{student}','{draft}')")
+ job3=call(f"studkab_intake_analysis_start('{student}','{draft}','{third['manifest']}','{plan}'::jsonb)")
+ d2=call(f"studkab_intake_open('{other}')")['id']
+ f2=call(f"studkab_intake_reserve('{other}','{d2}','data.pdf','application/pdf',10,'{'b'*64}',null)")['file']
+ call(f"studkab_intake_finish('{other}','{d2}','{f2['id']}','{f2['file_hash']}')")
+ sql(f"update studkab_intake_files set read_status='ready',read_version='intake-reader-1',read_result='{{}}' where id='{f2['id']}'")
+ snap2=call(f"studkab_intake_analysis_snapshot('{other}','{d2}')")
+ call(f"studkab_intake_analysis_start('{other}','{d2}','{snap2['manifest']}','{plan}'::jsonb)")
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:pair=list(pool.map(lambda _:call('studkab_intake_analysis_claim()'),range(2)))
+ assert all(pair) and pair[0]['job_id']!=pair[1]['job_id']
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:funded=list(pool.map(lambda x:call(f"studkab_intake_analysis_dispatch('{x['job_id']}','{x['claim']}',10000)"),pair))
+ assert sum(x is not None for x in funded)==1
+ assert int(sql('select reserved_microusd from studkab_gen_budget'))==20000
+ assert int(sql('select studkab_gen_expected_reserved()'))==20000
+ print('PASS: semantic duplicate start, exclusive claim/dispatch, stale-source refusal, retained reserve and unknown without retry')
  print('PASS: parallel draft creation, hash deduplication, eight-file limit, ownership, finish, one successor and persisted exclusive reading')
 finally:
  subprocess.run(['dropdb',database],check=True)

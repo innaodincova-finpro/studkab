@@ -328,6 +328,14 @@
       "name": "c162_ai_visual_scope",
       "file": "20260928112143_c162_ai_visual_scope.sql",
       "sha256": "2784781dc69900619a423d0c081b254642f23cb0e1dd89e0616f32476e17812b"
+    },
+    {
+      "version": "20261001031058",
+      "name": "intake_semantic_analysis",
+      "file": "20261001031058_intake_semantic_analysis.sql",
+      "sha256": "1fc0fd7caf47f5460604ca5cf2cfbb7f83d844c9ad7ce549f07768904575ba62",
+      "status": "pending",
+      "note": "INTAKE-01 step 4; disabled, not installed in production"
     }
   ],
   "pending_migrations": [

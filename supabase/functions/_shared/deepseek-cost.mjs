@@ -1,4 +1,4 @@
-// https://api-docs.deepseek.com/quick_start/pricing/ checked 2026-09-15.
+// https://api-docs.deepseek.com/quick_start/pricing/ checked 2026-09-15; intake rechecked 2026-10-01.
 // DeepSeek-V4.1-Flash peak prices:
 // cache-miss input USD 0.30 / 1M tokens, output USD 1.20 / 1M tokens.
 // UTF-8 bytes are used as an intentionally conservative token upper bound,

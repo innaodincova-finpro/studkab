@@ -2,6 +2,7 @@ import {handler} from './handler.mjs';
 import {checkReserve} from './reserve.mjs';
 import {withContext} from './context.mjs';
 import {machineAuthorization} from './auth.mjs';
+import {runIntake} from './intake-runner.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const token=Deno.env.get('STUDKAB_PROXY_TOKEN');
 const enabled=Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true';
@@ -33,5 +34,9 @@ Deno.serve(handler({
   p_job:c.job_id,p_ordinal:c.ordinal,p_claim:c.claim,p_reason:code
  }),
  provider,ready:()=>enabled && !!token,
+ // Share the existing minute schedule without starving ordinary generation.
+ // Database policy is a second, independent fail-closed numerical budget gate.
+ processIntake:async()=>Deno.env.get('STUDKAB_INTAKE_ANALYSIS_ENABLED')==='true'&&!!token&&new Date().getUTCMinutes()%2===0
+  ?await runIntake({rpc:(name:string,args:unknown)=>db('rpc/'+name,args),provider}):null,
  readiness:()=>({enabled,providerConfigured:!!token})
 }));

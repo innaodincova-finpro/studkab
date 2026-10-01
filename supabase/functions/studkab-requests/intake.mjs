@@ -1,4 +1,5 @@
 import {intakeRead} from './intake-reading.mjs';
+import {analysisPlan} from '../_shared/intake-analysis.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
 const missing={status:404,data:{error:'Черновик не найден'}};
@@ -37,6 +38,20 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный черновик'}};
  const [draft]=await db('studkab_intake_drafts?id=eq.'+input.id+'&student_id=eq.'+user.id+'&state=eq.open&select=id,revision');
  if(!draft)return missing;
+ if(input.action==='intake-analysis-state'){
+  const r=await db('rpc/studkab_intake_analysis_state','POST',{p_student:user.id,p_draft:input.id});
+  return r.missing?missing:{data:{analysis:r}};
+ }
+ if(input.action==='intake-analyze'){
+  const src=await db('rpc/studkab_intake_analysis_snapshot','POST',{p_student:user.id,p_draft:input.id});
+  if(src.missing)return missing;
+  if(src.unread)return {status:409,data:{error:'Сначала нужно полностью прочитать все документы. Сохранённые материалы остаются в кабинете'}};
+  let plan;try{if(src.limited)throw Error('ANALYSIS_LIMIT');plan=analysisPlan(src);}catch{return {status:409,data:{error:'Комплект не подходит для автоматического разбора. Проверьте чтение или разделите большие документы'}};}
+  const r=await db('rpc/studkab_intake_analysis_start','POST',{p_student:user.id,p_draft:input.id,p_manifest:src.manifest,p_plan:plan});
+  if(r.disabled)return {data:{analysis:{state:'disabled'}}};
+  if(r.unread||r.limited)return {status:409,data:{error:'Материалы изменились или комплект слишком велик для разбора. Сохранённые документы доступны'}};
+  return resultError(r)||{data:{analysis:r}};
+ }
  if(input.action==='intake-notes'){
   if(typeof input.notes!=='string'||input.notes.length>5000||!Number.isSafeInteger(input.revision)||input.revision<1)return {status:400,data:{error:'Проверьте сведения черновика'}};
   const r=await db('rpc/studkab_intake_notes','POST',{p_student:user.id,p_draft:input.id,p_revision:input.revision,p_notes:input.notes});

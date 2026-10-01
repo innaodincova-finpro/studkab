@@ -80,7 +80,7 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
-   if(['intake-open','intake-notes','intake-upload','intake-download','intake-read'].includes(input?.action)){
+   if(['intake-open','intake-notes','intake-upload','intake-download','intake-read','intake-analyze','intake-analysis-state'].includes(input?.action)){
     if(input.action!=='intake-upload'&&raw.length>16000)return json({error:'Запрос слишком большой'},413);
     const r=await intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake});return json(r.data,r.status||200);
    }

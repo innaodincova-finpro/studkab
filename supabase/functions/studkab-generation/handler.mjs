@@ -1,7 +1,7 @@
 import {sameSecret} from '../_shared/secret-equal.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
-export function handler({config,rpc,provider,ready,authorize,readiness,prepare,failClaim}) {
+export function handler({config,rpc,provider,ready,authorize,readiness,prepare,failClaim,processIntake}) {
  return async req=>{
   if(req.method!=='POST')return reply({error:'METHOD'},405);
   // Fail closed before reading configuration or claiming any work.
@@ -15,6 +15,9 @@ export function handler({config,rpc,provider,ready,authorize,readiness,prepare,f
   if(req.headers.get('X-Studkab-Probe')==='1') {
    const state=readiness?readiness():{};
    return reply({enabled:state.enabled===true,providerConfigured:state.providerConfigured===true});
+  }
+  if(processIntake){
+   try{const intake=await processIntake();if(intake)return reply(intake);}catch{return reply({status:'intake_unavailable'},503);}
   }
   if(!ready())return reply({status:'disabled',error:'PROVIDER_NOT_CONFIGURED'},503);
   let c;
