@@ -126,7 +126,7 @@ test('extracted fields show conflicts and source locations without creating a wo
  });
  await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
  const box=page.locator('[data-intake-analysis]');await expect(box).toContainText('Найдено в документах');await expect(box).toContainText('Требуется уточнение');await expect(box).toContainText('Другая тема');
- await box.getByText('Источники',{exact:true}).first().click();await expect(box).toContainText('абзац 2');expect(await box.locator('img').count()).toBe(0);
+ await box.getByText('Источники и исправление',{exact:true}).first().click();await box.getByText('Источники',{exact:true}).first().click();await expect(box).toContainText('абзац 2');expect(await box.locator('img').count()).toBe(0);
  expect(await page.evaluate(()=>D.works.length)).toBe(0);
  expect(await page.evaluate(()=>document.querySelector('.sheet-in').scrollWidth<=document.querySelector('.sheet-in').clientWidth+1)).toBe(true);
 });
@@ -164,4 +164,10 @@ test('switching accounts never restores another student confirmation answers',as
  await setup(page);await page.evaluate(()=>{cloudSwitchUser('answers-a');window.failAnswerWrites=true;});await knownAnalysis(page,true);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.locator('[data-answer="f:n"]').selectOption('custom');await page.locator('[data-custom="f:n"]').fill('Приватный ответ первого студента');
  await page.getByRole('button',{name:'Сохранить ответы',exact:true}).click();await expect(page.locator('[data-answer-status]')).toContainText('Ввод сохранён на устройстве');
  await page.evaluate(()=>{cloudSwitchUser('answers-b');window.failAnswerWrites=false;});await expect(page.locator('[data-intake-dialog]')).toHaveCount(0);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await expect(page.locator('[data-intake-confirmation]')).not.toContainText('Приватный ответ первого студента');await expect(page.locator('[data-answer="f:n"]')).toHaveValue('');
+});
+
+test('clearing a custom correction restores the document value in the summary and saved confirmation',async({page})=>{
+ await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
+ const summary=page.locator('[data-effective="f:n"]'),field=summary.locator('..');await field.getByText('Источники и исправление',{exact:true}).click();await field.locator('[data-answer="f:n"]').selectOption('custom');await field.locator('[data-custom="f:n"]').fill('Уточнённое имя');await expect(summary).toHaveText('Уточнённое имя');
+ await field.locator('[data-answer="f:n"]').selectOption('');await expect(summary).toHaveText('Сведение n');await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-answer-status]')).toContainText('Сведения подтверждены');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).confirmation.answers['f:n'])).toBeUndefined();
 });
