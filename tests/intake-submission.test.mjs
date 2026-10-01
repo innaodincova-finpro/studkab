@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {PGlite} from '@electric-sql/pglite';
+import fs from 'node:fs';import test from 'node:test';import assert from 'node:assert/strict';import {PGlite} from '@electric-sql/pglite';
 import {schema,submissionExtension,student,other,apiDatabase} from './intake-fixture.mjs';
 import {distribute} from '../supabase/functions/_shared/intake-analysis.mjs';
 import {handler,validatePayload} from '../supabase/functions/studkab-requests/handler.mjs';
@@ -6,7 +6,7 @@ import {intakeAction} from '../supabase/functions/studkab-requests/intake.mjs';
 import {addIntakeCandidates} from '../supabase/functions/studkab-requests/intake-passport.mjs';
 import {requirementAction,originalityText} from '../supabase/functions/studkab-requests/requirements.mjs';
 async function fixture(assignment=true){
- const db=new PGlite();await db.exec(schema()+submissionExtension());await db.exec('set role service_role');const api=apiDatabase(db),rpc=(name,args)=>api('rpc/studkab_intake_'+name,'POST',args);
+ const db=new PGlite();await db.exec(schema()+submissionExtension()+fs.readFileSync(new URL('../supabase/migrations/20261001162253_route02_receive_before_analysis.sql',import.meta.url),'utf8'));await db.exec('set role service_role');const api=apiDatabase(db),rpc=(name,args)=>api('rpc/studkab_intake_'+name,'POST',args);
  const draft=await rpc('open',{p_student:student}),files=[];
  for(let index=0;index<3;index++){
  const {file}=await rpc('reserve',{p_student:student,p_draft:draft.id,p_name:['Задание.docx','Методичка.pdf','Расчёт.xlsx'][index],p_type:['application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'][index],p_size:10,p_hash:'abc'[index].repeat(64),p_supersedes:null});

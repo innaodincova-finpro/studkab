@@ -349,3 +349,11 @@ do $$ declare signature text; role_name text; begin
   if has_function_privilege('anon',signature,'execute') or has_function_privilege('authenticated',signature,'execute') or not has_function_privilege('service_role',signature,'execute') then raise exception 'Confirmation RPC grants: %',signature; end if;
  end loop;
 end $$;
+
+-- ROUTE-02-B: receipt capability and private RPCs preserve the study barrier.
+do $$ declare name text; begin
+ foreach name in array array['public.studkab_intake_receive_snapshot(uuid,uuid)','public.studkab_intake_receive(uuid,uuid,integer,text,text,text)'] loop
+  if has_function_privilege('anon',name,'execute') or has_function_privilege('authenticated',name,'execute') or not has_function_privilege('service_role',name,'execute') then raise exception 'Receipt RPC grants: %',name; end if;
+ end loop;
+ if not exists(select 1 from pg_trigger where tgname='studkab_received_passport_guard' and not tgisinternal) then raise exception 'Missing receipt study barrier'; end if;
+end $$;

@@ -32,13 +32,13 @@
   document.querySelectorAll('[data-intake-dialog]').forEach(function(el){el.remove();});
   var readWarnings={archive_limit:'Файл превышает предел распаковки. Разделите документ на части',damaged_archive:'Файл повреждён: сохраните его заново в Word или Excel',damaged_pdf:'PDF повреждён: загрузите исправленную текстовую версию',encrypted_pdf:'PDF защищён паролем: нужна доступная текстовая версия',unsafe_xml:'Файл содержит неподдерживаемые XML-объявления: сохраните его заново',result_limit:'Документ слишком большой для чтения: разделите его на части',time_limit:'Чтение превысило допустимое время: разделите документ на части',pdf_annotations:'Поля или примечания PDF требуют текстовой версии',undecodable_text:'Часть символов не распознана: загрузите Word или исправленную текстовую версию',pdf_image_page:'На странице PDF есть изображение: нужна текстовая версия',pdf_nontext_page:'Содержимое страницы PDF не прочитано: нужна текстовая версия',no_readable_text:'Читаемый текст не найден',word_field_cache:'Поля Word содержат сохранённый результат: требуется проверка',document_comments:'Замечания Word сохранены вместе с текстом',equation_layout:'Формулы Word требуют отдельной проверки',formula_cache_unverified:'Сохранённые результаты формул требуют проверки',formula_result_missing:'В формуле отсутствует сохранённый результат',cell_error:'В ячейке ошибка Excel',external_formula:'Формула с внешними данными не выполнялась',external_link:'Внешняя ссылка не открывалась',shared_formula_reference:'Общая формула: требуется проверка диапазона',non_text_content:'Изображения не прочитаны: нужна текстовая версия',tracked_changes:'Есть исправления Word: нужна согласованная версия',text_box_layout:'Текстовые поля Word требуют текстовой версии',non_cell_content:'Рисунки или примечания Excel не прочитаны',external_or_embedded_parts:'Вложенные или внешние данные не прочитаны',reading_unavailable:'Не удалось завершить чтение. Повторите чтение сохранённого файла'};
  function readingLabel(f){var state=f.read_status||'idle';return {idle:'Ожидает чтения',reading:'Чтение выполняется — откройте материалы позже',ready:'Текст и структура прочитаны',blocked:'Чтение неполное — нужна другая версия документа',failed:'Чтение прервано — можно повторить'}[state]||'Чтение не подтверждено';}
- var owner=options.owner(),identity=options.identity(),draft=null,files=[],busy=false,analysisTimer=null,confirmCleanup=null;
+ var owner=options.owner(),identity=options.identity(),draft=null,files=[],busy=false,receiptUnknown=false,analysisTimer=null,confirmCleanup=null;
   var wrap=options.openModal('<button type="button" class="close" data-x>✕</button><h2>Материалы к заявке</h2>'+
    '<p class="small">Выберите все имеющиеся документы вместе. Не нужно распределять их по пунктам. Сохранённый комплект останется в вашем кабинете после выхода.</p>'+
    '<div class="field"><label for="intakeFiles">Документы Word, PDF или Excel</label><input id="intakeFiles" type="file" multiple accept=".docx,.pdf,.xlsx" disabled></div>'+
    '<p class="hint">До 8 файлов, до 5 МБ каждый. PDF должен содержать читаемый текст. Фотографии и сканы не подходят.</p>'+
    '<p class="hint" role="status" aria-live="polite" data-intake-status>Открываем сохранённые материалы…</p>'+
-   '<div data-intake-files></div><div data-intake-analysis aria-live="polite"></div><p class="small">Это черновик материалов. Заявка ещё не отправлена, сведения из документов ещё не проверены.</p>'+
+   '<div data-intake-reception hidden><div class="field"><label for="intakeDeadline">Срок готовности</label><input id="intakeDeadline" type="date"></div><div class="field"><label for="intakeDescription">Что подготовить, если это неясно из документов</label><textarea id="intakeDescription" maxlength="500"></textarea></div><p class="hint">После отправки заявка сразу появится в реестре. Помощники изучат документы отдельно.</p><button type="button" class="b b-main" data-intake-receive disabled>Отправить заявку</button></div><div data-intake-files></div><div data-intake-analysis aria-live="polite"></div><p class="small">Это черновик материалов. Заявка ещё не отправлена, сведения из документов ещё не проверены.</p>'+
    '<div class="rowbtns"><button type="button" class="b b-main" data-intake-retry disabled>Повторить сохранение</button><button type="button" class="b b-quiet" data-intake-read>Повторить чтение</button><button type="button" class="b b-quiet" data-x>Закрыть</button></div>');
   wrap.setAttribute('data-intake-dialog','');
   var status=wrap.querySelector('[data-intake-status]'),list=wrap.querySelector('[data-intake-files]'),input=wrap.querySelector('#intakeFiles'),retry=wrap.querySelector('[data-intake-retry]');
@@ -56,8 +56,13 @@
     queued.filter(function(f){return !known.has(f.fileHash);}).map(function(f){return '<div class="item"><div class="txt"><b>'+options.esc(f.fileName)+'</b><small>Сохранён на устройстве; ожидает передачи в кабинет</small></div></div>';}).join('')+
     (history.length?'<details><summary>Предыдущие версии: '+history.length+'</summary>'+history.map(function(f){return row(f,true);}).join('')+'</details>':'');
    if(!shown.length&&!queued.length)list.innerHTML='<p class="small">Документы пока не выбраны.</p>';
-   list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=busy||el.hasAttribute('data-intake-waiting');});
-   input.disabled=busy||!draft;retry.disabled=busy;wrap.querySelector('[data-intake-read]').disabled=busy;
+   list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=busy||receiptUnknown||!!draft&&draft.state==='submitted'||el.hasAttribute('data-intake-waiting');});
+   input.disabled=busy||receiptUnknown||!draft||draft.state==='submitted';retry.disabled=busy||receiptUnknown||draft&&draft.state==='submitted';wrap.querySelector('[data-intake-read]').disabled=busy;
+   if(draft&&draft.receiptMode){
+    wrap.querySelector('[data-intake-reception]').hidden=false;wrap.querySelector('#intakeDeadline').disabled=busy||receiptUnknown||draft.state==='submitted';wrap.querySelector('#intakeDescription').disabled=busy||receiptUnknown||draft.state==='submitted';wrap.querySelector('[data-intake-read]').hidden=true;
+    wrap.querySelector('[data-intake-analysis]').hidden=true;
+    wrap.querySelector('[data-intake-receive]').disabled=busy||draft.state==='submitted'||queued.length>0||!shown.length||shown.some(function(f){return f.state!=='saved';});
+   }
   }
   async function refresh(){var result=await options.api({action:'intake-open'});current();draft=result.draft;files=result.files;await paint();}
   async function readSaved(){
@@ -103,10 +108,10 @@
      if(!same())return;await queue('delete',f.key);current();
     }catch(e){if(!same()||!wrap.isConnected)return;errors.push(f.fileName+': '+e.message);}
    }
-   await refresh();await readSaved();await analysis(true);status.textContent=errors.length?'Часть файлов не передана. Сохранённые файлы доступны; нажмите «Повторить сохранение». '+errors.join(' '):'Материалы сохранены в кабинете. '+(visible(files).some(function(f){return f.read_status!=='ready';})?'Для части документов чтение не подтверждено — смотрите пояснения у файлов. ':'Документы прочитаны; сведения заявки ещё не подтверждены. ')+'Заявка ещё не отправлена.';
+   await refresh();if(draft.receiptMode){status.textContent=errors.length?'Часть файлов не передана. Повторите сохранение. '+errors.join(' '):'Материалы сохранены. Укажите срок и отправьте заявку; изучение начнётся после регистрации.';return;}await readSaved();await analysis(true);status.textContent=errors.length?'Часть файлов не передана. Сохранённые файлы доступны; нажмите «Повторить сохранение». '+errors.join(' '):'Материалы сохранены в кабинете. '+(visible(files).some(function(f){return f.read_status!=='ready';})?'Для части документов чтение не подтверждено — смотрите пояснения у файлов. ':(draft.receiptMode?'Изучение начнётся после регистрации заявки. ':'Документы прочитаны; сведения заявки ещё не подтверждены. '))+'Заявка ещё не отправлена.';
   }
   async function run(selected,replaces){
-   if(busy||draft&&draft.state==='submitted')return;if(confirmCleanup){confirmCleanup();confirmCleanup=null;}wrap.querySelector('[data-intake-analysis]').innerHTML='';busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
+   if(busy||receiptUnknown||draft&&draft.state==='submitted')return;if(confirmCleanup){confirmCleanup();confirmCleanup=null;}wrap.querySelector('[data-intake-analysis]').innerHTML='';busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
    try{
     current();
     if(!draft)await refresh();
@@ -124,7 +129,7 @@
     await paint();await transmit();
     if(errors.length)status.textContent+=' Не добавлены: '+errors.join(' ');
    }catch(e){if(same()&&wrap.isConnected)status.textContent='Сохранение не завершено: '+e.message;}
-   finally{busy=false;if(same()&&wrap.isConnected){input.value='';input.disabled=!draft;retry.disabled=false;wrap.querySelector('[data-intake-read]').disabled=false;list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=el.hasAttribute('data-intake-waiting');});}}
+   finally{busy=false;if(same()&&wrap.isConnected){input.value='';input.disabled=!draft||draft.state==='submitted';retry.disabled=!!draft&&draft.state==='submitted';wrap.querySelector('[data-intake-read]').disabled=false;list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=!!draft&&draft.state==='submitted'||el.hasAttribute('data-intake-waiting');});if(draft&&draft.receiptMode)await paint();}}
   }
   input.addEventListener('change',function(){run(Array.from(input.files));});
   wrap.addEventListener('change',function(e){if(e.target.matches('[data-intake-replace]'))run(Array.from(e.target.files),e.target.getAttribute('data-intake-replace'));});
@@ -138,13 +143,43 @@
    }catch(e){if(same()&&wrap.isConnected)status.textContent=e.message;}finally{button.disabled=false;}
   });
   wrap.addEventListener('click',function(e){if(e.target.closest('[data-x]')){clearTimeout(analysisTimer);if(confirmCleanup)confirmCleanup();}});
+  function receiptInputs(){return {deadline:wrap.querySelector('#intakeDeadline').value,description:wrap.querySelector('#intakeDescription').value};}
+  var receiptKey='studkab-intake-reception:'+owner;
+  try{var savedReceipt=JSON.parse(localStorage.getItem(receiptKey)||'null');if(savedReceipt){wrap.querySelector('#intakeDeadline').value=savedReceipt.deadline||'';wrap.querySelector('#intakeDescription').value=savedReceipt.description||'';}}catch(_){}
+  wrap.querySelector('[data-intake-reception]').addEventListener('input',function(){if(same())localStorage.setItem(receiptKey,JSON.stringify(receiptInputs()));});
+  function acceptReceipt(receipt){
+   if(!receipt||!receipt.submitted||!receipt.ready||!receipt.payload)throw Error('Приём заявки не подтверждён');
+   receiptUnknown=false;draft.state='submitted';wrap.querySelector('#intakeDeadline').value=receipt.payload.dl;wrap.querySelector('#intakeDescription').value=receipt.payload.rq;
+   status.textContent='Заявка №'+receipt.number+' принята. Документы сохранены; комплект ожидает изучения.';
+   if(options.submitted)options.submitted(receipt);
+  }
+  wrap.querySelector('[data-intake-receive]').addEventListener('click',async function(){
+   if(busy||!draft||!draft.receiptMode||draft.state==='submitted')return;
+   busy=true;
+   try{
+    current();await paint();if((await pending()).length)throw Error('Сначала завершите сохранение выбранных документов');
+    var values=receiptInputs();
+    if(!values.deadline||Number.isNaN(Date.parse(values.deadline))||new Date(values.deadline).toISOString().slice(0,10)!==values.deadline)throw Error('Укажите срок готовности');
+    localStorage.setItem('studkab-intake-submit:'+owner,JSON.stringify({draftId:draft.id,receiptMode:true}));
+    receiptUnknown=true;var result=await options.api({action:'intake-receive',id:draft.id,revision:draft.revision,deadline:values.deadline,description:values.description});current();
+    acceptReceipt(result.submission);
+   }catch(e){
+    if(!same()||!wrap.isConnected)return;
+    if(receiptUnknown){
+     try{var recovered=(await options.api({action:'intake-receive-state',id:draft.id})).submission;current();if(recovered&&recovered.submitted){acceptReceipt(recovered);return;}receiptUnknown=false;}
+     catch(_){if(!same()||!wrap.isConnected)return;}
+    }
+    status.textContent='Отправка не подтверждена: '+e.message+'. Сохранённые материалы доступны; повтор не создаёт новую заявку.';
+   }
+   finally{busy=false;if(same()&&wrap.isConnected)await paint();}
+  });
   var intent;try{intent=JSON.parse(localStorage.getItem('studkab-intake-submit:'+owner)||'null');}catch(_){}
   if(intent&&intent.draftId)try{
-   var previous=(await options.api({action:'intake-submission-state',id:intent.draftId})).submission;current();
+   var previous=(await options.api({action:intent.receiptMode?'intake-receive-state':'intake-submission-state',id:intent.draftId})).submission;current();
    if(previous&&previous.submitted){
     if(options.submitted)options.submitted(previous);status.textContent='Заявка №'+previous.number+' уже отправлена. Весь комплект сохранён.';
     input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
-    var next=document.createElement('button');next.type='button';next.className='b b-main';next.textContent='Новая заявка';next.onclick=function(){localStorage.removeItem('studkab-intake-submit:'+owner);next.remove();run([]);};list.appendChild(next);return wrap;
+    var next=document.createElement('button');next.type='button';next.className='b b-main';next.textContent='Новая заявка';next.onclick=function(){localStorage.removeItem('studkab-intake-submit:'+owner);localStorage.removeItem(receiptKey);wrap.querySelector('#intakeDeadline').value='';wrap.querySelector('#intakeDescription').value='';next.remove();run([]);};list.appendChild(next);return wrap;
    }
   }catch(e){if(!same())return wrap;status.textContent='Проверка прежней отправки не завершена: '+e.message+'. Повтор не создаёт новую заявку.';}
   await run([]);

@@ -1574,7 +1574,7 @@ function fromPayload(p){
     id: p.id || uid("rq"),
     added: today(),
     status: "new",
-    topic: p.t || "", workType: p.k || "", discipline: p.d || "",
+    topic: p.t || (p.route==='received'?'Материалы получены — тема ещё не изучена':''), workType: p.k || "", discipline: p.d || "",
     univ: p.u || "", faculty: p.fc || "", kafedra: p.kf || "", city: p.ct || "",
     student: p.n || "", group: p.g || "", supervisor: p.s || "",
     program: p.pr || "", form: p.fo || "", course: p.co || "",
@@ -1582,7 +1582,7 @@ function fromPayload(p){
     org: p.org || "", methodNotes: p.mn || "", contact: p.cn || "",
     format: { mTop:f.mt, mRight:f.mr, mBottom:f.mb, mLeft:f.ml,
               font:f.fn, size:f.sz, spacing:f.sp, indent:f.ind },
-    note: ""
+    note: "", receivedBeforeAnalysis:p.route==='received'
   });
 }
 function intake(){
@@ -2032,6 +2032,7 @@ function deliveryHistory(x){
  return '<p data-delivery-history><b>Ранее передано: '+esc(ruDate(String(last.createdAt).slice(0,10)))+'</b><br><span class="hint">Это сохранённая передача. Совпадение текущего документа с переданной версией здесь не проверяется.</span></p>';
 }
 function requestWorkflow(x){
+ if(x.receivedBeforeAnalysis)return {step:1,key:'intake',title:'Заявка получена',copy:'Документы сохранены. Изучение комплекта ещё не завершено; подготовка не разрешена.',action:'materials-refresh',label:'Показать материалы',blocker:'Комплект ожидает изучения помощниками',complete:false,steps:RequestWorkflow.steps};
  if(x.serverMissing)return {step:1,key:'cancelled',title:'Заявка отсутствует на сервере',copy:'Локальная карточка сохранена для проверки. Серверные действия недоступны; после сверки удалите её кнопкой «удалить» в обзоре.',action:null,label:'',blocker:'',complete:false,steps:RequestWorkflow.steps};
  if(x.materialRevision&&x.materialRevision.state==='open')return {step:1,key:'intake',title:'Ожидаются дополнительные материалы',copy:'Студент завершит загрузку в своём кабинете. После этого проверьте комплект и новую версию паспорта.',action:'materials-refresh',label:'Обновить материалы',blocker:x.materialRevision.reason||'',complete:false,steps:RequestWorkflow.steps};
  var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[],hasDocument=!!(x.doc&&(x.doc.order||[]).some(function(c){var part=(x.doc.structure||{})[c.id]||{};return String(part.text||'').trim()||(Array.isArray(part.figures)&&part.figures.length);})),reviewCurrent=false;
@@ -2340,7 +2341,7 @@ function viewItem(id){
   }
   if (r && r.verified) requirements += '<div class="chips"><button type="button" class="chip" data-act="ref-open" data-id="'+r.id+'">Требования вуза ✓</button></div>';
   var materials='<p class="hint">Материалы предоставляет студент. Здесь можно просмотреть и скачать полученные файлы.</p>';
-  if(Array.isArray(x.attachments))materials += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
+  if(Array.isArray(x.attachments))materials += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category==='unclassified'?'Ещё не изучен':a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
   else materials+='<p class="hint">'+(x.requestNumber?'Список файлов ещё не получен. Обновите материалы.':'У этой ручной заявки нет файлов из кабинета студента.')+'</p>';
   if(x.requestNumber)materials+='<button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить материалы</button>';
   if(x.intakeContext){var ic=x.intakeContext;materials+='<details><summary>Сведения и требования из общей загрузки</summary><p class="hint">'+(ic.stale?'После отправки сведения изменились; исходный анализ показан только как история.':'Кандидаты из документов, не утверждённый паспорт. Ответы студента сохранены отдельно.')+'</p>'+(ic.analysis.requirements||[]).map(function(q){return '<p class="small">'+esc(q.value)+(q.condition?'<br>Условие: '+esc(q.condition):'')+'<br>'+q.refs.map(function(r){return esc(r.fileName||'Примечание студента')+': '+esc(r.quote);}).join('<br>')+'</p>';}).join('')+'</details>';}
