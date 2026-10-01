@@ -336,6 +336,13 @@
       "sha256": "fcea846d66ef96b8f3bed1c0f73181c29f7bb5d22d5615b8bb7e980ea21c66c8",
       "status": "pending",
       "note": "INTAKE-01 step 4; disabled, not installed in production"
+    },
+    {
+      "version": "20261001110117",
+      "name": "intake_analysis_output_bound",
+      "file": "20261001110117_intake_analysis_output_bound.sql",
+      "sha256": "1b12220597848f461aa7d1cf9c9d6fbe80f3c9c320cebe623a1e991d6bc38ba2",
+      "status": "pending"
     }
   ],
   "pending_migrations": [
