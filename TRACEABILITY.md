@@ -2183,3 +2183,60 @@ R14/C171 → `requirements.mjs`, `reestr.html`, `tests/requirement-passports.tes
 # C177-P2 — повторная проверка локальных страниц, 30.09.2026
 
 TASK R14/QD06 → `tools/word_page_pilot.py` (`--verify-existing`), `tests/word_page_pilot_test.py`, CHANGE_CONTROL C177-P2. Проба на четырёх вымышленных DOCX дала 3, 2, 3 и 60 страниц за 1,91, 0,98, 1,33 и 10,5 секунды в локальной среде. В первом 60-страничном наборе после успешного запуска один PNG (стр. 29) оказался усечённым; причина не установлена. Повторный старый прогон дал 60 целых страниц. Новый режим сверяет исходный DOCX, число и порядок страниц, читаемость всех PNG и их хеши непосредственно перед просмотром; при проверке прежнего набора отказал с `PAGE_IMAGE_CORRUPT`. Адресные Python-тесты 2/2: целый набор, усечённый PNG, изменённый исходник, неполный набор. Новый 60-страничный прогон: 11,57 с, затем отдельная проверка целостности 1,11 с, 60/60. Локальные PNG 8 страниц коротких примеров просмотрены; у вымышленной длинной таблицы продолжение осталось без повторного заголовка. Microsoft Word в среде отсутствует, сравнения раскладки нет. Это локальная диагностика без приложения, публикации, платных сервисов и положительной приёмки QD06.
+
+## ROUTE-02-B — приём до разбора, 01.10.2026
+
+Основание: утверждённый ROUTE-02 / PR202. Ветка fix/route02-receipt-before-analysis.
+Код: intake-receive.mjs, intake.mjs/handler, intake-ui/index/reestr/sw,
+миграция 20261001162253_route02_receive_before_analysis.sql, requirements.mjs.
+Подтверждено локально: 208 адресных и регрессионных Node/PGlite тестов;
+миграция и legacy submit проверены на изолированном SQL; Vite build exit 0
+(прежние предупреждения о немодульных script сохранены); git diff --check.
+Новые browser сценарии написаны; не исполнены из-за отсутствия Chromium
+и неуспешной загрузки его архива. Native PostgreSQL concurrency и полный
+Supabase replay не выполнены локально: отсутствует psql/контейнерная среда.
+Код нового приёма сохраняет все оригиналы и не вызывает платный анализ;
+нераспознанные материалы явно блокируют паспорт и подготовку. Дальнейшее
+изучение — пакет C, пока не реализовано. CI PR202 отменён во время browser
+этапа; остальные проверки пропущены. Приложение и база не менялись. Нужны общий CI,
+проверка интерфейса, приёмка на согласованных аккаунтах и разрешённый выпуск.
+
+### ROUTE-02-B — повторная проверка 01.10.2026
+
+Общий локальный Node прогон: 615 тестов, 610 прошли, 5 завершились ошибками.
+Исправлен пропуск регистрации новой миграции в supabase/migrations/manifest.json:
+статус pending, SHA-256 исходника, без утверждения установки в production.
+Четыре остальных ошибки содержали SIGKILL; причина остановки не установлена.
+Адресный повтор затронутых проверок: 18/18 и generation-stop SQL 2/2 прошли.
+Повтор приёма/legacy: 14/14; Vite build exit 0; change-process check passed.
+Полный прогон после исправления не повторялся; успешный общий CI не заявляется.
+Три browser теста не запустились: Chromium отсутствует; архив установки повреждён.
+PR202 остаётся draft/open, CI 36889491726 cancelled. Публикация кода отклонена
+автоматической проверкой: нет явного разрешения на публикацию исходников.
+Основная ветка, рабочая база и приложение не изменены; платных запусков не было.
+
+### ROUTE-02-B — полный последовательный локальный прогон 01.10.2026
+
+Проверен head 4ccd265 после регистрации миграции: полный набор package.json
+выполнен с --test-concurrency=1. Итог 615/615, fail 0, skipped 0,
+cancelled 0; длительность 280969 мс. Журнал:
+/workspace/scratch/a1cc5e738c39/route02-full-sequential.log.
+Change-process check и git diff --check успешны. Это локальные Node/PGlite
+проверки, не browser, не native PostgreSQL concurrency и не production.
+Браузерная проверка и общий CI остаются открыты; публикация 20 файлов
+исходников требует разрешения после прежнего отказа автоматической проверки.
+
+### ROUTE-02-B — browser verification, 01.10.2026
+
+Installed Chromium found at /tmp/studkab-browser-runtime/chromium; no new download.
+Corrected intake-receive test setup: restored submitted draft must disable uploads.
+Added rapid double-click assertion: exactly one receive call and one fixture write.
+Focused receive scenarios: 3/3 passed. Chromium compatibility subset: 30/30 passed,
+17.2 seconds (intake, intake-drafts, intake-receive). Log:
+/tmp/route02-chromium-current.log. API is simulated in these browser scenarios;
+this is not production database acceptance. Initial combined 31-scenario run
+had 20 passes then Safari scenario timed out at 90s; the run was interrupted
+while cleanup stalled. Safari was excluded only in the temporary local config
+for the subsequent Chromium subset. Original checked-in config restored.
+Safari/WebKit, native PostgreSQL, full CI and production acceptance remain open.
+No application source behavior changed in this correction; production untouched.

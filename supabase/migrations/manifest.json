@@ -485,6 +485,14 @@
       "sha256": "5c59144952c4a91e0d72e046f01d1897b3a0cfafb3a7851389ba199937847345",
       "status": "pending",
       "note": "INTAKE-01 step 6; not installed in production"
+    },
+    {
+      "version": "20261001162253",
+      "name": "route02_receive_before_analysis",
+      "file": "20261001162253_route02_receive_before_analysis.sql",
+      "sha256": "707dc1d0b2853114dd625a7be83b8d7f05dbbe9821eeecde769e78f6e28e5779",
+      "status": "pending",
+      "note": "ROUTE-02-B; not installed in production"
     }
   ],
   "production_reconciled_at": "2026-09-23"
