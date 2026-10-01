@@ -135,3 +135,15 @@ test('tampered oversized part fails before provider dispatch',async()=>{
  assert.equal((await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd,0);
  }finally{await f.db.close();}
 });
+
+
+test('complete JSON code fence is formatting only; prose, malformed JSON and unsupported sources remain blocked',()=>{
+ const part={blocks:[{blockId:'b0',text:'Тема: Менеджмент',source:{paragraph:1}}]};
+ const value={covered:['b0'],candidates:[{field:'t',value:'Тема: Менеджмент',condition:'',refs:[{blockId:'b0',quote:'Тема: Менеджмент'}]}],roles:[]};
+ const json=JSON.stringify(value);const wrapped='```json\n'+json+'\n```';
+ assert.deepEqual(verifyExtraction(wrapped,part),verifyExtraction(json,part));
+ assert.deepEqual(verifyExtraction('```\r\n'+json+'\r\n```',part),verifyExtraction(json,part));
+ for(const invalid of ['Объяснение\n'+wrapped,wrapped+'\nИтог','```python\n'+json+'\n```',wrapped+'\n'+wrapped,'```json\n{\n```'])assert.throws(()=>verifyExtraction(invalid,part));
+ const invented=structuredClone(value);invented.candidates[0].value='Чужая тема';invented.candidates[0].refs[0].quote='Чужая тема';
+ assert.throws(()=>verifyExtraction('```json\n'+JSON.stringify(invented)+'\n```',part),/INVALID_SOURCE/);
+});

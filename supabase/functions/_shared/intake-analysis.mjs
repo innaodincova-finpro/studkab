@@ -39,7 +39,9 @@ export function analysisPlan(snapshot){
 }
 export function verifyExtraction(text,part){
  if(typeof text!=='string'||bytes(text)>100000)throw Error('INVALID_EXTRACTION');
- let x;try{x=JSON.parse(text);}catch{throw Error('INVALID_EXTRACTION');}
+ // Accept only a complete JSON code fence; surrounding prose stays invalid.
+ const fence=text.match(/^\s*```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```\s*$/);
+ let x;try{x=JSON.parse(fence?fence[1]:text);}catch{throw Error('INVALID_EXTRACTION');}
  if(!x||!Array.isArray(x.covered)||!Array.isArray(x.candidates)||!Array.isArray(x.roles)||x.candidates.length>500||x.roles.length>40)throw Error('INVALID_EXTRACTION');
  const known=new Map(part.blocks.map(b=>[b.blockId,b]));
  if(x.covered.length!==known.size||new Set(x.covered).size!==known.size||x.covered.some(id=>!known.has(id)))throw Error('INCOMPLETE_EXTRACTION');
