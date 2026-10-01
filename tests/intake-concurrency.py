@@ -50,7 +50,7 @@ try:
  assert sum(row.get('conflict',False) for row in finished)==1
  assert begin(0).get('cached') is True
  # Semantic queue uses the same isolated DB, with a shared capped ledger.
- sql("update studkab_intake_files set state='saved',read_status='ready',read_version='intake-reader-1',read_result='{}';update studkab_intake_analysis_policy set enabled=true,limit_microusd=15000;update studkab_gen_budget set limit_microusd=15000;")
+ sql("update studkab_intake_files set state='saved',saved_at=coalesce(saved_at,now()),read_status='ready',read_version='intake-reader-1',read_result='{}';update studkab_intake_analysis_policy set enabled=true,limit_microusd=15000;update studkab_gen_budget set limit_microusd=15000;")
  snapshot=call(f"studkab_intake_analysis_snapshot('{student}','{draft}')")
  plan=json.dumps([{'blocks':[],'prompt':'synthetic','max_output_tokens':4000,'max_cost_microusd':10000}]).replace("'","''")
  def start(_):return call(f"studkab_intake_analysis_start('{student}','{draft}','{snapshot['manifest']}','{plan}'::jsonb)")
