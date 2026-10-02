@@ -42,3 +42,14 @@ test('registered study: account change blocks a pending decision',async({page})=
  await expect(page.locator('[data-study-status]')).toContainText('Аккаунт изменился');
  expect(await page.evaluate(()=>studyCalls.filter(c=>c.action==='registered-question-decide').length)).toBe(0);
 });
+test('registered study: inadequate answer has readable grounds and cannot appear resolved',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{studyState.result.kitReview={version:'registered-kit-review-1',gaps:[{key:'cash_flow'}],returnedReviews:[{status:'resolved',reason:'Справочник вузов не требуется по заданию.',refs:[{fileName:'Задание.docx',source:{paragraph:3},quote:'Справочник вузов не нужен'}]}],answerReviews:[{status:'insufficient',reason:'Ответ не предоставляет требуемый ОДДС.',refs:[{fileName:'Задание.docx',source:{paragraph:2},quote:'Предоставить ОДДС'}]}]};document.querySelector('.sheet-in').innerHTML=StudRegisteredStudy.content(studyState,esc);});
+ await expect(page.getByText('Ответ недостаточен',{exact:true})).toBeVisible();
+ await expect(page.getByText('Вопрос снят по заключению',{exact:true})).toBeVisible();
+ await expect(page.getByText('Справочник вузов не требуется по заданию.',{exact:true})).toBeVisible();
+ await expect(page.getByText('Ответ не предоставляет требуемый ОДДС.',{exact:true})).toBeVisible();
+ await expect(page.getByText('Есть существенные нерешённые вопросы:',{exact:false})).toBeVisible();
+ await expect(page.getByText('Подготовка ожидает их разрешения.',{exact:false})).toBeVisible();
+ expect(await page.evaluate(()=>studyCalls.filter(c=>c.action==='registered-question-decide').length)).toBe(0);
+});

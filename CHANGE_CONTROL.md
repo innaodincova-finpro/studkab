@@ -2612,3 +2612,75 @@ the UI evidence for the prior head. No paid calls or deployment.
 
 Replay correction focused Node/PGlite/history/privacy: 22/22,
 32409 ms. Whitespace passed. Publish fix; whole new-head CI still required.
+
+## ROUTE-02 — регистрация до анализа и управление помощниками, 01.10.2026
+
+Требования: R15/R14, R2/R3/R4/R8/R9/R10/R13. Основание: согласованные решения
+владельца 01.10.2026, а не вывод о безошибочности ИИ. Прежняя схема допускала
+ошибки распределения достоверных цитат по неверным полям и блокировала приём
+до анализа/подтверждения. Наличие источника не доказывает смысл и полноту.
+
+Альтернативы рассмотрены: полная анкета, автозаполнение до отправки, краткая подача,
+диалог до подачи, немедленная генерация. Принято: подтверждённое сохранение комплекта
+и регистрация до анализа; затем проверяемое изучение. Вопросы адресованы студенту,
+проходят одобрение администратора. Внутренний чат — текст/голос. Две отдельные
+кнопки администратора: начало подготовки и передача после обязательных проверок.
+Бот — уведомления/согласование/внутренний чат; push обеим ролям с фактической приёмкой.
+Источник подробных условий и плана: docs/APPROVED_REQUEST_ROUTE_2026-10-01.md.
+
+Влияние: будущая совместимая доработка submit/SQL/publication, предложений,
+голоса/бота, этапов и уведомлений. Данные, номера, версии, бюджет, R13/R14 и допуск
+качества не ослабляются. Стек прежний. Новые платные провайдеры/лимиты не утверждены.
+Связанные открытые PR201/183/184 не объединяются этим решением.
+Проверка текущего пакета: целостность документации, ссылки и сверка состава docs diff.
+Код/БД/production не меняются, тесты приложения и live-доставка не объявлены пройденными.
+Будущие проверки и откат перечислены в ROUTE-02; откат текущего пакета — revert docs PR.
+
+
+## ROUTE-02-C4 / статус A — 02.10.2026
+
+Требование: утверждённые A/C, R3/R4/R9/R15. Основание сверки: актуальные
+PR202–205 не объединены; main835209d5a8a5ad180126b49b0d80d686baa89acb;
+CI36956789382 на e71f6ce успешен (193 browser,642 Node,SQL/native/A1/replay).
+Старые статусы «не установлен» в PR193/198 заменяются их поздними доказательствами
+установки только в названной области. Новый маршрут не установлен.
+
+Найденный пробел: distribute распознавал конфликты/условия, но не оценивал
+существенные отсутствующие данные всего комплекта и достаточность каждого ответа.
+Решение: добавить bounded whole-kit assessment к сохранённому плану, с исходными
+цитатами и авторством ответов; не универсальный чек-лист полей. Every input block
+covered, every answer assessed; insufficient/unknown требует нового private gap.
+Гэп без исходного файла/точной цитаты, выдуманный источник или неучтённый ответ
+делают ответ invalid. Кандидаты всё равно требуют отдельного утверждения паспорта.
+Gap blocks passport before materialization or publication; reply re-study clears
+only with a fresh exact-source assessment. Old extraction alone cannot approve.
+
+Новый studyProtocol меняет manifest только submitted источника. Open/legacy plans
+остаются прежними. Exact completed extraction prefix переиспользуется, дополнительный
+резерв — лишь whole-kit review. Unknown/partial paid prefix удерживается для сверки.
+Оба числовых предела проверяются заранее; новое включение/провайдер/бюджет не добавлены.
+Whole-kit prompt <=40000 UTF8 bytes/500 blocks, output <=4000 tokens/100000 bytes;
+original text never truncated. Larger kits processing-blocked, not declared complete.
+Альтернатива: фиксированная анкета/пропуски одной части — отвергнута, не соответствует
+согласованному сценарию. Реальная предметная приёмка модели отдельно открыта.
+
+Проверка: адресный Node/PGlite, старый analysis pipeline, immutable history/privacy,
+новые SQL admission/budget/source gates; native independent transactions добавлены
+в существующий единственный safety job без второго browser прогона. Browser показывает
+нерешённый gap/достаточность с основаниями. CI нового head и реальные роли/комплекты
+учитываются отдельно от успешного предыдущего head. Платных тестов/production нет.
+Откат: UI/worker first; additive SQL/history/paid reservations и оригиналы сохранять.
+Документы A приводятся к одному актуальному статусу и прежним требованиям, без
+незаметной отмены качества/приёмок. Откат docs — revert проверенного docs diff.
+
+C4 local verification: focused 47/47, Vite build, JS/Python syntax, whitespace
+and separate history/change-process checks passed. Current full CI and native
+registered concurrency await the published head. Real model completeness and
+production remain open; no paid provider call or budget activation.
+
+### ROUTE-02-C4: recovery audit, 02.10.2026
+Requirement: continue approved A/C without asking user to reconstruct technical data.
+Recovered existing worktree/logs; no functional expansion. Current full Node653,
+focused29 and browser6 pass; build/whitespace/history pass. Preserve public
+publication barrier; exact packet is listed in the recovery audit. Main, production,
+budget and data unchanged. Rollback this audit by reverting its documentation.

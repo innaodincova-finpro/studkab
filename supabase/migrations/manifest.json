@@ -525,6 +525,14 @@
       "status": "pending",
       "note": "ROUTE-02-C; not installed in production",
       "sha256": "889c0fc1a2702e8b07cd05e64a98920d6f93e7a790c25a270017ca1e02655dcb"
+    },
+    {
+      "version": "20261002031300",
+      "name": "route02_kit_review",
+      "file": "20261002031300_route02_kit_review.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C; whole-kit and answer assessment; not installed in production",
+      "sha256": "0edc16ea62b59a0ad3bd3371ae4e913931070dadc9bc6e3119549ccec9dc4c39"
     }
   ],
   "production_reconciled_at": "2026-09-23"

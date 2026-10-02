@@ -367,6 +367,8 @@ do $$ declare signature text;begin
  'public.studkab_registered_read_claim(text)',
  'public.studkab_registered_read_finish(uuid,integer,uuid,uuid,text,jsonb)',
  'public.studkab_registered_analysis_source(uuid)',
+ 'public.studkab_registered_analysis_original_source(uuid)',
+ 'public.studkab_registered_field_questions_refresh(uuid)',
  'public.studkab_registered_analysis_next()',
  'public.studkab_registered_analysis_start(uuid,text,jsonb)',
  'public.studkab_registered_analysis_state(uuid,uuid)',
