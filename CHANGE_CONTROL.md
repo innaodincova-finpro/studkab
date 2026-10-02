@@ -2595,3 +2595,20 @@ checks. Browser and native new-RPC concurrency await CI/acceptance; no activatio
 
 Final focused current-version checks: 36/36, fail/skipped/cancelled 0,
 43477 ms. /tmp/route02-study-current-focused.log. No paid provider calls.
+
+### CI replay inventory correction, 02.10.2026
+
+PR205/head3ea84ce run36955764099: 193 browser, pretest15 and Node642 passed;
+SQL safety/existing native concurrency/A1 passed. All new migrations applied.
+The final replay assertion failed because its fixed table inventory still said
+43 instead of 46. Add the three actual private tables and verify all new RPC
+ACL/invoker flags, classification column grants and approval/history triggers.
+Do not disable the assertion. Narrow service attachment UPDATE to the two
+reviewed classification columns; original hash/path remain unwritable even by
+this worker. Pending migration only; production unchanged. Repeat affected SQL
+and complete CI for the new head. Local alternate Chromium run: 5/8 passed,
+three browser-context launch/timeout failures; GitHub's complete 193 pass is
+the UI evidence for the prior head. No paid calls or deployment.
+
+Replay correction focused Node/PGlite/history/privacy: 22/22,
+32409 ms. Whitespace passed. Publish fix; whole new-head CI still required.

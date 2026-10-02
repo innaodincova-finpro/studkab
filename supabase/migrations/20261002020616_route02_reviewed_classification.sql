@@ -9,6 +9,7 @@ create table public.studkab_intake_classifications (
 alter table public.studkab_intake_classifications enable row level security;
 revoke all on public.studkab_intake_classifications from public,anon,authenticated,service_role;
 grant select,insert on public.studkab_intake_classifications to service_role;
+revoke update on public.studkab_request_attachments from service_role;
 grant update(category,extracted_text) on public.studkab_request_attachments to service_role;
 create or replace function public.studkab_attachment_immutable() returns trigger
 language plpgsql security invoker set search_path='' as $$

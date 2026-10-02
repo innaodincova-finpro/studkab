@@ -524,7 +524,7 @@
       "file": "20261002020616_route02_reviewed_classification.sql",
       "status": "pending",
       "note": "ROUTE-02-C; not installed in production",
-      "sha256": "3cd22ee58ebc735bda8304f71a3ba0d7ae587a922e98c8b196eb396426890e02"
+      "sha256": "889c0fc1a2702e8b07cd05e64a98920d6f93e7a790c25a270017ca1e02655dcb"
     }
   ],
   "production_reconciled_at": "2026-09-23"
