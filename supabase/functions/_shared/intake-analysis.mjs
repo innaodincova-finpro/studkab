@@ -6,7 +6,7 @@ export const SYSTEM='Ты извлекаешь сведения и ВСЕ при
 const bytes=s=>new TextEncoder().encode(s).byteLength;
 const norm=s=>s.trim().replace(/\s+/g,' ').toLocaleLowerCase('ru');
 // Provenance stays in the persisted plan; the model only needs addresses and text.
-export const analysisPrompt=(blocks,part,parts)=>JSON.stringify({version:ANALYSIS_VERSION,part,parts,blocks:blocks.map(b=>({blockId:b.blockId,text:b.text}))});
+export const analysisPrompt=(blocks,part,parts,reviewInstructions)=>JSON.stringify({version:ANALYSIS_VERSION,part,parts,blocks:blocks.map(b=>({blockId:b.blockId,text:b.text})),...(reviewInstructions?.length?{reviewInstructions,reviewRule:'Комментарии задают предмет повторной проверки, не являются источником фактов. Цитаты допустимы только из blocks.'}:{})});
 function fragments(text){
  const result=[];let value='',start=0,offset=0,size=0;
  for(const ch of text){const n=bytes(ch);if(size+n>BLOCK_TEXT_BYTES){result.push({text:value,start,end:offset});start=offset;value='';size=0;}value+=ch;size+=n;offset+=ch.length;}
@@ -15,13 +15,21 @@ function fragments(text){
 export function validAnalysisPart(part,ordinal,total){
  return part?.analysis_version===ANALYSIS_VERSION&&part.max_output_tokens===4000&&Array.isArray(part.blocks)&&part.blocks.length>0&&part.blocks.length<=PART_BLOCK_LIMIT&&
  part.blocks.every(b=>typeof b.text==='string'&&bytes(b.text)<=BLOCK_TEXT_BYTES)&&part.blocks.reduce((n,b)=>n+bytes(b.text),0)<=PART_TEXT_BYTES&&
- part.prompt===analysisPrompt(part.blocks,ordinal+1,total)&&part.max_cost_microusd===reserveMicrousd(SYSTEM,part.prompt,4000);
+ (!part.reviewInstructions||(Array.isArray(part.reviewInstructions)&&part.reviewInstructions.length<=20&&part.reviewInstructions.every(x=>typeof x.comment==='string'&&x.comment.length<=1000)))&&
+ part.prompt===analysisPrompt(part.blocks,ordinal+1,total,part.reviewInstructions)&&part.max_cost_microusd===reserveMicrousd(SYSTEM,part.prompt,4000);
 }
 export function analysisPlan(snapshot){
  const blocks=[];
+ const reviewInstructions=snapshot.reviewInstructions||[];
+ if(!Array.isArray(reviewInstructions)||reviewInstructions.length>20||reviewInstructions.some(x=>typeof x.comment!=='string'||x.comment.length>1000))throw Error('ANALYSIS_LIMIT');
  for(const file of snapshot.files||[]){
   if(file.read_status!=='ready'||file.read_result?.status!=='ready'||file.read_result.readerVersion!==file.read_version)throw Error('READING_INCOMPLETE');
   for(const [i,b] of file.read_result.blocks.entries())if(typeof b.text==='string'&&b.text.trim())for(const f of fragments(b.text))blocks.push({...b,text:f.text,blockId:'b'+blocks.length,originalBlockId:file.id+':'+i,source:{...b.source,textStart:f.start,textEnd:f.end},fileId:file.id,fileHash:file.file_hash,fileName:file.file_name,readerVersion:file.read_version});
+ }
+ if(typeof snapshot.deadline==='string'&&snapshot.deadline.trim())blocks.push({kind:'student_deadline',text:snapshot.deadline,blockId:'b'+blocks.length,originalBlockId:'deadline',source:{kind:'student_deadline',requestId:snapshot.requestId,field:'dl'},readerVersion:null});
+ for(const answer of snapshot.studentAnswers||[]){
+  if(typeof answer.answer!=='string'||typeof answer.source!=='string')throw Error('READING_INCOMPLETE');
+  for(const f of fragments(answer.answer+'\nОснование ответа: '+answer.source))blocks.push({kind:'student_answer',text:f.text,blockId:'b'+blocks.length,originalBlockId:'answer:'+answer.id,source:{kind:'student_answer',questionId:answer.id,author:answer.author,textStart:f.start,textEnd:f.end},readerVersion:null});
  }
  if(snapshot.notes?.trim())for(const f of fragments(snapshot.notes))blocks.push({kind:'student_note',text:f.text,blockId:'b'+blocks.length,originalBlockId:'notes',source:{kind:'student_note',textStart:f.start,textEnd:f.end},readerVersion:null});
  if(!blocks.length)throw Error('READING_INCOMPLETE');
@@ -33,7 +41,7 @@ export function analysisPlan(snapshot){
  }
  if(group.length)groups.push(group);
  if(groups.length>120)throw Error('ANALYSIS_LIMIT');
- const plan=groups.map((source,i)=>{const prompt=analysisPrompt(source,i+1,groups.length);return {analysis_version:ANALYSIS_VERSION,blocks:source,prompt,max_output_tokens:4000,max_cost_microusd:reserveMicrousd(SYSTEM,prompt,4000)};});
+ const plan=groups.map((source,i)=>{const prompt=analysisPrompt(source,i+1,groups.length,reviewInstructions);return {analysis_version:ANALYSIS_VERSION,blocks:source,prompt,...(reviewInstructions.length?{reviewInstructions}:{}),max_output_tokens:4000,max_cost_microusd:reserveMicrousd(SYSTEM,prompt,4000)};});
  if(bytes(JSON.stringify(plan))>16000000)throw Error('ANALYSIS_LIMIT');
  return plan;
 }

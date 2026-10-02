@@ -3,6 +3,7 @@ import {checkReserve} from './reserve.mjs';
 import {withContext} from './context.mjs';
 import {machineAuthorization} from './auth.mjs';
 import {runIntake} from './intake-runner.mjs';
+import {queueRegisteredAnalysis} from './registered-analysis.mjs';
 import {runRegisteredReading} from './registered-reading.mjs';
 import {readIntake} from '../studkab-requests/reader-runtime.ts';
 import {loadOriginal} from '../studkab-requests/intake-reading.mjs';
@@ -46,6 +47,9 @@ Deno.serve(handler({
   if(Deno.env.get('STUDKAB_REGISTERED_READING_ENABLED')==='true'){
    const reading=await runRegisteredReading({rpc,readIntake,loadIntake:(path:string,size:number,hash:string)=>loadOriginal({base,key,path,size,hash})});
    if(reading)return reading;
+  }
+  if(Deno.env.get('STUDKAB_REGISTERED_ANALYSIS_ENABLED')==='true'&&Deno.env.get('STUDKAB_INTAKE_ANALYSIS_ENABLED')==='true'&&!!token){
+   await queueRegisteredAnalysis({rpc});
   }
   return Deno.env.get('STUDKAB_INTAKE_ANALYSIS_ENABLED')==='true'&&!!token
    ?await runIntake({rpc,provider}):null;

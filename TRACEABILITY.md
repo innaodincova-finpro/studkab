@@ -2269,3 +2269,43 @@ Read GitHub job logs for prior B head cd4e917/run 36900949567: 188 browser tests
 passed, then the 30-minute job was cancelled; later Node/SQL/replay steps skipped.
 That is browser evidence for B, not complete CI for C1. New draft upload covers
 exactly the authorized ten files. No main/production mutation or paid operation.
+
+## ROUTE-02-C — registered study and private decisions, 02.10.2026
+
+R15/R3/R9 and approved ROUTE-02 package C. Code: new registered analysis
+queue/API/UI and three additive migrations. Current saved originals, request
+revision/owner/member and answers bind every semantic result. Old open-draft
+fingerprints remain unchanged. Whole-kit estimate must fit authorized caps before
+enqueue; dispatch still checks actual ledger. Existing paid identical completed
+plans may be reused; partial/uncertain paid identical plans require reconciliation.
+Unread/preparation failures are processing blockers, never missing facts.
+Private source-backed ambiguities need executor publish/edit or return. Private
+rows create no student event; one published question creates one event. Returned
+comment and student answer invalidate the analysis manifest. Guidance is not a
+factual citation; student answers preserve authorship. Repeated study records why
+a returned issue disappeared or needs a new proposal; answered questions are not
+blindly repeated. File classification requires separately approved grounded role
+and leaves original hash/path unchanged. Passport remains a separate approval;
+pending ambiguity/stale study cannot bypass its gate even before proposals are
+materialized. Published clarification items can be reviewed in the passport editor.
+
+Verification: initial affected suite 76/76; whole sequential Node/PGlite run
+642/642, fail/cancelled/skipped 0, 302671 ms. Late changes make the saved student
+deadline an attributed input, guard unmaterialized ambiguities and add paid-plan
+reconciliation. Those affected areas are rechecked in the final focused suite;
+do not describe the earlier whole-run log as proof of later byte changes.
+Logs: /tmp/route02-study-full-node.log, /tmp/route02-study-current-focused.log.
+Vite build, JS syntax and git diff --check passed. Local browser scenarios could
+not launch: browser absent and Playwright download returned a truncated archive.
+Five authored UI scenarios need GitHub browser CI. Native PostgreSQL concurrency
+for new RPCs, migration replay, real two-role/real-kit acceptance and production
+remain open. No model provider, paid synthetic test, main mutation or activation.
+Essential missing-data-question completeness is not established by conflict tests.
+Bot/voice, stages/push, full preparation/quality/release and route acceptance remain.
+
+C1 predecessor PR204 has successful complete CI 36950865908 on 9dc26fa: 188
+browser and 624 Node plus existing native suites and migration replay. That CI
+does not cover this new package.
+
+Final focused current-version checks: 36/36, fail/skipped/cancelled 0,
+43477 ms. /tmp/route02-study-current-focused.log. No paid provider calls.

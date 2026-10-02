@@ -197,3 +197,12 @@ C1 реализует только бесплатное серверное чт�
 с ограниченными повторами и версионным сохранением. Семантический анализ,
 приватные вопросы/решения, бот/голос, этапы, реальные уведомления и общая
 приёмка сохраняются в остатке. Не выдавать C1 или PR203 за завершение маршрута.
+
+### ROUTE-02-C2/C3 — implementation scope, 02.10.2026
+Registered bounded semantic study, private source-backed ambiguity proposals,
+executor publish/edit/return, attributed student replies and repeated study.
+Original file roles need separate executor confirmation; passport approval remains
+separate. Unknown paid calls retain their reservations. No production activation
+or increased budget. Source-backed ambiguities are implemented; completeness of
+essential missing-data questions requires criterion-based acceptance of real kits.
+Bot/voice, delivery stages/push, full route acceptance and production remain open.

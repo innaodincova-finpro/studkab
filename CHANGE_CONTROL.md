@@ -2545,3 +2545,53 @@ Recovered version verification 02.10: 624/624 full sequential Node/PGlite,
 unavailable (binary missing); CI/native concurrency/replay/production remain
 open. Previous B run 36900949567 logged 188 passed browser tests but job
 cancelled at 30 minutes, skipping later checks. Do not call the CI successful.
+
+## ROUTE-02-C2 — registered semantic study, 02.10.2026
+
+Requirement: approved ROUTE-02 package C, R15/R3/R9. Registration already
+preserves originals and C1 reads them, but the semantic source accepts only open
+drafts. Extend the existing bounded analysis/budget pipeline to current received
+requests. Keep legacy open-source fingerprints byte-compatible; bind submitted
+sources to live request revision, member/owner and active attachment hashes.
+Only ready original readings enter analysis. Private output is visible only to
+the executor; no student confirmation, classification or passport approval is
+implied. Unknown paid outcomes retain reservations and are never auto-repeated.
+Alternative reopening drafts rejected because it changes saved submission state.
+No policy/env activation or budget increase; synthetic provider tests only.
+Check isolated SQL: stale ownership/revision/deletion/membership/materials,
+legacy compatibility, lease recovery, budget refusal, private API access.
+Rollback worker/API first; retain additive functions/history and original data.
+Questions/decisions follow in C3; C2 alone does not finish package C.
+
+### ROUTE-02-C3 — private decisions and reviewed file roles, 02.10.2026
+
+Same approved package C/R3/R9/R15. Implement private proposals from source-backed
+conflicts/conditional fields; missing universal header fields do not automatically
+generate student questions. Executor approves exact/edit wording or returns with
+comment. Published rows use existing immutable student-answer/dialogue path;
+private rows generate no student notification. Return/answer changes the source
+manifest for repeat study. Guidance cannot serve as a factual citation.
+Reviewed file role requires current done analysis and a cited role for that exact
+original. Only category/extracted_text may change once; bytes/hash/path stay fixed.
+A separate private approval row and trigger guard protect the narrow transition.
+The editor adds published clarification items so answers can be checked in a new
+passport revision. No passport approval is automatic and existing gates stay.
+Reuse exactly matching completed plans without a second paid reservation.
+Preparation failures persist without starving subsequent kits; budget refusals
+are visible and placed after unexamined candidates. Numerical caps unchanged.
+Checks: private visibility/events, SQL actor/role/stale guards, retries, unchanged
+legacy plans, return/re-study, student authorship, reviewed classification, UI.
+Rollback UI/worker first; retain proposals, decisions and original history.
+Real-kit essential-question completeness and the entire route acceptance remain
+open. No paid synthetic requests or production changes.
+
+Final review: pending ambiguities block passport approval even if the private
+proposal list has not yet been opened. Student's saved deadline is included as
+an attributed registration source, separate from document quotes. Identical
+partial/uncertain paid plans cannot be re-purchased after metadata-only changes.
+Existing completed identical output can be reused for zero additional reservation.
+Whole Node/PGlite run 642/642; subsequent narrow adjustments get final focused
+checks. Browser and native new-RPC concurrency await CI/acceptance; no activation.
+
+Final focused current-version checks: 36/36, fail/skipped/cancelled 0,
+43477 ms. /tmp/route02-study-current-focused.log. No paid provider calls.
