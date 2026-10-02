@@ -7,7 +7,8 @@ import {runIntake as runIntakePart} from '../supabase/functions/studkab-generati
 import {registeredStudyAction} from '../supabase/functions/studkab-requests/registered-study.mjs';
 import {handler} from '../supabase/functions/studkab-requests/handler.mjs';
 import {registeredAnalysisPlan,verifyKitReview,validReviewPart,REVIEW_VERSION} from '../supabase/functions/_shared/registered-review.mjs';
-async function runIntake(args){for(let i=0;i<120;i++){const result=await runIntakePart(args);if(result?.status!=='intake_queued')return result;}throw Error('did not finish');}
+import {kitAdapt} from './kit-adapter.mjs';
+async function runIntake(args){args={...args,provider:kitAdapt(args.provider)};for(let i=0;i<120;i++){const result=await runIntakePart(args);if(result?.status!=='intake_queued')return result;}throw Error('did not finish');}
 function reviewResponse(spec){return {covered:spec.blocks.map(b=>b.blockId),gaps:[],returnedReviews:spec.reviewInstructions.filter(i=>i.proposalId).map(i=>({proposalId:i.proposalId,status:'resolved',reason:'Вопрос снят: исходное задание содержит применимое условие; общий вариант методички не изменяет его.',refs:[{blockId:spec.blocks.find(b=>b.fileId).blockId,quote:spec.blocks.find(b=>b.fileId).text}]})),answerReviews:spec.answers.map(a=>({questionId:a.id,status:'sufficient',reason:'Ответ содержит применимое условие по исходному заданию.',refs:[spec.blocks.find(b=>b.source?.questionId===a.id),spec.blocks.find(b=>b.fileId)].map(b=>({blockId:b.blockId,quote:b.text}))}))};}
 const read=n=>fs.readFileSync(new URL('../supabase/migrations/'+n,import.meta.url),'utf8');
 const migration=read('20261002015056_route02_registered_analysis.sql');
@@ -20,7 +21,7 @@ async function fixture({enabled=true,ready=true,kitText=text}={}){
  const {file}=await rpc('studkab_intake_reserve',{p_student:student,p_draft:draft.id,p_name:'Assignment.docx',p_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',p_size:100,p_hash:'a'.repeat(64),p_supersedes:null});
  await rpc('studkab_intake_finish',{p_student:student,p_draft:draft.id,p_file:file.id,p_hash:file.file_hash});
  const legacy=await rpc('studkab_intake_analysis_source',{p_draft:draft.id});
- await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql'));await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
+ await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql'));await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
  assert.deepEqual(await rpc('studkab_intake_analysis_source',{p_draft:draft.id}),legacy);
  const snap=await rpc('studkab_intake_receive_snapshot',{p_student:student,p_draft:draft.id});
  const receipt=await rpc('studkab_intake_receive',{p_student:student,p_draft:draft.id,p_revision:snap.revision,p_deadline:'2026-10-30',p_description:'',p_contact:'synthetic@example.invalid'});
@@ -241,25 +242,27 @@ test('a legacy completed extraction without whole-kit adequacy cannot approve th
  }finally{await f.db.close();}
 });
 
-test('new whole-kit review reuses the exact paid legacy extraction and reserves only the additional review',async()=>{
+test('KIT-02: whole-kit method keeps a paid legacy extraction untouched and reserves only its own two parts',async()=>{
  const f=await fixture();try{
   const plan=registeredAnalysisPlan(await f.source()),prefix=plan.slice(0,-1).map(({extraction_parts,...p})=>p);
   const raw=await f.provider({spec:prefix[0]}),parsed=verifyExtraction(raw.text,prefix[0]),cost=prefix[0].max_cost_microusd;
   const inserted=await f.db.query("insert into studkab_intake_analysis_jobs(draft_id,manifest,version,plan,state,ordinal,part_results,result,reserved_microusd) values($1,$2,'intake-analysis-2',$3,'done',1,$4,$5,$6) returning id",[f.draft.id,'c'.repeat(64),prefix,[parsed],{analysisVersion:'intake-analysis-2',status:'candidate'},cost]);
-  await f.mutate('update studkab_gen_budget set reserved_microusd='+cost+',limit_microusd='+(cost+plan.at(-1).max_cost_microusd)+';update studkab_intake_analysis_policy set limit_microusd='+(cost+plan.at(-1).max_cost_microusd));
+  await f.mutate('update studkab_gen_budget set reserved_microusd='+cost);
   const before=f.calls;assert.equal((await f.enqueue()).status,'registered_analysis_queued');
-  const claimed=await f.rpc('studkab_intake_analysis_claim',{});assert.equal(claimed.part.kind,'kit_review');
-  await f.mutate("update studkab_intake_analysis_jobs set lease_until=now()-interval '1 second' where state='claimed'");
-  assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');assert.equal(f.calls,before+1);
+  assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');assert.equal(f.calls,before+2);
   const current=await f.state(),job=(await f.db.query('select * from studkab_intake_analysis_jobs where id=$1',[current.analysisId])).rows[0];
-  assert.equal(job.raw_outputs[0].reused_extraction_id,inserted.rows[0].id);assert.equal(Number(job.reserved_microusd),plan.at(-1).max_cost_microusd);assert.equal(current.result.fields.t.values[0].value,'Менеджмент');
+  assert.deepEqual(job.plan.map(p=>p.kind),['kit_extraction','kit_review']);assert.equal(Number(job.reserved_microusd),job.plan[0].max_cost_microusd+job.plan[1].max_cost_microusd);
+  const legacy=(await f.db.query('select state,reserved_microusd from studkab_intake_analysis_jobs where id=$1',[inserted.rows[0].id])).rows[0];assert.equal(legacy.state,'done');assert.equal(Number(legacy.reserved_microusd),cost);
+  assert.equal(current.result.fields.t.values[0].value,'Менеджмент');
  }finally{await f.db.close();}
 });
-test('an uncertain paid legacy extraction cannot be re-bought to add a whole-kit review',async()=>{
+test('KIT-02: an uncertain legacy extraction keeps its reserve; the new method is limited by the remaining policy',async()=>{
  const f=await fixture();try{
   const plan=registeredAnalysisPlan(await f.source()),prefix=plan.slice(0,-1).map(({extraction_parts,...p})=>p);
   await f.db.query("insert into studkab_intake_analysis_jobs(draft_id,manifest,version,plan,state,reserved_microusd) values($1,$2,'intake-analysis-2',$3,'unknown',1000)",[f.draft.id,'c'.repeat(64),prefix]);
-  await f.mutate('update studkab_gen_budget set reserved_microusd=1000');assert.equal((await f.enqueue()).status,'registered_analysis_reconciliation');assert.equal(f.calls,0);
+  await f.mutate('update studkab_gen_budget set reserved_microusd=1000;update studkab_intake_analysis_policy set limit_microusd=1001');
+  assert.equal((await f.enqueue()).status,'registered_analysis_budget');assert.equal(f.calls,0);
+  const legacy=(await f.db.query("select state,reserved_microusd from studkab_intake_analysis_jobs where state='unknown'")).rows[0];assert.equal(Number(legacy.reserved_microusd),1000);
  }finally{await f.db.close();}
 });
 
@@ -310,4 +313,19 @@ test('C acceptance: unknown answer, explicit follow-up, adequate reply and sourc
   await gate();assert.equal((await f.db.query("select count(*) n from studkab_dialog_events where kind='question'")).rows[0].n,2);assert.equal((await f.db.query("select count(*) n from studkab_dialog_events where kind='answer'")).rows[0].n,2);
   assert.equal((await f.db.query('select file_hash from studkab_request_attachments')).rows[0].file_hash,f.file.file_hash);
  }finally{await f.db.close();}
+});
+
+test('KIT-02: брак формата даёт один оплачиваемый повтор той же части; второй брак останавливает разбор',async()=>{
+ for(const failures of [1,2]){const f=await fixture();try{
+  let bad=failures;const provider=async c=>{if(c.spec.kind==='kit_extraction'&&bad>0){bad--;return {complete:true,text:'Вот разбор комплекта: всё хорошо.'};}return f.provider(c);};
+  assert.equal((await f.enqueue()).status,'registered_analysis_queued');
+  const first=await runIntakePart({rpc:f.rpc,provider:kitAdapt(provider)});assert.equal(first.status,'intake_retry');assert.equal(first.check,'INVALID_EXTRACTION');
+  let job=(await f.db.query('select * from studkab_intake_analysis_jobs')).rows[0];assert.equal(job.state,'queued');assert.equal(job.ordinal,0);assert.equal(job.raw_outputs[0].error,'invalid:INVALID_EXTRACTION');assert.equal(job.raw_outputs[0].text,'Вот разбор комплекта: всё хорошо.');
+  const reserve=Number(job.reserved_microusd);assert.equal(reserve,job.plan[0].max_cost_microusd);
+  const second=await runIntake({rpc:f.rpc,provider});
+  job=(await f.db.query('select * from studkab_intake_analysis_jobs')).rows[0];
+  if(failures===1){assert.equal(second.status,'intake_done');assert.equal(job.state,'done');assert.equal(Number(job.reserved_microusd),2*job.plan[0].max_cost_microusd+job.plan[1].max_cost_microusd);}
+  else {assert.equal(second.status,'intake_invalid');assert.equal(job.state,'invalid');assert.equal(Number(job.reserved_microusd),2*reserve);assert.equal(await runIntakePart({rpc:f.rpc,provider:kitAdapt(provider)}),null);}
+  const budget=(await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0];assert.equal(Number(budget.reserved_microusd),Number(job.reserved_microusd));
+ }finally{await f.db.close();}}
 });

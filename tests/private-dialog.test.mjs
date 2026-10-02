@@ -7,7 +7,8 @@ import {runIntake as runIntakePart} from '../supabase/functions/studkab-generati
 import {registeredStudyAction} from '../supabase/functions/studkab-requests/registered-study.mjs';
 import {handler} from '../supabase/functions/studkab-requests/handler.mjs';
 import {registeredAnalysisPlan,verifyKitReview,validReviewPart,REVIEW_VERSION} from '../supabase/functions/_shared/registered-review.mjs';
-async function runIntake(args){for(let i=0;i<120;i++){const result=await runIntakePart(args);if(result?.status!=='intake_queued')return result;}throw Error('did not finish');}
+import {kitAdapt} from './kit-adapter.mjs';
+async function runIntake(args){args={...args,provider:kitAdapt(args.provider)};for(let i=0;i<120;i++){const result=await runIntakePart(args);if(result?.status!=='intake_queued')return result;}throw Error('did not finish');}
 function reviewResponse(spec){return {covered:spec.blocks.map(b=>b.blockId),gaps:[],returnedReviews:spec.reviewInstructions.filter(i=>i.proposalId).map(i=>({proposalId:i.proposalId,status:'resolved',reason:'Вопрос снят: исходное задание содержит применимое условие; общий вариант методички не изменяет его.',refs:[{blockId:spec.blocks.find(b=>b.fileId).blockId,quote:spec.blocks.find(b=>b.fileId).text}]})),answerReviews:spec.answers.map(a=>({questionId:a.id,status:'sufficient',reason:'Ответ содержит применимое условие по исходному заданию.',refs:[spec.blocks.find(b=>b.source?.questionId===a.id),spec.blocks.find(b=>b.fileId)].map(b=>({blockId:b.blockId,quote:b.text}))}))};}
 const read=n=>fs.readFileSync(new URL('../supabase/migrations/'+n,import.meta.url),'utf8');
 const migration=read('20261002015056_route02_registered_analysis.sql');
@@ -37,7 +38,7 @@ async function baseFixture({enabled=true,ready=true,kitText=text}={}){
  return {db,rpc,api,draft,file,receipt,source,state,enqueue,provider,reading,mutate,get calls(){return calls;}};
 }
 
-async function fixture(){const f=await baseFixture();await f.mutate(fs.readFileSync(new URL('../telegram-setup.sql',import.meta.url),'utf8')+read('20261002052253_route02_private_dialog.sql'));await f.mutate("insert into studkab_telegram_setup(setup_hash,owner_hash,expires_at,installed,owner_chat_id) values('"+'a'.repeat(64)+"','"+'b'.repeat(64)+"',now()+interval '1 day',true,100)");return f;}
+async function fixture(){const f=await baseFixture();await f.mutate(fs.readFileSync(new URL('../telegram-setup.sql',import.meta.url),'utf8')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql'));await f.mutate("insert into studkab_telegram_setup(setup_hash,owner_hash,expires_at,installed,owner_chat_id) values('"+'a'.repeat(64)+"','"+'b'.repeat(64)+"',now()+interval '1 day',true,100)");return f;}
 const manifest=async f=>(await f.rpc('studkab_private_dialog_read',{p_request:f.receipt.id,p_actor:other})).manifest;
 const send=(f,key,body,manifest,actor=other)=>f.rpc('studkab_private_dialog_send',{p_request:f.receipt.id,p_actor:actor,p_key:key,p_body:body,p_manifest:manifest,p_channel:'web'});
 const action=(f,mode,extra={},chat=100)=>f.rpc('studkab_telegram_registered_action',{p_chat:chat,p_action:mode,p_request:null,p_proposal:null,p_text:null,p_key:null,p_reply:null,...extra});
