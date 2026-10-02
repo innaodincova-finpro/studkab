@@ -74,7 +74,11 @@ try:
  replies=parallel(lambda _:call("studkab_telegram_registered_action(100,'reply',null,null,'Проверьте применимость задания.','telegram:race',55)"))
  assert all(x['ok'] for x in replies);assert sum(x.get('duplicate',False) for x in replies)==1
  assert int(sql('select count(*) from studkab_private_dialog'))==2
- assert call(f"studkab_telegram_registered_action(100,'publish',null,'{q['id']}',null,null,null)")['duplicate']
+ unchanged=call(f"studkab_telegram_registered_action(100,'publish',null,'{q['id']}',null,null,null)")
+ assert unchanged.get('conflict') and not unchanged.get('ok')
+ retries=parallel(lambda _:call(f"studkab_registered_question_decide('{request}','{executor}','{q['id']}','publish','Уточните местонахождение данных.')"))
+ assert all(x.get('duplicate') for x in retries)
+ assert sql(f"select published_text from studkab_question_proposals where id='{q['id']}'")=='Уточните местонахождение данных.'
  assert int(sql('select count(*) from studkab_clarifications'))==1
  print('PASS: native private web/Telegram comment/context/reply concurrency; shared immutable decision, no private student events')
 

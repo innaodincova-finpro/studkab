@@ -66,9 +66,11 @@ test('Telegram and web share exact immutable decisions; foreign chats and stale 
   await f.enqueue();await runIntake({rpc:f.rpc,provider:async c=>{const r=await f.provider(c),x=JSON.parse(r.text);if(c.spec.kind==='kit_review')x.gaps=[{key:'topic',question:'Какая тема применима?',reason:'Оригинал содержит два варианта.',refs:[{blockId:c.spec.blocks[0].blockId,quote:'Тема: Менеджмент. Тема: Финансы.'}]}];return {...r,text:JSON.stringify(x)};}});
   const study=await action(f,'study',{p_request:f.receipt.id});const q=study.proposals[0];assert.equal(study.requestId,f.receipt.id);
   await assert.rejects(()=>action(f,'publish',{p_proposal:q.id},101),/FORBIDDEN/);
-  const result=await action(f,'publish',{p_proposal:q.id});assert.equal(result.ok,true);assert.equal(result.published_text,q.question);
-  assert.equal((await f.rpc('studkab_registered_question_decide',{p_request:f.receipt.id,p_actor:other,p_proposal:q.id,p_decision:'publish',p_text:q.question})).duplicate,true);
-  assert.equal((await action(f,'publish',{p_proposal:q.id})).duplicate,true);
+  const edited='Уточните тему, согласованную с преподавателем.';
+  const result=await f.rpc('studkab_registered_question_decide',{p_request:f.receipt.id,p_actor:other,p_proposal:q.id,p_decision:'publish',p_text:edited});assert.equal(result.published_text,edited);
+  assert.equal((await f.rpc('studkab_registered_question_decide',{p_request:f.receipt.id,p_actor:other,p_proposal:q.id,p_decision:'publish',p_text:edited})).duplicate,true);
+  const originalRetry=await action(f,'publish',{p_proposal:q.id});assert.equal(originalRetry.conflict,true);assert.equal(originalRetry.ok,false);
+  assert.equal((await f.db.query('select published_text from studkab_question_proposals where id=$1',[q.id])).rows[0].published_text,edited);
   assert.equal((await f.db.query('select count(*) n from studkab_clarifications')).rows[0].n,1);
   assert.equal((await f.db.query("select count(*) n from studkab_dialog_events where kind='question'")).rows[0].n,1);
  }finally{await f.db.close();}
