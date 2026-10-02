@@ -2184,6 +2184,149 @@ R14/C171 → `requirements.mjs`, `reestr.html`, `tests/requirement-passports.tes
 
 TASK R14/QD06 → `tools/word_page_pilot.py` (`--verify-existing`), `tests/word_page_pilot_test.py`, CHANGE_CONTROL C177-P2. Проба на четырёх вымышленных DOCX дала 3, 2, 3 и 60 страниц за 1,91, 0,98, 1,33 и 10,5 секунды в локальной среде. В первом 60-страничном наборе после успешного запуска один PNG (стр. 29) оказался усечённым; причина не установлена. Повторный старый прогон дал 60 целых страниц. Новый режим сверяет исходный DOCX, число и порядок страниц, читаемость всех PNG и их хеши непосредственно перед просмотром; при проверке прежнего набора отказал с `PAGE_IMAGE_CORRUPT`. Адресные Python-тесты 2/2: целый набор, усечённый PNG, изменённый исходник, неполный набор. Новый 60-страничный прогон: 11,57 с, затем отдельная проверка целостности 1,11 с, 60/60. Локальные PNG 8 страниц коротких примеров просмотрены; у вымышленной длинной таблицы продолжение осталось без повторного заголовка. Microsoft Word в среде отсутствует, сравнения раскладки нет. Это локальная диагностика без приложения, публикации, платных сервисов и положительной приёмки QD06.
 
+## ROUTE-02-B — приём до разбора, 01.10.2026
+
+Основание: утверждённый ROUTE-02 / PR202. Ветка fix/route02-receipt-before-analysis.
+Код: intake-receive.mjs, intake.mjs/handler, intake-ui/index/reestr/sw,
+миграция 20261001162253_route02_receive_before_analysis.sql, requirements.mjs.
+Подтверждено локально: 208 адресных и регрессионных Node/PGlite тестов;
+миграция и legacy submit проверены на изолированном SQL; Vite build exit 0
+(прежние предупреждения о немодульных script сохранены); git diff --check.
+Новые browser сценарии написаны; не исполнены из-за отсутствия Chromium
+и неуспешной загрузки его архива. Native PostgreSQL concurrency и полный
+Supabase replay не выполнены локально: отсутствует psql/контейнерная среда.
+Код нового приёма сохраняет все оригиналы и не вызывает платный анализ;
+нераспознанные материалы явно блокируют паспорт и подготовку. Дальнейшее
+изучение — пакет C, пока не реализовано. CI PR202 отменён во время browser
+этапа; остальные проверки пропущены. Приложение и база не менялись. Нужны общий CI,
+проверка интерфейса, приёмка на согласованных аккаунтах и разрешённый выпуск.
+
+### ROUTE-02-B — повторная проверка 01.10.2026
+
+Общий локальный Node прогон: 615 тестов, 610 прошли, 5 завершились ошибками.
+Исправлен пропуск регистрации новой миграции в supabase/migrations/manifest.json:
+статус pending, SHA-256 исходника, без утверждения установки в production.
+Четыре остальных ошибки содержали SIGKILL; причина остановки не установлена.
+Адресный повтор затронутых проверок: 18/18 и generation-stop SQL 2/2 прошли.
+Повтор приёма/legacy: 14/14; Vite build exit 0; change-process check passed.
+Полный прогон после исправления не повторялся; успешный общий CI не заявляется.
+Три browser теста не запустились: Chromium отсутствует; архив установки повреждён.
+PR202 остаётся draft/open, CI 36889491726 cancelled. Публикация кода отклонена
+автоматической проверкой: нет явного разрешения на публикацию исходников.
+Основная ветка, рабочая база и приложение не изменены; платных запусков не было.
+
+### ROUTE-02-B — полный последовательный локальный прогон 01.10.2026
+
+Проверен head 4ccd265 после регистрации миграции: полный набор package.json
+выполнен с --test-concurrency=1. Итог 615/615, fail 0, skipped 0,
+cancelled 0; длительность 280969 мс. Журнал:
+/workspace/scratch/a1cc5e738c39/route02-full-sequential.log.
+Change-process check и git diff --check успешны. Это локальные Node/PGlite
+проверки, не browser, не native PostgreSQL concurrency и не production.
+Браузерная проверка и общий CI остаются открыты; публикация 20 файлов
+исходников требует разрешения после прежнего отказа автоматической проверки.
+
+### ROUTE-02-B — browser verification, 01.10.2026
+
+Installed Chromium found at /tmp/studkab-browser-runtime/chromium; no new download.
+Corrected intake-receive test setup: restored submitted draft must disable uploads.
+Added rapid double-click assertion: exactly one receive call and one fixture write.
+Focused receive scenarios: 3/3 passed. Chromium compatibility subset: 30/30 passed,
+17.2 seconds (intake, intake-drafts, intake-receive). Log:
+/tmp/route02-chromium-current.log. API is simulated in these browser scenarios;
+this is not production database acceptance. Initial combined 31-scenario run
+had 20 passes then Safari scenario timed out at 90s; the run was interrupted
+while cleanup stalled. Safari was excluded only in the temporary local config
+for the subsequent Chromium subset. Original checked-in config restored.
+Safari/WebKit, native PostgreSQL, full CI and production acceptance remain open.
+No application source behavior changed in this correction; production untouched.
+
+## ROUTE-02-C1 — registered original reading, 01.10.2026
+
+Requirement ROUTE-02 1.3/package C, R15/R3/R9. Added a machine-only unpaid
+reading worker in studkab-generation, authorized through existing machine + cron
+checks. It verifies original hashes/sizes, stores parser results under request
+revision and file lease, preserves originals and permits at most three attempts.
+Lost replies are recoverable; deleted/reassigned/revised requests and revoked
+members cannot accept the result. Classification and passport approval remain
+blocked: C1 does not complete semantic study or private question proposals.
+01.10 recorded local verification: 623/623 full Node/PGlite, 31/31 final focused,
+Deno cached-only check and Vite build. Original local logs/commit unavailable
+02.10; these historical figures are not evidence for the recovered bytes.
+Recovered source and 10-file scope from this conversation. Published B base tree
+matches b2023094284cd1b77ab78e18bb1b82f07c9093c0. Current verification repeated
+before the user-authorized 02.10 public upload. Native PostgreSQL concurrency,
+migration replay, browser CI, production and authorized acceptance remain open.
+
+### ROUTE-02-C1 — recovered version verification, 02.10.2026
+
+Current recovered version passed full sequential Node/PGlite suite 624/624,
+fail/cancelled/skipped 0, 265166 ms. Current focused suite 32/32, 13511 ms.
+Vite build and git diff --check passed. Deno recheck could not run: executable
+is no longer present; historical Deno result is not claimed for recovered bytes.
+Log paths: /workspace/scratch/7721e3be668e/recovery/full-node.log and focused.log.
+Read GitHub job logs for prior B head cd4e917/run 36900949567: 188 browser tests
+passed, then the 30-minute job was cancelled; later Node/SQL/replay steps skipped.
+That is browser evidence for B, not complete CI for C1. New draft upload covers
+exactly the authorized ten files. No main/production mutation or paid operation.
+
+## ROUTE-02-C — registered study and private decisions, 02.10.2026
+
+R15/R3/R9 and approved ROUTE-02 package C. Code: new registered analysis
+queue/API/UI and three additive migrations. Current saved originals, request
+revision/owner/member and answers bind every semantic result. Old open-draft
+fingerprints remain unchanged. Whole-kit estimate must fit authorized caps before
+enqueue; dispatch still checks actual ledger. Existing paid identical completed
+plans may be reused; partial/uncertain paid identical plans require reconciliation.
+Unread/preparation failures are processing blockers, never missing facts.
+Private source-backed ambiguities need executor publish/edit or return. Private
+rows create no student event; one published question creates one event. Returned
+comment and student answer invalidate the analysis manifest. Guidance is not a
+factual citation; student answers preserve authorship. Repeated study records why
+a returned issue disappeared or needs a new proposal; answered questions are not
+blindly repeated. File classification requires separately approved grounded role
+and leaves original hash/path unchanged. Passport remains a separate approval;
+pending ambiguity/stale study cannot bypass its gate even before proposals are
+materialized. Published clarification items can be reviewed in the passport editor.
+
+Verification: initial affected suite 76/76; whole sequential Node/PGlite run
+642/642, fail/cancelled/skipped 0, 302671 ms. Late changes make the saved student
+deadline an attributed input, guard unmaterialized ambiguities and add paid-plan
+reconciliation. Those affected areas are rechecked in the final focused suite;
+do not describe the earlier whole-run log as proof of later byte changes.
+Logs: /tmp/route02-study-full-node.log, /tmp/route02-study-current-focused.log.
+Vite build, JS syntax and git diff --check passed. Local browser scenarios could
+not launch: browser absent and Playwright download returned a truncated archive.
+Five authored UI scenarios need GitHub browser CI. Native PostgreSQL concurrency
+for new RPCs, migration replay, real two-role/real-kit acceptance and production
+remain open. No model provider, paid synthetic test, main mutation or activation.
+Essential missing-data-question completeness is not established by conflict tests.
+Bot/voice, stages/push, full preparation/quality/release and route acceptance remain.
+
+C1 predecessor PR204 has successful complete CI 36950865908 on 9dc26fa: 188
+browser and 624 Node plus existing native suites and migration replay. That CI
+does not cover this new package.
+
+Final focused current-version checks: 36/36, fail/skipped/cancelled 0,
+43477 ms. /tmp/route02-study-current-focused.log. No paid provider calls.
+
+### CI replay inventory correction, 02.10.2026
+
+PR205/head3ea84ce run36955764099: 193 browser, pretest15 and Node642 passed;
+SQL safety/existing native concurrency/A1 passed. All new migrations applied.
+The final replay assertion failed because its fixed table inventory still said
+43 instead of 46. Add the three actual private tables and verify all new RPC
+ACL/invoker flags, classification column grants and approval/history triggers.
+Do not disable the assertion. Narrow service attachment UPDATE to the two
+reviewed classification columns; original hash/path remain unwritable even by
+this worker. Pending migration only; production unchanged. Repeat affected SQL
+and complete CI for the new head. Local alternate Chromium run: 5/8 passed,
+three browser-context launch/timeout failures; GitHub's complete 193 pass is
+the UI evidence for the prior head. No paid calls or deployment.
+
+Replay correction focused Node/PGlite/history/privacy: 22/22,
+32409 ms. Whitespace passed. Publish fix; whole new-head CI still required.
+
 ## ROUTE-02 — согласованные требования и план реализации, 01.10.2026
 
 | Требование | Документы / код для будущей доработки | Проверка текущего этапа | Статус |
@@ -2200,3 +2343,55 @@ TASK R14/QD06 → `tools/word_page_pilot.py` (`--verify-existing`), `tests/word_
 Проверки ссылок/состава документации фиксируются в описании docs PR;
 результат CI нельзя подменять этим протоколом. Сведения других проектов не применялись.
 
+
+## ROUTE-02-C4 / статус A — 02.10.2026
+
+Требование: утверждённые A/C, R3/R4/R9/R15. Основание сверки: актуальные
+PR202–205 не объединены; main835209d5a8a5ad180126b49b0d80d686baa89acb;
+CI36956789382 на e71f6ce успешен (193 browser,642 Node,SQL/native/A1/replay).
+Старые статусы «не установлен» в PR193/198 заменяются их поздними доказательствами
+установки только в названной области. Новый маршрут не установлен.
+
+Найденный пробел: distribute распознавал конфликты/условия, но не оценивал
+существенные отсутствующие данные всего комплекта и достаточность каждого ответа.
+Решение: добавить bounded whole-kit assessment к сохранённому плану, с исходными
+цитатами и авторством ответов; не универсальный чек-лист полей. Every input block
+covered, every answer assessed; insufficient/unknown требует нового private gap.
+Гэп без исходного файла/точной цитаты, выдуманный источник или неучтённый ответ
+делают ответ invalid. Кандидаты всё равно требуют отдельного утверждения паспорта.
+Gap blocks passport before materialization or publication; reply re-study clears
+only with a fresh exact-source assessment. Old extraction alone cannot approve.
+
+Новый studyProtocol меняет manifest только submitted источника. Open/legacy plans
+остаются прежними. Exact completed extraction prefix переиспользуется, дополнительный
+резерв — лишь whole-kit review. Unknown/partial paid prefix удерживается для сверки.
+Оба числовых предела проверяются заранее; новое включение/провайдер/бюджет не добавлены.
+Whole-kit prompt <=40000 UTF8 bytes/500 blocks, output <=4000 tokens/100000 bytes;
+original text never truncated. Larger kits processing-blocked, not declared complete.
+Альтернатива: фиксированная анкета/пропуски одной части — отвергнута, не соответствует
+согласованному сценарию. Реальная предметная приёмка модели отдельно открыта.
+
+Проверка: адресный Node/PGlite, старый analysis pipeline, immutable history/privacy,
+новые SQL admission/budget/source gates; native independent transactions добавлены
+в существующий единственный safety job без второго browser прогона. Browser показывает
+нерешённый gap/достаточность с основаниями. CI нового head и реальные роли/комплекты
+учитываются отдельно от успешного предыдущего head. Платных тестов/production нет.
+Откат: UI/worker first; additive SQL/history/paid reservations и оригиналы сохранять.
+Документы A приводятся к одному актуальному статусу и прежним требованиям, без
+незаметной отмены качества/приёмок. Откат docs — revert проверенного docs diff.
+
+C4 local verification: 47/47 focused Node/PGlite/history/privacy, no failures,
+skips or cancellations, 59308 ms; /tmp/route02-kit-final-focused.log. Separate
+history/change-process checks passed after the final manifest hash refresh.
+Vite build, JS syntax, Python native-test syntax and git diff --check passed.
+Native registered concurrency is authored for CI, not claimed as locally run.
+No paid provider, production action or full real-kit acceptance.
+
+### ROUTE-02-C4: recovery and verified publication packet, 02.10.2026
+Recovered actual worktree and original logs; prior unavailable-files claim corrected.
+Current code: full sequential Node/PGlite 653/653, focused 29/29, browser 6/6,
+Vite build and history/process 5/5 pass. Browser executable restored through
+a temporary cache without source configuration changes. See docs/ROUTE02_C4_DELAY_AUDIT_2026-10-02.md.
+Publication awaits explicit public-content authorization recorded as required by
+the earlier automatic review; no alternate upload, merge, production or paid call.
+Full new-head CI/native transactions and real-kit/two-role acceptance remain open.
