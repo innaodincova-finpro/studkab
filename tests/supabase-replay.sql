@@ -12,6 +12,9 @@ begin
     'studkab_intake_files',
     'studkab_intake_analysis_policy',
     'studkab_intake_analysis_jobs',
+    'studkab_registered_analysis_blocks',
+    'studkab_question_proposals',
+    'studkab_intake_classifications',
     'studkab_gen_attempts',
     'studkab_gen_budget',
     'studkab_gen_jobs',
@@ -60,11 +63,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 43 then
-    raise exception 'Expected 43 STUDKAB tables, found %', table_count;
+  if table_count <> 46 then
+    raise exception 'Expected 46 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 43 then
-    raise exception 'RLS enabled on only % of 43 STUDKAB tables', rls_count;
+  if rls_count <> 46 then
+    raise exception 'RLS enabled on only % of 46 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -356,4 +359,34 @@ do $$ declare name text; begin
   if has_function_privilege('anon',name,'execute') or has_function_privilege('authenticated',name,'execute') or not has_function_privilege('service_role',name,'execute') then raise exception 'Receipt RPC grants: %',name; end if;
  end loop;
  if not exists(select 1 from pg_trigger where tgname='studkab_received_passport_guard' and not tgisinternal) then raise exception 'Missing receipt study barrier'; end if;
+end $$;
+
+-- ROUTE-02-C: private study/decisions, immutable classification provenance and guards.
+do $$ declare signature text;begin
+ foreach signature in array array[
+ 'public.studkab_registered_read_claim(text)',
+ 'public.studkab_registered_read_finish(uuid,integer,uuid,uuid,text,jsonb)',
+ 'public.studkab_registered_analysis_source(uuid)',
+ 'public.studkab_registered_analysis_original_source(uuid)',
+ 'public.studkab_registered_field_questions_refresh(uuid)',
+ 'public.studkab_registered_analysis_next()',
+ 'public.studkab_registered_analysis_start(uuid,text,jsonb)',
+ 'public.studkab_registered_analysis_state(uuid,uuid)',
+ 'public.studkab_registered_analysis_block(uuid,text)',
+ 'public.studkab_registered_questions_refresh(uuid)',
+ 'public.studkab_registered_question_decide(uuid,uuid,uuid,text,text)',
+ 'public.studkab_registered_material_classify(uuid,uuid,uuid,uuid,text)'] loop
+  if to_regprocedure(signature) is null
+   or has_function_privilege('anon',signature,'execute')
+   or has_function_privilege('authenticated',signature,'execute')
+   or not has_function_privilege('service_role',signature,'execute')
+   or (select prosecdef from pg_proc where oid=to_regprocedure(signature)) then raise exception 'ROUTE-02-C RPC security: %',signature;end if;
+ end loop;
+ if has_table_privilege('service_role','public.studkab_intake_classifications','update,delete') then raise exception 'Mutable classification provenance';end if;
+ if has_column_privilege('service_role','public.studkab_request_attachments','file_hash','update')
+ or has_column_privilege('service_role','public.studkab_request_attachments','storage_path','update')
+ or not has_column_privilege('service_role','public.studkab_request_attachments','category','update')
+ or not has_column_privilege('service_role','public.studkab_request_attachments','extracted_text','update') then raise exception 'Classification column grants';end if;
+ if not exists(select 1 from pg_trigger where tgname='immutable_question_proposal' and not tgisinternal)
+ or not exists(select 1 from pg_trigger where tgname='registered_study_passport_gate' and not tgisinternal) then raise exception 'ROUTE-02-C immutable/approval barrier missing';end if;
 end $$;

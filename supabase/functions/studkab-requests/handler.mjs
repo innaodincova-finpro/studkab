@@ -1,5 +1,6 @@
 import {qualityAction,qualityError} from './quality-evidence.mjs';
 import {testDeliveryAction} from './test-delivery.mjs';
+import {registeredStudyAction} from './registered-study.mjs';
 import {clarificationAction} from './clarifications.mjs';
 import {materialRevisionAction} from './material-revision.mjs';
 import {kindCorrectionAction} from './kind-correction.mjs';
@@ -92,6 +93,9 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    }
    if(['deliver','result','prepare-result','review-result','auto-review-result','review-notes','result-review-state','result-review-history','rebind-result'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
+   }
+   if(['registered-study-state','registered-question-decide','registered-material-classify'].includes(input.action)){
+    const r=await registeredStudyAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(['clarification-list','clarification-unread','clarification-read','clarification-ask','clarification-answer'].includes(input.action)){
     const r=await clarificationAction(input,user,{db,config,isMember});return json(r.data,r.status||200);
