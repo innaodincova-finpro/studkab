@@ -2503,3 +2503,45 @@ while cleanup stalled. Safari was excluded only in the temporary local config
 for the subsequent Chromium subset. Original checked-in config restored.
 Safari/WebKit, native PostgreSQL, full CI and production acceptance remain open.
 No application source behavior changed in this correction; production untouched.
+
+## ROUTE-02-C1 — server reading after receipt, 01.10.2026
+
+Requirement: approved ROUTE-02 section 1.3/package C and R15/R3/R9.
+Evidence: read_begin/read_finish accept only open drafts; receive changes state to
+submitted, leaving registered originals unprocessed. Decision: add a machine-only
+bounded reading worker on the existing authorized generation schedule. It reads
+one current original per invocation with hash/size verification and persists the
+parser result under a lease and request revision. No model calls, budget changes,
+classification guesses or approval are added. Receipt/legacy code stays intact.
+Alternative reopening the submitted draft rejected: permits changed snapshots.
+Access: service_role RPCs only, ownership/membership/revision checks in SQL;
+originals unchanged; discarded stale completions cannot unblock a passport.
+Check: real containers + isolated SQL, lease expiry, retries, revoked/transferred
+ownership, stale revision and browser-role denial. Native concurrency/CI/replay
+and production remain mandatory. Rollback worker code first; retain originals,
+reader results and additive schema. C1 does not complete semantic analysis/questions.
+
+### Recovery and authorization, 02.10.2026
+
+01.10 local verification reported 623/623 Node/PGlite, 31/31 focused,
+Deno cached-only check and Vite build successful. GitHub create_tree upload of
+10 C1 files was rejected by automatic approval review, requiring explicit
+publication authorization. No alternate upload was performed. 02.10 user
+explicitly authorized publication of these 10 files in the public STUDKAB repo.
+Local worktree/commit/logs were no longer available. Restored the published B
+base from cd4e917; local tree matches b2023094284cd1b77ab78e18bb1b82f07c9093c0.
+C1 files restored from the recorded implementation and tests in this conversation.
+Exact identity with the unavailable original C1 commit is not claimed. Repeat
+local verification before upload. No main/production modification or paid calls.
+
+Restoration review caught a deletion compatibility issue: the new reader's
+request foreign key would otherwise prevent physical request deletion. It now
+uses ON DELETE SET NULL, retains original/history rows, and rejects stale finish.
+A real isolated-SQL deletion test is added within the same authorized test file.
+No approval or issuance gate is changed.
+
+Recovered version verification 02.10: 624/624 full sequential Node/PGlite,
+32/32 focused, Vite build and whitespace checks successful. Deno recheck
+unavailable (binary missing); CI/native concurrency/replay/production remain
+open. Previous B run 36900949567 logged 188 passed browser tests but job
+cancelled at 30 minutes, skipping later checks. Do not call the CI successful.

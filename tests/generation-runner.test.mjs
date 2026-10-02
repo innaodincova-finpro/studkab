@@ -131,3 +131,11 @@ test('invalid or unknown first review blocks before a second provider dispatch',
   assert.equal(response.status,409);assert.equal(blocked,'REVIEW_FIRST_INVALID');assert.equal(dispatched,false);assert.equal(paid,false);
  }
 });
+test('unpaid registered reading requires both machine authorization and cron token, works with paid provider disabled',async()=>{
+ let reads=0,paid=0;
+ const h=handler({authorize:async r=>r.headers.get('Authorization')==='Bearer synthetic-service',config:async()=>({cron_token:'synthetic-cron'}),ready:()=>false,
+ processIntake:async()=>{reads++;return {status:'registered_read_ready'};},provider:async()=>{paid++;},rpc:async()=>{throw Error('generation must not start');}});
+ const call=(bearer,token)=>h(new Request('https://internal',{method:'POST',headers:{Authorization:bearer,'X-Studkab-Runner':token}}));
+ assert.equal((await call('Bearer user','synthetic-cron')).status,401);assert.equal((await call('Bearer synthetic-service','wrong')).status,401);assert.equal(reads,0);
+ assert.equal((await(await call('Bearer synthetic-service','synthetic-cron')).json()).status,'registered_read_ready');assert.equal(reads,1);assert.equal(paid,0);
+});

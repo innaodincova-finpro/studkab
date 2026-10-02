@@ -343,6 +343,14 @@
       "file": "20261001110117_intake_analysis_output_bound.sql",
       "sha256": "1b12220597848f461aa7d1cf9c9d6fbe80f3c9c320cebe623a1e991d6bc38ba2",
       "status": "pending"
+    },
+    {
+      "version": "20261001175519",
+      "name": "route02_registered_reading",
+      "file": "20261001175519_route02_registered_reading.sql",
+      "sha256": "1f2cc06eecedba9d0b22ef028e4392a0766c731f260ca4cd367b4f0607c49d87",
+      "status": "pending",
+      "note": "ROUTE-02-C1: unpaid server reading after receipt; not installed."
     }
   ],
   "pending_migrations": [

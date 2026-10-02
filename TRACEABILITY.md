@@ -2240,3 +2240,32 @@ while cleanup stalled. Safari was excluded only in the temporary local config
 for the subsequent Chromium subset. Original checked-in config restored.
 Safari/WebKit, native PostgreSQL, full CI and production acceptance remain open.
 No application source behavior changed in this correction; production untouched.
+
+## ROUTE-02-C1 — registered original reading, 01.10.2026
+
+Requirement ROUTE-02 1.3/package C, R15/R3/R9. Added a machine-only unpaid
+reading worker in studkab-generation, authorized through existing machine + cron
+checks. It verifies original hashes/sizes, stores parser results under request
+revision and file lease, preserves originals and permits at most three attempts.
+Lost replies are recoverable; deleted/reassigned/revised requests and revoked
+members cannot accept the result. Classification and passport approval remain
+blocked: C1 does not complete semantic study or private question proposals.
+01.10 recorded local verification: 623/623 full Node/PGlite, 31/31 final focused,
+Deno cached-only check and Vite build. Original local logs/commit unavailable
+02.10; these historical figures are not evidence for the recovered bytes.
+Recovered source and 10-file scope from this conversation. Published B base tree
+matches b2023094284cd1b77ab78e18bb1b82f07c9093c0. Current verification repeated
+before the user-authorized 02.10 public upload. Native PostgreSQL concurrency,
+migration replay, browser CI, production and authorized acceptance remain open.
+
+### ROUTE-02-C1 — recovered version verification, 02.10.2026
+
+Current recovered version passed full sequential Node/PGlite suite 624/624,
+fail/cancelled/skipped 0, 265166 ms. Current focused suite 32/32, 13511 ms.
+Vite build and git diff --check passed. Deno recheck could not run: executable
+is no longer present; historical Deno result is not claimed for recovered bytes.
+Log paths: /workspace/scratch/7721e3be668e/recovery/full-node.log and focused.log.
+Read GitHub job logs for prior B head cd4e917/run 36900949567: 188 browser tests
+passed, then the 30-minute job was cancelled; later Node/SQL/replay steps skipped.
+That is browser evidence for B, not complete CI for C1. New draft upload covers
+exactly the authorized ten files. No main/production mutation or paid operation.
