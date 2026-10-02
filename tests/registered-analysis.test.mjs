@@ -275,3 +275,39 @@ test('whole-kit applicability judgment does not repeat a conditional rule that d
   await f.db.query("insert into studkab_requirement_passports(request_id,status) values($1,'approved')",[f.receipt.id]);
  }finally{await f.db.close();}
 });
+
+test('C acceptance: unknown answer, explicit follow-up, adequate reply and source-bound admission',async()=>{
+ const kit='Менеджмент. Для этой курсовой выберите одну тему: Менеджмент или Финансы. Укажите выбор преподавателя.';
+ const f=await fixture({kitText:kit});try{
+  const provider=async c=>{
+   const r=await f.provider(c),x=JSON.parse(r.text);
+   if(c.spec.kind!=='kit_review')x.roles=[{role:'assignment',refs:[{blockId:c.spec.blocks[0].blockId,quote:'Менеджмент'}]}];
+   else {
+    const original=c.spec.blocks.find(b=>b.fileId),e={blockId:original.blockId,quote:kit};
+    const answers=c.spec.answers.map(a=>({id:a.id,b:c.spec.blocks.find(b=>b.source?.questionId===a.id)}));
+    const adequate=answers.some(a=>a.b.text.includes('Выбрана тема Финансы'));
+    x.gaps=adequate?[]:[{key:'chosen_topic',question:'Какую тему выбрал преподаватель?',reason:'Задание разрешает варианты, а применимый выбор не подтверждён.',refs:[e,...answers.map(a=>({blockId:a.b.blockId,quote:a.b.text}))],answerId:answers.at(-1)?.id||null}];
+    x.answerReviews=answers.map(a=>({questionId:a.id,status:adequate?'sufficient':'unknown',reason:adequate?'Поздний ответ содержит выбор из разрешённых оригиналом вариантов; прежняя неопределённость снята.':'Ответ не устанавливает выбор преподавателя.',refs:[e,{blockId:a.b.blockId,quote:a.b.text},...answers.filter(z=>z.id!==a.id).map(z=>({blockId:z.b.blockId,quote:z.b.text}))]}));
+   }
+   return {...r,text:JSON.stringify(x)};
+  };
+  const study=async()=>{assert.equal((await f.enqueue()).status,'registered_analysis_queued');assert.equal((await runIntake({rpc:f.rpc,provider})).status,'intake_done');return f.rpc('studkab_registered_questions_refresh',{p_request:f.receipt.id});};
+  const gate=()=>f.db.query("insert into studkab_requirement_passports(request_id,status) values($1,'approved')",[f.receipt.id]);
+  const initial=await study(),q1=initial.proposals[0];
+  assert.equal(q1.state,'pending');assert.equal((await f.db.query('select count(*) n from studkab_dialog_events')).rows[0].n,0);
+  await assert.rejects(gate,/INTAKE_ESSENTIAL_GAPS_UNRESOLVED/);
+  await decide(f,q1,'publish',q1.question);
+  await f.rpc('studkab_clarification_answer',{p_request:f.receipt.id,p_actor:student,p_id:q1.id,p_answer:'Не знаю',p_source:'Преподаватель пока не уточнил'});
+  const second=await study(),q2=second.proposals.find(q=>q.state==='pending');
+  assert.notEqual(q2.id,q1.id);assert.equal((await f.state()).result.kitReview.answerReviews[0].status,'unknown');
+  assert.equal((await f.db.query('select count(*) n from studkab_clarifications')).rows[0].n,1);
+  await assert.rejects(gate,/INTAKE_ESSENTIAL_GAPS_UNRESOLVED/);
+  await decide(f,q2,'publish',q2.question);
+  await f.rpc('studkab_clarification_answer',{p_request:f.receipt.id,p_actor:student,p_id:q2.id,p_answer:'Выбрана тема Финансы',p_source:'Выбор преподавателя из вариантов задания'});
+  await study();const s=await f.state();assert.equal(s.result.kitReview.gaps.length,0);assert.equal(s.result.kitReview.answerReviews.length,2);assert.ok(s.result.kitReview.answerReviews.every(a=>a.status==='sufficient'));
+  assert.equal((await f.db.query("select count(*) n from studkab_requirement_passports where status='approved'")).rows[0].n,0);
+  await f.rpc('studkab_registered_material_classify',{p_request:f.receipt.id,p_actor:other,p_analysis:s.analysisId,p_file:f.file.id,p_category:'assignment'});
+  await gate();assert.equal((await f.db.query("select count(*) n from studkab_dialog_events where kind='question'")).rows[0].n,2);assert.equal((await f.db.query("select count(*) n from studkab_dialog_events where kind='answer'")).rows[0].n,2);
+  assert.equal((await f.db.query('select file_hash from studkab_request_attachments')).rows[0].file_hash,f.file.file_hash);
+ }finally{await f.db.close();}
+});

@@ -2684,3 +2684,20 @@ Recovered existing worktree/logs; no functional expansion. Current full Node653,
 focused29 and browser6 pass; build/whitespace/history pass. Preserve public
 publication barrier; exact packet is listed in the recovery audit. Main, production,
 budget and data unchanged. Rollback this audit by reverting its documentation.
+
+### ROUTE-02-C: опубликованный контроль и полный цикл ответов, 02.10.2026
+Требования: TASK R3/R4/R9/R15, ROUTE-02 A/C. Основание: опубликованный
+PR205/bcc21d90b604d5f81fe05aa04b317be0862e8661 прошёл CI36964990828:
+194 browser, 653 Node/PGlite, SQL safety, native registered concurrency и
+остальные native/A1/replay проверки. PR202/be7d0fbe0389bd4223bafee7f738fffd2b6cb634
+прошёл CI36965025398 (185 browser, 610 Node и SQL/native/A1/replay).
+
+Решение: сохранить дополнительную проверку продолжения после unknown-ответа:
+отдельное одобрение нового вопроса, sufficient-ответ, повторное изучение обоих
+ответов и отсутствие автоматического утверждения. Адресно 1/1 pass, 3502 ms;
+поставщик подставной, отдельная локальная тестовая БД. Код продукта/схема не
+меняются; актуализированы журналы, маршрут и исторический аудит публикации.
+Бюджеты, production и пользовательские данные неизменны. CI дополнения
+учитывается по новому head, предыдущий success не выдаётся за новый прогон.
+Реальная смысловая приёмка модели/двух ролей остаётся открытой. Откат: revert
+этого дополнения теста и документации, без удаления оригиналов или истории.
