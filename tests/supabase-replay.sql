@@ -14,6 +14,8 @@ begin
     'studkab_intake_analysis_jobs',
     'studkab_registered_analysis_blocks',
     'studkab_question_proposals',
+    'studkab_private_dialog',
+    'studkab_telegram_dialog_context',
     'studkab_intake_classifications',
     'studkab_gen_attempts',
     'studkab_gen_budget',
@@ -63,11 +65,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 46 then
-    raise exception 'Expected 46 STUDKAB tables, found %', table_count;
+  if table_count <> 48 then
+    raise exception 'Expected 48 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 46 then
-    raise exception 'RLS enabled on only % of 46 STUDKAB tables', rls_count;
+  if rls_count <> 48 then
+    raise exception 'RLS enabled on only % of 48 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -389,4 +391,21 @@ do $$ declare signature text;begin
  or not has_column_privilege('service_role','public.studkab_request_attachments','extracted_text','update') then raise exception 'Classification column grants';end if;
  if not exists(select 1 from pg_trigger where tgname='immutable_question_proposal' and not tgisinternal)
  or not exists(select 1 from pg_trigger where tgname='registered_study_passport_gate' and not tgisinternal) then raise exception 'ROUTE-02-C immutable/approval barrier missing';end if;
+end $$;
+
+-- ROUTE-02-D: append-only private conversation and context RPCs.
+do $$ declare signature text;role_name text;begin
+ foreach signature in array array[
+ 'public.studkab_registered_analysis_kit_source(uuid)',
+ 'public.studkab_registered_question_base_decide(uuid,uuid,uuid,text,text)',
+ 'public.studkab_private_dialog_send(uuid,uuid,text,text,text,text)',
+ 'public.studkab_private_dialog_read(uuid,uuid)',
+ 'public.studkab_telegram_executor(bigint)',
+ 'public.studkab_telegram_dialog_context_save(bigint,bigint,uuid,text,text,uuid)',
+ 'public.studkab_telegram_registered_action(bigint,text,uuid,uuid,text,text,bigint)'] loop
+ if to_regprocedure(signature) is null or (select prosecdef from pg_proc where oid=to_regprocedure(signature)) then raise exception 'Missing/private invoker dialog RPC: %',signature;end if;
+ foreach role_name in array array['anon','authenticated'] loop
+ if has_function_privilege(role_name,signature,'execute') then raise exception 'Exposed private dialog RPC: %',signature;end if;end loop;
+ end loop;
+ if has_table_privilege('service_role','public.studkab_private_dialog','update,delete') or has_table_privilege('service_role','public.studkab_telegram_dialog_context','update,delete') then raise exception 'Mutable private dialog history';end if;
 end $$;

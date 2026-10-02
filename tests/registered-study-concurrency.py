@@ -64,5 +64,19 @@ try:
  assert call(f"studkab_registered_analysis_state('{request}','{executor}')")['state']=='awaiting_analysis'
  assert sql('select file_hash from studkab_request_attachments')=='a'*64
  print('PASS: native registered reading/queue/dispatch/proposal/classification/decision/answer concurrency; private events and unresolved-gap gate')
+ sql((root/'telegram-setup.sql').read_text()+(root/'supabase/migrations/20261002052253_route02_private_dialog.sql').read_text())
+ sql("insert into studkab_telegram_setup(setup_hash,owner_hash,expires_at,installed,owner_chat_id) values('"+'a'*64+"','"+'b'*64+"',now()+interval '1 day',true,100)")
+ current=sql(f"select encode(sha256(convert_to(studkab_registered_analysis_source('{request}')::text,'UTF8')),'hex')")
+ comments=parallel(lambda _:call(f"studkab_private_dialog_send('{request}','{executor}','web:race','Проверьте исходные данные.','{current}','web')"))
+ assert all(x['ok'] for x in comments);assert sum(x.get('duplicate',False) for x in comments)==1
+ current=sql(f"select encode(sha256(convert_to(studkab_registered_analysis_source('{request}')::text,'UTF8')),'hex')")
+ assert call(f"studkab_telegram_dialog_context_save(100,55,'{request}','{current}','comment',null)")['saved']
+ replies=parallel(lambda _:call("studkab_telegram_registered_action(100,'reply',null,null,'Проверьте применимость задания.','telegram:race',55)"))
+ assert all(x['ok'] for x in replies);assert sum(x.get('duplicate',False) for x in replies)==1
+ assert int(sql('select count(*) from studkab_private_dialog'))==2
+ assert call(f"studkab_telegram_registered_action(100,'publish',null,'{q['id']}',null,null,null)")['duplicate']
+ assert int(sql('select count(*) from studkab_clarifications'))==1
+ print('PASS: native private web/Telegram comment/context/reply concurrency; shared immutable decision, no private student events')
+
 finally:
  subprocess.run(['dropdb','--if-exists',database],check=True)

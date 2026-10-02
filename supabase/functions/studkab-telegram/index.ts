@@ -14,12 +14,18 @@ async function rest(query: string, method='GET', body?: unknown) {
   return await response.json();
 }
 const db = {
+  async action(payload: unknown) { return rpc('studkab_telegram_registered_action',payload); },
+  async context(payload: unknown) { return rpc('studkab_telegram_dialog_context_save',payload); },
   async get() { return (await rest('id=eq.true&select=*'))[0]; },
   async install(hash: string) { await rest(`id=eq.true&setup_hash=eq.${hash}`, 'PATCH', {installed:true}); },
   async bind(hash: string, chatId: number, timestamp: string) {
     return (await rest(`id=eq.true&owner_hash=eq.${hash}&owner_chat_id=is.null&expires_at=gt.${encodeURIComponent(timestamp)}`, 'PATCH', {owner_chat_id:chatId,bound_at:timestamp})).length === 1;
   }
 };
+async function rpc(name: string,payload: unknown) {
+ const response=await fetch(`${base}/rest/v1/rpc/${name}`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
+ if(!response.ok)throw Error('Database unavailable');return response.json();
+}
 async function telegram(method: string, payload: unknown) {
   const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)

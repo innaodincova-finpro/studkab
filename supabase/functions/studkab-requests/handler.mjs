@@ -94,7 +94,7 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(['deliver','result','prepare-result','review-result','auto-review-result','review-notes','result-review-state','result-review-history','rebind-result'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
    }
-   if(['registered-study-state','registered-question-decide','registered-material-classify'].includes(input.action)){
+   if(['registered-study-state','registered-question-decide','registered-material-classify','registered-private-message'].includes(input.action)){
     const r=await registeredStudyAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(['clarification-list','clarification-unread','clarification-read','clarification-ask','clarification-answer'].includes(input.action)){

@@ -21,7 +21,7 @@ async function send(row:any){
  if(!owner?.owner_chat_id||!owner.installed||!token)throw Error('Recipient unavailable');
  const p=row.payload;
  const text=`Новая заявка №${row.number}\nСтудент: ${p.n||'не указан'}\nРабота: ${p.k||'не указана'}\nТема: ${p.t}\nСрок: ${p.dl||'не указан'}`;
- const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:owner.owner_chat_id,text,reply_markup:{inline_keyboard:[[{text:'Открыть заявку в реестре',url:'https://innaodincova-finpro.github.io/studkab/reestr.html#request='+row.id}]]}}),signal:AbortSignal.timeout(10000)});
+ const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:owner.owner_chat_id,text,reply_markup:{inline_keyboard:[[{text:'Открыть заявку в реестре',url:'https://innaodincova-finpro.github.io/studkab/reestr.html#request='+row.id}],[{text:'Изучение и вопросы',callback_data:'study:'+row.id}]]}}),signal:AbortSignal.timeout(10000)});
  const data=await r.json();if(!r.ok||!data.ok)throw Error('Telegram unavailable');
 }
 const uuid=/^[0-9a-f-]{36}$/i;

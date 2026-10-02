@@ -533,6 +533,12 @@
       "status": "pending",
       "note": "ROUTE-02-C; whole-kit and answer assessment; not installed in production",
       "sha256": "0edc16ea62b59a0ad3bd3371ae4e913931070dadc9bc6e3119549ccec9dc4c39"
+    },
+    {
+      "version": "20261002052253",
+      "name": "route02_private_dialog",
+      "file": "20261002052253_route02_private_dialog.sql",
+      "sha256": "5d392e11f2d80746ac8ab6b16033796cc3a4e58df244758bb87c154871c0447c"
     }
   ],
   "production_reconciled_at": "2026-09-23"
