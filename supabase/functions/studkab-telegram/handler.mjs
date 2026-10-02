@@ -17,6 +17,10 @@ function equal(a, b) {
 }
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
 export function handler({token, db, telegram, now=()=>Date.now()}) {
+  async function ensureCallbacks(){
+    const info=await telegram('getWebhookInfo',{});
+    if(info?.url===WEBHOOK&&!info.allowed_updates?.includes('callback_query'))await telegram('setWebhook',{url:WEBHOOK,secret_token:await webhookSecret(token),allowed_updates:['message','callback_query'],max_connections:1});
+  }
   return async req => {
     try {
       if (req.method !== 'POST') return json({error:'Method not allowed'},405);
@@ -31,7 +35,7 @@ export function handler({token, db, telegram, now=()=>Date.now()}) {
         if (me.username !== BOT) return json({error:'Unexpected bot identity'},409);
         const previous = await telegram('getWebhookInfo',{});
         if (previous.url && previous.url !== WEBHOOK) return json({error:'Bot already used by another webhook'},409);
-        await telegram('setWebhook',{url:WEBHOOK, secret_token:await webhookSecret(token), allowed_updates:['message'], max_connections:1});
+        await telegram('setWebhook',{url:WEBHOOK, secret_token:await webhookSecret(token), allowed_updates:['message','callback_query'], max_connections:1});
         await db.install(row.setup_hash);
         return json({installed:true, bot:me.username});
       }
@@ -41,20 +45,32 @@ export function handler({token, db, telegram, now=()=>Date.now()}) {
       if (text.length > 65536) return json({error:'Payload too large'},413);
       let update;
       try { update = JSON.parse(text); } catch { return json({error:'Invalid JSON'},400); }
+      const callback=update?.callback_query;
+      if(callback){
+        const row=await db.get(),chat=callback.message?.chat;
+        if(!row?.installed||chat?.type!=='private'||!Number.isSafeInteger(chat.id)||chat.id<=0||callback.from?.id!==chat.id||callback.from?.is_bot||String(row.owner_chat_id)!==String(chat.id))return json({ok:true});
+        if(typeof db.action==='function')await studyDialog(update,{db,telegram,chatId:chat.id});
+        return json({ok:true});
+      }
       const m = update?.message;
       if (!m || m.chat?.type !== 'private' || !Number.isSafeInteger(m.chat.id) || m.chat.id <= 0 || m.from?.id !== m.chat.id || m.from?.is_bot) return json({ok:true});
       const command = typeof m.text === 'string' && m.text.match(/^\/start(?:@Studkab_Requests_bot)?(?:\s+(bind_[A-Za-z0-9_-]{43}))?\s*$/i);
-      if (!command) return json({ok:true});
+      if (!command){
+        const row=await db.get();
+        if(row?.installed&&String(row.owner_chat_id)===String(m.chat.id)&&typeof db.action==='function'){await ensureCallbacks();await studyDialog(update,{db,telegram,chatId:m.chat.id});}
+        return json({ok:true});
+      }
       const row = await db.get();
       if (!row?.installed) return json({error:'Setup incomplete'},503);
-      let bound = false;
+      let bound = String(row.owner_chat_id)===String(m.chat.id);
       if (command[1] && Date.parse(row.expires_at) > now() && equal(await digest(command[1]),row.owner_hash)) {
         // Atomic compare-and-set: never replace an existing recipient, even with the same link.
         bound = String(row.owner_chat_id) === String(m.chat.id) || await db.bind(row.owner_hash,m.chat.id,new Date(now()).toISOString());
       }
       const message = bound
-        ? 'Ваш Telegram привязан как получатель заявок. Уведомления о новых заявках будут приходить сюда. Личные контакты студентам не показываются.'
+        ? 'Ваш Telegram привязан как получатель заявок. Открывайте изучение кнопкой в уведомлении: можно согласовать вопрос или оставить приватный комментарий помощнику. Личные контакты студентам не показываются.'
         : 'Кабинет студента — заявки. Заявки отправляются из кабинета студента. Переписка с исполнителем через бота пока не подключена.';
+      if(bound&&typeof db.action==='function')await ensureCallbacks();
       await telegram('sendMessage',{chat_id:m.chat.id,text:message});
       return json({ok:true});
     } catch {
@@ -63,3 +79,4 @@ export function handler({token, db, telegram, now=()=>Date.now()}) {
     }
   };
 }
+import {studyDialog} from './study-dialog.mjs';

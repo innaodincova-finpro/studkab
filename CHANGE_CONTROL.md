@@ -2447,3 +2447,307 @@ R9/R10. В опубликованном кабинете «Новая работ
 
 ## C151 — подписи карточки заявки № 1 у студента, 27.09.2026
 R8/R9/R10. При авторизованной проверке заявки № 1 студент видит укрупнённый этап «Требования утверждены», а исполнитель — прикреплённый Word на проверке. API `student-progress` пока не различает подготовку и проверку Word; экран материалов предлагает добавление, хотя комплект закрыт после начала проверки. Решение: объяснить в карточке общий этап «готовит или проверяет Word», отсутствие подтверждённой передачи и условие добавления материалов после открытия дополнения исполнителем. Альтернатива отображать точный этап без соответствующего серверного поля недостоверна. Только тексты `index.html`; запросов, вопросов, паспортов, Word и прав не меняем. Проверка: CI Safety checks 36321232811 успешно завершился, включая browser; публикация и повторная рабочая проверка остаются отдельными шагами. Откат: вернуть тексты страницы.
+
+## ROUTE-02-B — приём комплекта до анализа, 01.10.2026
+
+Основание: утверждённый ROUTE-02 в PR202. Отдельная ветка от main 835209d.
+Реализация: новый атомарный receive RPC, сохранённые оригиналы без вымышленных
+ФИО/вуза/темы и без обязательного чтения; срок задаёт студент. Legacy submit
+и прежняя публикация не ослабляются. Новая возможность объявляется intake-open
+только после миграции; старые Edge/клиенты остаются на прежнем маршруте.
+Неразобранные файлы имеют категорию unclassified и отсутствие извлечённого текста;
+сервер и SQL запрещают утверждение паспорта до их изучения. Приём не запускает
+платный анализ. Передача файлов завершается до транзакции публикации; смена
+ревизии/сбой сохраняют приватные оригиналы без частичной заявки. Проверки:
+реальный SQL в изолированной среде, адресные API/браузерные сценарии и старый
+submit. До общего CI/приёмки/выпуска функцию не считать установленной.
+Откат: вернуть старый клиент/Edge без удаления новых заявок, оригиналов и миграции.
+Пакет C должен обеспечить последующее изучение и классификацию через сохранённые
+версии; пакет B сам не обещает работающую подготовку.
+
+### ROUTE-02-B — повторная проверка 01.10.2026
+
+Общий локальный Node прогон: 615 тестов, 610 прошли, 5 завершились ошибками.
+Исправлен пропуск регистрации новой миграции в supabase/migrations/manifest.json:
+статус pending, SHA-256 исходника, без утверждения установки в production.
+Четыре остальных ошибки содержали SIGKILL; причина остановки не установлена.
+Адресный повтор затронутых проверок: 18/18 и generation-stop SQL 2/2 прошли.
+Повтор приёма/legacy: 14/14; Vite build exit 0; change-process check passed.
+Полный прогон после исправления не повторялся; успешный общий CI не заявляется.
+Три browser теста не запустились: Chromium отсутствует; архив установки повреждён.
+PR202 остаётся draft/open, CI 36889491726 cancelled. Публикация кода отклонена
+автоматической проверкой: нет явного разрешения на публикацию исходников.
+Основная ветка, рабочая база и приложение не изменены; платных запусков не было.
+
+### ROUTE-02-B — итог последовательного прогона 01.10.2026
+
+После исправления manifest полный Node/PGlite набор на 4ccd265 повторён
+последовательно: 615/615, без ошибок, пропусков и отменённых тестов,
+280969 мс. Change-process и git diff --check успешны.
+Код и поведение не изменялись при этом повторе. Браузерные проверки,
+native PostgreSQL concurrency/replay, общий CI и выпуск остаются открыты.
+20 подготовленных файлов ещё не опубликованы: прежний отказ автоматической
+проверки требовал явного разрешения на публичную публикацию исходников.
+
+### ROUTE-02-B — browser verification, 01.10.2026
+
+Installed Chromium found at /tmp/studkab-browser-runtime/chromium; no new download.
+Corrected intake-receive test setup: restored submitted draft must disable uploads.
+Added rapid double-click assertion: exactly one receive call and one fixture write.
+Focused receive scenarios: 3/3 passed. Chromium compatibility subset: 30/30 passed,
+17.2 seconds (intake, intake-drafts, intake-receive). Log:
+/tmp/route02-chromium-current.log. API is simulated in these browser scenarios;
+this is not production database acceptance. Initial combined 31-scenario run
+had 20 passes then Safari scenario timed out at 90s; the run was interrupted
+while cleanup stalled. Safari was excluded only in the temporary local config
+for the subsequent Chromium subset. Original checked-in config restored.
+Safari/WebKit, native PostgreSQL, full CI and production acceptance remain open.
+No application source behavior changed in this correction; production untouched.
+
+## ROUTE-02-C1 — server reading after receipt, 01.10.2026
+
+Requirement: approved ROUTE-02 section 1.3/package C and R15/R3/R9.
+Evidence: read_begin/read_finish accept only open drafts; receive changes state to
+submitted, leaving registered originals unprocessed. Decision: add a machine-only
+bounded reading worker on the existing authorized generation schedule. It reads
+one current original per invocation with hash/size verification and persists the
+parser result under a lease and request revision. No model calls, budget changes,
+classification guesses or approval are added. Receipt/legacy code stays intact.
+Alternative reopening the submitted draft rejected: permits changed snapshots.
+Access: service_role RPCs only, ownership/membership/revision checks in SQL;
+originals unchanged; discarded stale completions cannot unblock a passport.
+Check: real containers + isolated SQL, lease expiry, retries, revoked/transferred
+ownership, stale revision and browser-role denial. Native concurrency/CI/replay
+and production remain mandatory. Rollback worker code first; retain originals,
+reader results and additive schema. C1 does not complete semantic analysis/questions.
+
+### Recovery and authorization, 02.10.2026
+
+01.10 local verification reported 623/623 Node/PGlite, 31/31 focused,
+Deno cached-only check and Vite build successful. GitHub create_tree upload of
+10 C1 files was rejected by automatic approval review, requiring explicit
+publication authorization. No alternate upload was performed. 02.10 user
+explicitly authorized publication of these 10 files in the public STUDKAB repo.
+Local worktree/commit/logs were no longer available. Restored the published B
+base from cd4e917; local tree matches b2023094284cd1b77ab78e18bb1b82f07c9093c0.
+C1 files restored from the recorded implementation and tests in this conversation.
+Exact identity with the unavailable original C1 commit is not claimed. Repeat
+local verification before upload. No main/production modification or paid calls.
+
+Restoration review caught a deletion compatibility issue: the new reader's
+request foreign key would otherwise prevent physical request deletion. It now
+uses ON DELETE SET NULL, retains original/history rows, and rejects stale finish.
+A real isolated-SQL deletion test is added within the same authorized test file.
+No approval or issuance gate is changed.
+
+Recovered version verification 02.10: 624/624 full sequential Node/PGlite,
+32/32 focused, Vite build and whitespace checks successful. Deno recheck
+unavailable (binary missing); CI/native concurrency/replay/production remain
+open. Previous B run 36900949567 logged 188 passed browser tests but job
+cancelled at 30 minutes, skipping later checks. Do not call the CI successful.
+
+## ROUTE-02-C2 — registered semantic study, 02.10.2026
+
+Requirement: approved ROUTE-02 package C, R15/R3/R9. Registration already
+preserves originals and C1 reads them, but the semantic source accepts only open
+drafts. Extend the existing bounded analysis/budget pipeline to current received
+requests. Keep legacy open-source fingerprints byte-compatible; bind submitted
+sources to live request revision, member/owner and active attachment hashes.
+Only ready original readings enter analysis. Private output is visible only to
+the executor; no student confirmation, classification or passport approval is
+implied. Unknown paid outcomes retain reservations and are never auto-repeated.
+Alternative reopening drafts rejected because it changes saved submission state.
+No policy/env activation or budget increase; synthetic provider tests only.
+Check isolated SQL: stale ownership/revision/deletion/membership/materials,
+legacy compatibility, lease recovery, budget refusal, private API access.
+Rollback worker/API first; retain additive functions/history and original data.
+Questions/decisions follow in C3; C2 alone does not finish package C.
+
+### ROUTE-02-C3 — private decisions and reviewed file roles, 02.10.2026
+
+Same approved package C/R3/R9/R15. Implement private proposals from source-backed
+conflicts/conditional fields; missing universal header fields do not automatically
+generate student questions. Executor approves exact/edit wording or returns with
+comment. Published rows use existing immutable student-answer/dialogue path;
+private rows generate no student notification. Return/answer changes the source
+manifest for repeat study. Guidance cannot serve as a factual citation.
+Reviewed file role requires current done analysis and a cited role for that exact
+original. Only category/extracted_text may change once; bytes/hash/path stay fixed.
+A separate private approval row and trigger guard protect the narrow transition.
+The editor adds published clarification items so answers can be checked in a new
+passport revision. No passport approval is automatic and existing gates stay.
+Reuse exactly matching completed plans without a second paid reservation.
+Preparation failures persist without starving subsequent kits; budget refusals
+are visible and placed after unexamined candidates. Numerical caps unchanged.
+Checks: private visibility/events, SQL actor/role/stale guards, retries, unchanged
+legacy plans, return/re-study, student authorship, reviewed classification, UI.
+Rollback UI/worker first; retain proposals, decisions and original history.
+Real-kit essential-question completeness and the entire route acceptance remain
+open. No paid synthetic requests or production changes.
+
+Final review: pending ambiguities block passport approval even if the private
+proposal list has not yet been opened. Student's saved deadline is included as
+an attributed registration source, separate from document quotes. Identical
+partial/uncertain paid plans cannot be re-purchased after metadata-only changes.
+Existing completed identical output can be reused for zero additional reservation.
+Whole Node/PGlite run 642/642; subsequent narrow adjustments get final focused
+checks. Browser and native new-RPC concurrency await CI/acceptance; no activation.
+
+Final focused current-version checks: 36/36, fail/skipped/cancelled 0,
+43477 ms. /tmp/route02-study-current-focused.log. No paid provider calls.
+
+### CI replay inventory correction, 02.10.2026
+
+PR205/head3ea84ce run36955764099: 193 browser, pretest15 and Node642 passed;
+SQL safety/existing native concurrency/A1 passed. All new migrations applied.
+The final replay assertion failed because its fixed table inventory still said
+43 instead of 46. Add the three actual private tables and verify all new RPC
+ACL/invoker flags, classification column grants and approval/history triggers.
+Do not disable the assertion. Narrow service attachment UPDATE to the two
+reviewed classification columns; original hash/path remain unwritable even by
+this worker. Pending migration only; production unchanged. Repeat affected SQL
+and complete CI for the new head. Local alternate Chromium run: 5/8 passed,
+three browser-context launch/timeout failures; GitHub's complete 193 pass is
+the UI evidence for the prior head. No paid calls or deployment.
+
+Replay correction focused Node/PGlite/history/privacy: 22/22,
+32409 ms. Whitespace passed. Publish fix; whole new-head CI still required.
+
+## ROUTE-02 — регистрация до анализа и управление помощниками, 01.10.2026
+
+Требования: R15/R14, R2/R3/R4/R8/R9/R10/R13. Основание: согласованные решения
+владельца 01.10.2026, а не вывод о безошибочности ИИ. Прежняя схема допускала
+ошибки распределения достоверных цитат по неверным полям и блокировала приём
+до анализа/подтверждения. Наличие источника не доказывает смысл и полноту.
+
+Альтернативы рассмотрены: полная анкета, автозаполнение до отправки, краткая подача,
+диалог до подачи, немедленная генерация. Принято: подтверждённое сохранение комплекта
+и регистрация до анализа; затем проверяемое изучение. Вопросы адресованы студенту,
+проходят одобрение администратора. Внутренний чат — текст/голос. Две отдельные
+кнопки администратора: начало подготовки и передача после обязательных проверок.
+Бот — уведомления/согласование/внутренний чат; push обеим ролям с фактической приёмкой.
+Источник подробных условий и плана: docs/APPROVED_REQUEST_ROUTE_2026-10-01.md.
+
+Влияние: будущая совместимая доработка submit/SQL/publication, предложений,
+голоса/бота, этапов и уведомлений. Данные, номера, версии, бюджет, R13/R14 и допуск
+качества не ослабляются. Стек прежний. Новые платные провайдеры/лимиты не утверждены.
+Связанные открытые PR201/183/184 не объединяются этим решением.
+Проверка текущего пакета: целостность документации, ссылки и сверка состава docs diff.
+Код/БД/production не меняются, тесты приложения и live-доставка не объявлены пройденными.
+Будущие проверки и откат перечислены в ROUTE-02; откат текущего пакета — revert docs PR.
+
+
+## ROUTE-02-C4 / статус A — 02.10.2026
+
+Требование: утверждённые A/C, R3/R4/R9/R15. Основание сверки: актуальные
+PR202–205 не объединены; main835209d5a8a5ad180126b49b0d80d686baa89acb;
+CI36956789382 на e71f6ce успешен (193 browser,642 Node,SQL/native/A1/replay).
+Старые статусы «не установлен» в PR193/198 заменяются их поздними доказательствами
+установки только в названной области. Новый маршрут не установлен.
+
+Найденный пробел: distribute распознавал конфликты/условия, но не оценивал
+существенные отсутствующие данные всего комплекта и достаточность каждого ответа.
+Решение: добавить bounded whole-kit assessment к сохранённому плану, с исходными
+цитатами и авторством ответов; не универсальный чек-лист полей. Every input block
+covered, every answer assessed; insufficient/unknown требует нового private gap.
+Гэп без исходного файла/точной цитаты, выдуманный источник или неучтённый ответ
+делают ответ invalid. Кандидаты всё равно требуют отдельного утверждения паспорта.
+Gap blocks passport before materialization or publication; reply re-study clears
+only with a fresh exact-source assessment. Old extraction alone cannot approve.
+
+Новый studyProtocol меняет manifest только submitted источника. Open/legacy plans
+остаются прежними. Exact completed extraction prefix переиспользуется, дополнительный
+резерв — лишь whole-kit review. Unknown/partial paid prefix удерживается для сверки.
+Оба числовых предела проверяются заранее; новое включение/провайдер/бюджет не добавлены.
+Whole-kit prompt <=40000 UTF8 bytes/500 blocks, output <=4000 tokens/100000 bytes;
+original text never truncated. Larger kits processing-blocked, not declared complete.
+Альтернатива: фиксированная анкета/пропуски одной части — отвергнута, не соответствует
+согласованному сценарию. Реальная предметная приёмка модели отдельно открыта.
+
+Проверка: адресный Node/PGlite, старый analysis pipeline, immutable history/privacy,
+новые SQL admission/budget/source gates; native independent transactions добавлены
+в существующий единственный safety job без второго browser прогона. Browser показывает
+нерешённый gap/достаточность с основаниями. CI нового head и реальные роли/комплекты
+учитываются отдельно от успешного предыдущего head. Платных тестов/production нет.
+Откат: UI/worker first; additive SQL/history/paid reservations и оригиналы сохранять.
+Документы A приводятся к одному актуальному статусу и прежним требованиям, без
+незаметной отмены качества/приёмок. Откат docs — revert проверенного docs diff.
+
+C4 local verification: focused 47/47, Vite build, JS/Python syntax, whitespace
+and separate history/change-process checks passed. Current full CI and native
+registered concurrency await the published head. Real model completeness and
+production remain open; no paid provider call or budget activation.
+
+### ROUTE-02-C4: recovery audit, 02.10.2026
+Requirement: continue approved A/C without asking user to reconstruct technical data.
+Recovered existing worktree/logs; no functional expansion. Current full Node653,
+focused29 and browser6 pass; build/whitespace/history pass. Preserve public
+publication barrier; exact packet is listed in the recovery audit. Main, production,
+budget and data unchanged. Rollback this audit by reverting its documentation.
+
+### ROUTE-02-C: опубликованный контроль и полный цикл ответов, 02.10.2026
+Требования: TASK R3/R4/R9/R15, ROUTE-02 A/C. Основание: опубликованный
+PR205/bcc21d90b604d5f81fe05aa04b317be0862e8661 прошёл CI36964990828:
+194 browser, 653 Node/PGlite, SQL safety, native registered concurrency и
+остальные native/A1/replay проверки. PR202/be7d0fbe0389bd4223bafee7f738fffd2b6cb634
+прошёл CI36965025398 (185 browser, 610 Node и SQL/native/A1/replay).
+
+Решение: сохранить дополнительную проверку продолжения после unknown-ответа:
+отдельное одобрение нового вопроса, sufficient-ответ, повторное изучение обоих
+ответов и отсутствие автоматического утверждения. Адресно 1/1 pass, 3502 ms;
+поставщик подставной, отдельная локальная тестовая БД. Код продукта/схема не
+меняются; актуализированы журналы, маршрут и исторический аудит публикации.
+Бюджеты, production и пользовательские данные неизменны. CI дополнения
+учитывается по новому head, предыдущий success не выдаётся за новый прогон.
+Реальная смысловая приёмка модели/двух ролей остаётся открытой. Откат: revert
+этого дополнения теста и документации, без удаления оригиналов или истории.
+
+### ROUTE-02-D: приватный текстовый диалог и решения в Telegram, 02.10.2026
+Требование: согласованный ROUTE-02 D, TASK R3/R4/R9/R15. Факт: бот обрабатывал
+только /start; приватной истории общего веб/Telegram разговора нет. Решение:
+append-only история комментариев/заключений, service-only RPC с проверкой
+исполнителя, включение комментариев в текущий bounded source как guidance.
+Telegram использует тот же RPC решения вопросов, а ответы связываются с
+сохранённым сообщением бота, заявкой и manifest; срок контекста 30 минут.
+Чужой чат, старый источник, повторный update и недоступная запись не создают
+второго решения/платного запуска. Альтернатива отдельной ветки решений/подмены
+студенческого диалога отклонена. Две приватные таблицы с RLS, без прав браузера.
+Голос не включать до провайдера/бюджета/политики хранения; не скачивать запись
+и не выдавать отказ распознавания за отправленный комментарий. Новых сервисов,
+повышения бюджета и production изменений нет. Проверки: SQL/API/web/Telegram,
+privacy, stale/retry, совместимость старого /start и full CI/replay. Откат:
+выключить новый UI/обработчик, сохранить переписку/решения/материалы.
+
+### ROUTE-02-D — приватная история и синхронные решения веб/Telegram
+TASK R3/R4/R9/R15 → migration 20261002052253, registered-study API/UI,
+Telegram study-dialog/handler/runtime и уведомление новой заявки. Текст
+комментария сохраняется один раз, идёт в bounded review guidance, не становится
+фактом; новое заключение сохраняется приватно и не утверждает требования.
+Callbacks/ответы проходят проверку привязанного owner_chat и текущего источника;
+publish/edit/return используют один RPC с вебом. Голос отключён без скачивания
+до провайдера/лимита/retention. Числовые бюджеты, данные и production не менялись.
+Локально: 5 новых SQL/bot сценариев, существующий Telegram набор и 24 сценария
+registered analysis прошли; browser 9/9 на 390/1440. Адресная проверка последней
+версии и build фиксируются при публикации; native concurrency/replay — в CI.
+Код написан; D не объявлен принятым/установленным, реальное качество C открыто.
+
+Последняя адресная проверка D: 12/12 Node/PGlite/Telegram/history, 0 fail/skip;
+24/24 registered-analysis regression; browser 9/9, Vite build и whitespace pass.
+Проверка PostgreSQL независимыми транзакциями и полного replay включена в CI,
+локально не объявляется пройденной. Production/голос/реальные роли не приняты.
+
+
+### ROUTE-02-D: точный повтор изменённого вопроса, 02.10.2026
+PR206/f226039, CI36973636526: 197 browser и 660 Node/PGlite прошли;
+SQL safety/intake concurrency прошли. Новый native registered-study сценарий
+остановился на KeyError duplicate: ранее опубликован изменённый текст,
+а callback publish использует исходный. Сервер корректно возвращает conflict,
+не создаёт второе решение. Ошибка ожидания теста, не основание менять защиту.
+Исправлены только проверки в двух ранее разрешённых тестовых файлах: исходный
+текст после правки отклоняется; точный повтор утверждённого текста возвращает
+duplicate при параллельном выполнении; текст и единственная запись сохраняются.
+Адресно 10/10 Node/PGlite/Telegram, Python syntax и whitespace прошли.
+Повторный полный CI нового head обязателен; первый CI не объявлен успешным.
+Код продукта, SQL, бюджеты и рабочие данные не изменены. Публикация всех 19 файлов
+разрешена владельцем 02.10.2026; PR206 остаётся draft, без объединения/установки.
+Откат: revert этой корректировки теста и журналов, не менять историю вопросов.

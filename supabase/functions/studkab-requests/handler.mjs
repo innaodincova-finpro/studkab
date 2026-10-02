@@ -1,5 +1,6 @@
 import {qualityAction,qualityError} from './quality-evidence.mjs';
 import {testDeliveryAction} from './test-delivery.mjs';
+import {registeredStudyAction} from './registered-study.mjs';
 import {clarificationAction} from './clarifications.mjs';
 import {materialRevisionAction} from './material-revision.mjs';
 import {kindCorrectionAction} from './kind-correction.mjs';
@@ -80,7 +81,7 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
-   if(['intake-open','intake-notes','intake-upload','intake-download','intake-read','intake-analyze','intake-analysis-state','intake-confirmation-state','intake-confirmation-save','intake-submission-state','intake-submit'].includes(input?.action)){
+   if(['intake-open','intake-notes','intake-upload','intake-download','intake-read','intake-analyze','intake-analysis-state','intake-confirmation-state','intake-confirmation-save','intake-submission-state','intake-submit','intake-receive-state','intake-receive'].includes(input?.action)){
     if(input.action!=='intake-upload'&&raw.length>(input.action==='intake-confirmation-save'?300000:16000))return json({error:'Запрос слишком большой'},413);
     const r=await intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,validatePayload});return json(r.data,r.status||200);
    }
@@ -92,6 +93,9 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    }
    if(['deliver','result','prepare-result','review-result','auto-review-result','review-notes','result-review-state','result-review-history','rebind-result'].includes(input.action)){
     const r=await resultAction(input,user,{db,config});return json(r.data,r.status||200);
+   }
+   if(['registered-study-state','registered-question-decide','registered-material-classify','registered-private-message'].includes(input.action)){
+    const r=await registeredStudyAction(input,user,{db,config});return json(r.data,r.status||200);
    }
    if(['clarification-list','clarification-unread','clarification-read','clarification-ask','clarification-answer'].includes(input.action)){
     const r=await clarificationAction(input,user,{db,config,isMember});return json(r.data,r.status||200);

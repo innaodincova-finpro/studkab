@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=17"></script><script src="push.js?v=4"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script><script src="request-workflow.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="registered-study.js?v=1"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1574,7 +1574,7 @@ function fromPayload(p){
     id: p.id || uid("rq"),
     added: today(),
     status: "new",
-    topic: p.t || "", workType: p.k || "", discipline: p.d || "",
+    topic: p.t || (p.route==='received'?'Материалы получены — тема ещё не изучена':''), workType: p.k || "", discipline: p.d || "",
     univ: p.u || "", faculty: p.fc || "", kafedra: p.kf || "", city: p.ct || "",
     student: p.n || "", group: p.g || "", supervisor: p.s || "",
     program: p.pr || "", form: p.fo || "", course: p.co || "",
@@ -1582,7 +1582,7 @@ function fromPayload(p){
     org: p.org || "", methodNotes: p.mn || "", contact: p.cn || "",
     format: { mTop:f.mt, mRight:f.mr, mBottom:f.mb, mLeft:f.ml,
               font:f.fn, size:f.sz, spacing:f.sp, indent:f.ind },
-    note: ""
+    note: "", receivedBeforeAnalysis:p.route==='received'
   });
 }
 function intake(){
@@ -2017,7 +2017,7 @@ function viewList(){
 
 var PASSPORT_CATEGORY={method:'Требование методички',measurable:'Измеримая проверка',expert:'Предметная рекомендация',assumption:'Предположение'};
 var PASSPORT_ITEM_LABEL={WORK_TYPE:'Вид работы',DISCIPLINE:'Дисциплина',STRUCTURE:'Структура',VOLUME:'Объём',METHODOLOGY:'Методология',FORMATTING:'Оформление',SOURCES:'Источники',CALCULATIONS:'Расчёты',ANTIPLAGIARISM:'Оригинальность',TEACHER:'Условия преподавателя'};
-function passportItemLabel(q){return /^REQ_[a-f0-9]{32}_\d+$/.test(q.id||'')?'Условие из файла: '+String(q.text||'').slice(0,90):(PASSPORT_ITEM_LABEL[q.id]||q.id);}
+function passportItemLabel(q){if(/^FIELD_/.test(q.id||''))return 'Уточнение по документам: '+((({t:'тема',k:'вид работы',d:'предмет',structure:'структура',length:'объём',formatting:'оформление',data:'исходные данные'})[q.id.slice(6)])||q.id.slice(6));return /^REQ_[a-f0-9]{32}_\d+$/.test(q.id||'')?'Условие из файла: '+String(q.text||'').slice(0,90):(PASSPORT_ITEM_LABEL[q.id]||q.id);}
 function originalityPassportText(o){
  if(o.mode==='university_threshold')return 'Оригинальность: не менее '+o.thresholdPercent+'% в системе '+o.service+'.';
  if(o.mode==='university_threshold_no_service')return 'Оригинальность: не менее '+o.thresholdPercent+'%; система проверки в задании не указана.';
@@ -2032,6 +2032,7 @@ function deliveryHistory(x){
  return '<p data-delivery-history><b>Ранее передано: '+esc(ruDate(String(last.createdAt).slice(0,10)))+'</b><br><span class="hint">Это сохранённая передача. Совпадение текущего документа с переданной версией здесь не проверяется.</span></p>';
 }
 function requestWorkflow(x){
+ if(x.receivedBeforeAnalysis)return {step:1,key:'intake',title:'Заявка получена',copy:'Документы сохранены. Изучение комплекта ещё не завершено; подготовка не разрешена.',action:'materials-refresh',label:'Показать материалы',blocker:'Комплект ожидает изучения помощниками',complete:false,steps:RequestWorkflow.steps};
  if(x.serverMissing)return {step:1,key:'cancelled',title:'Заявка отсутствует на сервере',copy:'Локальная карточка сохранена для проверки. Серверные действия недоступны; после сверки удалите её кнопкой «удалить» в обзоре.',action:null,label:'',blocker:'',complete:false,steps:RequestWorkflow.steps};
  if(x.materialRevision&&x.materialRevision.state==='open')return {step:1,key:'intake',title:'Ожидаются дополнительные материалы',copy:'Студент завершит загрузку в своём кабинете. После этого проверьте комплект и новую версию паспорта.',action:'materials-refresh',label:'Обновить материалы',blocker:x.materialRevision.reason||'',complete:false,steps:RequestWorkflow.steps};
  var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[],hasDocument=!!(x.doc&&(x.doc.order||[]).some(function(c){var part=(x.doc.structure||{})[c.id]||{};return String(part.text||'').trim()||(Array.isArray(part.figures)&&part.figures.length);})),reviewCurrent=false;
@@ -2136,9 +2137,9 @@ function readMaterialManifest(wrap){
 function passportContent(x){
   if(x.materialRevision&&x.materialRevision.state==='open')return lab('Паспорт требований')+'<p role="status">Студент дополняет материалы. Прежний паспорт больше не утверждён. Новая версия будет создана после завершения дополнения.</p><button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить состояние</button>';
   var versions=Array.isArray(x.passports)?x.passports:[],p=versions[0];
-  if(!p)return lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>';
+  if(!p)return (x.receivedBeforeAnalysis?'<button type="button" class="chip" data-act="registered-study" data-id="'+esc(x.id)+'">Изучение документов</button>':'')+lab('Паспорт требований')+'<p class="hint">Зафиксируйте требования именно этой работы до подготовки текста.</p><div class="chips"><button type="button" class="chip" data-act="passport-load" data-id="'+esc(x.id)+'">Проверить паспорт</button><button type="button" class="chip warn" data-act="passport-edit" data-id="'+esc(x.id)+'">Создать паспорт</button></div>';
   var items=Array.isArray(p.items)?p.items:[],unresolved=passportUnresolved(p),pending=(x.clarifications||[]).some(function(q){return !q.answer||!items.some(function(i){return i.id===q.item_id&&i.verified&&(i.answer_ids||[]).indexOf(q.id)>=0;});}),numberIssues=(x.structureFindings||[]).filter(function(f){return !f.resolved;}),canApprove=p.status==='draft'&&!unresolved.length&&!pending&&!materialManifestIssues(x,p).length&&!numberIssues.length;
-  return lab('Паспорт требований · версия '+Number(p.revision||1))+
+  return (x.receivedBeforeAnalysis?'<button type="button" class="chip" data-act="registered-study" data-id="'+esc(x.id)+'">Изучение документов</button>':'')+lab('Паспорт требований · версия '+Number(p.revision||1))+
     '<div class="row" style="margin-bottom:8px"><span class="pill '+(p.status==='approved'?'p-ok':'p-och')+'">'+(p.status==='approved'?'утверждён':p.status==='stale'?'устарел':'проект')+'</span></div>'+
     (pending?'<p class="hint">Есть вопросы без ответа или ответы, ещё не учтённые в этой версии требований.</p>':'')+
     (p.summary?'<details class="requirement-detail"><summary>О версии паспорта</summary><p>'+esc(p.summary)+'</p></details>':'')+
@@ -2254,6 +2255,7 @@ async function editPassport(x,fullRevision){
  try{questions=(await Oblako.requestApi({action:'clarification-list',id:x.id})).questions||[];}catch(e){toast(e.message||'Не удалось прочитать уточнения');return;}
  if(identity!==Oblako.identity())return toast('Аккаунт изменился. Откройте требования заново.');
  x.clarifications=questions;
+ items=items.slice();questions.forEach(function(q){if(/^FIELD_[A-Za-z0-9_]+$/.test(q.item_id)&&!items.some(function(i){return i.id===q.item_id;}))items.push({id:q.item_id,category:'method',required:true,text:'',source:'',verified:false,answer_ids:[]});});
  var numberIssues=(x.structureFindings||[]).filter(function(f){return !f.resolved&&!f.tooMany;}),structureItem=items.find(function(q){return q.id==='STRUCTURE';});
  var numberFields=numberIssues.map(function(f,n){var old=((structureItem&&structureItem.structure_resolutions)||[]).find(function(r){return r.fileHash===f.fileHash&&r.number===f.number&&r.first===f.first&&r.second===f.second;})||{};return '<fieldset class="fold" data-number-issue="'+n+'"><legend>Разрешить повтор номера '+esc(f.number)+'</legend><p>Исходный файл: '+esc(f.fileName)+'</p><p>'+esc(f.number)+' '+esc(f.first)+'<br>'+esc(f.number)+' '+esc(f.second)+'</p><div class="fld"><label>Номер второго подраздела в итоговом документе<input data-number-chosen value="'+esc(old.chosenNumber||'')+'" placeholder="Например: 2.4" maxlength="10"></label></div><div class="fld"><label>Основание решения<textarea data-number-reason maxlength="1000" placeholder="Исправленное задание, ответ преподавателя или причина решения в учебном кейсе">'+esc(old.reason||'')+'</textarea></label></div><label><input type="checkbox" data-number-confirm'+(old.verified?' checked':'')+'> Проверил(а) исходные заголовки и подтверждаю выбранный номер</label></fieldset>';}).join('');
  var fields=items.map(function(q,n){
@@ -2340,7 +2342,7 @@ function viewItem(id){
   }
   if (r && r.verified) requirements += '<div class="chips"><button type="button" class="chip" data-act="ref-open" data-id="'+r.id+'">Требования вуза ✓</button></div>';
   var materials='<p class="hint">Материалы предоставляет студент. Здесь можно просмотреть и скачать полученные файлы.</p>';
-  if(Array.isArray(x.attachments))materials += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
+  if(Array.isArray(x.attachments))materials += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category==='unclassified'?'Ещё не изучен':a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
   else materials+='<p class="hint">'+(x.requestNumber?'Список файлов ещё не получен. Обновите материалы.':'У этой ручной заявки нет файлов из кабинета студента.')+'</p>';
   if(x.requestNumber)materials+='<button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить материалы</button>';
   if(x.intakeContext){var ic=x.intakeContext;materials+='<details><summary>Сведения и требования из общей загрузки</summary><p class="hint">'+(ic.stale?'После отправки сведения изменились; исходный анализ показан только как история.':'Кандидаты из документов, не утверждённый паспорт. Ответы студента сохранены отдельно.')+'</p>'+(ic.analysis.requirements||[]).map(function(q){return '<p class="small">'+esc(q.value)+(q.condition?'<br>Условие: '+esc(q.condition):'')+'<br>'+q.refs.map(function(r){return esc(r.fileName||'Примечание студента')+': '+esc(r.quote);}).join('<br>')+'</p>';}).join('')+'</details>';}
@@ -2789,6 +2791,7 @@ document.addEventListener("click", function(ev){
   if (act === "review-word") return StudResults.deliver(item(id),true);
   if (act === "deliver-result") return StudResults.deliver(item(id));
   if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
+  if(act==='registered-study'){var study=item(id);if(study)StudRegisteredStudy.show({requestId:id,api:Oblako.requestApi,esc:esc,openModal:openModal});return;}
   if(act==='executor-clarifications'){var cq=item(id);if(cq)StudClarifications.show({requestId:cq.id,executor:true,items:((cq.passports||[])[0]||{}).items||[],labels:PASSPORT_ITEM_LABEL,api:Oblako.requestApi,esc:esc,openModal:openModal,onRead:refreshExecutorDialogue,onChange:function(){return loadPassports(cq);}});return;}
   if (act === "passport-edit" || act === "passport-revise") {var pe=item(id);if(pe)editPassport(pe,act === "passport-revise");return;}
   if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;var approvalRevision=pa.passportMaterialRevision,approvalIdentity=Oblako.identity(),approvalData=D;var materialIssues=materialManifestIssues(pa,pv);if(materialIssues.length){toast(materialIssues.join(' '));return;}var unresolved=passportUnresolved(pv);if(unresolved.length){toast('Сначала уточните: '+unresolved.map(passportItemLabel).join(', '));return;}passportFingerprint(pa).then(function(sourceFingerprint){if(approvalIdentity!==Oblako.identity()||approvalData!==D)throw Error('Аккаунт изменился. Откройте заявку заново.');return Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items,material_manifest:pv.material_manifest},sourceFingerprint:sourceFingerprint,expectedRevision:approvalRevision});}).then(function(r){if(approvalIdentity!==Oblako.identity()||approvalData!==D)return;pa.passportMaterialRevision=r.materialRevision;pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){if(approvalIdentity===Oblako.identity()&&approvalData===D)loadPassports(pa).catch(function(){});toast(e.message||'Не удалось утвердить паспорт');});return;}

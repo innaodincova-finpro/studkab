@@ -1,3 +1,4 @@
+import {intakeReceive} from './intake-receive.mjs';
 import {intakeRead} from './intake-reading.mjs';
 import {analysisPlan} from '../_shared/intake-analysis.mjs';
 import {intakeSubmission} from './intake-submission.mjs';
@@ -34,9 +35,10 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   if(draft?.denied)return {status:403,data:{error:'Нет доступа'}};
   if(!uuid.test(draft?.id))throw Error('Intake unavailable');
   const files=await db('studkab_intake_files?draft_id=eq.'+draft.id+'&order=created_at.asc,id.asc&select=id,file_name,content_type,size_bytes,file_hash,state,supersedes,created_at,saved_at,roles,read_status,read_version,read_summary:read_result->summary,read_warnings:read_result->warnings');
-  return {data:{draft:{id:draft.id,state:draft.state,revision:draft.revision,notes:draft.notes},files:files.map(safeFile),limits:{files:8,bytes:5242880,historyBytes:104857600}}};
+  return {data:{draft:{id:draft.id,state:draft.state,revision:draft.revision,notes:draft.notes,receiptMode:draft.reception_version===2},files:files.map(safeFile),limits:{files:8,bytes:5242880,historyBytes:104857600}}};
  }
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный черновик'}};
+ if(['intake-receive-state','intake-receive'].includes(input.action))return intakeReceive(input,user,{db,transferIntake});
  if(['intake-submission-state','intake-submit'].includes(input.action))return intakeSubmission(input,user,{db,transferIntake,validatePayload});
  const [draft]=await db('studkab_intake_drafts?id=eq.'+input.id+'&student_id=eq.'+user.id+'&state=eq.open&select=id,revision');
  if(!draft)return missing;

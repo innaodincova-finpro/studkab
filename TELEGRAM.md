@@ -1,5 +1,33 @@
 # Telegram: recipient setup (phase 1)
 
+> Актуальный статус на 02.10.2026: см. [ROUTE-02](docs/APPROVED_REQUEST_ROUTE_2026-10-01.md), раздел 7. Старые датированные статусы ниже — история; реализация, CI, установка и приёмка учитываются отдельно.
+
+## ROUTE-02 — согласованный маршрут, 01.10.2026
+
+Статус: требования согласованы владельцем; новая реализация и приёмка не выполнены.
+Действующий план изменений: [ROUTE-02](docs/APPROVED_REQUEST_ROUTE_2026-10-01.md).
+Этот раздел заменяет прежнюю последовательность INTAKE-01 только в части приёма:
+сохранение выбранных оригиналов и регистрация → изучение → существенные уточнения.
+Анализ и подтверждение раскладки по полям не блокируют отправку.
+Кандидаты ИИ не считаются проверенными требованиями.
+R2–R9/R13/R14, версии, бюджет, изоляция и ограничения выдачи сохраняются.
+
+Вопрос ИИ адресован студенту, но сначала показан администратору с обоснованием.
+Публикация только после её подтверждения. Внутренняя переписка с помощником —
+текстом или голосом по выбору; возврат с замечанием вызывает повторное изучение.
+Запуск подготовки — «Начать подготовку» после обзора требований/стоимости.
+Выдача — «Передать студенту» после обязательных проверок точного файла;
+администратор принимает решение о выпуске, не выполняет предметную проверку за ИИ.
+Бот уведомляет администратора, поддерживает согласование вопросов и внутреннее
+общение. Push — штатный канал обеих ролей с настройкой и проверкой фактического
+получения. Все действия связаны с одной заявкой. Этапы отображаются с текстом
+и зелёной отметкой только по подтверждённому прохождению.
+
+Нижележащие описания прежнего порядка/ручных действий являются исторической
+реализацией в противоречащей этому разделу части. Нельзя выдавать новый маршрут
+за уже установленный или удалять историю прежних проверок.
+
+
 Bot: `@Studkab_Requests_bot`. Secret: `STUDKAB_TELEGRAM_BOT_TOKEN` in Edge Function Secrets.
 
 This phase verifies bot identity, installs an authenticated webhook and binds one executor chat using an expiring, unguessable private start link. It does **not** submit requests or relay conversations yet. The bot explicitly tells users this.
@@ -17,3 +45,11 @@ Deliver the `https://t.me/Studkab_Requests_bot?start=bind_...` link only to the 
 `node --test tests/telegram.test.mjs` checks forged webhooks, wrong bot, setup replay, expired/invalid/group activation and recipient replacement. Read-only SQL may check `installed`, `owner_chat_id is not null`, and `bound_at`; do not print the chat ID. Existing cabinet, registry, push functions and other shared-project applications are unchanged.
 
 Next phase: authenticated student request storage, executor inbox authorization, durable Telegram delivery/retries, student linkage and private replies. Keep existing request sharing until that phase passes acceptance.
+
+## ROUTE-02: место в реализации
+
+Текущая привязка через /start остаётся. Существующая отправка уведомления о новой
+заявке реализована в studkab-requests/index.ts; ответы студента исполнителю —
+в studkab-push/index.ts. Одобрение вопросов, текст/voice и callback управления
+добавляются по ROUTE-02, а не объявляются работающими. Два интерфейса используют
+одну запись решения; студенту доступен только одобренный вопрос, не внутренний чат.

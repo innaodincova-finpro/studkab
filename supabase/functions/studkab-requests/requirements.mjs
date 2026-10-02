@@ -241,6 +241,8 @@ export async function requirementAction(input,user,{db,config}){
   const filled=rows.length?fillMissingDraft(rows[0],row.payload):null;
   const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text,intake_file_id');
   if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
+  if(currentAttachments(attachments).some(a=>a.category==='unclassified'||a.extracted_text===null))return {status:409,data:{error:'Заявка получена, но изучение оригиналов ещё не завершено. Подготовка не разрешена'}};
+
   const sameSource=rows.length&&rows[0].status!=='stale'&&rows[0].source_fingerprint===input.sourceFingerprint;
   const intakeContext=attachments.some(a=>a.intake_file_id)?await db('rpc/studkab_intake_request_context','POST',{p_request:request}):null;
   let linked;
@@ -278,6 +280,8 @@ export async function requirementAction(input,user,{db,config}){
   if(!anti.originality||anti.text!==originalityText(anti.originality)||anti.originality.mode==='service_only'&&!/STUDKAB/i.test(anti.source)||['university_threshold','university_no_threshold'].includes(anti.originality.mode)&&!anti.originality.service)return {status:409,data:{error:'Укажите подтверждённое основание проверки оригинальности'}};
   const attachments=await db('studkab_request_attachments?request_id=eq.'+request+'&select=id,supersedes,category,file_name,file_hash,extracted_text,intake_file_id');
   if(!Array.isArray(attachments))throw Error('Не удалось прочитать исходные материалы');
+  if(currentAttachments(attachments).some(a=>a.category==='unclassified'||a.extracted_text===null))return {status:409,data:{error:'Заявка получена, но изучение оригиналов ещё не завершено. Подготовка не разрешена'}};
+
   if(attachments.some(a=>a.intake_file_id)){
    let expected;
    try{expected=addIntakeCandidates({items:[]},await db('rpc/studkab_intake_request_context','POST',{p_request:request})).items;}catch(e){return {status:409,data:{error:e.message}};}

@@ -3,6 +3,10 @@ import {checkReserve} from './reserve.mjs';
 import {withContext} from './context.mjs';
 import {machineAuthorization} from './auth.mjs';
 import {runIntake} from './intake-runner.mjs';
+import {queueRegisteredAnalysis} from './registered-analysis.mjs';
+import {runRegisteredReading} from './registered-reading.mjs';
+import {readIntake} from '../studkab-requests/reader-runtime.ts';
+import {loadOriginal} from '../studkab-requests/intake-reading.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const token=Deno.env.get('STUDKAB_PROXY_TOKEN');
 const enabled=Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true';
@@ -36,7 +40,19 @@ Deno.serve(handler({
  provider,ready:()=>enabled && !!token,
  // Share the existing minute schedule without starving ordinary generation.
  // Database policy is a second, independent fail-closed numerical budget gate.
- processIntake:async()=>Deno.env.get('STUDKAB_INTAKE_ANALYSIS_ENABLED')==='true'&&!!token&&new Date().getUTCMinutes()%2===0
-  ?await runIntake({rpc:(name:string,args:unknown)=>db('rpc/'+name,args),provider}):null,
+ processIntake:async()=>{
+  if(new Date().getUTCMinutes()%2!==0)return null;
+  const rpc=(name:string,args:unknown)=>db('rpc/'+name,args);
+  // Unpaid reading works independently of AI enablement and provider credentials.
+  if(Deno.env.get('STUDKAB_REGISTERED_READING_ENABLED')==='true'){
+   const reading=await runRegisteredReading({rpc,readIntake,loadIntake:(path:string,size:number,hash:string)=>loadOriginal({base,key,path,size,hash})});
+   if(reading)return reading;
+  }
+  if(Deno.env.get('STUDKAB_REGISTERED_ANALYSIS_ENABLED')==='true'&&Deno.env.get('STUDKAB_INTAKE_ANALYSIS_ENABLED')==='true'&&!!token){
+   await queueRegisteredAnalysis({rpc});
+  }
+  return Deno.env.get('STUDKAB_INTAKE_ANALYSIS_ENABLED')==='true'&&!!token
+   ?await runIntake({rpc,provider}):null;
+ },
  readiness:()=>({enabled,providerConfigured:!!token})
 }));

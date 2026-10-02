@@ -147,6 +147,29 @@ try:
  assert sql(f"select ready_at is not null from studkab_requests where id='{sent4[0]['id']}'")=='t'
  print('PASS: concurrent intake submission creates one published ordinary request, one complete file set and immutable receipt')
  print('PASS: semantic duplicate start, exclusive claim/dispatch, stale-source refusal, retained reserve and unknown without retry')
+ # ROUTE-02-B: real simultaneous receipts plus source-change race, no provider.
+ sql((root/'supabase/migrations/20261001162253_route02_receive_before_analysis.sql').read_text())
+ fifth='55555555-5555-4555-8555-555555555555'
+ sql(f"insert into auth.users values('{fifth}');insert into studkab_members values('{fifth}');")
+ d5=call(f"studkab_intake_open('{fifth}')")['id']
+ f5=call(f"studkab_intake_reserve('{fifth}','{d5}','unread.pdf','application/pdf',10,'"+'f'*64+"',null)")['file']
+ call(f"studkab_intake_finish('{fifth}','{d5}','{f5['id']}','{f5['file_hash']}')")
+ rev5=call(f"studkab_intake_receive_snapshot('{fifth}','{d5}')")['revision']
+ def receive5():return call(f"studkab_intake_receive('{fifth}','{d5}',{rev5},'2026-10-30','','student@example.invalid')")
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:receipts=list(pool.map(lambda _:receive5(),range(2)))
+ assert receipts[0]['id']==receipts[1]['id'] and sum(x['duplicate'] for x in receipts)==1
+ assert int(sql(f"select count(*) from studkab_request_attachments where request_id='{receipts[0]['id']}'"))==1
+ assert sql(f"select category from studkab_request_attachments where id='{f5['id']}'")=='unclassified'
+ d6=call(f"studkab_intake_open('{fifth}')")['id']
+ f6=call(f"studkab_intake_reserve('{fifth}','{d6}','unread.pdf','application/pdf',10,'"+'1'*64+"',null)")['file']
+ call(f"studkab_intake_finish('{fifth}','{d6}','{f6['id']}','{f6['file_hash']}')")
+ rev6=call(f"studkab_intake_receive_snapshot('{fifth}','{d6}')")['revision']
+ with concurrent.futures.ThreadPoolExecutor(2) as pool:
+  pending=[pool.submit(lambda:call(f"studkab_intake_receive('{fifth}','{d6}',{rev6},'2026-10-30','','student@example.invalid')")),
+   pool.submit(lambda:call(f"studkab_intake_reserve('{fifth}','{d6}','late.pdf','application/pdf',10,'"+'2'*64+"',null)"))]
+  race=[x.result() for x in pending]
+ assert (race[0].get('submitted') and race[1].get('missing')) or (race[0].get('conflict') and race[1].get('file'))
+ print('PASS: ROUTE-02 atomic repeated receipts and reserve/receipt race preserve one complete snapshot')
  print('PASS: parallel draft creation, hash deduplication, eight-file limit, ownership, finish, one successor and persisted exclusive reading')
 finally:
  subprocess.run(['dropdb',database],check=True)

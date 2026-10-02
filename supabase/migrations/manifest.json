@@ -343,6 +343,14 @@
       "file": "20261001110117_intake_analysis_output_bound.sql",
       "sha256": "1b12220597848f461aa7d1cf9c9d6fbe80f3c9c320cebe623a1e991d6bc38ba2",
       "status": "pending"
+    },
+    {
+      "version": "20261001175519",
+      "name": "route02_registered_reading",
+      "file": "20261001175519_route02_registered_reading.sql",
+      "sha256": "1f2cc06eecedba9d0b22ef028e4392a0766c731f260ca4cd367b4f0607c49d87",
+      "status": "pending",
+      "note": "ROUTE-02-C1: unpaid server reading after receipt; not installed."
     }
   ],
   "pending_migrations": [
@@ -485,6 +493,52 @@
       "sha256": "5c59144952c4a91e0d72e046f01d1897b3a0cfafb3a7851389ba199937847345",
       "status": "pending",
       "note": "INTAKE-01 step 6; not installed in production"
+    },
+    {
+      "version": "20261001162253",
+      "name": "route02_receive_before_analysis",
+      "file": "20261001162253_route02_receive_before_analysis.sql",
+      "sha256": "707dc1d0b2853114dd625a7be83b8d7f05dbbe9821eeecde769e78f6e28e5779",
+      "status": "pending",
+      "note": "ROUTE-02-B; not installed in production"
+    },
+    {
+      "version": "20261002015056",
+      "name": "route02_registered_analysis",
+      "file": "20261002015056_route02_registered_analysis.sql",
+      "sha256": "69e9e815cf395834062d8b3b641fc1631356b74d8f8042025d85949e005eaee7",
+      "status": "pending",
+      "note": "ROUTE-02-C2; not installed in production"
+    },
+    {
+      "version": "20261002015751",
+      "name": "route02_private_questions",
+      "file": "20261002015751_route02_private_questions.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C; not installed in production",
+      "sha256": "f31c961a3c03fa032245db573061b7c84e78ee2eb96bb651dad628b626f0beac"
+    },
+    {
+      "version": "20261002020616",
+      "name": "route02_reviewed_classification",
+      "file": "20261002020616_route02_reviewed_classification.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C; not installed in production",
+      "sha256": "889c0fc1a2702e8b07cd05e64a98920d6f93e7a790c25a270017ca1e02655dcb"
+    },
+    {
+      "version": "20261002031300",
+      "name": "route02_kit_review",
+      "file": "20261002031300_route02_kit_review.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C; whole-kit and answer assessment; not installed in production",
+      "sha256": "0edc16ea62b59a0ad3bd3371ae4e913931070dadc9bc6e3119549ccec9dc4c39"
+    },
+    {
+      "version": "20261002052253",
+      "name": "route02_private_dialog",
+      "file": "20261002052253_route02_private_dialog.sql",
+      "sha256": "5d392e11f2d80746ac8ab6b16033796cc3a4e58df244758bb87c154871c0447c"
     }
   ],
   "production_reconciled_at": "2026-09-23"

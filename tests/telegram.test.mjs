@@ -62,3 +62,14 @@ test('recipient binds once; a second chat cannot take over; retry is safe',async
   assert.doesNotMatch(replies.filter(c=>c.payload.chat_id===200).at(-1).payload.text,/привязан/);
   assert.ok(replies.every(c=>!c.payload.text.includes(activation)));
 });
+
+test('bound owner enables callbacks only on the verified existing webhook',async()=>{
+ for(const url of [WEBHOOK,'https://foreign.example/webhook']){
+  const calls=[],secret=await webhookSecret(token);
+  const app=handler({token,db:{get:async()=>({installed:true,owner_chat_id:100}),action:async()=>({})},telegram:async(method,payload)=>{calls.push({method,payload});return method==='getWebhookInfo'?{url,allowed_updates:['message']}:{message_id:1};}});
+  const r=await app(new Request(WEBHOOK,{method:'POST',headers:{'x-telegram-bot-api-secret-token':secret},body:JSON.stringify({message:{chat:{id:100,type:'private'},from:{id:100,is_bot:false},text:'/start'}})}));
+  assert.equal(r.status,200);const changed=calls.find(c=>c.method==='setWebhook');
+  assert.equal(Boolean(changed),url===WEBHOOK);
+  if(changed){assert.deepEqual(changed.payload.allowed_updates,['message','callback_query']);assert.equal(changed.payload.secret_token,secret);}
+ }
+});
