@@ -5,6 +5,19 @@ const original='Для анализа необходимы ОДДС и пока�
 function source(extra={}){return {studyProtocol:REVIEW_VERSION,files:[{id:'file-1',file_name:'Задание.docx',file_hash:'a'.repeat(64),read_status:'ready',read_version:'reader-1',read_result:{status:'ready',readerVersion:'reader-1',blocks:[{text:original,source:{paragraph:1}}]}}],...extra};}
 function output(part){return {covered:part.blocks.map(b=>b.blockId),gaps:[],answerReviews:[]};}
 const ref=(b,quote=b.text)=>({blockId:b.blockId,quote});
+test('whole-kit prompt keeps all 256 blocks while source metadata remains in the saved plan',()=>{
+ const s=source();s.files[0].id='11111111-1111-4111-8111-111111111111';
+ s.files[0].read_result.blocks=Array.from({length:256},(_,i)=>({text:'Требование '+i+': сохранить число и условие применения.',source:{paragraph:i+1,table:2,row:i+1,column:1,originalLabel:'Подробное служебное описание источника '.repeat(3)}}));
+ const plan=registeredAnalysisPlan(s),part=plan.at(-1),prompt=JSON.parse(part.prompt);
+ const old=JSON.stringify({blocks:part.blocks.map(b=>({blockId:b.blockId,text:b.text,source:b.source,fileId:b.fileId}))});
+ assert.ok(new TextEncoder().encode(old).length>40000);
+ assert.ok(new TextEncoder().encode(part.prompt).length<=40000);
+ assert.equal(prompt.blocks.length,256);assert.deepEqual(prompt.blocks.map(b=>b.text),s.files[0].read_result.blocks.map(b=>b.text));
+ assert.equal(validReviewPart(part,plan.length-1,plan.length),true);
+ const x=output(part);x.gaps=[{key:'source_check',question:'Уточните условие.',reason:'Нужно уточнение.',refs:[ref(part.blocks[255])]}];
+ const r=verifyKitReview(JSON.stringify(x),part).gaps[0].refs[0];
+ assert.equal(r.source.paragraph,256);assert.equal(r.fileId,s.files[0].id);assert.equal(r.fileHash,s.files[0].file_hash);
+});
 test('registered adequacy is a separate budgeted final part; legacy plans do not change',()=>{
  const s=source(),plan=registeredAnalysisPlan(s),last=plan.at(-1);
  assert.equal(plan.length,2);assert.equal(validAnalysisPart(plan[0],0,plan[0].extraction_parts),true);assert.equal(validReviewPart(last,1,2),true);assert.equal(validReviewPart(last,0,2),false);
