@@ -21,7 +21,7 @@ async function fixture({enabled=true,ready=true,kitText=text}={}){
  const {file}=await rpc('studkab_intake_reserve',{p_student:student,p_draft:draft.id,p_name:'Assignment.docx',p_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',p_size:100,p_hash:'a'.repeat(64),p_supersedes:null});
  await rpc('studkab_intake_finish',{p_student:student,p_draft:draft.id,p_file:file.id,p_hash:file.file_hash});
  const legacy=await rpc('studkab_intake_analysis_source',{p_draft:draft.id});
- await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
+ await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
  assert.deepEqual(await rpc('studkab_intake_analysis_source',{p_draft:draft.id}),legacy);
  const snap=await rpc('studkab_intake_receive_snapshot',{p_student:student,p_draft:draft.id});
  const receipt=await rpc('studkab_intake_receive',{p_student:student,p_draft:draft.id,p_revision:snap.revision,p_deadline:'2026-10-30',p_description:'',p_contact:'synthetic@example.invalid'});
@@ -56,15 +56,23 @@ test('whole plan cost must fit both authorized limits before any paid part is qu
  }finally{await f.db.close();}}
 });
 test('revocation, reassignment, deletion, revision or changed attachment prevents paid dispatch',async()=>{
- for(const change of ["delete from studkab_members where user_id='"+student+"'","update studkab_requests set student_id='"+other+"'",'update studkab_requests set deleting_at=now()','update studkab_requests set revision=revision+1','delete from studkab_request_attachments']){const f=await fixture();try{
-  await f.enqueue();await f.mutate(change);const current=await f.source();assert.ok(current===null||current.files.length===0);assert.equal(await runIntake({rpc:f.rpc,provider:f.provider}),null);assert.equal(f.calls,0);
+ for(const change of ["delete from studkab_members where user_id='"+student+"'","update studkab_requests set student_id='"+other+"'",'update studkab_requests set deleting_at=now()',"update studkab_requests set payload=jsonb_set(payload,'{dl}','\"2026-11-30\"')",'delete from studkab_request_attachments']){const f=await fixture();try{
+  const before=await f.source();await f.enqueue();await f.mutate(change);const current=await f.source();
+  // KIT-03: изменение содержания (срок) даёт новую версию комплекта; прочие изменения делают его недоступным.
+  if(change.includes("'{dl}'"))assert.notDeepEqual(current,before);else assert.ok(current===null||current.files.length===0);
+  assert.equal(await runIntake({rpc:f.rpc,provider:f.provider}),null);assert.equal(f.calls,0);
   assert.equal((await f.db.query('select state from studkab_intake_analysis_jobs')).rows[0].state,'stale');
  }finally{await f.db.close();}}
 });
 test('request change during provider call rejects saved result and retains paid reservation',async()=>{
  const f=await fixture();try{
-  await f.enqueue();const provider=async c=>{const r=await f.provider(c);await f.mutate('update studkab_requests set revision=revision+1');return r;};
-  assert.equal((await runIntake({rpc:f.rpc,provider})).status,'intake_stale');assert.equal((await f.state()).state,'stale');assert.equal(await f.enqueue(),null);assert.equal(f.calls,1);
+  await f.enqueue();const provider=async c=>{const r=await f.provider(c);await f.mutate("update studkab_requests set payload=jsonb_set(payload,'{dl}','\"2026-11-30\"')");return r;};
+  assert.equal((await runIntake({rpc:f.rpc,provider})).status,'intake_stale');assert.equal(f.calls,1);
+  assert.equal((await f.db.query('select state from studkab_intake_analysis_jobs')).rows[0].state,'stale');
+  // KIT-03: изменённый комплект изучается заново как новая версия; устаревший результат не сохраняется.
+  assert.equal((await f.state()).state,'awaiting_analysis');assert.equal((await f.enqueue()).status,'registered_analysis_queued');
+  // Служебная смена номера редакции без изменения содержания нового платного разбора не создаёт.
+  await f.mutate('update studkab_requests set revision=revision+1');assert.equal(await f.enqueue(),null);
   assert.ok(Number((await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd)>0);
  }finally{await f.db.close();}
 });
@@ -153,7 +161,12 @@ test('only student answers; saved answer changes the analysis manifest and becom
 });
 test('stale material revision rejects publication; pending private question cannot leak through direct browser SQL',async()=>{
  const f=await fixture();try{
-  const q=await proposal(f);await f.mutate('update studkab_requests set revision=revision+1');assert.equal((await decide(f,q,'publish',q.question)).stale,true);
+  const q=await proposal(f);
+  // KIT-03: смена номера редакции без изменения содержания вопрос не устаревает; замена файла — устаревает.
+  await f.mutate('update studkab_requests set revision=revision+1');
+  const hash='f'.repeat(64),reserved=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v2.docx',p_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',p_size:10,p_hash:hash});
+  await f.rpc('studkab_registered_replace_finish',{p_student:student,p_request:f.receipt.id,p_file:reserved.file.id,p_hash:hash});
+  assert.equal((await decide(f,q,'publish',q.question)).stale,true);
   for(const role of ['anon','authenticated']){await f.db.exec('reset role;set role '+role);await assert.rejects(()=>f.db.query('select * from studkab_question_proposals'),/permission denied/);await assert.rejects(()=>decide(f,q,'publish',q.question),/permission denied/);}
  }finally{await f.db.close();}
 });
@@ -341,5 +354,54 @@ test('KIT-02: платная отправка работает при закры
   assert.equal((await runIntakePart({rpc:f.rpc,provider:kitAdapt(f.provider)})).status,'intake_dispatch_unconfirmed');assert.equal(f.calls,0);
   await f.mutate("update studkab_gen_budget set reserved_microusd=reserved_microusd-1;update studkab_intake_analysis_jobs set lease_until=now()-interval '1 second' where state='claimed'");
   assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');assert.equal(f.calls,2);
+ }finally{await f.db.close();}
+});
+
+const DOCX='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+async function readFile(f,fileId,hash,text){
+ const c=await f.rpc('studkab_registered_read_claim',{p_version:'intake-reader-1'});assert.equal(c.file.id,fileId);
+ const result={schema:1,readerVersion:'intake-reader-1',status:'ready',blocks:[{text,kind:'paragraph',source:{part:'word/document.xml',paragraph:1}}],warnings:[],extracted_text:text,fileId,fileHash:hash};
+ assert.equal((await f.rpc('studkab_registered_read_finish',{p_request:f.receipt.id,p_revision:c.revision,p_file:fileId,p_lease:c.file.read_lease,p_version:'intake-reader-1',p_result:result})).saved,true);
+}
+test('KIT-03: замена файла в принятой заявке — новый файл читается, комплект изучается заново, прежний остаётся в истории',async()=>{
+ const f=await fixture();try{
+  assert.equal((await f.enqueue()).status,'registered_analysis_queued');assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');
+  const before=await f.state();assert.equal(before.state,'done');
+  const hash='b'.repeat(64);
+  const reserved=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'Assignment-v2.docx',p_type:DOCX,p_size:120,p_hash:hash});
+  assert.equal(reserved.file.supersedes,f.file.id);assert.equal(reserved.file.state,'pending');
+  // Повтор резерва того же файла возвращает ту же запись.
+  assert.equal((await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'Assignment-v2.docx',p_type:DOCX,p_size:120,p_hash:hash})).file.id,reserved.file.id);
+  // Чужой студент не может заменить файл.
+  assert.equal((await f.rpc('studkab_registered_replace_reserve',{p_student:other,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'x.docx',p_type:DOCX,p_size:10,p_hash:'c'.repeat(64)})).missing,true);
+  const finished=await f.rpc('studkab_registered_replace_finish',{p_student:student,p_request:f.receipt.id,p_file:reserved.file.id,p_hash:hash});
+  assert.equal(finished.attachment.supersedes,f.file.id);assert.equal(finished.duplicate,false);
+  assert.equal((await f.rpc('studkab_registered_replace_finish',{p_student:student,p_request:f.receipt.id,p_file:reserved.file.id,p_hash:hash})).duplicate,true);
+  // Прежний файл уже заменён: второй замены той же редакции нет.
+  assert.equal((await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v3.docx',p_type:DOCX,p_size:10,p_hash:'d'.repeat(64)})).conflict,true);
+  const rows=(await f.db.query('select id,supersedes from studkab_request_attachments order by created_at')).rows;assert.equal(rows.length,2);
+  // Новый файл ещё не прочитан: разбор не запускается и не тратит деньги.
+  assert.equal(await f.enqueue(),null);assert.equal((await f.state()).state,'reading_blocked');
+  await readFile(f,reserved.file.id,hash,'Тема: Менеджмент. Объём 40 страниц. Исходные данные не приложены.');
+  const src=await f.source();assert.deepEqual(src.files.map(x=>x.id),[reserved.file.id]);
+  const calls=f.calls;assert.equal((await f.enqueue()).status,'registered_analysis_queued');
+  assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');assert.equal(f.calls,calls+2);
+  const after=await f.state();assert.equal(after.state,'done');assert.notEqual(after.manifest,before.manifest);assert.notEqual(after.analysisId,before.analysisId);
+ }finally{await f.db.close();}
+});
+test('KIT-03: после начала подготовки замена закрыта; открытое дополнение снова её разрешает',async()=>{
+ const f=await fixture();try{
+  await f.mutate("insert into studkab_gen_jobs(request_id) values('"+f.receipt.id+"')");
+  const locked=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v2.docx',p_type:DOCX,p_size:10,p_hash:'e'.repeat(64)});
+  assert.equal(locked.locked,true);
+  await f.mutate("delete from studkab_gen_jobs;insert into studkab_material_revisions(id,request_id,closed_at) values(gen_random_uuid(),'"+f.receipt.id+"',now())");
+  assert.equal((await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v2.docx',p_type:DOCX,p_size:10,p_hash:'e'.repeat(64)})).locked,true);
+  const cycle='11111111-2222-4333-8444-555555555555';
+  await f.mutate("insert into studkab_material_revisions(id,request_id,closed_at) values('"+cycle+"','"+f.receipt.id+"',null)");
+  const reserved=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v2.docx',p_type:DOCX,p_size:10,p_hash:'e'.repeat(64)});
+  const done=await f.rpc('studkab_registered_replace_finish',{p_student:student,p_request:f.receipt.id,p_file:reserved.file.id,p_hash:'e'.repeat(64)});
+  assert.equal((await f.db.query('select material_revision_id from studkab_request_attachments where id=$1',[done.attachment.id])).rows[0].material_revision_id,cycle);
+  // Прямая вставка чужого файла в обход функции отклоняется прежней защитой.
+  await assert.rejects(()=>f.db.query("insert into studkab_request_attachments(id,request_id,student_id,intake_file_id,category,supersedes,file_name,content_type,size_bytes,file_hash,storage_path) select gen_random_uuid(),request_id,student_id,intake_file_id,'unclassified',id,file_name,content_type,size_bytes,file_hash,storage_path from studkab_request_attachments where id=$1",[done.attachment.id]));
  }finally{await f.db.close();}
 });
