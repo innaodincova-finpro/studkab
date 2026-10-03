@@ -539,6 +539,14 @@
       "name": "route02_private_dialog",
       "file": "20261002052253_route02_private_dialog.sql",
       "sha256": "5d392e11f2d80746ac8ab6b16033796cc3a4e58df244758bb87c154871c0447c"
+    },
+    {
+      "version": "20261002150000",
+      "name": "route02_kit_whole",
+      "file": "20261002150000_route02_kit_whole.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C KIT-02: whole-kit extraction part and one format retry; install after CI",
+      "sha256": "99c37b8b5ca7092cc4ad163625930676e2ee23a1d671bc38482a3acc7733e38a"
     }
   ],
   "production_reconciled_at": "2026-09-23"
