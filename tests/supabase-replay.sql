@@ -65,11 +65,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 48 then
-    raise exception 'Expected 48 STUDKAB tables, found %', table_count;
+  if table_count <> 50 then
+    raise exception 'Expected 50 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 48 then
-    raise exception 'RLS enabled on only % of 48 STUDKAB tables', rls_count;
+  if rls_count <> 50 then
+    raise exception 'RLS enabled on only % of 50 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -85,6 +85,11 @@ begin
   if to_regclass('public.studkab_result_requirement_snapshots') is null
     or to_regclass('public.studkab_result_requirement_evidence') is null then
     raise exception 'C177 requirement coverage tables are missing';
+  end if;
+  -- BENCH-01: учебный стенд проверки комплекта, две таблицы с собственным лимитом.
+  if to_regclass('public.studkab_kit_bench_policy') is null
+    or to_regclass('public.studkab_kit_bench_runs') is null then
+    raise exception 'BENCH-01 bench tables are missing';
   end if;
 end
 $$;
