@@ -563,6 +563,14 @@
       "status": "pending",
       "note": "ROUTE-02-C KIT-03: file replacement in a received request; kit version by content",
       "sha256": "5652a9bd8452ea2647cea70a6590f3aaeb7c51cbed064a43ea098540470a2f58"
+    },
+    {
+      "version": "20261003170000",
+      "name": "route02_kit_bench",
+      "file": "20261003170000_route02_kit_bench.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C BENCH-01: separate bench for kit review quality, own limit",
+      "sha256": "8773e6098c4a8bb108da256585fb2629e110b7c7b0999b086216c2f4d195d958"
     }
   ],
   "production_reconciled_at": "2026-09-23"
