@@ -571,6 +571,14 @@
       "status": "pending",
       "note": "ROUTE-02-C BENCH-01: separate bench for kit review quality, own limit",
       "sha256": "8773e6098c4a8bb108da256585fb2629e110b7c7b0999b086216c2f4d195d958"
+    },
+    {
+      "version": "20261003200000",
+      "name": "route02_kit_bench_actual",
+      "file": "20261003200000_route02_kit_bench_actual.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C BENCH-02: bench limit counted by actual cost; full reserve before each call",
+      "sha256": "b2064f935efdb523bc2c0b7cec58993f7b7d5869964a147b72b073b20cdfc50c"
     }
   ],
   "production_reconciled_at": "2026-09-23"
