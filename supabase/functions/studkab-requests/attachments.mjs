@@ -20,8 +20,9 @@ async function access(id,user,{db,config}){
 export async function attachmentAction(input,user,deps){
  const permit=await access(input.id,user,deps);if(!permit)return denied;
  if(input.action==='attachment-list'){
-  const rows=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,supersedes,category,file_name,content_type,size_bytes,file_hash,created_at&order=created_at.asc');
-  return {status:200,data:{attachments:currentAttachments(rows),materialRevision:permit.row.revision}};
+  const rows=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,supersedes,category,file_name,content_type,size_bytes,file_hash,created_at,intake_file_id&order=created_at.asc');
+  // KIT-03: признак intake показывает кабинету, что файл заменяется через новый маршрут.
+  return {status:200,data:{attachments:currentAttachments(rows).map(({intake_file_id,...a})=>({...a,intake:!!intake_file_id})),materialRevision:permit.row.revision}};
  }
  if(input.action==='attachment-context'){
   if(!permit.executor)return {status:403,data:{error:'Материалы доступны исполнителю'}};

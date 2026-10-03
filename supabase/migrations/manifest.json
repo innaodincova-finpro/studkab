@@ -553,8 +553,16 @@
       "name": "route02_intake_ledger_access",
       "file": "20261003100000_route02_intake_ledger_access.sql",
       "status": "pending",
-      "note": "ROUTE-02-C KIT-02: dispatch ledger check without opening reconciliations to service_role",
+      "note": "ROUTE-02-C KIT-02a: dispatch ledger check without opening reconciliations to service_role; installed in production 03.10.2026",
       "sha256": "9f733bf87576438509bca3be9ad5504749f4909175a87469b35d29e0452f8bac"
+    },
+    {
+      "version": "20261003130000",
+      "name": "route02_registered_replace",
+      "file": "20261003130000_route02_registered_replace.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C KIT-03: file replacement in a received request; kit version by content",
+      "sha256": "5652a9bd8452ea2647cea70a6590f3aaeb7c51cbed064a43ea098540470a2f58"
     }
   ],
   "production_reconciled_at": "2026-09-23"

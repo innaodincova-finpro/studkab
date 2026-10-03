@@ -1017,10 +1017,47 @@ async function openStudentMaterials(workId){
   var listed=await Oblako.requestApi({action:'attachment-list',id:r.serverId});current();
   var checked=await readState();if(checked.requestRevision!==state.requestRevision||checked.cycleId!==state.cycleId)throw Error('Материалы изменились во время загрузки. Откройте их заново.');
   var pane=wrap.querySelector('.sheet-in'),titleId=wrap.getAttribute('aria-labelledby');
-  var names={assignment:'Задание',methodology:'Методические указания',data:'Исходные данные',sources:'Источники'};
+  var names={assignment:'Задание',methodology:'Методические указания',data:'Исходные данные',sources:'Источники',unclassified:'Файл'};
   function fileList(rows){return rows.map(function(a){return '<li>'+esc(names[a.category]||a.category)+': '+esc(a.file_name)+'</li>';}).join('');}
   var files=fileList(listed.attachments||[]);
+  function renderIntakeReplace(rows){
+   var formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
+   var box=document.createElement('div');
+   box.innerHTML='<p><b>Заменить файл</b></p><p class="hint">Нажмите «Заменить» рядом с файлом и выберите новую редакцию: DOCX, PDF или XLSX до 5 МБ. Прежняя редакция сохранится в истории. После замены программа заново прочитает и изучит весь комплект — это займёт несколько минут.</p>'+
+    '<ul data-intake-replace-list>'+rows.map(function(a){return '<li>'+esc(a.file_name)+' <label class="btn mini">Заменить<input type="file" hidden data-intake-replace-file="'+esc(a.id)+'" accept=".docx,.pdf,.xlsx"></label></li>';}).join('')+'</ul>'+
+    '<p role="status" data-intake-replace-status></p>';
+   var status=wrap.querySelector('[data-material-status]');
+   if(status)status.parentNode.insertBefore(box,status);else wrap.querySelector('.sheet-in').appendChild(box);
+   var note=box.querySelector('[data-intake-replace-status]'),working=false;
+   var intro=wrap.querySelector('[data-material-files]');if(intro&&intro.previousElementSibling&&state.state==='initial')intro.previousElementSibling.textContent='Материалы заявки можно заменить: файлы перечислены ниже.';
+   box.addEventListener('change',async function(e){
+    var input=e.target.closest('[data-intake-replace-file]');if(!input||!input.files||!input.files[0]||working)return;
+    working=true;box.querySelectorAll('input').forEach(function(x){x.disabled=true;});
+    try{
+     current();var file=input.files[0],ext=String(file.name).toLowerCase().split('.').pop(),type=formats[ext];
+     if(!type)throw Error('Разрешены только DOCX, PDF и XLSX');
+     if(file.size<1||file.size>5242880)throw Error('Размер файла должен быть от 1 байта до 5 МБ');
+     note.textContent='Сохраняем файл…';
+     var bytes=new Uint8Array(await file.arrayBuffer());
+     var digest=await crypto.subtle.digest('SHA-256',bytes);
+     var hash=Array.from(new Uint8Array(digest)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');
+     var binary='',chunk=32768;for(var i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
+     current();
+     await Oblako.requestApi({action:'registered-replace',id:r.serverId,attachmentId:input.getAttribute('data-intake-replace-file'),fileName:file.name,contentType:type,sizeBytes:file.size,fileHash:hash,base64:btoa(binary)});
+     current();
+     var fresh=await Oblako.requestApi({action:'attachment-list',id:r.serverId});current();
+     wrap.querySelector('[data-material-files]').innerHTML=fileList(fresh.attachments||[]);
+     var next=(fresh.attachments||[]).filter(function(a){return a.intake;});
+     box.querySelector('[data-intake-replace-list]').innerHTML=next.map(function(a){return '<li>'+esc(a.file_name)+' <label class="btn mini">Заменить<input type="file" hidden data-intake-replace-file="'+esc(a.id)+'" accept=".docx,.pdf,.xlsx"></label></li>';}).join('');
+     note.textContent='Файл заменён. Программа заново прочитает и изучит комплект.';
+    }catch(err){if(wrap.isConnected&&D===expectedData&&identity===Oblako.identity())note.textContent=err.message||'Не удалось заменить файл. Откройте материалы заново.';}
+    finally{working=false;box.querySelectorAll('input').forEach(function(x){x.disabled=false;x.value='';});}
+   });
+  }
   pane.innerHTML='<button type="button" class="close" data-x="1">✕</button><h3 id="'+esc(titleId)+'">Материалы заявки</h3>'+(state.state==='open'?'<p><b>Нужно дополнить материалы</b></p><p style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(state.reason||'')+'</p>':'<p>'+esc(state.state==='initial'?'Первичный комплект ещё можно дополнить. Закройте это окно и откройте «Отправить заявку», чтобы добавить или заменить файлы.':state.blockingReason||'Изменения закрыты. Если нужно добавить файл, попросите исполнителя открыть дополнение материалов.')+'</p>')+'<ul data-material-files>'+(files||'<li>Приложенных файлов пока нет.</li>')+'</ul>'+(state.state==='open'&&state.canUpload?'<p class="hint">Один актуальный файл в каждой категории, DOCX, PDF или TXT до 5 МБ. Новый файл заменяет текущую редакцию; прежняя сохраняется в истории.</p>'+Object.keys(names).map(function(key){return '<div class="field"><label>'+esc(names[key])+'<input type="file" data-request-file="'+key+'" accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label></div>';}).join('')+'<div class="rowbtns"><button type="button" class="btn" data-material-upload>Сохранить выбранные файлы</button><button type="button" class="btn" data-material-complete>Завершить дополнение</button></div><p class="hint">Сначала сохраните все нужные файлы. Затем завершите дополнение: исполнитель проверит комплект и новый паспорт.</p>':'')+'<p role="status" data-material-status></p>';
+  // KIT-03: файлы принятой заявки, загруженные через первичную загрузку, заменяются по одному.
+  var intakeRows=(listed.attachments||[]).filter(function(a){return a.intake;});
+  if(intakeRows.length&&state.canUpload){renderIntakeReplace(intakeRows);return;}
   if(state.state!=='open'||!state.canUpload)return;
   if(r.materialRevisionCycleId!==state.cycleId)change(function(){r.materialRevisionCycleId=state.cycleId;r.materialRevisionPendingFiles=[];});
   var upload=wrap.querySelector('[data-material-upload]'),complete=wrap.querySelector('[data-material-complete]'),status=wrap.querySelector('[data-material-status]');

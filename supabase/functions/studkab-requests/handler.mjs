@@ -10,6 +10,7 @@ import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
 import {attachmentAction} from './attachments.mjs';
 import {intakeAction} from './intake.mjs';
+import {registeredReplaceAction} from './registered-replace.mjs';
 const fields={id:100,t:300,k:100,d:200,u:300,fc:300,kf:300,ct:100,n:200,g:100,pr:200,fo:100,co:50,s:200,dl:10,rq:500,org:1500,mn:1500,cn:200};
 const intakeFields={k:'вид работы',n:'ФИО студента',u:'вуз',d:'дисциплину',dl:'срок'};
 export function validatePayload(p,{newSubmission=false,previous=null}={}) {
@@ -84,6 +85,9 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(['intake-open','intake-notes','intake-upload','intake-download','intake-read','intake-analyze','intake-analysis-state','intake-confirmation-state','intake-confirmation-save','intake-submission-state','intake-submit','intake-receive-state','intake-receive'].includes(input?.action)){
     if(input.action!=='intake-upload'&&raw.length>(input.action==='intake-confirmation-save'?300000:16000))return json({error:'Запрос слишком большой'},413);
     const r=await intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,validatePayload});return json(r.data,r.status||200);
+   }
+   if(input.action==='registered-replace'){
+    const r=await registeredReplaceAction(input,user,{db,isMember,saveIntake});return json(r.data,r.status||200);
    }
    if(input.action==='request-kind-correct'){
     const r=await kindCorrectionAction(input,user,{db,config});return json(r.data,r.status||200);
