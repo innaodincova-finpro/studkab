@@ -21,7 +21,7 @@ async function fixture({enabled=true,ready=true,kitText=text}={}){
  const {file}=await rpc('studkab_intake_reserve',{p_student:student,p_draft:draft.id,p_name:'Assignment.docx',p_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',p_size:100,p_hash:'a'.repeat(64),p_supersedes:null});
  await rpc('studkab_intake_finish',{p_student:student,p_draft:draft.id,p_file:file.id,p_hash:file.file_hash});
  const legacy=await rpc('studkab_intake_analysis_source',{p_draft:draft.id});
- await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql'));await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
+ await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
  assert.deepEqual(await rpc('studkab_intake_analysis_source',{p_draft:draft.id}),legacy);
  const snap=await rpc('studkab_intake_receive_snapshot',{p_student:student,p_draft:draft.id});
  const receipt=await rpc('studkab_intake_receive',{p_student:student,p_draft:draft.id,p_revision:snap.revision,p_deadline:'2026-10-30',p_description:'',p_contact:'synthetic@example.invalid'});
@@ -328,4 +328,18 @@ test('KIT-02: брак формата даёт один оплачиваемый
   else {assert.equal(second.status,'intake_invalid');assert.equal(job.state,'invalid');assert.equal(Number(job.reserved_microusd),2*reserve);assert.equal(await runIntakePart({rpc:f.rpc,provider:kitAdapt(provider)}),null);}
   const budget=(await f.db.query('select reserved_microusd from studkab_gen_budget')).rows[0];assert.equal(Number(budget.reserved_microusd),Number(job.reserved_microusd));
  }finally{await f.db.close();}}
+});
+
+test('KIT-02: платная отправка работает при закрытой для service_role таблице сверок и по-прежнему ловит расхождение журнала',async()=>{
+ const f=await fixture();try{
+  await assert.rejects(()=>f.db.query('select * from studkab_gen_reconciliations'),/permission denied/);
+  for(const role of ['anon','authenticated']){await f.db.exec('reset role;set role '+role);await assert.rejects(()=>f.db.query('select public.studkab_intake_ledger_matches(0)'),/permission denied/);}
+  await f.db.exec('reset role;set role service_role');
+  assert.equal((await f.enqueue()).status,'registered_analysis_queued');
+  // Расхождение общего журнала останавливает отправку до вызова модели.
+  await f.mutate('update studkab_gen_budget set reserved_microusd=reserved_microusd+1');
+  assert.equal((await runIntakePart({rpc:f.rpc,provider:kitAdapt(f.provider)})).status,'intake_dispatch_unconfirmed');assert.equal(f.calls,0);
+  await f.mutate("update studkab_gen_budget set reserved_microusd=reserved_microusd-1;update studkab_intake_analysis_jobs set lease_until=now()-interval '1 second' where state='claimed'");
+  assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');assert.equal(f.calls,2);
+ }finally{await f.db.close();}
 });
