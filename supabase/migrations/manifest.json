@@ -545,8 +545,16 @@
       "name": "route02_kit_whole",
       "file": "20261002150000_route02_kit_whole.sql",
       "status": "pending",
-      "note": "ROUTE-02-C KIT-02: whole-kit extraction part and one format retry; install after CI",
+      "note": "ROUTE-02-C KIT-02: whole-kit extraction part and one format retry; installed in production 03.10.2026",
       "sha256": "99c37b8b5ca7092cc4ad163625930676e2ee23a1d671bc38482a3acc7733e38a"
+    },
+    {
+      "version": "20261003100000",
+      "name": "route02_intake_ledger_access",
+      "file": "20261003100000_route02_intake_ledger_access.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C KIT-02: dispatch ledger check without opening reconciliations to service_role",
+      "sha256": "9f733bf87576438509bca3be9ad5504749f4909175a87469b35d29e0452f8bac"
     }
   ],
   "production_reconciled_at": "2026-09-23"
