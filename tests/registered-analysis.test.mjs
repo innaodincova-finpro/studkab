@@ -21,7 +21,7 @@ async function fixture({enabled=true,ready=true,kitText=text}={}){
  const {file}=await rpc('studkab_intake_reserve',{p_student:student,p_draft:draft.id,p_name:'Assignment.docx',p_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',p_size:100,p_hash:'a'.repeat(64),p_supersedes:null});
  await rpc('studkab_intake_finish',{p_student:student,p_draft:draft.id,p_file:file.id,p_hash:file.file_hash});
  const legacy=await rpc('studkab_intake_analysis_source',{p_draft:draft.id});
- await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
+ await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql')+read('20261003230000_route02_checklist_live.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
  assert.deepEqual(await rpc('studkab_intake_analysis_source',{p_draft:draft.id}),legacy);
  const snap=await rpc('studkab_intake_receive_snapshot',{p_student:student,p_draft:draft.id});
  const receipt=await rpc('studkab_intake_receive',{p_student:student,p_draft:draft.id,p_revision:snap.revision,p_deadline:'2026-10-30',p_description:'',p_contact:'synthetic@example.invalid'});
@@ -403,5 +403,74 @@ test('KIT-03: после начала подготовки замена закр
   assert.equal((await f.db.query('select material_revision_id from studkab_request_attachments where id=$1',[done.attachment.id])).rows[0].material_revision_id,cycle);
   // Прямая вставка чужого файла в обход функции отклоняется прежней защитой.
   await assert.rejects(()=>f.db.query("insert into studkab_request_attachments(id,request_id,student_id,intake_file_id,category,supersedes,file_name,content_type,size_bytes,file_hash,storage_path) select gen_random_uuid(),request_id,student_id,intake_file_id,'unclassified',id,file_name,content_type,size_bytes,file_hash,storage_path from studkab_request_attachments where id=$1",[done.attachment.id]));
+ }finally{await f.db.close();}
+});
+
+// KIT-06: пошаговая проверка checklist-3 в разборе настоящих заявок.
+function checklistProvider(mode={}){
+ const seen=[];
+ const fn=async({spec,input})=>{
+  seen.push({kind:spec.kind,system:input?.system,prompt:spec.prompt});
+  const id=t=>spec.blocks.find(b=>b.text.includes(t)).blockId;
+  if(spec.kind==='kit_extraction')return {complete:true,text:JSON.stringify({fields:[{field:'topic',value:'Менеджмент',ids:[id('Менеджмент')]}],requirements:[],roles:[]})};
+  if(spec.kind==='checklist_inventory')return {complete:true,text:JSON.stringify({needs:[{need:'Тема, согласованная преподавателем',required_ids:[id('Менеджмент')],found_ids:[],status:'absent',question:'Какая тема согласована преподавателем?'}],params:[{kind:'volume',value:'25 страниц',ids:[id('Объём')]}]})};
+  const p=JSON.parse(spec.prompt),returned=p.returned||[],answers=p.answers||[];
+  const answerBlock=spec.blocks.find(b=>b.source?.questionId)?.blockId;
+  const x={checks:[{n:0,status:answers.length&&mode.answer==='sufficient'?'found':'absent',ids:answers.length&&mode.answer==='sufficient'?[answerBlock]:[],returnedProposalId:returned[0]?.proposalId||null}],
+   answerReviews:answers.map(a=>({questionId:a.id,status:mode.answer||'sufficient',reason:mode.answer==='insufficient'?'Ответ не называет тему из документов.':'Ответ называет тему, указанную в задании.',ids:[answerBlock],question:mode.answer==='insufficient'?'Назовите тему точно так, как она указана в задании.':''})),
+   returnedReviews:returned.map(r=>({proposalId:r.proposalId,status:mode.returned||'resolved',reason:'Вопрос снят: в задании указана одна тема, вторая относится к примеру в методичке.',ids:[id('Менеджмент')]}))};
+  return {complete:true,text:JSON.stringify(x)};
+ };
+ fn.seen=seen;return fn;
+}
+const enqueueList=f=>queueRegisteredAnalysis({rpc:f.rpc,method:'checklist-3'});
+test('KIT-06: checklist-3 — three parts of one method, deferred conclusion, private proposal; resolved return removes the false question',async()=>{
+ const f=await fixture();try{
+  assert.equal((await enqueueList(f)).status,'registered_analysis_queued');
+  const job=(await f.db.query('select plan from studkab_intake_analysis_jobs order by created_at desc limit 1')).rows[0].plan;
+  assert.deepEqual(job.map(p=>[p.method,p.kind,!!p.deferred]),[['checklist-3','kit_extraction',false],['checklist-3','checklist_inventory',false],['checklist-3','kit_review',true]]);
+  assert.equal(job[2].prompt,undefined);
+  const provider=checklistProvider();
+  assert.equal((await runIntake({rpc:f.rpc,provider})).status,'intake_done');
+  assert.deepEqual(provider.seen.map(s=>s.kind),['kit_extraction','checklist_inventory','kit_review']);
+  assert.match(provider.seen[2].prompt,/Тема, согласованная преподавателем/);
+  const r=await f.rpc('studkab_registered_questions_refresh',{p_request:f.receipt.id});
+  assert.equal(r.proposals.length,1);assert.equal(r.proposals[0].state,'pending');assert.equal(r.proposals[0].question,'Какая тема согласована преподавателем?');
+  const q=r.proposals[0];
+  assert.equal((await decide(f,q,'return','Вопрос лишний: в задании указана одна тема, вторая — пример из методички.')).state,'returned');
+  assert.equal((await enqueueList(f)).status,'registered_analysis_queued');
+  const again=checklistProvider();assert.equal((await runIntake({rpc:f.rpc,provider:again})).status,'intake_done');
+  const sent=JSON.parse(again.seen[2].prompt);assert.equal(sent.returned[0].question,'Какая тема согласована преподавателем?');assert.match(sent.returned[0].comment,/Вопрос лишний/);
+  const after=await f.rpc('studkab_registered_questions_refresh',{p_request:f.receipt.id});
+  assert.equal(after.proposals.length,1);assert.match(after.proposals[0].restudy_reason,/Вопрос снят/);
+  assert.equal((await f.db.query('select count(*) n from studkab_clarifications')).rows[0].n,0);
+ }finally{await f.db.close();}
+});
+test('KIT-06: checklist-3 — unresolved return keeps a new private question; insufficient answer gives a follow-up, sufficient answer closes it',async()=>{
+ const f=await fixture();try{
+  await enqueueList(f);await runIntake({rpc:f.rpc,provider:checklistProvider()});
+  let q=(await f.rpc('studkab_registered_questions_refresh',{p_request:f.receipt.id})).proposals[0];
+  await decide(f,q,'return','Проверьте ещё раз обе темы в оригиналах.');await enqueueList(f);
+  await runIntake({rpc:f.rpc,provider:checklistProvider({returned:'unresolved'})});
+  let r=await f.rpc('studkab_registered_questions_refresh',{p_request:f.receipt.id});
+  assert.equal(r.proposals.length,2);assert.equal(r.proposals[1].state,'pending');assert.match(r.proposals[0].restudy_reason,/остаётся существенным/);
+  q=r.proposals[1];await decide(f,q,'publish',q.question);
+  await f.rpc('studkab_clarification_answer',{p_request:f.receipt.id,p_actor:student,p_id:q.id,p_answer:'Не знаю',p_source:'Сам'});
+  await enqueueList(f);await runIntake({rpc:f.rpc,provider:checklistProvider({answer:'insufficient',returned:'unresolved'})});
+  r=await f.rpc('studkab_registered_questions_refresh',{p_request:f.receipt.id});
+  assert.ok(r.proposals.some(p=>p.state==='pending'&&p.question==='Назовите тему точно так, как она указана в задании.'));
+  assert.ok(r.proposals.some(p=>/Ответ недостаточен/.test(p.restudy_reason||'')));
+ }finally{await f.db.close();}
+});
+test('KIT-06: a saved plan cannot be altered; a tampered checklist part fails the check before any paid call',async()=>{
+ const f=await fixture();try{
+  await enqueueList(f);
+  await assert.rejects(()=>f.mutate("update studkab_intake_analysis_jobs set plan=jsonb_set(plan,'{1,prompt}',to_jsonb('x'::text))"),/IMMUTABLE_INTAKE_ANALYSIS/);
+  const {checklistPlan,validChecklistPart}=await import('../supabase/functions/_shared/checklist-review.mjs');
+  const plan=checklistPlan(await f.source(),[]);
+  assert.deepEqual(plan.map((p,i)=>validChecklistPart(p,i,3)),[true,true,true]);
+  assert.equal(validChecklistPart({...plan[1],prompt:plan[1].prompt.replace('Менеджмент','Финансы')},1,3),false);
+  assert.equal(validChecklistPart({...plan[2],max_cost_microusd:plan[2].max_cost_microusd+1},2,3),false);
+  assert.equal(validChecklistPart({...plan[2],prompt:'{}'},2,3),false);
  }finally{await f.db.close();}
 });
