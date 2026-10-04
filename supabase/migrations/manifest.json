@@ -579,6 +579,14 @@
       "status": "pending",
       "note": "ROUTE-02-C BENCH-02: bench limit counted by actual cost; full reserve before each call",
       "sha256": "b2064f935efdb523bc2c0b7cec58993f7b7d5869964a147b72b073b20cdfc50c"
+    },
+    {
+      "version": "20261003230000",
+      "name": "route02_checklist_live",
+      "file": "20261003230000_route02_checklist_live.sql",
+      "status": "pending",
+      "note": "ROUTE-02-C KIT-06: registered analysis by checklist-3, deferred conclusion part",
+      "sha256": "39048715e5c183519ecc9d0b8d1cb480ef5787e46ceddb5a5cfcc28949a00f0b"
     }
   ],
   "production_reconciled_at": "2026-09-23"

@@ -49,7 +49,8 @@ Deno.serve(handler({
    if(reading)return reading;
   }
   if(Deno.env.get('STUDKAB_REGISTERED_ANALYSIS_ENABLED')==='true'&&Deno.env.get('STUDKAB_INTAKE_ANALYSIS_ENABLED')==='true'&&!!token){
-   await queueRegisteredAnalysis({rpc});
+   // KIT-06: заявки изучаются пошаговой проверкой checklist-3 (прошла учебный стенд).
+   await queueRegisteredAnalysis({rpc,method:'checklist-3'});
   }
   return Deno.env.get('STUDKAB_INTAKE_ANALYSIS_ENABLED')==='true'&&!!token
    ?await runIntake({rpc,provider}):null;

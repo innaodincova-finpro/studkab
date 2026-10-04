@@ -118,7 +118,7 @@ export function kitPlan(snapshot){
  return [extraction,review];
 }
 const sameBlocks=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-const canon=x=>Array.isArray(x)?x.map(canon):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canon(x[k])])):x;
+export const canon=x=>Array.isArray(x)?x.map(canon):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canon(x[k])])):x;
 export function validKitPart(part,ordinal,total){
  if(part?.method!==KIT_METHOD||part.analysis_version!==ANALYSIS_VERSION||total!==2||part.max_output_tokens!==KIT_OUTPUT_TOKENS||part.temperature!==0)return false;
  if(!Array.isArray(part.blocks)||!part.blocks.length||part.blocks.length>KIT_BLOCK_LIMIT||new Set(part.blocks.map(b=>b.blockId)).size!==part.blocks.length)return false;
@@ -132,7 +132,7 @@ export function validKitPart(part,ordinal,total){
  return false;
 }
 // Postgres JSONB меняет порядок ключей; для сверки запроса порядок блоков важен, ключей — нет.
-const canonBlocks=blocks=>blocks.map(b=>({blockId:b.blockId,text:b.text,kind:b.kind,fileName:b.fileName,source:b.source}));
+export const canonBlocks=blocks=>blocks.map(b=>({blockId:b.blockId,text:b.text,kind:b.kind,fileName:b.fileName,source:b.source}));
 export const isKitPart=part=>part?.method===KIT_METHOD;
 
 function parse(text,code){
