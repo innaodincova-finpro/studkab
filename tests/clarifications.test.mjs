@@ -33,13 +33,18 @@ for(const options of [{fail:true},{switchAccount:true}])test('C095 failed or for
  await f.context.editPassport(f.x,true);
  assert.equal(f.opened(),0);assert.equal(JSON.stringify(f.x),before);
 });
-test('C084 Edge: list only owned requests, executor asks, student answers with source',async()=>{
+test('C084 Edge: list only owned requests, executor asks, student answers with optional source',async()=>{
  const calls=[];const deps={config:async()=>({executor_email:executor.email}),isMember:async()=>true,db:async(path,method,body)=>{calls.push({path,body});if(path.startsWith('studkab_requests?'))return path.includes('student_id=eq.bad')?[]:[{id,student_id:student.id}];if(path.startsWith('studkab_clarifications?'))return [];return {id:questionId};}};
  assert.equal((await clarificationAction({action:'clarification-list',id},{id:'bad',email:'other@test'},deps)).status,404);
  assert.ok(calls[0].path.endsWith('student_id=eq.bad'));
  assert.equal((await clarificationAction({action:'clarification-ask',id,questionId,itemId:'VOLUME',question:'Сколько страниц?'},student,deps)).status,403);
  assert.equal((await clarificationAction({action:'clarification-ask',id,questionId,itemId:'VOLUME',question:'Сколько страниц?'},executor,deps)).data.question.id,questionId);
- assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:''},student,deps)).status,400);
+ // UX-02a: основание необязательно — без него сохраняется пометка «Ответ студента в кабинете»; пустой ответ отклоняется.
+ assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'',source:''},student,deps)).status,400);
+ assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:''},student,deps)).data.question.id,questionId);
+ assert.equal(calls.at(-1).body.p_source,'Ответ студента в кабинете');
+ assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:'x'.repeat(1001)},student,deps)).status,400);
+ assert.match((await clarificationAction({action:'clarification-answer',id,questionId,answer:'x'.repeat(4001)},student,deps)).data.error,/слишком длинный/);
  assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:'Методичка, с. 3'},executor,deps)).status,403);
  assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:'Методичка, с. 3'},student,deps)).data.question.id,questionId);
  assert.equal(calls.at(-1).body.p_actor,student.id);

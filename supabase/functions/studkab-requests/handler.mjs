@@ -10,7 +10,7 @@ import {resultAction} from './results.mjs';
 import {requirementAction} from './requirements.mjs';
 import {attachmentAction} from './attachments.mjs';
 import {intakeAction} from './intake.mjs';
-import {registeredReplaceAction} from './registered-replace.mjs';
+import {registeredReplaceAction,registeredAddAction} from './registered-replace.mjs';
 const fields={id:100,t:300,k:100,d:200,u:300,fc:300,kf:300,ct:100,n:200,g:100,pr:200,fo:100,co:50,s:200,dl:10,rq:500,org:1500,mn:1500,cn:200};
 const intakeFields={k:'вид работы',n:'ФИО студента',u:'вуз',d:'дисциплину',dl:'срок'};
 export function validatePayload(p,{newSubmission=false,previous=null}={}) {
@@ -88,6 +88,9 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    }
    if(input.action==='registered-replace'){
     const r=await registeredReplaceAction(input,user,{db,isMember,saveIntake});return json(r.data,r.status||200);
+   }
+   if(input.action==='registered-add'){
+    const r=await registeredAddAction(input,user,{db,isMember,saveIntake});return json(r.data,r.status||200);
    }
    if(input.action==='request-kind-correct'){
     const r=await kindCorrectionAction(input,user,{db,config});return json(r.data,r.status||200);

@@ -21,7 +21,7 @@ async function fixture({enabled=true,ready=true,kitText=text}={}){
  const {file}=await rpc('studkab_intake_reserve',{p_student:student,p_draft:draft.id,p_name:'Assignment.docx',p_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',p_size:100,p_hash:'a'.repeat(64),p_supersedes:null});
  await rpc('studkab_intake_finish',{p_student:student,p_draft:draft.id,p_file:file.id,p_hash:file.file_hash});
  const legacy=await rpc('studkab_intake_analysis_source',{p_draft:draft.id});
- await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql')+read('20261003230000_route02_checklist_live.sql')+read('20261004100000_route02_ux01_replace_pending.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
+ await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql')+read('20261003230000_route02_checklist_live.sql')+read('20261004100000_route02_ux01_replace_pending.sql')+read('20261004140000_route02_ux02a_answer_file.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
  assert.deepEqual(await rpc('studkab_intake_analysis_source',{p_draft:draft.id}),legacy);
  const snap=await rpc('studkab_intake_receive_snapshot',{p_student:student,p_draft:draft.id});
  const receipt=await rpc('studkab_intake_receive',{p_student:student,p_draft:draft.id,p_revision:snap.revision,p_deadline:'2026-10-30',p_description:'',p_contact:'synthetic@example.invalid'});
@@ -507,5 +507,49 @@ test('UX-01: плановый вызов видит ожидающее чтен�
   await f.mutate('update studkab_intake_analysis_policy set enabled=false');assert.equal(await pending(),false);
   // Права: вызов только для service_role.
   await f.db.exec('reset role');await f.db.exec('set role authenticated');await assert.rejects(()=>f.db.query('select public.studkab_intake_work_pending()'),/permission denied/);await f.db.exec('reset role');
+ }finally{await f.db.close();}
+});
+
+test('UX-02a: файл к ответу добавляется в принятую заявку отдельным файлом, читается и изучается вместе с комплектом',async()=>{
+ const f=await fixture();try{
+  assert.equal((await f.enqueue()).status,'registered_analysis_queued');assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');
+  const before=await f.state();const rev=(await f.db.query('select revision from studkab_requests where id=$1',[f.receipt.id])).rows[0].revision;
+  const XLSX='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',hash='9'.repeat(64);
+  assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:other,p_request:f.receipt.id,p_name:'x.xlsx',p_type:XLSX,p_size:10,p_hash:hash})).missing,true);
+  assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'x.exe',p_type:'application/x-msdownload',p_size:10,p_hash:hash})).invalid,true);
+  // Тот же файл, что уже стоит в заявке, повторно не добавляется: сервер сообщает, что он уже есть.
+  assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'Assignment.docx',p_type:DOCX,p_size:100,p_hash:'a'.repeat(64)})).duplicate,true);
+  const reserved=await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'Опрос.xlsx',p_type:XLSX,p_size:50,p_hash:hash});
+  assert.equal(reserved.file.supersedes,null);assert.equal(reserved.file.state,'pending');
+  assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'Опрос.xlsx',p_type:XLSX,p_size:50,p_hash:hash})).file.id,reserved.file.id);
+  const done=await f.rpc('studkab_registered_add_finish',{p_student:student,p_request:f.receipt.id,p_file:reserved.file.id,p_hash:hash});
+  assert.equal(done.duplicate,false);assert.equal(done.attachment.supersedes,null);
+  assert.equal((await f.rpc('studkab_registered_add_finish',{p_student:student,p_request:f.receipt.id,p_file:reserved.file.id,p_hash:hash})).duplicate,true);
+  assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'Опрос.xlsx',p_type:XLSX,p_size:50,p_hash:hash})).duplicate,true);
+  const rows=(await f.db.query('select id,supersedes,category from studkab_request_attachments order by created_at')).rows;
+  assert.equal(rows.length,2);assert.equal(rows[1].supersedes,null);assert.equal(rows[1].category,'unclassified');
+  assert.equal((await f.db.query('select revision from studkab_requests where id=$1',[f.receipt.id])).rows[0].revision,rev+1);
+  // Новый файл ещё не прочитан — платный разбор не запускается; после чтения изучается весь комплект.
+  assert.equal(await f.enqueue(),null);assert.equal((await f.state()).state,'reading_blocked');
+  await readFile(f,reserved.file.id,hash,'Результаты опроса: 50 ответов по шкале 1–5.');
+  assert.deepEqual((await f.source()).files.map(x=>x.id).sort(),[f.file.id,reserved.file.id].sort());
+  assert.equal((await f.enqueue()).status,'registered_analysis_queued');assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');
+  const after=await f.state();assert.notEqual(after.manifest,before.manifest);
+ }finally{await f.db.close();}
+});
+test('UX-02a: после начала подготовки добавление закрыто; предел 8 файлов; прямая вставка в обход функции отклоняется',async()=>{
+ const f=await fixture();try{
+  const XLSX='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  // Прямая вставка нового файла черновика в обход studkab_registered_add_finish отклоняется и при свободных местах.
+  await f.mutate("insert into studkab_intake_files(id,draft_id,file_name,content_type,size_bytes,file_hash,storage_path,state,saved_at) select gen_random_uuid(),draft_id,'z.docx',content_type,10,'"+'d'.repeat(64)+"',storage_path||'z','saved',now() from studkab_intake_files where id='"+f.file.id+"'");
+  await assert.rejects(()=>f.db.query("insert into studkab_request_attachments(id,request_id,student_id,intake_file_id,category,file_name,content_type,size_bytes,file_hash,storage_path) select i.id,'"+f.receipt.id+"','"+student+"',i.id,'unclassified',i.file_name,i.content_type,i.size_bytes,i.file_hash,i.storage_path from studkab_intake_files i where i.file_hash='"+'d'.repeat(64)+"'"),/Intake attachment mismatch/);
+  // Прежняя, уже заменённая редакция не добавляется повторно.
+  const r0=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v2.docx',p_type:DOCX,p_size:120,p_hash:'e'.repeat(64)});
+  await f.rpc('studkab_registered_replace_finish',{p_student:student,p_request:f.receipt.id,p_file:r0.file.id,p_hash:'e'.repeat(64)});
+  assert.deepEqual(await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'Assignment.docx',p_type:DOCX,p_size:100,p_hash:'a'.repeat(64)}),{conflict:true,kind:'replaced'});
+  for(let i=0;i<7;i++){const h=String(i+1).repeat(64);const r=await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f'+i+'.xlsx',p_type:XLSX,p_size:10,p_hash:h});await f.rpc('studkab_registered_add_finish',{p_student:student,p_request:f.receipt.id,p_file:r.file.id,p_hash:h});}
+  assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f9.xlsx',p_type:XLSX,p_size:10,p_hash:'b'.repeat(64)})).limit,true);
+  await f.mutate("insert into studkab_gen_jobs(request_id) values('"+f.receipt.id+"')");
+  assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f9.xlsx',p_type:XLSX,p_size:10,p_hash:'c'.repeat(64)})).locked,true);
  }finally{await f.db.close();}
 });
