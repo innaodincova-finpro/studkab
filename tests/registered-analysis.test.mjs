@@ -21,7 +21,7 @@ async function fixture({enabled=true,ready=true,kitText=text}={}){
  const {file}=await rpc('studkab_intake_reserve',{p_student:student,p_draft:draft.id,p_name:'Assignment.docx',p_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',p_size:100,p_hash:'a'.repeat(64),p_supersedes:null});
  await rpc('studkab_intake_finish',{p_student:student,p_draft:draft.id,p_file:file.id,p_hash:file.file_hash});
  const legacy=await rpc('studkab_intake_analysis_source',{p_draft:draft.id});
- await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql')+read('20261003230000_route02_checklist_live.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
+ await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql')+read('20261003230000_route02_checklist_live.sql')+read('20261004100000_route02_ux01_replace_pending.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
  assert.deepEqual(await rpc('studkab_intake_analysis_source',{p_draft:draft.id}),legacy);
  const snap=await rpc('studkab_intake_receive_snapshot',{p_student:student,p_draft:draft.id});
  const receipt=await rpc('studkab_intake_receive',{p_student:student,p_draft:draft.id,p_revision:snap.revision,p_deadline:'2026-10-30',p_description:'',p_contact:'synthetic@example.invalid'});
@@ -472,5 +472,40 @@ test('KIT-06: a saved plan cannot be altered; a tampered checklist part fails th
   assert.equal(validChecklistPart({...plan[1],prompt:plan[1].prompt.replace('Менеджмент','Финансы')},1,3),false);
   assert.equal(validChecklistPart({...plan[2],max_cost_microusd:plan[2].max_cost_microusd+1},2,3),false);
   assert.equal(validChecklistPart({...plan[2],prompt:'{}'},2,3),false);
+ }finally{await f.db.close();}
+});
+
+test('UX-01: замена называет точную причину отказа: тот же файл, дубликат или уже заменённая редакция',async()=>{
+ const f=await fixture();try{
+  // Тот же файл на своём месте — замена не нужна.
+  assert.deepEqual(await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'Assignment.docx',p_type:DOCX,p_size:100,p_hash:'a'.repeat(64)}),{same:true});
+  const hash='b'.repeat(64);
+  const reserved=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v2.docx',p_type:DOCX,p_size:120,p_hash:hash});
+  await f.rpc('studkab_registered_replace_finish',{p_student:student,p_request:f.receipt.id,p_file:reserved.file.id,p_hash:hash});
+  // Старая строка списка: редакция уже заменена.
+  const stale=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v3.docx',p_type:DOCX,p_size:10,p_hash:'d'.repeat(64)});
+  assert.equal(stale.conflict,true);assert.equal(stale.kind,'replaced');
+  // Новая редакция, выбранная ещё раз, — тот же файл.
+  assert.deepEqual(await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:reserved.file.id,p_name:'v2.docx',p_type:DOCX,p_size:120,p_hash:hash}),{same:true});
+  // Прежняя редакция, загруженная вместо новой, — уже есть в истории заявки.
+  const dup=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:reserved.file.id,p_name:'Assignment.docx',p_type:DOCX,p_size:100,p_hash:'a'.repeat(64)});
+  assert.equal(dup.conflict,true);assert.equal(dup.kind,'duplicate');
+  const rows=(await f.db.query('select id from studkab_request_attachments')).rows;assert.equal(rows.length,2);
+ }finally{await f.db.close();}
+});
+test('UX-01: плановый вызов видит ожидающее чтение и разрешённое изучение, но не выключенный разбор',async()=>{
+ const f=await fixture({ready:false});try{
+  const pending=async()=>(await f.db.query('select public.studkab_intake_work_pending() p')).rows[0].p;
+  assert.equal(await pending(),true);
+  await f.reading();
+  // Чтение завершено, разбор разрешён и не начат — вызов нужен.
+  assert.equal(await pending(),true);
+  assert.equal((await f.enqueue()).status,'registered_analysis_queued');assert.equal(await pending(),true);
+  assert.equal((await runIntake({rpc:f.rpc,provider:f.provider})).status,'intake_done');
+  // Всё изучено — вызывать нечего.
+  assert.equal(await pending(),false);
+  await f.mutate('update studkab_intake_analysis_policy set enabled=false');assert.equal(await pending(),false);
+  // Права: вызов только для service_role.
+  await f.db.exec('reset role');await f.db.exec('set role authenticated');await assert.rejects(()=>f.db.query('select public.studkab_intake_work_pending()'),/permission denied/);await f.db.exec('reset role');
  }finally{await f.db.close();}
 });

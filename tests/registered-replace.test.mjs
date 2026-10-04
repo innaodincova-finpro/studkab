@@ -23,3 +23,8 @@ test('KIT-03: закрытые материалы, чужой доступ, не
  const path=deps({reserve:a=>({file:{id:file,file_hash:a.p_hash,state:'pending',storage_path:'someone/draft/'+file}})});
  await assert.rejects(async()=>registeredReplaceAction(await payload(),user,path),/Replace unavailable/);assert.equal(path.saved.length,0);
 });
+test('UX-01: отказ замены называет точную причину и ничего не записывает',async()=>{
+ const cases=[[{same:true},'уже загружен в заявку и стоит на этом месте'],[{conflict:true,kind:'duplicate'},'уже есть в заявке на другом месте'],[{conflict:true,kind:'replaced'},'уже заменён новой редакцией'],[{conflict:true},'уже заменён новой редакцией']];
+ for(const [reply,text] of cases){const d=deps({reserve:()=>reply}),r=await registeredReplaceAction(await payload(),user,d);
+  assert.equal(r.status,409);assert.match(r.data.error,new RegExp(text));assert.equal(d.saved.length,0);assert.deepEqual(d.calls,['rpc/studkab_registered_replace_reserve']);}
+});

@@ -57,3 +57,22 @@ test('receipt is displayed in registry with a visible study blocker and original
  });
  expect(result.topic).toContain('тема ещё не изучена');expect(result.stage.title).toBe('Заявка получена');expect(result.stage.blocker).toContain('изучения');expect(result.stage.complete).toBe(false);
 });
+
+// UX-01: карточка «Следующее действие» показывает состояние изучения и открывает окно изучения.
+test('registry card reflects finished study and opens the study window',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  window.cardCalls=[];
+  const study={state:'done',manifest:'a'.repeat(64),analysisId:'22222222-2222-4222-8222-222222222222',dialog:[],files:[],result:{fields:{},requirements:[],roles:[]},proposals:[1,2].map(n=>({id:'4444444'+n+'-4444-4444-8444-444444444444',analysis_id:'22222222-2222-4222-8222-222222222222',state:'pending',question:'Вопрос '+n,reason:'Причина '+n,evidence:[]}))};
+  Oblako.requestApi=async d=>{cardCalls.push(d.action);if(d.action==='registered-study-state')return {study:structuredClone(study)};throw Error('Unexpected '+d.action);};
+  const x=fromPayload({id:'receipt-card',route:'received',t:'',n:'',u:'',dl:'2026-10-30',cn:'student@example.invalid'});x.requestNumber=2;
+  D.items=[x];openId=x.id;render();
+ });
+ const button=page.locator('.request-action [data-act="registered-study"]');
+ await expect(button).toHaveText('Решить вопросы (2)');
+ await expect(page.locator('.request-action')).toContainText('Нужно решить вопросы по комплекту');
+ await expect(page.locator('.request-action')).not.toContainText('Показать материалы');
+ await button.click();
+ await expect(page.getByRole('dialog')).toContainText('Нужно ваше решение по 2 вопросам');
+ await expect(page.locator('[data-proposal-publish]')).toHaveCount(2);
+});

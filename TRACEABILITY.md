@@ -2517,3 +2517,14 @@ duplicate при параллельном выполнении; текст и е
 | C: ответ студента учтён | answerReviews; insufficient — новый приватный вопрос | KIT-06: «insufficient answer gives a follow-up» | Код готов, приёмка открыта |
 | Деньги | Резерв заключения — верхняя граница; dispatch прежний | validChecklistPart; SQL start | Код готов |
 Прежний способ whole-kit-2: все прежние тесты registered-analysis/private-dialog проходят с новой миграцией.
+
+## ROUTE-02-C, UX-01 — понятное окно изучения и запуск после замены файла, 04.10.2026
+
+| Требование | Что сделано | Чем доказано | Статус |
+|---|---|---|---|
+| C: исполнитель сразу видит, какое решение нужно | Окно изучения: состояние и вопросы первыми, справка ниже, второстепенное свёрнуто | registered-study.spec: «decision first, reference sections after, no duplicated quote» | Код готов |
+| C: решение по вопросу явное и одно | «Отправить студенту»; «Вопрос лишний» с комментарием от 10 знаков | registered-study.spec: publish once, return stays private | Код готов |
+| C: назначение файлов подтверждает исполнитель | «Всё верно — подтвердить» — отдельный вызов по каждому файлу | registered-study.spec: file role confirmation | Код готов |
+| C: карточка заявки ведёт к действию | «Решить вопросы (N)» открывает окно изучения | intake-receive.spec: registry card reflects finished study | Код готов |
+| C: после замены файла комплект читается и изучается без ручного вызова | studkab_intake_work_pending; cron в чётные минуты | registered-analysis.test: «плановый вызов видит ожидающее чтение…» | Код готов, проверка на заявке №2 после установки |
+| C: студент понимает причину отказа замены | same / duplicate / replaced; время текущей редакции | registered-analysis.test (UX-01), registered-replace.test, registered-replace.spec | Код готов |
