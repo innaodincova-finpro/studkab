@@ -76,3 +76,11 @@ test('KIT-05: в строке таблицы название столбца в�
  const rows=kitBlocks({files:[file]}).map(b=>b.text);
  assert.equal(rows[1],'Таблица 1, строка 2: Оценка: Ответы | 5: 5');
 });
+
+test('KIT-07: прямой выбор студентом одного из расходящихся значений закрывает противоречие; «файл приложен» без файла — нет',async()=>{
+ const {CHECKLIST_DIALOG_SYSTEM}=await import('../supabase/functions/_shared/checklist-review.mjs');
+ assert.match(CHECKLIST_DIALOG_SYSTEM,/прямо выбрал одно из этих значений[^.]*— это sufficient/);
+ assert.match(CHECKLIST_DIALOG_SYSTEM,/приложил файл или данные, а среди фрагментов их нет, — insufficient/);
+ // Правило добавлено только в инструкцию с ответами; JSON-формат ответа прежний.
+ assert.match(CHECKLIST_DIALOG_SYSTEM,/Верни только JSON без пояснений: \{"checks"/);
+});
