@@ -12,7 +12,7 @@ async function open(page,state){
    if(body.action==='material-revision-state')return {materials:{...replaceState}};
    if(body.action==='attachment-list')return {attachments:replaceFiles.map(x=>({...x}))};
    if(body.action==='registered-replace'){
-    replaceFiles=replaceFiles.filter(x=>x.id!==body.attachmentId).concat({id:'44444444-4444-4444-8444-444444444444',file_name:body.fileName,category:'unclassified',file_hash:body.fileHash,intake:true});
+    replaceFiles=replaceFiles.filter(x=>x.id!==body.attachmentId).concat({id:'44444444-4444-4444-8444-444444444444',file_name:body.fileName,category:'unclassified',file_hash:body.fileHash,intake:true,supersedes:body.attachmentId,created_at:'2026-10-04T03:24:44Z'});
     replaceState.requestRevision++;return {attachment:{id:'44444444-4444-4444-8444-444444444444',supersedes:body.attachmentId}};
    }
    throw Error('Unexpected '+body.action);
@@ -25,7 +25,8 @@ test('KIT-03 student replaces a file of the received request; old version is not
  await expect(page.getByRole('dialog')).toContainText('Заменить файл');
  await expect(page.getByRole('dialog')).not.toContainText('откройте «Отправить заявку»');
  await page.locator('[data-intake-replace-file]').setInputFiles({name:'03_Данные_v2.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from([80,75,3,4,9,9])});
- await expect(page.locator('[data-intake-replace-status]')).toContainText('Файл заменён');
+ await expect(page.locator('[data-intake-replace-status]')).toContainText('загружен вместо прежнего');
+ await expect(page.locator('[data-intake-replace-list]')).toContainText('новая редакция загружена 4 октября');
  await expect(page.locator('[data-material-files]')).toContainText('03_Данные_v2.docx');
  await expect(page.locator('[data-material-files]')).not.toContainText('03_Данные.docx');
  const call=await page.evaluate(()=>replaceCalls.find(x=>x.action==='registered-replace'));

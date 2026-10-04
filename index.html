@@ -1020,11 +1020,13 @@ async function openStudentMaterials(workId){
   var names={assignment:'Задание',methodology:'Методические указания',data:'Исходные данные',sources:'Источники',unclassified:'Файл'};
   function fileList(rows){return rows.map(function(a){return '<li>'+esc(names[a.category]||a.category)+': '+esc(a.file_name)+'</li>';}).join('');}
   var files=fileList(listed.attachments||[]);
+  // UX-01: у заменённого файла видно, когда загружена текущая редакция, — повторная замена не нужна.
+  function replaceRows(rows){return rows.map(function(a){var when=a.supersedes&&a.created_at?new Date(a.created_at):null,stamp=when&&!isNaN(when)?' <span class="hint">— новая редакция загружена '+esc(when.toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))+' в '+esc(when.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}))+'</span>':'';return '<li>'+esc(a.file_name)+stamp+' <label class="btn mini">Заменить<input type="file" hidden data-intake-replace-file="'+esc(a.id)+'" accept=".docx,.pdf,.xlsx"></label></li>';}).join('');}
   function renderIntakeReplace(rows){
    var formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
    var box=document.createElement('div');
    box.innerHTML='<p><b>Заменить файл</b></p><p class="hint">Нажмите «Заменить» рядом с файлом и выберите новую редакцию: DOCX, PDF или XLSX до 5 МБ. Прежняя редакция сохранится в истории. После замены программа заново прочитает и изучит весь комплект — это займёт несколько минут.</p>'+
-    '<ul data-intake-replace-list>'+rows.map(function(a){return '<li>'+esc(a.file_name)+' <label class="btn mini">Заменить<input type="file" hidden data-intake-replace-file="'+esc(a.id)+'" accept=".docx,.pdf,.xlsx"></label></li>';}).join('')+'</ul>'+
+    '<ul data-intake-replace-list>'+replaceRows(rows)+'</ul>'+
     '<p role="status" data-intake-replace-status></p>';
    var status=wrap.querySelector('[data-material-status]');
    if(status)status.parentNode.insertBefore(box,status);else wrap.querySelector('.sheet-in').appendChild(box);
@@ -1048,8 +1050,8 @@ async function openStudentMaterials(workId){
      var fresh=await Oblako.requestApi({action:'attachment-list',id:r.serverId});current();
      wrap.querySelector('[data-material-files]').innerHTML=fileList(fresh.attachments||[]);
      var next=(fresh.attachments||[]).filter(function(a){return a.intake;});
-     box.querySelector('[data-intake-replace-list]').innerHTML=next.map(function(a){return '<li>'+esc(a.file_name)+' <label class="btn mini">Заменить<input type="file" hidden data-intake-replace-file="'+esc(a.id)+'" accept=".docx,.pdf,.xlsx"></label></li>';}).join('');
-     note.textContent='Файл заменён. Программа заново прочитает и изучит комплект.';
+     box.querySelector('[data-intake-replace-list]').innerHTML=replaceRows(next);
+     note.textContent='Файл «'+file.name+'» загружен вместо прежнего. Программа заново прочитает и изучит комплект — это займёт несколько минут.';
     }catch(err){if(wrap.isConnected&&D===expectedData&&identity===Oblako.identity())note.textContent=err.message||'Не удалось заменить файл. Откройте материалы заново.';}
     finally{working=false;box.querySelectorAll('input').forEach(function(x){x.disabled=false;x.value='';});}
    });

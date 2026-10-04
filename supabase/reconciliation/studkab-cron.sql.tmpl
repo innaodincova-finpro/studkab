@@ -41,11 +41,13 @@ select cron.schedule('studkab-generation-v1','* * * * *',$job$
   'X-Studkab-Runner',(select cron_token from public.studkab_request_config where id=true)
  ),
  body:='{}'::jsonb,timeout_milliseconds:=120000)
- where exists(select 1 from public.studkab_gen_jobs where status in ('queued','running'))
+ where (exists(select 1 from public.studkab_gen_jobs where status in ('queued','running'))
  and (
   exists(select 1 from public.studkab_gen_budget where id=true and limit_microusd>reserved_microusd)
   or exists(select 1 from public.studkab_gen_jobs where status='running')
- );
+ ))
+ -- UX-01: чтение заменённого файла и разрешённое изучение комплекта; обработчик берёт их в чётные минуты.
+ or (extract(minute from now())::int%2=0 and public.studkab_intake_work_pending());
 $job$);
 
 select cron.schedule('studkab-maintenance','* * * * *',$job$

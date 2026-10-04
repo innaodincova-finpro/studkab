@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=17"></script><script src="push.js?v=4"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="registered-study.js?v=1"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script><script src="request-workflow.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=2"></script><script src="registered-study.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -2031,8 +2031,26 @@ function deliveryHistory(x){
  if(!last)return '<p class="hint" data-delivery-history>На момент обновления сервер не зарегистрировал передачу.</p>';
  return '<p data-delivery-history><b>Ранее передано: '+esc(ruDate(String(last.createdAt).slice(0,10)))+'</b><br><span class="hint">Это сохранённая передача. Совпадение текущего документа с переданной версией здесь не проверяется.</span></p>';
 }
+// UX-01: карточка «Следующее действие» показывает фактическое состояние изучения комплекта
+// и открывает окно «Изучение документов», а не только перечитывает данные заявки.
+function studyWorkflow(x){
+ var s=x.studySummary,base={step:1,key:'intake',action:'registered-study',complete:false,steps:RequestWorkflow.steps,blocker:''};
+ var studying=['awaiting_analysis','queued','claimed','sent','reading_blocked','stale'];
+ if(!s)return Object.assign(base,{title:'Заявка получена',copy:'Документы сохранены. Состояние изучения загружается.',label:'Открыть изучение документов',blocker:'Подготовка начнётся после изучения комплекта'});
+ if(s.state==='error')return Object.assign(base,{title:'Заявка получена',copy:'Не удалось получить состояние изучения. Откройте изучение, чтобы проверить ещё раз.',label:'Открыть изучение документов',blocker:'Подготовка начнётся после изучения комплекта'});
+ if(s.state==='done'&&s.pending)return Object.assign(base,{title:'Нужно решить вопросы по комплекту',copy:'Изучение завершено. Отправьте вопросы студенту или отметьте лишние. Подготовка работы начнётся после решения.',label:'Решить вопросы ('+s.pending+')'});
+ if(s.state==='done'&&s.published)return Object.assign(base,{title:'Ожидается ответ студента',copy:'Вопросы отправлены студенту. После ответа комплект будет изучен заново.',label:'Открыть изучение документов'});
+ if(s.state==='done')return Object.assign(base,{title:'Комплект изучен',copy:'Вопросов к студенту нет. Проверьте выводы и переходите к требованиям.',label:'Открыть изучение документов'});
+ if(studying.indexOf(s.state)>=0)return Object.assign(base,{title:'Комплект изучается',copy:'Документы сохранены, изучение идёт. Это займёт несколько минут.',label:'Открыть изучение документов'});
+ return Object.assign(base,{title:'Изучение остановлено',copy:'Изучение комплекта не завершено. Откройте изучение: там указана причина.',label:'Открыть изучение документов',blocker:'Нужна проверка исполнителя'});
+}
+var studyLoads=new Set();
+function loadStudySummary(x){
+ if(studyLoads.has(x))return;studyLoads.add(x);
+ Oblako.requestApi({action:'registered-study-state',id:x.id}).then(function(r){x.studySummary=StudRegisteredStudy.summary(r.study);}).catch(function(){x.studySummary={state:'error'};}).finally(function(){studyLoads.delete(x);render();});
+}
 function requestWorkflow(x){
- if(x.receivedBeforeAnalysis)return {step:1,key:'intake',title:'Заявка получена',copy:'Документы сохранены. Изучение комплекта ещё не завершено; подготовка не разрешена.',action:'materials-refresh',label:'Показать материалы',blocker:'Комплект ожидает изучения помощниками',complete:false,steps:RequestWorkflow.steps};
+ if(x.receivedBeforeAnalysis)return studyWorkflow(x);
  if(x.serverMissing)return {step:1,key:'cancelled',title:'Заявка отсутствует на сервере',copy:'Локальная карточка сохранена для проверки. Серверные действия недоступны; после сверки удалите её кнопкой «удалить» в обзоре.',action:null,label:'',blocker:'',complete:false,steps:RequestWorkflow.steps};
  if(x.materialRevision&&x.materialRevision.state==='open')return {step:1,key:'intake',title:'Ожидаются дополнительные материалы',copy:'Студент завершит загрузку в своём кабинете. После этого проверьте комплект и новую версию паспорта.',action:'materials-refresh',label:'Обновить материалы',blocker:x.materialRevision.reason||'',complete:false,steps:RequestWorkflow.steps};
  var p=Array.isArray(x.passports)&&x.passports[0],unresolved=p?passportUnresolved(p):[],hasDocument=!!(x.doc&&(x.doc.order||[]).some(function(c){var part=(x.doc.structure||{})[c.id]||{};return String(part.text||'').trim()||(Array.isArray(part.figures)&&part.figures.length);})),reviewCurrent=false;
@@ -2297,6 +2315,7 @@ function viewItem(id){
   var x = item(id);
   if (!x) return '<div class="empty">Заявка не найдена</div>';
   if(x.serverMissing)return '<button type="button" class="mini" data-act="back">← Заявки</button><h1>'+esc(requestLabel(x))+' — '+esc(x.topic||'Тема не указана')+'</h1>'+card('<p role="status">Эта заявка отсутствует на сервере. Локальная карточка сохранена, но обработка и передача недоступны.</p><p class="hint">Если вам нужны местные заметки или текст, сохраните копию реестра в разделе «Ещё». После проверки удалите эту карточку.</p><button type="button" class="del" data-act="delete" data-id="'+esc(x.id)+'">Удалить локальную карточку</button>');
+  if(x.receivedBeforeAnalysis&&!x.studySummary)loadStudySummary(x);
   if(x.requestNumber&&(!Array.isArray(x.passports)||!x.materialRevision)&&!passportLoads.has(x)){
     passportLoads.add(x);setTimeout(function(){loadPassports(x).catch(function(e){toast(e.message||'Не удалось создать паспорт');}).finally(function(){passportLoads.delete(x);});},0);
   }
@@ -2791,7 +2810,7 @@ document.addEventListener("click", function(ev){
   if (act === "review-word") return StudResults.deliver(item(id),true);
   if (act === "deliver-result") return StudResults.deliver(item(id));
   if (act === "passport-load") {var px=item(id);if(px)loadPassports(px).then(function(){toast('Паспорт обновлён');}).catch(function(e){toast(e.message||'Не удалось получить паспорт');});return;}
-  if(act==='registered-study'){var study=item(id);if(study)StudRegisteredStudy.show({requestId:id,api:Oblako.requestApi,esc:esc,openModal:openModal});return;}
+  if(act==='registered-study'){var study=item(id);if(study)StudRegisteredStudy.show({requestId:id,api:Oblako.requestApi,esc:esc,openModal:openModal,onState:function(sum){study.studySummary=sum;},onClose:function(){render();}});return;}
   if(act==='executor-clarifications'){var cq=item(id);if(cq)StudClarifications.show({requestId:cq.id,executor:true,items:((cq.passports||[])[0]||{}).items||[],labels:PASSPORT_ITEM_LABEL,api:Oblako.requestApi,esc:esc,openModal:openModal,onRead:refreshExecutorDialogue,onChange:function(){return loadPassports(cq);}});return;}
   if (act === "passport-edit" || act === "passport-revise") {var pe=item(id);if(pe)editPassport(pe,act === "passport-revise");return;}
   if (act === "passport-approve") {var pa=item(id),pv=pa&&Array.isArray(pa.passports)?pa.passports[0]:null;if(!pa||!pv)return;var approvalRevision=pa.passportMaterialRevision,approvalIdentity=Oblako.identity(),approvalData=D;var materialIssues=materialManifestIssues(pa,pv);if(materialIssues.length){toast(materialIssues.join(' '));return;}var unresolved=passportUnresolved(pv);if(unresolved.length){toast('Сначала уточните: '+unresolved.map(passportItemLabel).join(', '));return;}passportFingerprint(pa).then(function(sourceFingerprint){if(approvalIdentity!==Oblako.identity()||approvalData!==D)throw Error('Аккаунт изменился. Откройте заявку заново.');return Oblako.requestApi({action:'passport-approve',id:pa.id,passportId:pv.id,passport:{title:pv.title,summary:pv.summary,items:pv.items,material_manifest:pv.material_manifest},sourceFingerprint:sourceFingerprint,expectedRevision:approvalRevision});}).then(function(r){if(approvalIdentity!==Oblako.identity()||approvalData!==D)return;pa.passportMaterialRevision=r.materialRevision;pa.passports=[r.passport].concat(pa.passports.filter(function(q){return q.id!==r.passport.id;}));render();toast('Паспорт утверждён');}).catch(function(e){if(approvalIdentity===Oblako.identity()&&approvalData===D)loadPassports(pa).catch(function(){});toast(e.message||'Не удалось утвердить паспорт');});return;}
