@@ -84,3 +84,22 @@ test('KIT-07: прямой выбор студентом одного из ра�
  // Правило добавлено только в инструкцию с ответами; JSON-формат ответа прежний.
  assert.match(CHECKLIST_DIALOG_SYSTEM,/Верни только JSON без пояснений: \{"checks"/);
 });
+
+test('KIT-07b: достаточный ответ студента закрывает расхождение параметра, найденное программой',async()=>{
+ const {checklistReviewOutput}=await import('../supabase/functions/_shared/checklist-review.mjs');
+ const blocks=[
+  {blockId:'b0',text:'Основная часть 25–30 страниц',fileId:'f1',fileHash:'h1',fileName:'01.docx',readerVersion:'r',source:{part:'word/document.xml',paragraph:1}},
+  {blockId:'b1',text:'Объём 40–45 страниц',fileId:'f2',fileHash:'h2',fileName:'02.docx',readerVersion:'r',source:{part:'word/document.xml',paragraph:2}},
+  {blockId:'b2',text:'Применять объём из задания: 25–30 страниц',source:{kind:'student_answer',questionId:'q1'}}];
+ const inventory={needs:[],params:[{kind:'volume',name:'объём основной части',value:'25–30 страниц',ids:['b0']},{kind:'volume',name:'объём основной части',value:'40–45 страниц',ids:['b1']}]};
+ const request={blocks,checks:[],returned:[],answers:[{id:'q1',question:'В комплекте указаны разные значения параметра «объём основной части»: «25–30 страниц» и «40–45 страниц». Какое значение применять?'}]};
+ const run=status=>checklistReviewOutput(JSON.stringify({checks:[],answerReviews:[{questionId:'q1',status,reason:'Студент выбрал значение из задания.',ids:['b2','b0'],question:status==='sufficient'?'':'Уточните объём.'}],returnedReviews:[]}),request,inventory);
+ const ok=run('sufficient');
+ assert.equal(ok.gaps.length,0);assert.equal(ok.answerReviews[0].status,'sufficient');
+ const bad=run('insufficient');
+ assert.deepEqual(bad.gaps.map(g=>g.type+':'+g.key),['conflict:conflict_1','missing:answer_1']);
+ // Ответ на другой вопрос не закрывает расхождение объёма.
+ const other={...request,answers:[{id:'q1',question:'Пришлите результаты опроса.'}]};
+ const r=checklistReviewOutput(JSON.stringify({checks:[],answerReviews:[{questionId:'q1',status:'sufficient',reason:'Данные приложены.',ids:['b2','b0']}],returnedReviews:[]}),other,inventory);
+ assert.deepEqual(r.gaps.map(g=>g.key),['conflict_1']);
+});
