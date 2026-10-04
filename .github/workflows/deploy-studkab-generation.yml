@@ -1,0 +1,40 @@
+name: Deploy studkab generation
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - supabase/functions/studkab-generation/**
+      - supabase/functions/_shared/**
+      - supabase/functions/studkab-generation-api/review-pass.mjs
+      - supabase/functions/studkab-generation-api/calculation-evidence.mjs
+      - supabase/functions/studkab-generation-api/calculation-inventory.mjs
+      - supabase/functions/studkab-requests/structured-reader.mjs
+      - supabase/functions/studkab-requests/reader-runtime.ts
+      - supabase/functions/studkab-requests/intake-reading.mjs
+      - .github/workflows/deploy-studkab-generation.yml
+permissions:
+  contents: read
+concurrency:
+  group: studkab-generation-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'innaodincova-finpro/studkab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.117.0
+      - run: npm ci
+      - name: Check study and generation
+        run: node --test tests/kit-analysis.test.mjs tests/kit-bench.test.mjs tests/generation-runner.test.mjs
+      - name: Deploy existing function (gateway JWT check stays on)
+        run: supabase functions deploy studkab-generation --project-ref dcpthwmuiodrjepifzsd --use-api
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

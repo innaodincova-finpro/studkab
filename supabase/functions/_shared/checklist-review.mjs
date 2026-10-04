@@ -131,7 +131,13 @@ export function checklistReviewOutput(text,request,inventory){
   return review;
  });
  if(answerReviews.some(v=>!answerIds.has(v.questionId)))throw Error('INVALID_KIT_REVIEW');
- return {candidates:[],roles:[],covered:request.blocks.map(b=>b.blockId),reviewVersion:REVIEW_VERSION,method:CHECKLIST_METHOD,gaps,answerReviews,returnedReviews,rejected};
+ // KIT-07b: расхождение параметра находит программа по числам в документах, поэтому оно
+ // повторялось бы и после ответа студента. Достаточный ответ студента на вопрос об этом же
+ // параметре («…параметра «объём основной части»…») закрывает расхождение.
+ const settled=request.answers.filter(q=>answerReviews.some(v=>v.questionId===q.id&&v.status==='sufficient')).map(q=>String(q.question||''));
+ const param=g=>(/параметра «([^»]+)»/.exec(g.question)||[])[1];
+ const open=gaps.filter(g=>!(g.type==='conflict'&&param(g)&&settled.some(t=>t.includes('параметра «'+param(g)+'»'))));
+ return {candidates:[],roles:[],covered:request.blocks.map(b=>b.blockId),reviewVersion:REVIEW_VERSION,method:CHECKLIST_METHOD,gaps:open,answerReviews,returnedReviews,rejected};
 }
 
 export function finishChecklistReview(previous,review){
