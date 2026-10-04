@@ -84,7 +84,7 @@
   wrap.addEventListener('click',async function(event){
    var ask=event.target.closest('[data-question-send]'),send=event.target.closest('[data-answers-send]');
    if(!ask&&!send)return;if(busy)return;if(!same()){changed();return;}
-   var button=ask||send;busy=true;button.disabled=true;
+   var button=ask||send,sent=0;busy=true;button.disabled=true;
    try{
     if(ask){
      var data={id:o.requestId,action:'clarification-ask',questionId:questionId,itemId:wrap.querySelector('[data-question-item]').value,question:wrap.querySelector('[data-question-text]').value.trim()};
@@ -93,18 +93,21 @@
     }else{
      keepDrafts();
      var items=Array.from(wrap.querySelectorAll('[data-answer]')).map(function(t){var id=t.getAttribute('data-answer'),text=t.value.trim(),att=files[id]||[];
-      var answer=text;if(att.length)answer=(text?text+'\n':'')+'Приложен файл: '+att.join(', ');
+      var answer=text;if(att.length)answer=(text?text+'\n':'')+'Приложен файл: '+att.join(', ');if(answer.length>4000)answer=answer.slice(0,3999)+'…';
       return {id:id,answer:answer,source:att.length?'Ответ студента в кабинете; файл добавлен в материалы заявки':''};}).filter(function(x){return x.answer;});
      for(var i=0;i<items.length;i++){
       status('Отправляем ответы: '+(i+1)+' из '+items.length+'…');
       await api({id:o.requestId,action:'clarification-answer',questionId:items[i].id,answer:items[i].answer,source:items[i].source});
-      if(!same()){changed();return;}delete drafts[items[i].id];delete files[items[i].id];
+      if(!same()){changed();return;}delete drafts[items[i].id];delete files[items[i].id];sent++;
      }
     }
     await draw();
     if(send)status('Ответы отправлены. Исполнитель получит их и продолжит работу.');
     if(o.onChange)await o.onChange();
-   }catch(e){if(!same()){changed();return;}var msg=e.message||'Не удалось подтвердить отправку. Повторите — уже отправленные ответы не задвоятся.';try{await draw();}catch(x){}status(msg);}
+   }catch(e){if(!same()){changed();return;}var msg=e.message||'Не удалось подтвердить отправку. Повторите — уже отправленные ответы не задвоятся.';
+    // Исполнитель не теряет набранный вопрос; у студента окно показывает уже отправленные ответы.
+    if(send){try{await draw();}catch(x){}if(sent&&o.onChange)try{await o.onChange();}catch(x){}}
+    status(msg);}
    finally{busy=false;var b=wrap.querySelector('[data-answers-send]');if(b)sendState();if(ask)ask.disabled=false;}
   });
   try{await draw();}catch(e){status(e.message||'Не удалось загрузить вопросы');}

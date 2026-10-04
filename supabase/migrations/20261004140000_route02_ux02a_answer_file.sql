@@ -31,7 +31,9 @@ begin
   -- UX-02a: студент добавляет к принятой заявке новый файл (например, к ответу на вопрос):
   -- новый файл того же отправленного черновика, не заменяющий ни один прежний.
   adding:=found and not replacing and r.intake_received and r.ready_at is not null and new.supersedes is null and i.supersedes is null
-   and exists(select 1 from public.studkab_intake_drafts where id=i.draft_id and student_id=new.student_id and state='submitted' and submitted_request_id=r.id);
+   and exists(select 1 from public.studkab_intake_drafts where id=i.draft_id and student_id=new.student_id and state='submitted' and submitted_request_id=r.id)
+   -- Только через studkab_registered_add_finish: она проверяет квоту и отмечает этот файл.
+   and current_setting('studkab.registered_add',true) is not distinct from new.id::text;
   if not found or (not replacing and not adding and (not exists(select 1 from public.studkab_intake_drafts where id=i.draft_id and student_id=new.student_id and state='open')
   or new.supersedes is not null or r.ready_at is not null))
   or i.state<>'saved' or (not r.intake_received and i.read_status<>'ready')
@@ -72,7 +74,7 @@ begin
   if f.supersedes is null and exists(select 1 from public.studkab_request_attachments where id=f.id and request_id=r.id and student_id=p_student)
   and not exists(select 1 from public.studkab_request_attachments s where s.supersedes=f.id)
   then return jsonb_build_object('file',to_jsonb(f),'duplicate',true); end if;
-  return jsonb_build_object('conflict',true,'kind','duplicate');
+  return jsonb_build_object('conflict',true,'kind',case when exists(select 1 from public.studkab_request_attachments s where s.supersedes=f.id) then 'replaced' else 'duplicate' end);
  end if;
  if (select count(*) from public.studkab_request_attachments a where a.request_id=r.id and not exists(select 1 from public.studkab_request_attachments b where b.supersedes=a.id))>=8 then return jsonb_build_object('limit',true); end if;
  if (select coalesce(sum(size_bytes),0) from public.studkab_intake_files where draft_id=d.id)+p_size>104857600 then return jsonb_build_object('quota',true); end if;
@@ -98,8 +100,10 @@ begin
  if (select count(*) from public.studkab_request_attachments o where o.request_id=r.id and not exists(select 1 from public.studkab_request_attachments b where b.supersedes=o.id))>=8 then return jsonb_build_object('limit',true); end if;
  select id into cycle from public.studkab_material_revisions where request_id=r.id and closed_at is null;
  if f.state='pending' then update public.studkab_intake_files set state='saved',saved_at=now() where id=f.id returning * into f; end if;
+ perform set_config('studkab.registered_add',f.id::text,true);
  insert into public.studkab_request_attachments(id,request_id,student_id,intake_file_id,category,supersedes,material_revision_id,file_name,content_type,size_bytes,file_hash,storage_path,extracted_text)
  values(f.id,r.id,p_student,f.id,'unclassified',null,cycle,f.file_name,f.content_type,f.size_bytes,f.file_hash,f.storage_path,null) returning * into a;
+ perform set_config('studkab.registered_add','',true);
  return jsonb_build_object('attachment',jsonb_build_object('id',a.id,'file_name',a.file_name,'file_hash',a.file_hash,'supersedes',a.supersedes),'duplicate',false);
 end $$;
 revoke all on function public.studkab_registered_add_reserve(uuid,uuid,text,text,integer,text),public.studkab_registered_add_finish(uuid,uuid,uuid,text) from public,anon,authenticated;

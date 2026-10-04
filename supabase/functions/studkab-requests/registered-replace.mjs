@@ -36,7 +36,7 @@ export async function registeredAddAction(input,user,{db,isMember,saveIntake}){
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверная заявка'}};
  let f;try{f=await intakeBytes(input);}catch(e){return {status:400,data:{error:e.message}};}
  const reserved=await db('rpc/studkab_registered_add_reserve','POST',{p_student:user.id,p_request:input.id,p_name:f.name,p_type:f.type,p_size:f.size,p_hash:f.hash});
- if(reserved?.conflict)return {status:409,data:{error:'Такой файл уже есть в заявке'}};
+ if(reserved?.conflict)return {status:409,data:{error:reserved.kind==='replaced'?'Это прежняя редакция файла, она уже заменена. Выберите нужный файл':'Такой файл уже есть в заявке'}};
  const error=failure(reserved);if(error)return error;
  const file=reserved.file;
  if(!uuid.test(file?.id||'')||file.file_hash!==f.hash||file.supersedes||!file.storage_path?.startsWith(user.id+'/')||!file.storage_path.endsWith('/'+file.id))throw Error('Add unavailable');

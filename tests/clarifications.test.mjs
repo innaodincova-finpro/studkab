@@ -44,6 +44,7 @@ test('C084 Edge: list only owned requests, executor asks, student answers with o
  assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:''},student,deps)).data.question.id,questionId);
  assert.equal(calls.at(-1).body.p_source,'Ответ студента в кабинете');
  assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:'x'.repeat(1001)},student,deps)).status,400);
+ assert.match((await clarificationAction({action:'clarification-answer',id,questionId,answer:'x'.repeat(4001)},student,deps)).data.error,/слишком длинный/);
  assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:'Методичка, с. 3'},executor,deps)).status,403);
  assert.equal((await clarificationAction({action:'clarification-answer',id,questionId,answer:'30',source:'Методичка, с. 3'},student,deps)).data.question.id,questionId);
  assert.equal(calls.at(-1).body.p_actor,student.id);

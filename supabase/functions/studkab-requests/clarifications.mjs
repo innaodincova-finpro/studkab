@@ -31,6 +31,7 @@ export async function clarificationAction(input,user,{db,config,isMember}){
   // UX-02a: студент отвечает одним полем; основание необязательно и по умолчанию —
   // сам ответ студента в кабинете. Пустое поле основания не отклоняет ответ.
   const answer=clean(input.answer,4000),source=input.source==null||(typeof input.source==='string'&&!input.source.trim())?'Ответ студента в кабинете':clean(input.source,1000);
+  if(typeof input.answer==='string'&&input.answer.length>4000)return {status:400,data:{error:'Ответ слишком длинный: до 4000 знаков'}};
   if(!answer)return {status:400,data:{error:'Напишите ответ'}};
   if(!source)return {status:400,data:{error:'Пояснение к ответу слишком длинное'}};
   const result=await db('rpc/studkab_clarification_answer','POST',{p_request:input.id,p_actor:user.id,p_id:input.questionId,p_answer:answer,p_source:source});

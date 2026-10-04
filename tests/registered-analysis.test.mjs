@@ -540,12 +540,16 @@ test('UX-02a: файл к ответу добавляется в приняту�
 test('UX-02a: после начала подготовки добавление закрыто; предел 8 файлов; прямая вставка в обход функции отклоняется',async()=>{
  const f=await fixture();try{
   const XLSX='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  // Прямая вставка нового файла черновика в обход studkab_registered_add_finish отклоняется и при свободных местах.
+  await f.mutate("insert into studkab_intake_files(id,draft_id,file_name,content_type,size_bytes,file_hash,storage_path,state,saved_at) select gen_random_uuid(),draft_id,'z.docx',content_type,10,'"+'d'.repeat(64)+"',storage_path||'z','saved',now() from studkab_intake_files where id='"+f.file.id+"'");
+  await assert.rejects(()=>f.db.query("insert into studkab_request_attachments(id,request_id,student_id,intake_file_id,category,file_name,content_type,size_bytes,file_hash,storage_path) select i.id,'"+f.receipt.id+"','"+student+"',i.id,'unclassified',i.file_name,i.content_type,i.size_bytes,i.file_hash,i.storage_path from studkab_intake_files i where i.file_hash='"+'d'.repeat(64)+"'"),/Intake attachment mismatch/);
+  // Прежняя, уже заменённая редакция не добавляется повторно.
+  const r0=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v2.docx',p_type:DOCX,p_size:120,p_hash:'e'.repeat(64)});
+  await f.rpc('studkab_registered_replace_finish',{p_student:student,p_request:f.receipt.id,p_file:r0.file.id,p_hash:'e'.repeat(64)});
+  assert.deepEqual(await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'Assignment.docx',p_type:DOCX,p_size:100,p_hash:'a'.repeat(64)}),{conflict:true,kind:'replaced'});
   for(let i=0;i<7;i++){const h=String(i+1).repeat(64);const r=await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f'+i+'.xlsx',p_type:XLSX,p_size:10,p_hash:h});await f.rpc('studkab_registered_add_finish',{p_student:student,p_request:f.receipt.id,p_file:r.file.id,p_hash:h});}
   assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f9.xlsx',p_type:XLSX,p_size:10,p_hash:'b'.repeat(64)})).limit,true);
   await f.mutate("insert into studkab_gen_jobs(request_id) values('"+f.receipt.id+"')");
   assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f9.xlsx',p_type:XLSX,p_size:10,p_hash:'c'.repeat(64)})).locked,true);
-  await f.mutate("delete from studkab_gen_jobs");
-  await f.mutate("insert into studkab_intake_files(id,draft_id,file_name,content_type,size_bytes,file_hash,storage_path,state,saved_at) select gen_random_uuid(),draft_id,'z.docx',content_type,10,'"+'d'.repeat(64)+"',storage_path||'z','saved',now() from studkab_intake_files where id='"+f.file.id+"'");
-  await assert.rejects(()=>f.db.query("insert into studkab_request_attachments(id,request_id,student_id,intake_file_id,category,file_name,content_type,size_bytes,file_hash,storage_path) select i.id,'"+f.receipt.id+"','"+student+"',i.id,'unclassified',i.file_name,i.content_type,i.size_bytes,i.file_hash,i.storage_path from studkab_intake_files i where i.file_hash='"+'d'.repeat(64)+"'"));
  }finally{await f.db.close();}
 });
