@@ -2,8 +2,10 @@
 // Стенд прогоняет учебные комплекты с заранее заложенными дефектами через тот же
 // способ проверки, что и кабинет, и считает, сколько дефектов найдено.
 // К заявкам, студентам и кабинету стенд не подключён: комплекты лежат в репозитории.
-import {kitPlan,verifyKitReviewOutput,KIT_REVIEW_SYSTEM} from './kit-analysis.mjs';
+import {kitPlan,verifyKitReviewOutput,KIT_REVIEW_SYSTEM,KIT_REVIEW_SYSTEM_V1} from './kit-analysis.mjs';
+import {reserveMicrousd} from './deepseek-cost.mjs';
 import {sameSecret} from './secret-equal.mjs';
+import {checklistInventoryPart,verifyInventory,checklistVerifyPart,verifyChecks,checklistGaps,CHECKLIST_INVENTORY_SYSTEM,CHECKLIST_VERIFY_SYSTEM} from './kit-checklist.mjs';
 
 export const BENCH_KIT_ID=/^[A-Z][0-9]{1,2}$/;
 export const BENCH_COMMIT=/^[0-9a-f]{40}$/;
@@ -45,8 +47,21 @@ export function benchSnapshot(kit){
 
 // Способы проверки, которые умеет прогонять стенд. Новый способ добавляется сюда
 // и сравнивается с прежним на тех же комплектах.
+// Каждый способ получает функцию ask(system, part, step): она резервирует сумму стенда,
+// обращается к модели и возвращает текст ответа. Способ сам проверяет ответы и
+// возвращает итоговые вопросы. Несколько обращений — несколько отдельных резервов.
 export const BENCH_METHODS={
- 'whole-kit-2':snapshot=>{const review=kitPlan(snapshot)[1];return {system:KIT_REVIEW_SYSTEM,part:review,verify:raw=>verifyKitReviewOutput(raw,review).gaps};},
+ 'whole-kit-2':async(snapshot,ask)=>{const review=kitPlan(snapshot)[1];return verifyKitReviewOutput(await ask(KIT_REVIEW_SYSTEM,review,''),review).gaps;},
+ // KIT-05: прежняя инструкция на том же запросе — для сравнения с действующей.
+ 'baseline-1':async(snapshot,ask)=>{const review=kitPlan(snapshot)[1];const part={...review,max_cost_microusd:reserveMicrousd(KIT_REVIEW_SYSTEM_V1,review.prompt,review.max_output_tokens)};return verifyKitReviewOutput(await ask(KIT_REVIEW_SYSTEM_V1,part,''),review).gaps;},
+ // KIT-05: пошаговая проверка — перечень нужного и параметров, затем сверка каждого пункта.
+ 'checklist-3':async(snapshot,ask)=>{
+  const inv=checklistInventoryPart(snapshot);
+  const inventory=verifyInventory(await ask(CHECKLIST_INVENTORY_SYSTEM,inv,'s1'),inv);
+  const check=checklistVerifyPart(inv,inventory);
+  const absent=check?verifyChecks(await ask(CHECKLIST_VERIFY_SYSTEM,check,'s2'),check):[];
+  return checklistGaps(inv.blocks,inventory,absent);
+ },
 };
 
 // Дефект считается найденным, если вопрос или пояснение содержит одно из его ключевых слов.
@@ -72,23 +87,37 @@ export function benchHandler({authorize,config,rpc,fetchKit,provider}){
   if(!sameSecret(req.headers.get('X-Studkab-Runner'),cfg?.cron_token))return reply({error:'UNAUTHORIZED'},401);
   let input;try{const raw=await req.text();if(raw.length>2000)throw 0;input=JSON.parse(raw);}catch{return reply({error:'BAD_REQUEST'},400);}
   if(!input||!BENCH_KIT_ID.test(input.kit)||!BENCH_COMMIT.test(input.commit)||!Object.hasOwn(BENCH_METHODS,input.method))return reply({error:'BAD_REQUEST'},400);
-  let kit,plan;
-  try{kit=validateBenchKit(await fetchKit(input.commit,input.kit),input.kit);plan=BENCH_METHODS[input.method](benchSnapshot(kit));}
+  let kit,snapshot;
+  try{kit=validateBenchKit(await fetchKit(input.commit,input.kit),input.kit);snapshot=benchSnapshot(kit);}
   catch{return reply({error:'KIT_UNAVAILABLE'},422);}
-  let run;
-  try{run=await rpc('studkab_kit_bench_reserve',{p_kit:kit.id,p_method:input.method,p_commit:input.commit,p_cost:plan.part.max_cost_microusd});}
-  catch{return reply({status:'reserve_unconfirmed'},503);}
-  if(!run)return reply({status:'budget_or_disabled'});
-  let output=null;try{output=await provider({input:{system:plan.system},spec:plan.part},run);}catch{}
-  let raw=null,gaps=null,error=null;
-  if(output?.complete===true&&typeof output.text==='string'&&new TextEncoder().encode(output.text).byteLength<=100000){
-   raw=output.text;
-   try{gaps=plan.verify(raw);}catch(e){error='invalid:'+String(e?.message||'').replace(/[^A-Z_]/g,'').slice(0,60);}
-  }else error=output?.detail?.reason==='length'?'length':'provider';
+  const calls=[];
+  class Stop extends Error{}
+  const ask=async(system,part,step)=>{
+   if(!Number.isSafeInteger(part.max_cost_microusd)||part.max_cost_microusd<=0)throw new Stop('invalid:COST');
+   let run;
+   try{run=await rpc('studkab_kit_bench_reserve',{p_kit:kit.id,p_method:input.method+(step?'-'+step:''),p_commit:input.commit,p_cost:part.max_cost_microusd});}
+   catch{throw new Stop('reserve_unconfirmed');}
+   if(!run)throw new Stop('budget_or_disabled');
+   let output=null;try{output=await provider({input:{system},spec:part},run);}catch{}
+   const ok=output?.complete===true&&typeof output.text==='string'&&new TextEncoder().encode(output.text).byteLength<=100000;
+   const usage=output?.detail&&typeof output.detail==='object'?{prompt:output.detail.prompt_tokens??null,completion:output.detail.completion_tokens??null}:null;
+   calls.push({run,raw:ok?output.text:null,usage,step});
+   if(!ok)throw new Stop(output?.detail?.reason==='length'?'length':'provider');
+   return output.text;
+  };
+  let gaps=null,error=null;
+  try{gaps=await BENCH_METHODS[input.method](snapshot,ask);}
+  catch(e){error=e instanceof Stop?e.message:'invalid:'+String(e?.message||'').replace(/[^A-Z_]/g,'').slice(0,60);}
+  if(!calls.length)return reply({status:error||'no_call'},error==='reserve_unconfirmed'?503:200);
   const score=gaps?scoreBench(kit,gaps):null;
-  const result={score,gaps:gaps?gaps.map(g=>({question:g.question,reason:g.reason,quotes:g.refs.map(r=>r.quote.slice(0,300))})):null,usage:output?.detail&&typeof output.detail==='object'?{prompt:output.detail.prompt_tokens??null,completion:output.detail.completion_tokens??null}:null};
-  try{await rpc('studkab_kit_bench_finish',{p_run:run,p_raw:raw,p_result:result,p_error:error});}
-  catch{return reply({status:'save_unconfirmed',run},503);}
+  // Итог и подсчёт сохраняются в последнем обращении; у каждого — свой фактический расход.
+  for(const [i,c] of calls.entries()){
+   const last=i===calls.length-1;
+   const result={step:c.step||null,usage:c.usage,...(last?{score,gaps:gaps?gaps.map(g=>({type:g.type||null,question:g.question,reason:g.reason,quotes:g.refs.map(r=>r.quote.slice(0,300))})):null}:{})};
+   try{await rpc('studkab_kit_bench_finish',{p_run:c.run,p_raw:c.raw,p_result:result,p_error:last?error:null});}
+   catch{return reply({status:'save_unconfirmed',run:c.run},503);}
+  }
+  const run=calls.at(-1).run;
   return reply({status:error?'failed':'done',run,kit:kit.id,method:input.method,score,error});
  };
 }

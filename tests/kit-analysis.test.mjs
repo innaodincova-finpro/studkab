@@ -50,13 +50,29 @@ test('KIT-02: вопросы ссылаются на фрагменты ориг
   answerReviews:[{questionId:'ans-1',status:'insufficient',reason:'Ответ не подтверждён документом.',ids:[answer]}],
   returnedReviews:[{proposalId:'p-1',status:'unresolved',reason:'Условие о дипломе остаётся неясным.',ids:[vol]}]};
  const r=verifyKitReviewOutput(JSON.stringify(out),part);assert.equal(r.gaps[0].key,'gap_1');assert.equal(r.gaps[0].refs[0].quote,'Для дипломной работы объём 80 страниц.');
- assert.throws(()=>verifyKitReviewOutput(JSON.stringify({...out,gaps:[{...out.gaps[0],ids:['b999']}]}),part),/INVALID_REVIEW_SOURCE/);
+ // KIT-05: вопрос без подтверждённого основания отклоняется; ответ студента без вопроса остаётся ошибкой.
+ assert.throws(()=>verifyKitReviewOutput(JSON.stringify({...out,gaps:[{...out.gaps[0],ids:['b999']}]}),part),/UNRESOLVED_STUDENT_ANSWER/);
  assert.throws(()=>verifyKitReviewOutput(JSON.stringify({...out,answerReviews:[]}),part),/INCOMPLETE_KIT_REVIEW/);
  assert.throws(()=>verifyKitReviewOutput(JSON.stringify({...out,gaps:[]}),part),/UNRESOLVED_STUDENT_ANSWER/);
- assert.throws(()=>verifyKitReviewOutput(JSON.stringify({...out,gaps:[{...out.gaps[0],ids:[answer]}]}),part),/INVALID_REVIEW_SOURCE/);
+ assert.throws(()=>verifyKitReviewOutput(JSON.stringify({...out,gaps:[{...out.gaps[0],ids:[answer]}]}),part),/UNRESOLVED_STUDENT_ANSWER/);
 });
 test('KIT-02: непрочитанный или слишком большой комплект не отправляется, а останавливается до оплаты',()=>{
  const unread=source();unread.files[0].read_status='failed';assert.throws(()=>kitPlan(unread),/READING_INCOMPLETE/);
  const big=source();big.files[2].read_result.blocks=Array.from({length:40},(_,i)=>para(i+1,'Требование '+i+' '+'текст '.repeat(200)));assert.throws(()=>kitPlan(big),/KIT_REVIEW_LIMIT/);
  const many=source();many.files[2].read_result.blocks=Array.from({length:520},(_,i)=>para(i+1,'п'+i));assert.throws(()=>kitBlocks(many),/KIT_REVIEW_LIMIT/);
+});
+
+test('KIT-05: отдельный неподтверждённый вопрос отклоняется с причиной, остальные сохраняются',()=>{
+ const plan=kitPlan(source()),part=plan[1],vol=byText(plan,'80 страниц'),ids=part.blocks.filter(b=>b.fileId).map(b=>b.blockId);
+ const ok={key:'k1',type:'missing',question:'Где данные?',reason:'Без них нельзя.',ids:[vol]};
+ const out={gaps:[ok,{...ok,key:'k2',ids:['b999']},{...ok,key:'k3',type:'conflict',ids:[vol]},{...ok,key:'k4',type:'other'},{...ok,key:'k5',ids:[...ids,...ids,'b999'].slice(0,20)}],answerReviews:[],returnedReviews:[]};
+ const r=verifyKitReviewOutput(JSON.stringify(out),part);
+ assert.deepEqual(r.gaps.map(g=>g.key),['k1','k5']);assert.equal(r.gaps[0].type,'missing');assert.ok(r.gaps[1].refs.length<=12);
+ assert.deepEqual(r.rejected.map(x=>x.reason),['INVALID_REVIEW_SOURCE','CONFLICT_NEEDS_TWO_SOURCES','INVALID_GAP_TYPE']);
+ assert.equal(finishKitReview([{candidates:[],roles:[],rejected:[]}],r).kitReview.rejected.length,3);
+});
+test('KIT-05: в строке таблицы название столбца видно, даже если оно совпадает со значением',()=>{
+ const file={id:'f',file_name:'d.docx',file_hash:'h',read_status:'ready',read_version:'v',read_result:{status:'ready',readerVersion:'v',blocks:[cell(1,1,1,'Оценка'),cell(1,1,2,'5'),cell(1,2,1,'Ответы'),cell(1,2,2,'5')]}};
+ const rows=kitBlocks({files:[file]}).map(b=>b.text);
+ assert.equal(rows[1],'Таблица 1, строка 2: Оценка: Ответы | 5: 5');
 });
