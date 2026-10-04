@@ -595,6 +595,12 @@
       "status": "pending",
       "note": "ROUTE-02-C UX-01: exact replace refusal reasons; pending intake work check for the generation schedule",
       "sha256": "348f80ed4696c3ab00fbed6188194f14bdf7f3bd5f30cdabddc52b44d27f970b"
+    },
+    {
+      "file": "20261004140000_route02_ux02a_answer_file.sql",
+      "version": "20261004140000",
+      "name": "route02_ux02a_answer_file",
+      "sha256": "e2682d3147faf297be69a4c6751631c27c3bad88af2b162b3ec76878cc2d28fd"
     }
   ],
   "production_reconciled_at": "2026-09-23"

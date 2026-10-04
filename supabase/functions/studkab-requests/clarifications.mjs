@@ -28,8 +28,11 @@ export async function clarificationAction(input,user,{db,config,isMember}){
  }
  if(input.action==='clarification-answer'){
   if(row.student_id!==user.id)return {status:403,data:{error:'Ответ доступен студенту этой заявки'}};
-  const answer=clean(input.answer,4000),source=clean(input.source,1000);
-  if(!answer||!source)return {status:400,data:{error:'Напишите ответ и его основание: документ, страницу или пояснение преподавателя'}};
+  // UX-02a: студент отвечает одним полем; основание необязательно и по умолчанию —
+  // сам ответ студента в кабинете. Пустое поле основания не отклоняет ответ.
+  const answer=clean(input.answer,4000),source=input.source==null||(typeof input.source==='string'&&!input.source.trim())?'Ответ студента в кабинете':clean(input.source,1000);
+  if(!answer)return {status:400,data:{error:'Напишите ответ'}};
+  if(!source)return {status:400,data:{error:'Пояснение к ответу слишком длинное'}};
   const result=await db('rpc/studkab_clarification_answer','POST',{p_request:input.id,p_actor:user.id,p_id:input.questionId,p_answer:answer,p_source:source});
   return result.error?{status:409,data:result}:{data:{question:result}};
  }
