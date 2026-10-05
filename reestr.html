@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=17"></script><script src="push.js?v=4"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=3"></script><script src="registered-study.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script><script src="request-workflow.js?v=3"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="file-prep.js?v=1"></script><script src="clarifications.js?v=4"></script><script src="registered-study.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1559,12 +1559,38 @@ function b64dec(s){
   return decodeURIComponent(out);
 }
 function validateRequest(rec){
-  var fields = ["topic", "workType", "discipline", "univ", "faculty", "kafedra", "city", "student", "group", "supervisor", "program", "form", "course", "deadline", "requirements", "org", "methodNotes", "contact"];
+  var fields = ["topic", "workType", "discipline", "univ", "faculty", "kafedra", "city", "student", "group", "supervisor", "program", "form", "course", "deadline", "requirements", "org", "methodNotes", "contact", "link"];
   fields.forEach(function(k){
     if (rec[k] != null && (typeof rec[k] !== "string" || rec[k].length > 20000)) throw new Error("bad field");
   });
   if (!rec.topic || !rec.topic.trim() || checkBackup({items:[rec], refs:[]})) throw new Error("bad request");
   return rec;
+}
+// ROUTE-03, R3-A: заявка по форме. Программа не изучает файлы; карточка показывает сведения
+// для титульного листа и материалы, исполнитель открывает их сам.
+function r3Title(p){var k=String(p.k||'').trim(),d=String(p.d||'').trim();return d&&k?d+' — '+k.charAt(0).toLowerCase()+k.slice(1):d||k||'Новое задание';}
+var R3_STEPS=[{key:'received',label:'Получена'},{key:'questions',label:'Вопросы'},{key:'work',label:'В работе'},{key:'delivered',label:'Передана'},{key:'done',label:'Сдана'}];
+function r3Workflow(x){
+ var files=Array.isArray(x.attachments)?x.attachments.length:null,what=files===null?'материалы':files?files+' '+plural(files,'файл','файла','файлов'):'';
+ if(x.link)what=what?what+' и ссылку на папку в облаке':'ссылку на папку в облаке';
+ return {step:1,key:'r3-received',title:'Новая заявка — откройте материалы',copy:'Студент прислал '+what+'. Посмотрите материалы и сведения для титульного листа. Если чего-то не хватает — задайте вопрос студенту.',action:'r3-materials',label:'Открыть материалы',blocker:'',complete:false,steps:R3_STEPS};
+}
+var R3_ROWS=[['workType','Вид работы'],['discipline','Дисциплина'],['univ','Вуз'],['kafedra','Кафедра'],['program','Направление подготовки'],['form','Форма обучения'],['group','Курс и группа'],['student','Фамилия, имя, отчество'],['supervisor','Преподаватель']];
+function r3TitleText(x){return R3_ROWS.map(function(r){return r[1]+': '+(x[r[0]]||'не указано');}).join('\n');}
+function r3Overview(x){
+ return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'+lab('Для титульного листа')+'<button type="button" class="mini" data-act="r3-copy" data-id="'+esc(x.id)+'">Скопировать</button></div>'+
+  R3_ROWS.map(function(r){return '<div class="stat"><span>'+r[1]+'</span><b'+(x[r[0]]?'':' class="mut"')+'>'+esc(x[r[0]]||'не указано')+'</b></div>';}).join('')+
+  (x.deadline?'<div class="stat"><span>Когда нужна работа</span><b>'+esc(ruDate(x.deadline))+'</b></div>':'')+
+  (x.requirements?lab('Пожелания студента')+'<p>'+esc(x.requirements)+'</p>':'')+r3LinkHtml(x);
+}
+function r3LinkHtml(x){return x.link?lab('Ссылка на папку в облаке')+'<p><a href="'+esc(x.link)+'" target="_blank" rel="noopener noreferrer">'+esc(x.link)+'</a></p><p class="hint">Копия материалов по ссылке появится на следующем этапе.</p>':'';}
+function r3FileKind(a){var t=a.content_type||'';return /^image\//.test(t)?'Фото':/pdf/.test(t)?'PDF':/spreadsheet/.test(t)?'Excel':/word/.test(t)?'Word':'Файл';}
+async function loadR3(x){
+ if(!window.Oblako||!Oblako.requestApi)throw Error('Войдите в аккаунт реестра');
+ var expectedData=D,identity=Oblako.identity();
+ function current(){if(D!==expectedData||identity!==Oblako.identity())throw Error('Аккаунт изменился. Откройте заявку заново.');}
+ await loadMaterialRevision(x);current();await loadAttachmentContext(x);current();
+ var questions=await Oblako.requestApi({action:'clarification-list',id:x.id});current();x.clarifications=questions.questions||[];x.passports=[];render();
 }
 function fromPayload(p){
   if (!p || typeof p !== "object" || Array.isArray(p) || checkSafeIds(p, 0)) throw new Error("bad payload");
@@ -1574,7 +1600,7 @@ function fromPayload(p){
     id: p.id || uid("rq"),
     added: today(),
     status: "new",
-    topic: p.t || (p.route==='received'?'Материалы получены — тема ещё не изучена':''), workType: p.k || "", discipline: p.d || "",
+    topic: p.t || (p.route==='r3'?r3Title(p):p.route==='received'?'Материалы получены — тема ещё не изучена':''), workType: p.k || "", discipline: p.d || "",
     univ: p.u || "", faculty: p.fc || "", kafedra: p.kf || "", city: p.ct || "",
     student: p.n || "", group: p.g || "", supervisor: p.s || "",
     program: p.pr || "", form: p.fo || "", course: p.co || "",
@@ -1582,7 +1608,7 @@ function fromPayload(p){
     org: p.org || "", methodNotes: p.mn || "", contact: p.cn || "",
     format: { mTop:f.mt, mRight:f.mr, mBottom:f.mb, mLeft:f.ml,
               font:f.fn, size:f.sz, spacing:f.sp, indent:f.ind },
-    note: "", receivedBeforeAnalysis:p.route==='received'
+    note: "", receivedBeforeAnalysis:p.route==='received', route3:p.route==='r3', link: typeof p.lk==='string'?p.lk:""
   });
 }
 function intake(){
@@ -1887,8 +1913,8 @@ function counts(){
   ORDER.forEach(function(s){ c[s] = D.items.filter(function(x){ return x.status===s }).length });
   return c;
 }
-var STAGE_FILTERS=[['requirements','Требования'],['preparation','Подготовка'],['quality','Проверка'],['delivery','К передаче'],['delivered','Передано'],['cancelled','Отменено']];
-function stageBucket(x){var key=requestWorkflow(x).key;return key==='intake'||key==='passport'?'requirements':key==='external-review'?'quality':key;}
+var STAGE_FILTERS=[['new','Новые'],['requirements','Требования'],['preparation','Подготовка'],['quality','Проверка'],['delivery','К передаче'],['delivered','Передано'],['cancelled','Отменено']];
+function stageBucket(x){var key=requestWorkflow(x).key;return key==='r3-received'?'new':key==='intake'||key==='passport'?'requirements':key==='external-review'?'quality':key;}
 function stageCounts(){var c={all:D.items.length};STAGE_FILTERS.forEach(function(q){c[q[0]]=D.items.filter(function(x){return stageBucket(x)===q[0];}).length;});return c;}
 function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
@@ -2050,6 +2076,7 @@ function loadStudySummary(x){
  Oblako.requestApi({action:'registered-study-state',id:x.id}).then(function(r){x.studySummary=StudRegisteredStudy.summary(r.study);}).catch(function(){x.studySummary={state:'error'};}).finally(function(){studyLoads.delete(x);render();});
 }
 function requestWorkflow(x){
+ if(x.route3&&!x.serverMissing&&x.status!=='off')return r3Workflow(x);
  if(x.receivedBeforeAnalysis)return studyWorkflow(x);
  if(x.serverMissing)return {step:1,key:'cancelled',title:'Заявка отсутствует на сервере',copy:'Локальная карточка сохранена для проверки. Серверные действия недоступны; после сверки удалите её кнопкой «удалить» в обзоре.',action:null,label:'',blocker:'',complete:false,steps:RequestWorkflow.steps};
  if(x.materialRevision&&x.materialRevision.state==='open')return {step:1,key:'intake',title:'Ожидаются дополнительные материалы',copy:'Студент завершит загрузку в своём кабинете. После этого проверьте комплект и новую версию паспорта.',action:'materials-refresh',label:'Обновить материалы',blocker:x.materialRevision.reason||'',complete:false,steps:RequestWorkflow.steps};
@@ -2091,7 +2118,7 @@ async function loadAttachmentContext(x){
  rows.forEach(function(a){var head='Файл: '+a.file_name+'; категория: '+a.category+'; SHA-256: '+a.file_hash;var block=head+'\n'+String(a.extracted_text||'').trim();if(a.category==='sources')sources.push(block);else blocks.push(block);});
  doc.attachmentMaterials=blocks.join('\n\n---\n\n');
  doc.attachmentSources=sources.join('\n\n---\n\n');
- x.attachments=rows.map(function(a){return {id:a.id,category:a.category,file_name:a.file_name,size_bytes:a.size_bytes,file_hash:a.file_hash,created_at:a.created_at};});
+ x.attachments=rows.map(function(a){return {id:a.id,category:a.category,file_name:a.file_name,content_type:a.content_type||'',size_bytes:a.size_bytes,file_hash:a.file_hash,created_at:a.created_at};});
  x.attachmentMaterialRevision=result.materialRevision;
  x.intakeContext=result.intake||null;
  x._attachmentsLoaded=true;return x.attachments;
@@ -2317,7 +2344,7 @@ function viewItem(id){
   if(x.serverMissing)return '<button type="button" class="mini" data-act="back">← Заявки</button><h1>'+esc(requestLabel(x))+' — '+esc(x.topic||'Тема не указана')+'</h1>'+card('<p role="status">Эта заявка отсутствует на сервере. Локальная карточка сохранена, но обработка и передача недоступны.</p><p class="hint">Если вам нужны местные заметки или текст, сохраните копию реестра в разделе «Ещё». После проверки удалите эту карточку.</p><button type="button" class="del" data-act="delete" data-id="'+esc(x.id)+'">Удалить локальную карточку</button>');
   if(x.receivedBeforeAnalysis&&!x.studySummary)loadStudySummary(x);
   if(x.requestNumber&&(!Array.isArray(x.passports)||!x.materialRevision)&&!passportLoads.has(x)){
-    passportLoads.add(x);setTimeout(function(){loadPassports(x).catch(function(e){toast(e.message||'Не удалось создать паспорт');}).finally(function(){passportLoads.delete(x);});},0);
+    passportLoads.add(x);setTimeout(function(){(x.route3?loadR3(x):loadPassports(x)).catch(function(e){toast(e.message||(x.route3?'Не удалось загрузить материалы':'Не удалось создать паспорт'));}).finally(function(){passportLoads.delete(x);});},0);
   }
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
   var r = x.refId ? refById(x.refId) : findRef(x);
@@ -2340,7 +2367,7 @@ function viewItem(id){
                  : '<span class="mut">Контакт не указан</span>') +
     '</div></header>';
 
-  var overview=lab("Основное") + row("Тип работы", x.workType) + row("Дисциплина", x.discipline) +
+  var overview=x.route3?r3Overview(x):lab("Основное") + row("Тип работы", x.workType) + row("Дисциплина", x.discipline) +
     row("Вуз", x.univ) + row("Срок", x.deadline ? ruDate(x.deadline) : "") + row("Группа", x.group);
   var panel=x.requestNumber?'<section data-test-delivery-host hidden></section>'+workflowCard(x)+(x.deliveryState&&x.deliveryState.last?card(deliveryHistory(x)):''):card(lab('Следующее действие')+'<p class="hint">Заявка добавлена вручную. Серверная передача в кабинет студента недоступна.</p><button type="button" class="btn" data-act="doc-open" data-id="'+esc(x.id)+'">Открыть документ</button>','workflow-next');
   h+='<div class="request-workspace"><aside class="request-action" aria-label="Следующее действие">'+panel+'</aside><div class="request-content"><div class="request-tabs" role="tablist" aria-label="Разделы заявки">'+[['overview','Обзор'],['requirements','Требования'],['materials','Материалы'],['result','Документ'],['delivery','Проверка'],['history','Версии и история']].map(function(t){return '<button type="button" role="tab" id="request-tab-'+t[0]+'" aria-controls="request-panel-'+t[0]+'" aria-selected="'+(defaultGroup===t[0])+'" tabindex="'+(defaultGroup===t[0]?'0':'-1')+'" data-act="request-tab" data-key="'+t[0]+'" data-id="'+esc(x.id)+'">'+t[1]+'</button>';}).join('')+'</div>';
@@ -2361,13 +2388,15 @@ function viewItem(id){
   }
   if (r && r.verified) requirements += '<div class="chips"><button type="button" class="chip" data-act="ref-open" data-id="'+r.id+'">Требования вуза ✓</button></div>';
   var materials='<p class="hint">Материалы предоставляет студент. Здесь можно просмотреть и скачать полученные файлы.</p>';
-  if(Array.isArray(x.attachments))materials += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(a.category==='unclassified'?'Ещё не изучен':a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
+  if(Array.isArray(x.attachments))materials += lab('Файлы студента')+(x.attachments.length?'<div class="passport-list">'+x.attachments.map(function(a){return '<div class="passport-item"><span>'+esc(x.route3?r3FileKind(a):a.category==='unclassified'?'Ещё не изучен':a.category)+' · '+Math.ceil(a.size_bytes/1024)+' КБ</span><b>'+esc(a.file_name)+'</b><button type="button" class="mini" data-act="attachment-download" data-id="'+esc(x.id)+'" data-attachment="'+esc(a.id)+'">Скачать</button></div>';}).join('')+'</div>':'<p class="hint">Файлы к заявке не приложены.</p>');
   else materials+='<p class="hint">'+(x.requestNumber?'Список файлов ещё не получен. Обновите материалы.':'У этой ручной заявки нет файлов из кабинета студента.')+'</p>';
+  if(x.route3)materials+=r3LinkHtml(x);
   if(x.requestNumber)materials+='<button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить материалы</button>';
   if(x.intakeContext){var ic=x.intakeContext;materials+='<details><summary>Сведения и требования из общей загрузки</summary><p class="hint">'+(ic.stale?'После отправки сведения изменились; исходный анализ показан только как история.':'Кандидаты из документов, не утверждённый паспорт. Ответы студента сохранены отдельно.')+'</p>'+(ic.analysis.requirements||[]).map(function(q){return '<p class="small">'+esc(q.value)+(q.condition?'<br>Условие: '+esc(q.condition):'')+'<br>'+q.refs.map(function(r){return esc(r.fileName||'Примечание студента')+': '+esc(r.quote);}).join('<br>')+'</p>';}).join('')+'</details>';}
   if(x.requestNumber)materials+='<div style="margin-top:12px"><p role="status">'+esc(x.materialRevision&&x.materialRevision.state==='open'?'Ожидаются дополнительные материалы: '+x.materialRevision.reason:x.materialRevision?(x.materialRevision.state==='initial'?'Первичный комплект ещё можно дополнить из кабинета студента.':'Комплект закрыт для изменений после начала проверки.'):'Состояние дополнения ещё не проверено.')+'</p><button type="button" class="chip" data-act="materials-reopen" data-id="'+esc(x.id)+'">'+(x.materialRevision&&x.materialRevision.state==='open'?'Посмотреть запрос дополнения':'Запросить дополнение материалов')+'</button></div>';
   h+=group('materials','Материалы',materials);
-  if(x.requestNumber) requirements = passportContent(x)+'<details class="requirement-original"><summary>Исходные сведения заявки и требования вуза</summary>'+requirements+'</details>';
+  if(x.route3) requirements = '<p class="hint">Требования этой работы — в материалах студента. Программа не составляет их автоматически.</p>'+'<details class="requirement-original"><summary>Исходные сведения заявки</summary>'+requirements+'</details>';
+  else if(x.requestNumber) requirements = passportContent(x)+'<details class="requirement-original"><summary>Исходные сведения заявки и требования вуза</summary>'+requirements+'</details>';
   h += group("requirements","Требования и материалы",requirements,defaultGroup==="requirements");
 
   var progress = '<details class="request-maintenance"><summary>Заметка и управление карточкой</summary>' +
@@ -2798,12 +2827,14 @@ document.addEventListener("click", function(ev){
     document.querySelectorAll('.request-panel').forEach(function(panel){panel.hidden=panel.id!=='request-panel-'+key;});return;
   }
   if(act==='list-page'){listPage=Number(el.dataset.page)||1;render();document.querySelector('.registry-pagination').setAttribute('tabindex','-1');document.querySelector('.registry-pagination').focus();return;}
-  if(act==='materials-refresh'){var mx=item(id);if(!mx)return;mx._attachmentsLoaded=false;el.disabled=true;loadPassports(mx).then(function(){render();}).catch(function(err){toast(err.message||'Не удалось обновить материалы');}).finally(function(){el.disabled=false;});return;}
+  if(act==='materials-refresh'){var mx=item(id);if(!mx)return;mx._attachmentsLoaded=false;el.disabled=true;(mx.route3?loadR3(mx):loadPassports(mx)).then(function(){render();}).catch(function(err){toast(err.message||'Не удалось обновить материалы');}).finally(function(){el.disabled=false;});return;}
   if(act==='materials-reopen'){openMaterialRevision(item(id));return;}
   if(act==='request-kind-correct'){correctRequestKind(item(id));return;}
 
   if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
+  if (act === "r3-copy"){ var rc = item(id); if (rc) copyText(r3TitleText(rc)); return; }
+  if (act === "r3-materials"){ requestTabs[id]='materials'; return render(); }
   if (act === "attachment-download") {var aid=el.getAttribute('data-attachment');el.disabled=true;Oblako.requestApi({action:'attachment-download',id:id,attachmentId:aid}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Не удалось скачать файл');}).finally(function(){el.disabled=false;});return;}
   if(['attach-word','review-word','deliver-result'].includes(act)){var checked=item(id);if(checked){var missing=materialManifestIssues(checked,(checked.passports||[])[0]);if(missing.length)return toast(missing.join(' '));}}
   if (act === "attach-word") return StudResults.attach(item(id));

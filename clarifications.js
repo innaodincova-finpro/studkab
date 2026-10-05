@@ -14,16 +14,13 @@
   if(/^REQ_/.test(id))return 'Условие из документов';
   return 'Уточнение по работе';
  }
- var FORMATS={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
  function when(value){var d=new Date(value);return isNaN(d)?'':d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})+' в '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
  async function fileBody(file){
-  var ext=String(file.name).toLowerCase().split('.').pop(),type=FORMATS[ext];
-  if(!type)throw Error('Можно приложить файл Word, PDF или Excel');
-  if(file.size<1||file.size>5242880)throw Error('Размер файла — до 5 МБ');
-  var bytes=new Uint8Array(await file.arrayBuffer());
+  // R3-A: к ответу можно приложить и фото; крупное фото уменьшается автоматически.
+  var f=await root.StudFilePrep.prepare(file),type=f.type,bytes=new Uint8Array(f.bytes);
   var hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(function(x){return x.toString(16).padStart(2,'0');}).join('');
   var binary='',chunk=32768;for(var i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
-  return {fileName:file.name,contentType:type,sizeBytes:file.size,fileHash:hash,base64:btoa(binary)};
+  return {fileName:f.name,contentType:type,sizeBytes:f.size,fileHash:hash,base64:btoa(binary)};
  }
  async function show(o){
   var api=o.api,esc=o.esc,student=!o.executor,title=student?'Вопросы исполнителя':'Уточнения по работе';
@@ -43,7 +40,7 @@
      '<div class="lab">Вопрос '+(i+1)+' из '+open.length+'</div><p style="margin:4px 0"><b>'+esc(topic(q.item_id,o.labels))+'</b></p>'+
      '<p style="white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 10px">'+esc(q.question)+'</p>'+
      '<div class="fld"><label><span style="display:block;margin-bottom:6px">Ваш ответ</span><textarea data-answer="'+id+'" maxlength="3500" placeholder="Если точного ответа нет, напишите, что знаете">'+esc(drafts[q.id]||'')+'</textarea></label></div>'+
-     '<div><label class="mini" style="cursor:pointer">Приложить файл<input type="file" hidden data-answer-file="'+id+'" accept=".docx,.pdf,.xlsx"></label> <span data-attached-list="'+id+'">'+fileChips(q.id)+'</span></div>'+
+     '<div><label class="mini" style="cursor:pointer">Приложить файл<input type="file" hidden data-answer-file="'+id+'" accept="'+root.StudFilePrep.ACCEPT+'"></label> <span data-attached-list="'+id+'">'+fileChips(q.id)+'</span></div>'+
     '</section>';}).join('');
    var doneHtml=done.length?'<details style="margin-top:8px"'+(open.length?'':' open')+'><summary>Отправленные ответы ('+done.length+')</summary>'+done.map(function(q){
     return '<section style="border-top:1px solid #DCE6EE;padding:12px 0"><p style="margin:0"><b>'+esc(topic(q.item_id,o.labels))+'</b></p><p style="white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0" class="hint">'+esc(q.question)+'</p><p style="white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0"><b>Ваш ответ:</b> '+esc(q.answer)+'</p><small class="hint">Отправлен '+esc(when(q.answered_at))+'</small></section>';

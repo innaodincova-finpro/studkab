@@ -26,7 +26,7 @@ export async function attachmentAction(input,user,deps){
  }
  if(input.action==='attachment-context'){
   if(!permit.executor)return {status:403,data:{error:'Материалы доступны исполнителю'}};
-  const rows=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,supersedes,category,file_name,size_bytes,file_hash,extracted_text,created_at,intake_file_id&order=created_at.asc');
+  const rows=await deps.db('studkab_request_attachments?request_id=eq.'+input.id+'&select=id,supersedes,category,file_name,content_type,size_bytes,file_hash,extracted_text,created_at,intake_file_id&order=created_at.asc');
   const intake=rows.some(r=>r.intake_file_id)?await deps.db('rpc/studkab_intake_request_context','POST',{p_request:input.id}):null;
   return {status:200,data:{attachments:currentAttachments(rows),materialRevision:permit.row.revision,...(intake?{intake}:{})}};
  }

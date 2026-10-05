@@ -3,13 +3,15 @@ import {intakeRead} from './intake-reading.mjs';
 import {analysisPlan} from '../_shared/intake-analysis.mjs';
 import {intakeSubmission} from './intake-submission.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
+// R3-A: фото и снимки экрана принимаются наравне с документами; программа их не читает.
+const formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp'};
+export const INTAKE_FILE_LIMIT=20;
 const missing={status:404,data:{error:'Черновик не найден'}};
 const safeFile=f=>({id:f.id,file_name:f.file_name,content_type:f.content_type,size_bytes:f.size_bytes,file_hash:f.file_hash,state:f.state,supersedes:f.supersedes,created_at:f.created_at,saved_at:f.saved_at,roles:f.roles||[],read_status:f.read_status||'idle',read_version:f.read_version||null,read_summary:f.read_result?{status:f.read_result.status,summary:f.read_result.summary||{},warnings:f.read_result.warnings}:f.read_version?{status:f.read_status,summary:f.read_summary||{},warnings:f.read_warnings||[]}:null});
 function resultError(r){
  if(r?.missing)return missing;
  if(r?.conflict)return {status:409,data:{error:'Черновик изменился. Откройте материалы заново'}};
- if(r?.limited)return {status:429,data:{error:'В черновике можно сохранить до 8 файлов по 5 МБ'}};
+ if(r?.limited)return {status:429,data:{error:'В черновике можно сохранить до 20 файлов по 5 МБ'}};
  if(r?.quota)return {status:429,data:{error:'Черновик достиг 100 МБ с учётом прежних версий. Сохранённые материалы не удалены'}};
  if(r?.invalid)return {status:400,data:{error:'Проверьте сведения черновика'}};
  return null;
@@ -18,13 +20,15 @@ export async function intakeBytes(input){
  const name=typeof input.fileName==='string'?input.fileName.replace(/[\\/\u0000-\u001f]/g,'_').trim():'';
  const ext=name.toLowerCase().split('.').at(-1),type=formats[ext],size=input.sizeBytes,hash=input.fileHash,encoded=input.base64;
  if(!name||name.length>180||!type||input.contentType!==type||!Number.isSafeInteger(size)||size<1||size>5242880||
-  typeof hash!=='string'||!/^[a-f0-9]{64}$/.test(hash)||typeof encoded!=='string'||encoded.length!==4*Math.ceil(size/3)||!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))throw Error('Проверьте файл: DOCX, PDF или XLSX, до 5 МБ');
+  typeof hash!=='string'||!/^[a-f0-9]{64}$/.test(hash)||typeof encoded!=='string'||encoded.length!==4*Math.ceil(size/3)||!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))throw Error('Проверьте файл: Word, PDF, Excel или фото (JPEG, PNG, WebP), до 5 МБ');
  let raw;try{raw=atob(encoded);}catch{throw Error('Не удалось прочитать выбранный файл');}
  const bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));
  const actual=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(x=>x.toString(16).padStart(2,'0')).join('');
  if(bytes.length!==size||actual!==hash)throw Error('Файл передан не полностью. Повторите загрузку');
  // Only a container signature here; semantic readability is checked in step 3.
- const signature=type==='application/pdf'?new TextDecoder().decode(bytes.slice(0,5))==='%PDF-':bytes[0]===80&&bytes[1]===75&&bytes[2]===3&&bytes[3]===4;
+ const ascii=(a,b)=>new TextDecoder().decode(bytes.slice(a,b));
+ const signature=type==='application/pdf'?ascii(0,5)==='%PDF-':type==='image/jpeg'?bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff:
+  type==='image/png'?bytes[0]===0x89&&ascii(1,4)==='PNG':type==='image/webp'?ascii(0,4)==='RIFF'&&ascii(8,12)==='WEBP':bytes[0]===80&&bytes[1]===75&&bytes[2]===3&&bytes[3]===4;
  if(!signature)throw Error('Содержимое не соответствует формату файла');
  return {name,type,size,hash,bytes};
 }
@@ -35,7 +39,7 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   if(draft?.denied)return {status:403,data:{error:'Нет доступа'}};
   if(!uuid.test(draft?.id))throw Error('Intake unavailable');
   const files=await db('studkab_intake_files?draft_id=eq.'+draft.id+'&order=created_at.asc,id.asc&select=id,file_name,content_type,size_bytes,file_hash,state,supersedes,created_at,saved_at,roles,read_status,read_version,read_summary:read_result->summary,read_warnings:read_result->warnings');
-  return {data:{draft:{id:draft.id,state:draft.state,revision:draft.revision,notes:draft.notes,receiptMode:draft.reception_version===2},files:files.map(safeFile),limits:{files:8,bytes:5242880,historyBytes:104857600}}};
+  return {data:{draft:{id:draft.id,state:draft.state,revision:draft.revision,notes:draft.notes,receiptMode:draft.reception_version===2},files:files.map(safeFile),limits:{files:INTAKE_FILE_LIMIT,bytes:5242880,historyBytes:104857600}}};
  }
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный черновик'}};
  if(['intake-receive-state','intake-receive'].includes(input.action))return intakeReceive(input,user,{db,transferIntake});

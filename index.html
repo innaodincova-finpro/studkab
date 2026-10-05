@@ -16,10 +16,10 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=18"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=3"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script>
+<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=4"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script>
 <script src="push.js?v=3"></script>
 <script src="intake-confirmation-ui.js?v=2"></script>
-<script src="intake-ui.js?v=6"></script>
+<script src="file-prep.js?v=1"></script><script src="intake-ui.js?v=7"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -2009,7 +2009,7 @@ function openNewTask(workId, dateIso){
 function viewWorks(){
   var filtered = D.works.filter(function(w){ return workFilter === "all" ? true : getStatus(w) === workFilter; });
   var chips = [{k:"all",t:"Все"}].concat(WORK_FILTERS.slice(1));
-  return '<div style="margin-bottom:14px"><button type="button" class="b b-main" data-act="intake-materials">Загрузить материалы</button><p class="small">Сохранить документы к будущей заявке или вернуться к загруженному комплекту.</p></div><div class="pick" style="margin-bottom:12px">' +
+  return '<div style="margin-bottom:14px"><button type="button" class="b b-main" data-act="intake-materials">Отправить задание</button><p class="small">Приложите задание от преподавателя файлами, фото или ссылкой на облако и заполните сведения для титульного листа.</p></div><div class="pick" style="margin-bottom:12px">' +
     chips.map(function(f){
       var n = f.k === "all" ? D.works.length : D.works.filter(function(w){ return getStatus(w) === f.k }).length;
       if (f.k !== "all" && !n) return "";
@@ -2329,6 +2329,8 @@ function openCloud(){
 
 /* ---------- ОКНА СНИЗУ ---------- */
 var modalSequence=0;
+// R3-A: название работы без темы — «Дисциплина — вид работы».
+function r3Title(p){var k=String(p.k||'').trim(),d=String(p.d||'').trim();return d&&k?d+' — '+k.charAt(0).toLowerCase()+k.slice(1):d||k||'Новое задание';}
 function openModal(html, onMount){
   var opener=document.activeElement;
   var wrap = document.createElement("div");
@@ -2699,7 +2701,7 @@ document.addEventListener("click", function(ev){
     return StudIntake.open({api:Oblako.requestApi,openModal:openModal,esc:esc,owner:function(){return KEY;},identity:Oblako.identity,submitted:function(s){
       if(D.works.some(function(w){return w.req&&w.req.serverId===s.id;}))return;
       var p=s.payload;if(!p)throw Error('Не получены сведения отправленной заявки');
-      change(function(){D.works.push({id:p.id,topic:p.t||(p.route==='received'?'Заявка №'+s.number+' — материалы получены':''),student:p.n,group:p.g,created:today(),deadline:p.dl,requirements:p.rq,status:'draft',
+      change(function(){D.works.push({id:p.id,topic:p.t||(p.route==='r3'?r3Title(p):p.route==='received'?'Заявка №'+s.number+' — материалы получены':''),student:p.n,group:p.g,created:today(),deadline:p.dl,requirements:p.rq,status:'draft',
         format:{org:'',univ:p.u,faculty:p.fc,kafedra:p.kf,city:p.ct,year:'',workType:p.k,discipline:p.d,supervisor:p.s,program:p.pr,form:p.fo,course:p.co,font:'',size:null,mTop:null,mRight:null,mBottom:null,mLeft:null,spacing:null,indent:null},
         structure:emptyStructure(),tasks:[],req:{id:p.id,serverId:s.id,number:s.number,contact:p.cn,org:p.org,notes:p.mn,sent:today(),sentBy:'direct',filesPending:false,preserveSubmittedFields:true,intake:true}});});
     }});
