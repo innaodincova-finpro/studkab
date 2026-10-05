@@ -282,3 +282,27 @@ test('R3-D: student hands in, then sends the teacher remarks with a photo; the c
  await expect(page.locator('[data-student-progress]')).toContainText('Работа на доработке');
  expect(await page.evaluate(()=>calls.find(c=>c.action==='r3-return').comment)).toBe('Задание 3: показать решение подробно.');
 });
+test('R3-E1: the work page shows the five-step route; passed steps fold into one line on a phone',async({page})=>{
+ await page.setViewportSize({width:390,height:900});
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  Oblako.mode='cloud';window.st={stage:'r3_received',openQuestions:0,route:'r3',returns:0};
+  Oblako.requestApi=async d=>{if(d.action==='student-progress')return structuredClone(st);if(d.action==='clarification-unread')return {question:0};throw Error('Unexpected '+d.action);};
+  // Работа без отметки маршрута (созданная до этой версии) переключается на маршрут по ответу сервера.
+  change(function(){D.works.push({id:'w-r3',topic:'Математика — практические задания',created:today(),deadline:'2027-01-25',status:'draft',format:{workType:'Практические задания',discipline:'Математика'},structure:emptyStructure(),tasks:[],req:{id:'intake_x',serverId:'11111111-1111-4111-8111-111111111111',number:15,sent:'2026-10-05'}});});
+  tab='works';openWorkId='w-r3';render();
+ });
+ const route=page.locator('[data-r3-route]');
+ await expect(route.locator('.r3s.cur')).toContainText('Шаг 2 из 5 · Вопросы');await expect(route.locator('.r3s.cur')).toContainText('Заявка у исполнителя');
+ await expect(route.locator('.r3s.fut')).toHaveCount(3);await expect(route.locator('.r3passed')).toContainText('Пройдено: Задание');
+ await expect(route.locator('.r3s.done').first()).toBeHidden();
+ expect(await page.evaluate(()=>work('w-r3').req.route)).toBe('r3');
+ await expect(page.locator('#fab')).toBeHidden();
+ await page.evaluate(()=>{st={stage:'needs_answer',openQuestions:2,route:'r3',returns:0};refreshStudentProgress();});
+ await expect(route.locator('.r3s.cur')).toContainText('Ответьте на вопрос исполнителя');await expect(route.locator('[data-act="student-clarifications"]')).toBeVisible();
+ await page.evaluate(()=>{st={stage:'r3_in_work',openQuestions:0,route:'r3',returns:0};refreshStudentProgress();});
+ await expect(route.locator('.r3s.cur')).toContainText('Шаг 3 из 5 · В работе');await expect(route.locator('.r3passed')).toContainText('Задание, Вопросы');
+ await page.setViewportSize({width:1280,height:900});
+ await expect(route.locator('.r3s.done')).toHaveCount(2);await expect(route.locator('.r3s.done').first()).toBeVisible();await expect(route.locator('.r3passed')).toBeHidden();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
