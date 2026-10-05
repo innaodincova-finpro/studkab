@@ -40,7 +40,7 @@ test('UX-02a: новый файл к ответу сохраняется оди�
  const r2=await registeredAddAction(await addPayload(),user,again);assert.equal(r2.data.duplicate,true);assert.equal(again.saved.length,0);assert.deepEqual(again.calls,['rpc/studkab_registered_add_reserve']);
 });
 test('UX-02a: закрытые материалы, предел файлов, дубликат, чужой доступ и подмена пути отклоняются до записи',async()=>{
- for(const [reply,status,text] of [[{locked:true,reason:'Изменения материалов закрыты'},409,'закрыты'],[{limit:true},409,'8 файлов'],[{conflict:true,kind:'duplicate'},409,'уже есть в заявке'],[{conflict:true,kind:'replaced'},409,'прежняя редакция'],[{quota:true},429,'100 МБ'],[{missing:true},404,'не найдены']]){
+ for(const [reply,status,text] of [[{locked:true,reason:'Изменения материалов закрыты'},409,'закрыты'],[{limit:true},409,'20 файлов'],[{conflict:true,kind:'duplicate'},409,'уже есть в заявке'],[{conflict:true,kind:'replaced'},409,'прежняя редакция'],[{quota:true},429,'100 МБ'],[{missing:true},404,'не найдены']]){
   const d=addDeps({reserve:()=>reply}),r=await registeredAddAction(await addPayload(),user,d);assert.equal(r.status,status);assert.match(r.data.error,new RegExp(text));assert.equal(d.saved.length,0);}
  assert.equal((await registeredAddAction(await addPayload(),user,addDeps({isMember:async()=>false}))).status,403);
  const bad=await addPayload();bad.id='x';assert.equal((await registeredAddAction(bad,user,addDeps())).status,400);

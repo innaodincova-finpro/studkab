@@ -21,7 +21,7 @@ async function fixture({enabled=true,ready=true,kitText=text}={}){
  const {file}=await rpc('studkab_intake_reserve',{p_student:student,p_draft:draft.id,p_name:'Assignment.docx',p_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',p_size:100,p_hash:'a'.repeat(64),p_supersedes:null});
  await rpc('studkab_intake_finish',{p_student:student,p_draft:draft.id,p_file:file.id,p_hash:file.file_hash});
  const legacy=await rpc('studkab_intake_analysis_source',{p_draft:draft.id});
- await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql')+read('20261003230000_route02_checklist_live.sql')+read('20261004100000_route02_ux01_replace_pending.sql')+read('20261004140000_route02_ux02a_answer_file.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
+ await db.exec('reset role');await db.exec(migration+read('20260921165603_c084_requirement_clarifications.sql')+read('20260926114639_c120_dialog_events.sql')+read('20261002015751_route02_private_questions.sql')+read('20261002020616_route02_reviewed_classification.sql')+read('20261002031300_route02_kit_review.sql')+read('20261002052253_route02_private_dialog.sql')+read('20261002150000_route02_kit_whole.sql')+read('20261003100000_route02_intake_ledger_access.sql')+read('20261003130000_route02_registered_replace.sql')+read('20261003230000_route02_checklist_live.sql')+read('20261004100000_route02_ux01_replace_pending.sql')+read('20261004140000_route02_ux02a_answer_file.sql')+read('20261005090000_route03_a_request_form.sql'));await db.exec('revoke all on studkab_gen_reconciliations from service_role');await db.exec('revoke update on studkab_request_attachments from service_role;grant update(category,extracted_text) on studkab_request_attachments to service_role');if(enabled)await db.exec('update studkab_intake_analysis_policy set enabled=true,limit_microusd=10000000;update studkab_gen_budget set limit_microusd=10000000');await db.exec('set role service_role');
  assert.deepEqual(await rpc('studkab_intake_analysis_source',{p_draft:draft.id}),legacy);
  const snap=await rpc('studkab_intake_receive_snapshot',{p_student:student,p_draft:draft.id});
  const receipt=await rpc('studkab_intake_receive',{p_student:student,p_draft:draft.id,p_revision:snap.revision,p_deadline:'2026-10-30',p_description:'',p_contact:'synthetic@example.invalid'});
@@ -537,7 +537,7 @@ test('UX-02a: файл к ответу добавляется в приняту�
   const after=await f.state();assert.notEqual(after.manifest,before.manifest);
  }finally{await f.db.close();}
 });
-test('UX-02a: после начала подготовки добавление закрыто; предел 8 файлов; прямая вставка в обход функции отклоняется',async()=>{
+test('UX-02a, R3-A: после начала подготовки добавление закрыто; предел 20 файлов; прямая вставка в обход функции отклоняется',async()=>{
  const f=await fixture();try{
   const XLSX='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   // Прямая вставка нового файла черновика в обход studkab_registered_add_finish отклоняется и при свободных местах.
@@ -547,9 +547,52 @@ test('UX-02a: после начала подготовки добавление 
   const r0=await f.rpc('studkab_registered_replace_reserve',{p_student:student,p_request:f.receipt.id,p_attachment:f.file.id,p_name:'v2.docx',p_type:DOCX,p_size:120,p_hash:'e'.repeat(64)});
   await f.rpc('studkab_registered_replace_finish',{p_student:student,p_request:f.receipt.id,p_file:r0.file.id,p_hash:'e'.repeat(64)});
   assert.deepEqual(await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'Assignment.docx',p_type:DOCX,p_size:100,p_hash:'a'.repeat(64)}),{conflict:true,kind:'replaced'});
-  for(let i=0;i<7;i++){const h=String(i+1).repeat(64);const r=await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f'+i+'.xlsx',p_type:XLSX,p_size:10,p_hash:h});await f.rpc('studkab_registered_add_finish',{p_student:student,p_request:f.receipt.id,p_file:r.file.id,p_hash:h});}
+  for(let i=0;i<19;i++){const h=(i+16).toString(16).repeat(32);const r=await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f'+i+'.xlsx',p_type:XLSX,p_size:10,p_hash:h});await f.rpc('studkab_registered_add_finish',{p_student:student,p_request:f.receipt.id,p_file:r.file.id,p_hash:h});}
   assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f9.xlsx',p_type:XLSX,p_size:10,p_hash:'b'.repeat(64)})).limit,true);
   await f.mutate("insert into studkab_gen_jobs(request_id) values('"+f.receipt.id+"')");
   assert.equal((await f.rpc('studkab_registered_add_reserve',{p_student:student,p_request:f.receipt.id,p_name:'f9.xlsx',p_type:XLSX,p_size:10,p_hash:'c'.repeat(64)})).locked,true);
+ }finally{await f.db.close();}
+});
+// ROUTE-03, R3-A: заявка по форме — сведения для титульного листа, фото, ссылка на облако.
+const R3_DETAILS={k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',s:''};
+async function r3Draft(f,files){
+ const d=await f.rpc('studkab_intake_open',{p_student:student});const saved=[];
+ for(const [name,type,hash] of files){const {file}=await f.rpc('studkab_intake_reserve',{p_student:student,p_draft:d.id,p_name:name,p_type:type,p_size:20,p_hash:hash,p_supersedes:null});await f.rpc('studkab_intake_finish',{p_student:student,p_draft:d.id,p_file:file.id,p_hash:hash});saved.push(file);}
+ const snap=await f.rpc('studkab_intake_receive_snapshot',{p_student:student,p_draft:d.id});
+ const receive=(details=R3_DETAILS,link='',extra={})=>f.rpc('studkab_intake_receive_form',{p_student:student,p_draft:d.id,p_revision:snap.revision,p_deadline:'2027-01-25',p_description:'Решить любые 2 задания',p_contact:'synthetic@example.invalid',p_details:JSON.stringify(details),p_link:link,...extra});
+ return {d,saved,receive};
+}
+test('R3-A: заявка по форме несёт сведения для титульного листа, фото прикрепляется и не уходит на чтение документов',async()=>{
+ const f=await fixture({enabled:false});try{
+  const r=await r3Draft(f,[['Страница.jpg','image/jpeg','1'.repeat(64)],['Практика1.pdf','application/pdf','2'.repeat(64)]]);
+  assert.deepEqual(await r.receive({...R3_DETAILS,fo:' '}),{invalid:true});
+  assert.deepEqual(await r.receive({...R3_DETAILS,zz:'x'}),{invalid:true});
+  assert.deepEqual(await r.receive({...R3_DETAILS,d:'x'.repeat(201)}),{invalid:true});
+  assert.deepEqual(await r.receive(R3_DETAILS,'https://evil.example/disk'),{invalid:true});
+  assert.equal((await f.db.query("select count(*) n from studkab_requests")).rows[0].n,1);
+  const ok=await r.receive(R3_DETAILS,'https://disk.yandex.ru/d/Mt7abc');
+  assert.equal(ok.submitted,true);assert.equal(ok.payload.route,'r3');assert.equal(ok.payload.t,'');
+  for(const k of ['k','d','u','kf','pr','fo','g','n'])assert.equal(ok.payload[k],R3_DETAILS[k]);
+  assert.equal(ok.payload.lk,'https://disk.yandex.ru/d/Mt7abc');assert.equal(ok.payload.dl,'2027-01-25');assert.equal(ok.payload.rq,'Решить любые 2 задания');
+  const rows=(await f.db.query('select content_type,category from studkab_request_attachments where request_id=$1 order by file_name',[ok.id])).rows;
+  assert.deepEqual(rows.map(x=>x.content_type),['application/pdf','image/jpeg']);assert.ok(rows.every(x=>x.category==='unclassified'));
+  assert.equal(await f.rpc('studkab_intake_work_pending'),true);
+  const claim=await f.rpc('studkab_registered_read_claim',{p_version:'intake-reader-1'});
+  assert.equal(claim.file.content_type,'application/pdf');
+  assert.equal(await f.rpc('studkab_registered_read_claim',{p_version:'intake-reader-1'}),null);
+  assert.equal(await f.rpc('studkab_intake_work_pending'),false);
+  // Повтор отправки не создаёт вторую заявку.
+  assert.equal((await r.receive(R3_DETAILS,'https://disk.yandex.ru/d/Mt7abc')).duplicate,true);
+  assert.equal((await f.db.query("select count(*) n from studkab_requests")).rows[0].n,2);
+ }finally{await f.db.close();}
+});
+test('R3-A: можно отправить только ссылку на облако; без файлов и без ссылки заявка не создаётся',async()=>{
+ const f=await fixture({enabled:false});try{
+  const r=await r3Draft(f,[]);
+  assert.deepEqual(await r.receive(R3_DETAILS,''),{incomplete:true});
+  const ok=await r.receive(R3_DETAILS,'https://drive.google.com/drive/folders/1AbC');
+  assert.equal(ok.submitted,true);assert.equal((await f.db.query('select count(*) n from studkab_request_attachments where request_id=$1',[ok.id])).rows[0].n,0);
+  const foreign=await f.rpc('studkab_intake_receive_form',{p_student:other,p_draft:r.d.id,p_revision:1,p_deadline:'2027-01-25',p_description:'',p_contact:'x@example.invalid',p_details:JSON.stringify(R3_DETAILS),p_link:''});
+  assert.equal(foreign.missing,true);
  }finally{await f.db.close();}
 });

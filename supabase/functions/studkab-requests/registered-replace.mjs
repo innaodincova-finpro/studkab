@@ -10,7 +10,7 @@ function failure(r){
  if(r?.same)return {status:409,data:{error:'Этот файл уже загружен в заявку и стоит на этом месте. Замена не нужна',same:true}};
  if(r?.conflict&&r.kind==='duplicate')return {status:409,data:{error:'Такой же файл уже есть в заявке на другом месте. Выберите другой файл'}};
  if(r?.conflict)return {status:409,data:{error:'Этот файл уже заменён новой редакцией. Закройте окно и откройте материалы заново'}};
- if(r?.limit)return {status:409,data:{error:'В заявке уже 8 файлов. Замените один из них новой редакцией'}};
+ if(r?.limit)return {status:409,data:{error:'В заявке уже 20 файлов. Замените один из них новой редакцией'}};
  if(r?.quota)return {status:429,data:{error:'Достигнут предел 100 МБ с учётом прежних редакций'}};
  if(r?.invalid)return {status:400,data:{error:'Проверьте файл: DOCX, PDF или XLSX, до 5 МБ'}};
  return null;

@@ -1,8 +1,12 @@
+// ROUTE-03, R3-A: окно «Отправьте задание» и карточка новой заявки в реестре.
 const {test,expect}=require('@playwright/test');
+const DETAILS={k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна'};
+const pdf=n=>({name:n+'.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-'+n)});
+const jpg={name:'Страница учебника.jpg',mimeType:'image/jpeg',buffer:Buffer.from([0xff,0xd8,0xff,0xe0,1,2,3])};
 async function setup(page,{restored=false}={}){
  await page.goto('http://127.0.0.1:4173/index.html');
  await page.evaluate(()=>{
-  window.receiptCalls=[];Oblako.mode='cloud';
+  window.receiptCalls=[];window.receiptInputs=[];Oblako.mode='cloud';
   Oblako.requestApi=async input=>{
    receiptCalls.push(input.action);
    let state=JSON.parse(localStorage.getItem('receipt-fixture:'+KEY)||'null')||{draft:{id:crypto.randomUUID(),state:'open',revision:1,receiptMode:true},files:[]};
@@ -10,12 +14,13 @@ async function setup(page,{restored=false}={}){
    if(input.action==='intake-open'){save();return state;}
    if(input.action==='intake-upload'){
     if(window.failReceiptUpload)throw Error('Нет сети');
-    if(!state.files.some(f=>f.file_hash===input.fileHash)){state.files.push({id:crypto.randomUUID(),file_name:input.fileName,file_hash:input.fileHash,state:'saved',read_status:'idle',size_bytes:input.sizeBytes});state.draft.revision++;save();}
+    if(!state.files.some(f=>f.file_hash===input.fileHash)){state.files.push({id:crypto.randomUUID(),file_name:input.fileName,content_type:input.contentType,file_hash:input.fileHash,state:'saved',read_status:'idle',size_bytes:input.sizeBytes});state.draft.revision++;save();}
     return {file:state.files.at(-1)};
    }
    if(input.action==='intake-receive-state')return {submission:state.receipt||{revision:state.draft.revision,files:state.files.length,canReceive:true}};
    if(input.action==='intake-receive'){
-    if(!state.receipt){state.receipt={submitted:true,ready:true,id:crypto.randomUUID(),number:8,payload:{route:'received',id:'intake_'+state.draft.id,t:'',n:'',u:'',k:'',d:'',dl:input.deadline,rq:input.description,cn:'student@example.invalid'}};state.writes=(state.writes||0)+1;save();}
+    receiptInputs.push(input);
+    if(!state.receipt){state.receipt={submitted:true,ready:true,id:crypto.randomUUID(),number:15,payload:{route:'r3',id:'intake_'+state.draft.id,t:'',...input.details,lk:input.link,dl:input.deadline,rq:input.description,cn:'student@example.invalid'}};state.writes=(state.writes||0)+1;save();}
     if(window.loseReceiptReply)throw Error('Ответ потерян');return {submission:state.receipt};
    }
    throw Error('Unexpected API: '+input.action);
@@ -25,54 +30,79 @@ async function setup(page,{restored=false}={}){
  if(restored)await expect(page.locator('#intakeFiles')).toBeDisabled();
  else await expect(page.locator('#intakeFiles')).toBeEnabled();
 }
-test('saved files can be sent before reading/AI and server receipt is the only success signal',async({page})=>{
- await setup(page);await page.locator('#intakeFiles').setInputFiles({name:'Материалы.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-unread')});
- await expect(page.locator('[data-intake-receive]')).toBeEnabled();
- await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-status]')).toContainText('Укажите срок');
+async function fill(page,details=DETAILS){
+ for(const [k,v] of Object.entries(details)){const el=page.locator('[data-intake-detail="'+k+'"]');if(await el.evaluate(e=>e.tagName)==='SELECT')await el.selectOption(v);else await el.fill(v);}
+}
+test('R3-A: files and photo are saved without reading; required details are explained; one receipt carries the title-page details',async({page})=>{
+ await setup(page);await page.locator('#intakeFiles').setInputFiles([pdf('Практика1'),jpg]);
+ await expect(page.locator('[data-intake-status]')).toContainText('Материалы сохранены: 2');
+ await expect(page.locator('[data-intake-files]')).toContainText('фото');
+ await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-status]')).toContainText('Заполните: вид работы, дисциплина, вуз');
+ await fill(page);await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-status]')).toContainText('Укажите, когда нужна работа');
  expect(await page.evaluate(()=>receiptCalls.includes('intake-receive'))).toBe(false);
- await page.locator('#intakeDeadline').fill('2026-10-30');
+ await page.locator('#intakeDeadline').fill('2027-01-25');await page.locator('#intakeDescription').fill('Любые 2 задания');
  await page.evaluate(()=>{const b=document.querySelector('[data-intake-receive]');b.click();b.click();});
- await expect(page.locator('[data-intake-status]')).toContainText('Заявка №8 принята');
+ await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
  await expect(page.locator('[data-intake-receive]')).toBeDisabled();await expect(page.locator('#intakeFiles')).toBeDisabled();
+ const sent=await page.evaluate(()=>receiptInputs);expect(sent.length).toBe(1);
+ expect(sent[0].details).toMatchObject(DETAILS);expect(sent[0].link).toBe('');expect(sent[0].deadline).toBe('2027-01-25');expect(sent[0].description).toBe('Любые 2 задания');
  expect(await page.evaluate(()=>receiptCalls.some(a=>['intake-read','intake-analyze','intake-confirmation-save'].includes(a)))).toBe(false);
- expect(await page.evaluate(()=>lastReceipt.payload.t)).toBe('');
- expect(await page.evaluate(()=>receiptCalls.filter(a=>a==='intake-receive').length)).toBe(1);
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('receipt-fixture:'+KEY)).writes)).toBe(1);
 });
-test('pending local file disables sending; retry retains the original, lost reply/reopen restores one receipt',async({page})=>{
- await setup(page);await page.evaluate(()=>window.failReceiptUpload=true);
- await page.locator('#intakeFiles').setInputFiles({name:'Материалы.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-pending')});
- await expect(page.locator('[data-intake-status]')).toContainText('Часть файлов');await expect(page.locator('[data-intake-receive]')).toBeDisabled();
+test('R3-A: link instead of files — only listed cloud services are accepted',async({page})=>{
+ await setup(page);await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');
+ await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-status]')).toContainText('Приложите файлы задания или ссылку');
+ await page.locator('#intakeLink').fill('https://example.com/folder');await page.locator('[data-intake-receive]').click();
+ await expect(page.locator('[data-intake-status]')).toContainText('Яндекс Диск, Google Диск или Облако Mail.ru');
+ await page.locator('#intakeLink').fill('https://disk.yandex.ru/d/Mt7abc');await page.locator('[data-intake-receive]').click();
+ await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
+ expect(await page.evaluate(()=>receiptInputs[0].link)).toBe('https://disk.yandex.ru/d/Mt7abc');
+});
+test('R3-A: entered details survive closing the window; pending file blocks sending; lost reply/reopen restores one receipt',async({page})=>{
+ await setup(page);await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');
+ await page.locator('[data-intake-dialog] .close').click();
+ await page.evaluate(()=>StudIntake.open({api:Oblako.requestApi,openModal,esc,owner:()=>KEY,identity:Oblako.identity}));
+ await expect(page.locator('[data-intake-detail="n"]')).toHaveValue(DETAILS.n);await expect(page.locator('[data-intake-detail="fo"]')).toHaveValue(DETAILS.fo);
+ await page.evaluate(()=>window.failReceiptUpload=true);
+ await page.locator('#intakeFiles').setInputFiles(pdf('Задание'));
+ await expect(page.locator('[data-intake-status]')).toContainText('Часть файлов');await expect(page.locator('[data-intake-receive]')).toBeDisabled();await expect(page.locator('[data-intake-retry]')).toBeVisible();
  await page.evaluate(()=>{window.failReceiptUpload=false;window.loseReceiptReply=true;});
  await page.locator('[data-intake-retry]').click();await expect(page.locator('[data-intake-receive]')).toBeEnabled();
- await page.locator('#intakeDeadline').fill('2026-10-30');await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-status]')).toContainText('Заявка №8 принята');
+ await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
  await setup(page,{restored:true});await expect(page.locator('[data-intake-status]')).toContainText('уже отправлена');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('receipt-fixture:'+KEY)).writes)).toBe(1);
 });
-test('receipt is displayed in registry with a visible study blocker and original download',async({page})=>{
- await page.goto('http://127.0.0.1:4173/reestr.html');
- const result=await page.evaluate(()=>{
-  const x=fromPayload({id:'receipt-ui',route:'received',t:'',n:'',u:'',dl:'2026-10-30',cn:'student@example.invalid'});
-  D.items=[x];openId=x.id;render();return {topic:x.topic,stage:requestWorkflow(x)};
+test('R3-A: a large photo is reduced to JPEG under 5 MB; narrow screen has no horizontal scroll',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await setup(page);
+ const r=await page.evaluate(async()=>{
+  const c=document.createElement('canvas');c.width=3000;c.height=2200;const x=c.getContext('2d'),img=x.createImageData(3000,2200);
+  for(let i=0;i<img.data.length;i++)img.data[i]=(i*2654435761)>>>24;x.putImageData(img,0,0);
+  const blob=await new Promise(r=>c.toBlob(r,'image/png'));const file=new File([blob],'Снимок.png',{type:'image/png'});
+  const out=await StudFilePrep.prepare(file);return {before:file.size,name:out.name,type:out.type,size:out.size};
  });
- expect(result.topic).toContain('тема ещё не изучена');expect(result.stage.title).toBe('Заявка получена');expect(result.stage.blocker).toContain('изучения');expect(result.stage.complete).toBe(false);
+ expect(r.before).toBeGreaterThan(1572864);expect(r.type).toBe('image/jpeg');expect(r.name).toBe('Снимок.jpg');expect(r.size).toBeLessThanOrEqual(5242880);
+ expect(await page.evaluate(()=>document.querySelector('.sheet-in').scrollWidth<=document.querySelector('.sheet-in').clientWidth+1)).toBe(true);
 });
-
-// UX-01: карточка «Следующее действие» показывает состояние изучения и открывает окно изучения.
-test('registry card reflects finished study and opens the study window',async({page})=>{
+test('R3-A: registry card shows title-page details and materials, opens no study and no passport',async({page})=>{
  await page.goto('http://127.0.0.1:4173/reestr.html');
- await page.evaluate(()=>{
+ const r=await page.evaluate(async()=>{
   window.cardCalls=[];
-  const study={state:'done',manifest:'a'.repeat(64),analysisId:'22222222-2222-4222-8222-222222222222',dialog:[],files:[],result:{fields:{},requirements:[],roles:[]},proposals:[1,2].map(n=>({id:'4444444'+n+'-4444-4444-8444-444444444444',analysis_id:'22222222-2222-4222-8222-222222222222',state:'pending',question:'Вопрос '+n,reason:'Причина '+n,evidence:[]}))};
-  Oblako.requestApi=async d=>{cardCalls.push(d.action);if(d.action==='registered-study-state')return {study:structuredClone(study)};throw Error('Unexpected '+d.action);};
-  const x=fromPayload({id:'receipt-card',route:'received',t:'',n:'',u:'',dl:'2026-10-30',cn:'student@example.invalid'});x.requestNumber=2;
+  Oblako.requestApi=async d=>{cardCalls.push(d.action);
+   if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:3}};
+   if(d.action==='attachment-context')return {attachments:[{id:'a1',category:'unclassified',file_name:'Практика1.pdf',content_type:'application/pdf',size_bytes:2048,file_hash:'a'.repeat(64)},{id:'a2',category:'unclassified',file_name:'Страница.jpg',content_type:'image/jpeg',size_bytes:4096,file_hash:'b'.repeat(64)}],materialRevision:3};
+   if(d.action==='clarification-list')return {questions:[]};
+   throw Error('Unexpected '+d.action);};
+  const x=fromPayload({id:'r3-card',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',s:'',lk:'https://disk.yandex.ru/d/Mt7abc',dl:'2027-01-25',rq:'Любые 2 задания',cn:'student@example.invalid'});x.requestNumber=15;
   D.items=[x];openId=x.id;render();
+  return {topic:x.topic,bucket:stageBucket(x),copy:r3TitleText(x)};
  });
- const button=page.locator('.request-action [data-act="registered-study"]');
- await expect(button).toHaveText('Решить вопросы (2)');
- await expect(page.locator('.request-action')).toContainText('Нужно решить вопросы по комплекту');
- await expect(page.locator('.request-action')).not.toContainText('Показать материалы');
- await button.click();
- await expect(page.getByRole('dialog')).toContainText('Нужно ваше решение по 2 вопросам');
- await expect(page.locator('[data-proposal-publish]')).toHaveCount(2);
+ expect(r.topic).toBe('Математика — практические задания');expect(r.bucket).toBe('new');
+ expect(r.copy).toContain('Дисциплина: Математика');expect(r.copy).toContain('Преподаватель: не указано');
+ await expect(page.locator('.request-action')).toContainText('Новая заявка — откройте материалы');
+ await expect(page.locator('.request-action')).toContainText('2 файла и ссылку на папку в облаке');
+ await expect(page.locator('#request-panel-overview')).toContainText('Курс и группа');await expect(page.locator('#request-panel-overview')).toContainText('26М214в');
+ await expect(page.locator('#request-panel-overview a[href="https://disk.yandex.ru/d/Mt7abc"]')).toHaveAttribute('rel','noopener noreferrer');
+ await page.locator('.request-action [data-act="r3-materials"]').click();
+ await expect(page.locator('#request-panel-materials')).toContainText('Фото · 4 КБ');
+ expect(await page.evaluate(()=>cardCalls.some(a=>/passport|registered-study/.test(a)))).toBe(false);
 });

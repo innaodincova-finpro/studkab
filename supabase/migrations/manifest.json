@@ -601,6 +601,14 @@
       "version": "20261004140000",
       "name": "route02_ux02a_answer_file",
       "sha256": "cb628134df87b7280562fa0602b8100d2d183e82de7930a82fd9ad9a3d44d438"
+    },
+    {
+      "file": "20261005090000_route03_a_request_form.sql",
+      "version": "20261005090000",
+      "name": "route03_a_request_form",
+      "status": "pending",
+      "note": "ROUTE-03 R3-A: заявка по форме — фото, 20 файлов, сведения для титульного листа, ссылка на облако; фото не читаются",
+      "sha256": "14ae7823fcde5d0ef5961caeb0e08894239360785ce762be3c51cbba1cf55d9e"
     }
   ],
   "production_reconciled_at": "2026-09-23"

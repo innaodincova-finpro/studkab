@@ -57,10 +57,10 @@ async function setup(page){
  });
 }
 async function open(page){await page.evaluate(()=>{StudIntake.open({api:Oblako.requestApi,openModal,esc,owner:()=>KEY,identity:Oblako.identity});});await expect(page.locator('#intakeFiles')).toBeEnabled();}
-async function saved(page,n){await expect(page.locator('[data-intake-download]')).toHaveCount(n);await expect(page.locator('[data-intake-status]')).toContainText('Материалы сохранены');}
+async function saved(page,n){await expect(page.locator('[data-intake-download]')).toHaveCount(n);await expect(page.locator('[data-intake-status]')).toContainText(n?'Материалы сохранены':'Приложите файлы задания');}
 test('one choice saves DOCX/PDF/XLSX before work creation; reopening/reload retain originals without publishing',async({page})=>{
  await setup(page);await page.evaluate(()=>{tab='works';render();});
- await page.getByRole('button',{name:'Загрузить материалы',exact:true}).click();await expect(page.locator('#intakeFiles')).toBeEnabled();
+ await page.getByRole('button',{name:'Отправить задание',exact:true}).click();await expect(page.locator('#intakeFiles')).toBeEnabled();
  await page.locator('#intakeFiles').setInputFiles([word,pdf('Методичка'),excel]);await saved(page,3);
  await page.locator('[data-intake-dialog] .close').click();await open(page);await saved(page,3);
  await setup(page);await open(page);await saved(page,3);
@@ -115,87 +115,5 @@ test('Safari Word and Excel originals survive network failure and page reload',a
   await setup(page);await open(page);await saved(page,2);
  }finally{await browser.close();}
 });
-
-test('automatic reading shows page-specific blockers and preserves saved originals on failed read and retry',async({page})=>{
- await setup(page);await open(page);await page.locator('#intakeFiles').setInputFiles([word,pdf('Скан')]);await saved(page,2);
- await expect(page.locator('[data-intake-files]')).toContainText('Текст и структура прочитаны');await expect(page.locator('[data-intake-files]')).toContainText('страница 2');
- await page.evaluate(()=>{window.failReads=true;});await page.locator('#intakeFiles').setInputFiles(excel);await saved(page,3);await expect(page.locator('[data-intake-files]')).toContainText('Чтение прервано');
- await page.evaluate(()=>{window.failReads=false;});await page.getByRole('button',{name:'Повторить чтение',exact:true}).click();await saved(page,3);await expect(page.locator('[data-intake-files]')).not.toContainText('Чтение прервано');
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).writes)).toBe(3);
- expect(await page.evaluate(()=>calls.some(c=>['submit','request-publish'].includes(c.action)))).toBe(false);
-});
-
-test('extracted fields show conflicts and source locations without creating a work; narrow layout escapes document content',async({page})=>{
- await page.setViewportSize({width:390,height:844});await setup(page);
- await page.evaluate(()=>{
-  const value=(text,fileName,source)=>({value:text,condition:'',refs:[{fileName,source,quote:text}]});
-  window.analysisResult={
-   fields:{t:{label:'Тема',status:'conflict',values:[value('<img onerror=alert(1)>','Задание.docx',{paragraph:2}),value('Другая тема','Методичка.pdf',{page:3})]}},
-   requirements:[value('Не использовать ИИ','Методичка.pdf',{page:4})]
-  };
- });
- await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
- const box=page.locator('[data-intake-analysis]');await expect(box).toContainText('Найдено в документах');await expect(box).toContainText('Требуется уточнение');await expect(box).toContainText('Другая тема');
- await box.getByText('Источники и исправление',{exact:true}).first().click();await box.getByText('Источники',{exact:true}).first().click();await expect(box).toContainText('абзац 2');expect(await box.locator('img').count()).toBe(0);
- expect(await page.evaluate(()=>D.works.length)).toBe(0);
- expect(await page.evaluate(()=>document.querySelector('.sheet-in').scrollWidth<=document.querySelector('.sheet-in').clientWidth+1)).toBe(true);
-});
-
-async function knownAnalysis(page,questions=false){await page.evaluate(questions=>{
- const fields={};for(const [key,label] of Object.entries({t:'Тема',k:'Вид работы',u:'Вуз',n:'ФИО студента',d:'Предмет',dl:'Срок'}))fields[key]={label,status:'candidate',values:[{value:key==='d'?'Менеджмент':'Сведение '+key,condition:'',refs:[{fileName:'Задание.docx',source:{paragraph:1},quote:'Сведение '+key}]}]};
- if(questions){fields.dl={label:'Срок',status:'missing',values:[]};fields.n.status='conflict';fields.n.values.push({value:'Другое имя',condition:'',refs:[]});}
- window.analysisResult={fields,requirements:questions?[{value:'Использовать метод при наличии данных',condition:'при наличии данных',refs:[{fileName:'Методичка.pdf',source:{page:2},quote:'при наличии данных'}]}]:[]};
- },questions);}
-test('short confirmation accepts found facts without retyping; lost response and reload retain one confirmation without sending',async({page})=>{
- await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
- const card=page.locator('[data-intake-confirmation]');await expect(card).toContainText('Менеджмент');await expect(card.locator('[data-answer]:visible')).toHaveCount(0);
- await page.evaluate(()=>{window.loseAnswerResponse=true;});await card.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(card.locator('[data-answer-status]')).toContainText('Подтверждение сохранено');
- await setup(page);await knownAnalysis(page);await open(page);await expect(page.locator('[data-answer-status]')).toContainText('Сведения подтверждены');
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).confirmation.revision)).toBe(1);
- expect(await page.evaluate(()=>D.works.length)).toBe(0);expect(await page.evaluate(()=>calls.some(c=>['submit','request-publish'].includes(c.action)))).toBe(false);
-});
-test('important answers survive closing during offline edit and resume; unknown is explicit and conditional requirements are preserved',async({page})=>{
- await page.setViewportSize({width:390,height:844});await setup(page);await knownAnalysis(page,true);await page.evaluate(()=>{window.failAnswerWrites=true;});await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
- await page.locator('[data-answer="f:n"]').selectOption('custom');await page.locator('[data-custom="f:n"]').fill('<img onerror=alert(1)> Имя');await page.locator('[data-answer="f:dl"]').selectOption('unknown');await page.locator('[data-answer="c:requirement:0"]').selectOption('unknown');
- await expect.poll(()=>page.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('studkab-intake-answers',1);r.onsuccess=()=>resolve(r.result);});const r=await new Promise(resolve=>{const tx=db.transaction('answers'),req=tx.objectStore('answers').getAll();req.onsuccess=()=>resolve(req.result);});db.close();return r.some(x=>x.owner===KEY&&x.answers['f:n']?.value==='<img onerror=alert(1)> Имя'&&x.answers['f:dl']?.type==='unknown'&&x.answers['c:requirement:0']?.type==='unknown');})).toBe(true);
- await page.locator('[data-intake-dialog] .close').click();await setup(page);await knownAnalysis(page,true);await open(page);await expect(page.locator('[data-answer-status]')).toContainText('Ответы сохранены в кабинете');await expect(page.locator('[data-custom="f:n"]')).toHaveValue('<img onerror=alert(1)> Имя');await expect(page.locator('[data-answer="f:dl"]')).toHaveValue('unknown');
- await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-answer-status]')).toContainText('Сведения подтверждены');expect(await page.locator('[data-intake-confirmation] img').count()).toBe(0);expect(await page.evaluate(()=>document.querySelector('.sheet-in').scrollWidth<=document.querySelector('.sheet-in').clientWidth+1)).toBe(true);
-});
-test('a second tab cannot silently replace saved answers; conflict shows other values before explicit overwrite',async({page,context})=>{
- await setup(page);await knownAnalysis(page,true);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
- const second=await context.newPage();await setup(second);await knownAnalysis(second,true);await open(second);await expect(second.locator('[data-answer="f:n"]')).toBeVisible();
- await page.locator('[data-answer="f:n"]').selectOption('custom');await page.locator('[data-custom="f:n"]').fill('Первая вкладка');await expect(page.locator('[data-answer-status]')).toContainText('Ответы сохранены в кабинете');
- await second.locator('[data-answer="f:n"]').selectOption('custom');await second.locator('[data-custom="f:n"]').fill('Вторая вкладка');await expect(second.locator('[data-answer-conflict]')).toContainText('Первая вкладка');
- expect(await second.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).confirmation.answers['f:n'].value)).toBe('Первая вкладка');await second.getByRole('button',{name:'Сохранить мои ответы вместо этих'}).click();await expect(second.locator('[data-answer-status]')).toContainText('Ответы сохранены в кабинете');
- expect(await second.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).confirmation.answers['f:n'].value)).toBe('Вторая вкладка');await second.close();
-});
-
-test('switching accounts never restores another student confirmation answers',async({page})=>{
- await setup(page);await page.evaluate(()=>{cloudSwitchUser('answers-a');window.failAnswerWrites=true;});await knownAnalysis(page,true);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.locator('[data-answer="f:n"]').selectOption('custom');await page.locator('[data-custom="f:n"]').fill('Приватный ответ первого студента');
- await page.getByRole('button',{name:'Сохранить ответы',exact:true}).click();await expect(page.locator('[data-answer-status]')).toContainText('Ввод сохранён на устройстве');
- await page.evaluate(()=>{cloudSwitchUser('answers-b');window.failAnswerWrites=false;});await expect(page.locator('[data-intake-dialog]')).toHaveCount(0);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await expect(page.locator('[data-intake-confirmation]')).not.toContainText('Приватный ответ первого студента');await expect(page.locator('[data-answer="f:n"]')).toHaveValue('');
-});
-
-test('clearing a custom correction restores the document value in the summary and saved confirmation',async({page})=>{
- await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);
- const summary=page.locator('[data-effective="f:n"]'),field=summary.locator('..');await field.getByText('Источники и исправление',{exact:true}).click();await field.locator('[data-answer="f:n"]').selectOption('custom');await field.locator('[data-custom="f:n"]').fill('Уточнённое имя');await expect(summary).toHaveText('Уточнённое имя');
- await field.locator('[data-answer="f:n"]').selectOption('');await expect(summary).toHaveText('Сведение n');await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-answer-status]')).toContainText('Сведения подтверждены');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).confirmation.answers['f:n'])).toBeUndefined();
-});
-
-test('one send transfers the whole package and creates one linked work; lost reply and reopen recover the receipt',async({page})=>{
- await setup(page);await knownAnalysis(page);await page.evaluate(()=>{tab='works';render();});await page.getByRole('button',{name:'Загрузить материалы',exact:true}).click();await expect(page.locator('#intakeFiles')).toBeEnabled();
- await page.locator('#intakeFiles').setInputFiles([word,pdf('Методичка'),excel]);await saved(page,3);await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();
- await page.evaluate(()=>{window.loseSubmissionResponse=true;});await page.locator('[data-intake-send]').click();await expect(page.locator('[data-intake-confirmation]')).toContainText('Заявка №1 отправлена');
- expect(await page.evaluate(()=>D.works.length)).toBe(1);expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('mock-intake:'+KEY)).submissionWrites)).toBe(1);await expect(page.locator('#intakeFiles')).toBeDisabled();
- await page.locator('[data-intake-dialog] .close').click();await setup(page);await knownAnalysis(page);await page.evaluate(()=>{tab='works';render();});await page.getByRole('button',{name:'Загрузить материалы',exact:true}).click();await expect(page.locator('[data-intake-status]')).toContainText('уже отправлена');expect(await page.evaluate(()=>D.works.length)).toBe(1);expect(await page.evaluate(()=>calls.some(c=>c.action==='intake-submit'))).toBe(false);
-});
-test('offline sending retains confirmed package; retry sends once and unknown deadline is not submitted',async({page})=>{
- await page.setViewportSize({width:390,height:844});await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();
- await page.evaluate(()=>{window.failSubmission=true;});await page.locator('[data-intake-send]').click();await expect(page.locator('[data-send-status]')).toContainText('повтор не создаст');await expect(page.locator('#intakeFiles')).toBeEnabled();await page.evaluate(()=>{window.failSubmission=false;});await page.locator('[data-intake-send]').click();await expect(page.locator('[data-intake-confirmation]')).toContainText('Заявка №1 отправлена');
- await page.locator('[data-intake-dialog] .close').click();await page.evaluate(()=>{localStorage.removeItem('studkab-intake-submit:'+KEY);localStorage.removeItem('mock-intake:'+KEY);});await knownAnalysis(page,true);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.locator('[data-answer="f:n"]').selectOption('candidate:0');await page.locator('[data-answer="f:dl"]').selectOption('unknown');await page.locator('[data-answer="c:requirement:0"]').selectOption('unknown');await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeDisabled();await expect(page.locator('[data-submission]')).toContainText('срок');expect(await page.evaluate(()=>document.querySelector('.sheet-in').scrollWidth<=document.querySelector('.sheet-in').clientWidth+1)).toBe(true);
-});
-test('new local edits disable sending until reconfirmed; another account never sees a saved submission receipt',async({page})=>{
- await setup(page);await knownAnalysis(page);await open(page);await page.locator('#intakeFiles').setInputFiles(word);await saved(page,1);await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();
- const field=page.locator('[data-effective="f:n"]').locator('..');await field.getByText('Источники и исправление',{exact:true}).click();await field.locator('[data-answer="f:n"]').selectOption('custom');await field.locator('[data-custom="f:n"]').fill('Новый ответ');await expect(page.locator('[data-intake-send]')).toBeDisabled();await expect(page.locator('[data-answer-status]')).toContainText('Ответы сохранены в кабинете');await page.getByRole('button',{name:'Подтвердить сведения',exact:true}).click();await expect(page.locator('[data-intake-send]')).toBeEnabled();await page.locator('[data-intake-send]').click();await expect(page.locator('[data-intake-confirmation]')).toContainText('отправлена');
- await page.evaluate(()=>cloudSwitchUser('other-submit-owner'));await expect(page.locator('[data-intake-dialog]')).toHaveCount(0);await open(page);await expect(page.locator('[data-intake-status]')).not.toContainText('№1');expect(await page.evaluate(()=>calls.filter(c=>c.owner===KEY&&c.action==='intake-submission-state').length)).toBe(0);
-});
+// ROUTE-03 (05.10.2026): автоматическое чтение, подтверждение карточки и отправка через подтверждение
+// из окна убраны; заявка регистрируется по форме — см. tests/browser/intake-receive.spec.cjs.

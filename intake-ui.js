@@ -1,6 +1,35 @@
+// ROUTE-03, R3-A: окно «Отправьте задание» в кабинете студента.
+// Студент прикладывает файлы любого допустимого вида (Word, PDF, Excel, фото) и/или ссылку
+// на папку в облаке, заполняет сведения для титульного листа, срок и пожелания.
+// Программа файлы не читает: заявка регистрируется сразу, материалы открывает исполнитель.
 (function(global){
  'use strict';
- var types={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
+ var LIMIT=20;
+ var KINDS=['Практические задания','Лабораторная работа','Контрольная работа','Реферат','Эссе','Курсовая работа','Отчёт по практике','Выпускная квалификационная работа','Другое'];
+ var FORMS=['Очная','Очно-заочная','Заочная'];
+ var DETAILS=[
+  ['k','Вид работы',true,'select',KINDS],['d','Дисциплина',true,'text',null,200],
+  ['u','Вуз',true,'text',null,300,true],['kf','Кафедра',false,'text',null,300],
+  ['pr','Направление подготовки',false,'text',null,200],['fo','Форма обучения',true,'select',FORMS],
+  ['g','Курс и группа',true,'text',null,100],['n','Фамилия, имя, отчество',true,'text',null,200],
+  ['s','Преподаватель',false,'text',null,200]
+ ];
+ var LINK=/^https:\/\/(disk\.yandex\.(ru|com|by|kz)|yadi\.sk|disk\.360\.yandex\.ru|drive\.google\.com|docs\.google\.com|cloud\.mail\.ru)\/[^\s<>"]+$/;
+ var CSS='.r3f .sheet-in{max-width:760px}'+
+  '.r3f h2{margin:0 0 6px}.r3f .lead{font-size:14px;color:var(--ink,#22303F);margin:0 0 4px}'+
+  '.r3f .grp{border:1px solid var(--line,#DCE6EE);border-radius:16px;padding:14px 14px 6px;margin:14px 0 0;background:#FCFDFE}'+
+  '.r3f .grp h3{font-family:inherit;font-size:15px;margin:0 0 10px;font-weight:600;letter-spacing:0}.r3f .grp h3 small{font-weight:400;color:var(--mut,#6B7F92);font-size:13px;margin-left:6px}'+
+  '.r3f .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.r3f .wide{grid-column:1/-1}'+
+  '.r3f .field label{font-size:13px;font-weight:600;color:var(--ink,#22303F)}.r3f .req{color:#8F6A3A;margin-left:2px}'+
+  '.r3f input[type=text],.r3f input[type=url],.r3f input[type=date],.r3f select,.r3f textarea{width:100%;box-sizing:border-box}'+
+  '.r3f .or{display:flex;align-items:center;gap:10px;color:var(--mut,#6B7F92);font-size:13px;margin:6px 0 10px}.r3f .or:before,.r3f .or:after{content:"";flex:1;border-top:1px solid var(--line,#DCE6EE)}'+
+  '.r3f .addf{display:inline-flex;align-items:center;gap:8px;cursor:pointer;color:var(--accent,#2F6091);font-weight:500;font-size:14px;padding:8px 0}'+
+  '.r3f .addf input{position:absolute;width:1px;height:1px;opacity:0}'+
+  '.r3f .rowbtns .send{flex:0 0 auto;padding:13px 26px}@media(max-width:640px){.r3f .rowbtns .send{flex:1 1 auto}}.r3f .send{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}'+
+  '.r3f .next{border-top:1px solid var(--line,#DCE6EE);margin-top:16px;padding-top:12px}'+
+  '.r3f .next b{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut,#6B7F92);margin-bottom:4px}'+
+  '@media(max-width:640px){.r3f .grid{grid-template-columns:1fr}}';
+ function style(){if(!document.querySelector('style[data-r3-form]')){var s=document.createElement('style');s.setAttribute('data-r3-form','');s.textContent=CSS;document.head.appendChild(s);}}
  function database(){return new Promise(function(resolve,reject){
   var r=indexedDB.open('studkab-intake-queue',2);
   r.onupgradeneeded=function(){var store=r.result.objectStoreNames.contains('files')?r.transaction.objectStore('files'):r.result.createObjectStore('files',{keyPath:'key'});if(!store.indexNames.contains('owner'))store.createIndex('owner','owner');};
@@ -18,87 +47,66 @@
   });}finally{db.close();}
  }
  async function prepare(file,owner,replaces){
-  var ext=file.name.toLowerCase().split('.').pop(),type=types[ext];
-  if(!type||!file.size||file.size>5242880||file.name.length>180)throw Error(file.name+': выберите DOCX, PDF или XLSX до 5 МБ');
-  var bytes=await file.arrayBuffer(),view=new Uint8Array(bytes);
-  var valid=ext==='pdf'?new TextDecoder().decode(view.slice(0,5))==='%PDF-':view[0]===80&&view[1]===75&&view[2]===3&&view[3]===4;
-  if(!valid)throw Error(file.name+': содержимое не соответствует формату');
-  var digest=await crypto.subtle.digest('SHA-256',bytes),hash=Array.from(new Uint8Array(digest)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');
-  return {key:owner+':'+hash+':'+(replaces||''),owner:owner,fileHash:hash,fileName:file.name,contentType:type,sizeBytes:file.size,bytes:bytes,replacesId:replaces||null};
+  var f=await global.StudFilePrep.prepare(file);
+  var digest=await crypto.subtle.digest('SHA-256',f.bytes),hash=Array.from(new Uint8Array(digest)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');
+  return {key:owner+':'+hash+':'+(replaces||''),owner:owner,fileHash:hash,fileName:f.name,contentType:f.type,sizeBytes:f.size,bytes:f.bytes,replacesId:replaces||null};
  }
  function encoded(bytes){var view=new Uint8Array(bytes),parts=[];for(var i=0;i<view.length;i+=16384)parts.push(String.fromCharCode.apply(null,view.subarray(i,i+16384)));return btoa(parts.join(''));}
  function visible(files){var replaced=new Set(files.filter(function(f){return f.state==='saved'&&f.supersedes;}).map(function(f){return f.supersedes;}));return files.filter(function(f){return !replaced.has(f.id);});}
+ function kindLabel(type){return /^image\//.test(type||'')?'фото':/pdf/.test(type||'')?'PDF':/spreadsheet/.test(type||'')?'Excel':'Word';}
+ function fieldHtml(d,esc){
+  var id='intakeDetail-'+d[0],label='<label for="'+id+'">'+esc(d[1])+(d[2]?'<span class="req">*</span>':'')+'</label>',input;
+  if(d[3]==='select')input='<select id="'+id+'" data-intake-detail="'+d[0]+'"><option value="">Выберите</option>'+d[4].map(function(v){return '<option>'+esc(v)+'</option>';}).join('')+'</select>';
+  else input='<input type="text" id="'+id+'" data-intake-detail="'+d[0]+'" maxlength="'+d[5]+'"'+(d[0]==='s'?' placeholder="если известен"':'')+'>';
+  return '<div class="field'+(d[6]?' wide':'')+'">'+label+input+'</div>';
+ }
  async function open(options){
   document.querySelectorAll('[data-intake-dialog]').forEach(function(el){el.remove();});
-  var readWarnings={archive_limit:'Файл превышает предел распаковки. Разделите документ на части',damaged_archive:'Файл повреждён: сохраните его заново в Word или Excel',damaged_pdf:'PDF повреждён: загрузите исправленную текстовую версию',encrypted_pdf:'PDF защищён паролем: нужна доступная текстовая версия',unsafe_xml:'Файл содержит неподдерживаемые XML-объявления: сохраните его заново',result_limit:'Документ слишком большой для чтения: разделите его на части',time_limit:'Чтение превысило допустимое время: разделите документ на части',pdf_annotations:'Поля или примечания PDF требуют текстовой версии',undecodable_text:'Часть символов не распознана: загрузите Word или исправленную текстовую версию',pdf_image_page:'На странице PDF есть изображение: нужна текстовая версия',pdf_nontext_page:'Содержимое страницы PDF не прочитано: нужна текстовая версия',no_readable_text:'Читаемый текст не найден',word_field_cache:'Поля Word содержат сохранённый результат: требуется проверка',document_comments:'Замечания Word сохранены вместе с текстом',equation_layout:'Формулы Word требуют отдельной проверки',formula_cache_unverified:'Сохранённые результаты формул требуют проверки',formula_result_missing:'В формуле отсутствует сохранённый результат',cell_error:'В ячейке ошибка Excel',external_formula:'Формула с внешними данными не выполнялась',external_link:'Внешняя ссылка не открывалась',shared_formula_reference:'Общая формула: требуется проверка диапазона',non_text_content:'Изображения не прочитаны: нужна текстовая версия',tracked_changes:'Есть исправления Word: нужна согласованная версия',text_box_layout:'Текстовые поля Word требуют текстовой версии',non_cell_content:'Рисунки или примечания Excel не прочитаны',external_or_embedded_parts:'Вложенные или внешние данные не прочитаны',reading_unavailable:'Не удалось завершить чтение. Повторите чтение сохранённого файла'};
- function readingLabel(f){var state=f.read_status||'idle';return {idle:'Ожидает чтения',reading:'Чтение выполняется — откройте материалы позже',ready:'Текст и структура прочитаны',blocked:'Чтение неполное — нужна другая версия документа',failed:'Чтение прервано — можно повторить'}[state]||'Чтение не подтверждено';}
- var owner=options.owner(),identity=options.identity(),draft=null,files=[],busy=false,receiptUnknown=false,analysisTimer=null,confirmCleanup=null;
-  var wrap=options.openModal('<button type="button" class="close" data-x>✕</button><h2>Материалы к заявке</h2>'+
-   '<p class="small">Выберите все имеющиеся документы вместе. Не нужно распределять их по пунктам. Сохранённый комплект останется в вашем кабинете после выхода.</p>'+
-   '<div class="field"><label for="intakeFiles">Документы Word, PDF или Excel</label><input id="intakeFiles" type="file" multiple accept=".docx,.pdf,.xlsx" disabled></div>'+
-   '<p class="hint">До 8 файлов, до 5 МБ каждый. PDF должен содержать читаемый текст. Фотографии и сканы не подходят.</p>'+
+  style();
+  var esc=options.esc,owner=options.owner(),identity=options.identity(),draft=null,files=[],busy=false,receiptUnknown=false;
+  var wrap=options.openModal('<button type="button" class="close" data-x>✕</button><h2>Отправьте задание</h2>'+
+   '<p class="lead">Приложите задание от преподавателя и заполните сведения для титульного листа. Звёздочкой отмечено обязательное.</p>'+
    '<p class="hint" role="status" aria-live="polite" data-intake-status>Открываем сохранённые материалы…</p>'+
-   '<div data-intake-reception hidden><div class="field"><label for="intakeDeadline">Срок готовности</label><input id="intakeDeadline" type="date"></div><div class="field"><label for="intakeDescription">Что подготовить, если это неясно из документов</label><textarea id="intakeDescription" maxlength="500"></textarea></div><p class="hint">После отправки заявка сразу появится в реестре. Помощники изучат документы отдельно.</p><button type="button" class="b b-main" data-intake-receive disabled>Отправить заявку</button></div><div data-intake-files></div><div data-intake-analysis aria-live="polite"></div><p class="small">Это черновик материалов. Заявка ещё не отправлена, сведения из документов ещё не проверены.</p>'+
-   '<div class="rowbtns"><button type="button" class="b b-main" data-intake-retry disabled>Повторить сохранение</button><button type="button" class="b b-quiet" data-intake-read>Повторить чтение</button><button type="button" class="b b-quiet" data-x>Закрыть</button></div>');
-  wrap.setAttribute('data-intake-dialog','');
-  var status=wrap.querySelector('[data-intake-status]'),list=wrap.querySelector('[data-intake-files]'),input=wrap.querySelector('#intakeFiles'),retry=wrap.querySelector('[data-intake-retry]');
+   '<section class="grp"><h3>Задание от преподавателя<small>файлы или ссылка — как удобнее</small></h3>'+
+    '<div data-intake-files></div>'+
+    '<label class="addf">+ Добавить файлы<input id="intakeFiles" type="file" multiple accept="'+global.StudFilePrep.ACCEPT+'" disabled></label>'+
+    '<p class="hint">Word, PDF, Excel, фото и снимки экрана · до '+LIMIT+' файлов, каждый до 5 МБ. Крупные фото уменьшаются автоматически.</p>'+
+    '<button type="button" class="b b-quiet b-sm" data-intake-retry hidden style="display:none">Повторить сохранение</button>'+
+    '<div class="or">или</div>'+
+    '<div class="field"><label for="intakeLink">Ссылка на папку в облаке</label><input type="url" id="intakeLink" maxlength="500" placeholder="https://disk.yandex.ru/d/…" inputmode="url" autocomplete="off"></div>'+
+    '<p class="hint">Яндекс Диск, Google Диск, Облако Mail.ru. Доступ — «всем, у кого есть ссылка».</p>'+
+   '</section>'+
+   '<section class="grp"><h3>Для титульного листа</h3><div class="grid">'+DETAILS.map(function(d){return fieldHtml(d,esc);}).join('')+'</div></section>'+
+   '<div class="grid" style="margin-top:14px"><div class="field"><label for="intakeDeadline">Когда нужна работа<span class="req">*</span></label><input id="intakeDeadline" type="date"></div>'+
+   '<div class="field"><label for="intakeDescription">Пожелания — если нужно</label><textarea id="intakeDescription" maxlength="500" placeholder="Например: «Решить любые 2 задания из каждого практического»"></textarea></div></div>'+
+   '<div class="rowbtns"><button type="button" class="b send" data-intake-receive disabled>Отправить задание</button></div>'+
+   '<p class="hint">Заполненное сохраняется на этом устройстве — можно вернуться позже.</p>'+
+   '<div class="next"><b>Что будет дальше</b><span class="hint">Заявке присвоят номер. Исполнитель откроет материалы и, если чего-то не хватает, спросит здесь.</span></div>');
+  wrap.setAttribute('data-intake-dialog','');wrap.classList.add('r3f');
+  var status=wrap.querySelector('[data-intake-status]'),list=wrap.querySelector('[data-intake-files]'),input=wrap.querySelector('#intakeFiles'),retry=wrap.querySelector('[data-intake-retry]'),send=wrap.querySelector('[data-intake-receive]');
+  var formInputs=function(){return Array.from(wrap.querySelectorAll('[data-intake-detail],#intakeLink,#intakeDeadline,#intakeDescription'));};
   function same(){return options.owner()===owner&&options.identity()===identity;}
   function current(allowClosed){if(!same()||(!allowClosed&&!wrap.isConnected))throw Error('Аккаунт или окно изменились. Откройте материалы заново');}
   async function pending(){return await queue('getAll',owner);}
+  function submitted(){return !!draft&&draft.state==='submitted';}
   async function paint(){
    var queued=await pending();current();
    var shown=visible(files),known=new Set(shown.map(function(f){return f.file_hash;}));
    function row(f,history){var waiting=files.some(function(next){return next.supersedes===f.id&&next.state==='pending';})||queued.some(function(next){return next.replacesId===f.id;});
-    return '<div class="item" style="flex-wrap:wrap"><div class="txt"><b>'+options.esc(f.file_name)+'</b><small>'+options.esc(f.state==='saved'?(history?'Предыдущая сохранённая версия':'Сохранён в кабинете'):'Сохранение не подтверждено — повторим загрузку')+'</small>'+(f.state==='saved'?'<small>'+options.esc(readingLabel(f))+'</small>'+((f.read_summary&&f.read_summary.warnings)||[]).slice(0,12).map(function(w){var at=w.source||{},place=at.page?' — страница '+at.page:at.cell?' — '+at.sheet+'!'+at.cell:'';return '<small>'+options.esc((readWarnings[w.code]||'Документ не прочитан полностью: проверьте формат или загрузите другую текстовую версию')+place)+'</small>';}).join(''):'')+'</div>'+
-    (f.state==='saved'?'<button type="button" class="mini" data-intake-download="'+options.esc(f.id)+'">Скачать</button>'+(!history?'<button type="button" class="mini" data-intake-replace-button="'+options.esc(f.id)+'"'+(waiting?' data-intake-waiting disabled':'')+'>Заменить</button><input type="file" hidden accept=".docx,.pdf,.xlsx" data-intake-replace="'+options.esc(f.id)+'"'+(waiting?' data-intake-waiting disabled':'')+'>':''):'')+'</div>';}
+    return '<div class="item" style="flex-wrap:wrap"><div class="txt"><b>'+esc(f.file_name)+'</b><small>'+esc((f.state==='saved'?(history?'Предыдущая версия':'Сохранён'):'Сохранение не подтверждено — повторим загрузку')+(f.content_type?' · '+kindLabel(f.content_type):''))+'</small></div>'+
+    (f.state==='saved'?'<button type="button" class="mini" data-intake-download="'+esc(f.id)+'">Скачать</button>'+(!history?'<button type="button" class="mini" data-intake-replace-button="'+esc(f.id)+'"'+(waiting?' data-intake-waiting disabled':'')+'>Заменить</button><input type="file" hidden accept="'+global.StudFilePrep.ACCEPT+'" data-intake-replace="'+esc(f.id)+'"'+(waiting?' data-intake-waiting disabled':'')+'>':''):'')+'</div>';}
    var active=new Set(shown.map(function(f){return f.id;})),history=files.filter(function(f){return !active.has(f.id);});
    list.innerHTML=shown.map(function(f){return row(f,false);}).join('')+
-    queued.filter(function(f){return !known.has(f.fileHash);}).map(function(f){return '<div class="item"><div class="txt"><b>'+options.esc(f.fileName)+'</b><small>Сохранён на устройстве; ожидает передачи в кабинет</small></div></div>';}).join('')+
+    queued.filter(function(f){return !known.has(f.fileHash);}).map(function(f){return '<div class="item"><div class="txt"><b>'+esc(f.fileName)+'</b><small>Сохранён на устройстве; ожидает передачи в кабинет</small></div></div>';}).join('')+
     (history.length?'<details><summary>Предыдущие версии: '+history.length+'</summary>'+history.map(function(f){return row(f,true);}).join('')+'</details>':'');
-   if(!shown.length&&!queued.length)list.innerHTML='<p class="small">Документы пока не выбраны.</p>';
-   list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=busy||receiptUnknown||!!draft&&draft.state==='submitted'||el.hasAttribute('data-intake-waiting');});
-   input.disabled=busy||receiptUnknown||!draft||draft.state==='submitted';retry.disabled=busy||receiptUnknown||draft&&draft.state==='submitted';wrap.querySelector('[data-intake-read]').disabled=busy;
-   if(draft&&draft.receiptMode){
-    wrap.querySelector('[data-intake-reception]').hidden=false;wrap.querySelector('#intakeDeadline').disabled=busy||receiptUnknown||draft.state==='submitted';wrap.querySelector('#intakeDescription').disabled=busy||receiptUnknown||draft.state==='submitted';wrap.querySelector('[data-intake-read]').hidden=true;
-    wrap.querySelector('[data-intake-analysis]').hidden=true;
-    wrap.querySelector('[data-intake-receive]').disabled=busy||draft.state==='submitted'||queued.length>0||!shown.length||shown.some(function(f){return f.state!=='saved';});
-   }
+   var locked=busy||receiptUnknown||submitted();
+   list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=locked||el.hasAttribute('data-intake-waiting');});
+   input.disabled=locked||!draft;
+   retry.hidden=!queued.length||submitted();retry.style.display=retry.hidden?'none':'';retry.disabled=locked;
+   formInputs().forEach(function(el){el.disabled=receiptUnknown||submitted();});
+   send.disabled=locked||queued.length>0||shown.some(function(f){return f.state!=='saved';});
   }
   async function refresh(){var result=await options.api({action:'intake-open'});current();draft=result.draft;files=result.files;await paint();}
-  async function readSaved(){
-   for(var f of visible(files)){
-    current();if(f.state!=='saved'||(f.read_version==='intake-reader-1'&&['ready','blocked'].includes(f.read_status)))continue;
-    status.textContent='Материалы сохранены. Читаем '+f.file_name+'…';
-    try{await options.api({action:'intake-read',id:draft.id,fileId:f.id});current();}catch(e){if(!same()||!wrap.isConnected)return;status.textContent='Материалы сохранены. Чтение не завершено: '+e.message;}
-   }
-   await refresh();
-  }
-  function sourceLabel(r){var at=r.source||{};return (r.fileName||'Примечание студента')+(at.page?' — страница '+at.page:at.cell?' — '+at.sheet+'!'+at.cell:at.table?' — таблица '+at.table+', строка '+at.row+', ячейка '+at.column:at.paragraph?' — абзац '+at.paragraph:'');}
-  function paintAnalysis(a){
-   var box=wrap.querySelector('[data-intake-analysis]'),labels={idle:'Документы ещё не разобраны',disabled:'Материалы сохранены. Автоматический разбор пока не включён исполнителем',queued:'Документы ожидают разбора. Можно закрыть страницу',claimed:'Разбираем документы. Можно закрыть страницу',sent:'Разбираем документы. Можно закрыть страницу',budget:'Разбор остановлен: достигнут разрешённый предел расходов. Материалы сохранены',output_limited:'Ответ помощника не завершён: достигнут предел ответа. Материалы сохранены; автоматического платного повтора не будет',unknown:'Результат разбора не подтверждён. Автоматического платного повтора не будет; нужна проверка исполнителя',invalid:'Ответ помощника не прошёл проверку источников или полноты блоков. Нужна проверка исполнителя',stale:'Документы изменились. Прежние сведения больше не актуальны'};
-   if(a.state!=='done'||!a.result){box.innerHTML='<p class="hint">'+options.esc(labels[a.state]||'Разбор не подтверждён')+'</p>';return;}
-   box.innerHTML='';
-   if(confirmCleanup)confirmCleanup();
-   global.StudIntakeConfirmation.render({box:box,result:a.result,analysisId:a.id,draftId:draft.id,owner:owner,api:options.api,esc:options.esc,same:same,
-    beforeSubmit:async function(){current();if(busy||(await pending()).length)throw Error('Сначала завершите сохранение выбранных файлов');busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=true;});},
-    afterSubmit:function(){if(draft.state!=='submitted'&&same()&&wrap.isConnected){busy=false;paint();}},
-    submitted:function(s){current();input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=true;});status.textContent='Заявка №'+s.number+' отправлена. Комплект сохранён.';draft.state='submitted';if(options.submitted)options.submitted(s);}
-   }).then(function(cleanup){if(!wrap.isConnected||!same())cleanup();else confirmCleanup=cleanup;});
-  }
-
-  async function analysis(start){
-   clearTimeout(analysisTimer);current();
-   if(!draft||!visible(files).length||visible(files).some(function(f){return f.state!=='saved'||f.read_status!=='ready';})||(await pending()).length){paintAnalysis({state:visible(files).length?'stale':'idle'});return;}
-   try{
-    var started=start?await options.api({action:'intake-analyze',id:draft.id}):null;current();
-    var response=await options.api({action:'intake-analysis-state',id:draft.id});current();
-    // A disabled start has no queued job; display that reason, not an empty result.
-    var a=response.analysis;
-    if(started&&started.analysis.state==='disabled')a=started.analysis;
-    paintAnalysis(a);
-   if(['queued','claimed','sent','budget'].includes(a.state))analysisTimer=setTimeout(function(){if(same()&&wrap.isConnected)analysis(false);},10000);
-   }catch(e){if(same()&&wrap.isConnected)wrap.querySelector('[data-intake-analysis]').textContent='Не удалось получить разбор: '+e.message+'. Сохранённые документы доступны.';}
-  }
   async function transmit(){
    var queued=await pending(),errors=[];current();
    for(var f of queued){
@@ -108,10 +116,13 @@
      if(!same())return;await queue('delete',f.key);current();
     }catch(e){if(!same()||!wrap.isConnected)return;errors.push(f.fileName+': '+e.message);}
    }
-   await refresh();if(draft.receiptMode){status.textContent=errors.length?'Часть файлов не передана. Повторите сохранение. '+errors.join(' '):'Материалы сохранены. Укажите срок и отправьте заявку; изучение начнётся после регистрации.';return;}await readSaved();await analysis(true);status.textContent=errors.length?'Часть файлов не передана. Сохранённые файлы доступны; нажмите «Повторить сохранение». '+errors.join(' '):'Материалы сохранены в кабинете. '+(visible(files).some(function(f){return f.read_status!=='ready';})?'Для части документов чтение не подтверждено — смотрите пояснения у файлов. ':(draft.receiptMode?'Изучение начнётся после регистрации заявки. ':'Документы прочитаны; сведения заявки ещё не подтверждены. '))+'Заявка ещё не отправлена.';
+   await refresh();
+   var count=visible(files).length;
+   status.textContent=errors.length?'Часть файлов не передана. Нажмите «Повторить сохранение». '+errors.join(' '):count?'Материалы сохранены: '+count+'. Заполните сведения и отправьте задание.':'Приложите файлы задания или ссылку на папку в облаке.';
   }
   async function run(selected,replaces){
-   if(busy||receiptUnknown||draft&&draft.state==='submitted')return;if(confirmCleanup){confirmCleanup();confirmCleanup=null;}wrap.querySelector('[data-intake-analysis]').innerHTML='';busy=true;input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
+   if(busy||receiptUnknown||submitted())return;
+   busy=true;input.disabled=true;retry.disabled=true;
    try{
     current();
     if(!draft)await refresh();
@@ -122,19 +133,18 @@
       var queued=await pending();current(true);
       var hashes=new Set(visible(files).filter(function(f){return !f.supersedes||f.state==='saved';}).map(function(f){return f.file_hash;}));
       queued.filter(function(f){return !f.replacesId;}).forEach(function(f){hashes.add(f.fileHash);});
-      if(!replaces&&!hashes.has(prepared.fileHash)&&hashes.size>=8)throw Error('Можно сохранить до 8 файлов');
+      if(!replaces&&!hashes.has(prepared.fileHash)&&hashes.size>=LIMIT)throw Error('Можно сохранить до '+LIMIT+' файлов');
       await queue('put',prepared);current(true);
      }catch(e){errors.push(e.message);}
     }
     await paint();await transmit();
     if(errors.length)status.textContent+=' Не добавлены: '+errors.join(' ');
    }catch(e){if(same()&&wrap.isConnected)status.textContent='Сохранение не завершено: '+e.message;}
-   finally{busy=false;if(same()&&wrap.isConnected){input.value='';input.disabled=!draft||draft.state==='submitted';retry.disabled=!!draft&&draft.state==='submitted';wrap.querySelector('[data-intake-read]').disabled=false;list.querySelectorAll('[data-intake-replace],[data-intake-replace-button]').forEach(function(el){el.disabled=!!draft&&draft.state==='submitted'||el.hasAttribute('data-intake-waiting');});if(draft&&draft.receiptMode)await paint();}}
+   finally{busy=false;if(same()&&wrap.isConnected){input.value='';try{await paint();}catch(_){}}}
   }
   input.addEventListener('change',function(){run(Array.from(input.files));});
   wrap.addEventListener('change',function(e){if(e.target.matches('[data-intake-replace]'))run(Array.from(e.target.files),e.target.getAttribute('data-intake-replace'));});
   retry.addEventListener('click',function(){run([]);});
-  wrap.querySelector('[data-intake-read]').addEventListener('click',function(){run([]);});
   wrap.addEventListener('click',async function(e){var replacement=e.target.closest('[data-intake-replace-button]');if(replacement&&!busy){wrap.querySelector('[data-intake-replace="'+replacement.getAttribute('data-intake-replace-button')+'"]').click();return;}
    var button=e.target.closest('[data-intake-download]');if(!button||busy)return;
    button.disabled=true;try{current();var result=await options.api({action:'intake-download',id:draft.id,fileId:button.getAttribute('data-intake-download')});current();
@@ -142,26 +152,44 @@
     var link=document.createElement('a');link.href=url.href;link.download=result.fileName;link.rel='noopener';link.click();
    }catch(e){if(same()&&wrap.isConnected)status.textContent=e.message;}finally{button.disabled=false;}
   });
-  wrap.addEventListener('click',function(e){if(e.target.closest('[data-x]')){clearTimeout(analysisTimer);if(confirmCleanup)confirmCleanup();}});
-  function receiptInputs(){return {deadline:wrap.querySelector('#intakeDeadline').value,description:wrap.querySelector('#intakeDescription').value};}
+  function values(){
+   var details={};wrap.querySelectorAll('[data-intake-detail]').forEach(function(el){details[el.getAttribute('data-intake-detail')]=el.value.trim();});
+   return {details:details,link:wrap.querySelector('#intakeLink').value.trim(),deadline:wrap.querySelector('#intakeDeadline').value,description:wrap.querySelector('#intakeDescription').value};
+  }
+  function fill(v){
+   if(!v)return;
+   Object.keys(v.details||{}).forEach(function(k){var el=wrap.querySelector('[data-intake-detail="'+k+'"]');if(el)el.value=v.details[k]||'';});
+   wrap.querySelector('#intakeLink').value=v.link||'';wrap.querySelector('#intakeDeadline').value=v.deadline||'';wrap.querySelector('#intakeDescription').value=v.description||'';
+  }
   var receiptKey='studkab-intake-reception:'+owner;
-  try{var savedReceipt=JSON.parse(localStorage.getItem(receiptKey)||'null');if(savedReceipt){wrap.querySelector('#intakeDeadline').value=savedReceipt.deadline||'';wrap.querySelector('#intakeDescription').value=savedReceipt.description||'';}}catch(_){}
-  wrap.querySelector('[data-intake-reception]').addEventListener('input',function(){if(same())localStorage.setItem(receiptKey,JSON.stringify(receiptInputs()));});
+  try{fill(JSON.parse(localStorage.getItem(receiptKey)||'null'));}catch(_){}
+  wrap.addEventListener('input',function(e){if(same()&&e.target.closest('[data-intake-detail],#intakeLink,#intakeDeadline,#intakeDescription'))try{localStorage.setItem(receiptKey,JSON.stringify(values()));}catch(_){}});
+  wrap.addEventListener('change',function(e){if(same()&&e.target.matches('select[data-intake-detail]'))try{localStorage.setItem(receiptKey,JSON.stringify(values()));}catch(_){}});
+  function check(v){
+   var missing=DETAILS.filter(function(d){return d[2]&&!v.details[d[0]];}).map(function(d){return d[1].toLowerCase();});
+   if(!visible(files).length&&!v.link)return 'Приложите файлы задания или ссылку на папку в облаке';
+   if(v.link&&!LINK.test(v.link))return 'Ссылка должна начинаться с https:// и вести на Яндекс Диск, Google Диск или Облако Mail.ru';
+   if(missing.length)return 'Заполните: '+missing.join(', ');
+   if(!v.deadline||Number.isNaN(Date.parse(v.deadline))||new Date(v.deadline).toISOString().slice(0,10)!==v.deadline)return 'Укажите, когда нужна работа';
+   return '';
+  }
   function acceptReceipt(receipt){
    if(!receipt||!receipt.submitted||!receipt.ready||!receipt.payload)throw Error('Приём заявки не подтверждён');
-   receiptUnknown=false;draft.state='submitted';wrap.querySelector('#intakeDeadline').value=receipt.payload.dl;wrap.querySelector('#intakeDescription').value=receipt.payload.rq;
-   status.textContent='Заявка №'+receipt.number+' принята. Документы сохранены; комплект ожидает изучения.';
+   receiptUnknown=false;draft.state='submitted';
+   status.textContent='Заявка №'+receipt.number+' отправлена. Исполнитель откроет материалы и, если чего-то не хватает, спросит здесь.';
+   try{localStorage.removeItem(receiptKey);}catch(_){}
    if(options.submitted)options.submitted(receipt);
   }
-  wrap.querySelector('[data-intake-receive]').addEventListener('click',async function(){
-   if(busy||!draft||!draft.receiptMode||draft.state==='submitted')return;
-   busy=true;
+  send.addEventListener('click',async function(){
+   if(busy||!draft||submitted())return;
+   // Проверка заполнения — до блокировки кнопки: подсказка появляется сразу, кнопка остаётся доступной.
+   var v=values(),problem=check(v);
+   if(problem){status.textContent=problem;return;}
+   busy=true;send.disabled=true;
    try{
-    current();await paint();if((await pending()).length)throw Error('Сначала завершите сохранение выбранных документов');
-    var values=receiptInputs();
-    if(!values.deadline||Number.isNaN(Date.parse(values.deadline))||new Date(values.deadline).toISOString().slice(0,10)!==values.deadline)throw Error('Укажите срок готовности');
+    current();if((await pending()).length)throw Error('Сначала завершите сохранение выбранных файлов');
     localStorage.setItem('studkab-intake-submit:'+owner,JSON.stringify({draftId:draft.id,receiptMode:true}));
-    receiptUnknown=true;var result=await options.api({action:'intake-receive',id:draft.id,revision:draft.revision,deadline:values.deadline,description:values.description});current();
+    receiptUnknown=true;var result=await options.api({action:'intake-receive',id:draft.id,revision:draft.revision,deadline:v.deadline,description:v.description,details:v.details,link:v.link});current();
     acceptReceipt(result.submission);
    }catch(e){
     if(!same()||!wrap.isConnected)return;
@@ -169,21 +197,21 @@
      try{var recovered=(await options.api({action:'intake-receive-state',id:draft.id})).submission;current();if(recovered&&recovered.submitted){acceptReceipt(recovered);return;}receiptUnknown=false;}
      catch(_){if(!same()||!wrap.isConnected)return;}
     }
-    status.textContent='Отправка не подтверждена: '+e.message+'. Сохранённые материалы доступны; повтор не создаёт новую заявку.';
+    status.textContent='Задание не отправлено: '+e.message+'. Заполненное и файлы сохранены; повтор не создаёт новую заявку.';
    }
    finally{busy=false;if(same()&&wrap.isConnected)await paint();}
   });
   var intent;try{intent=JSON.parse(localStorage.getItem('studkab-intake-submit:'+owner)||'null');}catch(_){}
   if(intent&&intent.draftId)try{
-   var previous=(await options.api({action:intent.receiptMode?'intake-receive-state':'intake-submission-state',id:intent.draftId})).submission;current();
+   var previous=(await options.api({action:'intake-receive-state',id:intent.draftId})).submission;current();
    if(previous&&previous.submitted){
-    if(options.submitted)options.submitted(previous);status.textContent='Заявка №'+previous.number+' уже отправлена. Весь комплект сохранён.';
-    input.disabled=true;retry.disabled=true;wrap.querySelector('[data-intake-read]').disabled=true;
-    var next=document.createElement('button');next.type='button';next.className='b b-main';next.textContent='Новая заявка';next.onclick=function(){localStorage.removeItem('studkab-intake-submit:'+owner);localStorage.removeItem(receiptKey);wrap.querySelector('#intakeDeadline').value='';wrap.querySelector('#intakeDescription').value='';next.remove();run([]);};list.appendChild(next);return wrap;
+    if(options.submitted)options.submitted(previous);status.textContent='Заявка №'+previous.number+' уже отправлена.';
+    input.disabled=true;send.disabled=true;formInputs().forEach(function(el){el.disabled=true;});
+    var next=document.createElement('button');next.type='button';next.className='b b-main';next.textContent='Новое задание';next.onclick=function(){localStorage.removeItem('studkab-intake-submit:'+owner);try{localStorage.removeItem(receiptKey);}catch(_){}formInputs().forEach(function(el){el.value='';});next.remove();draft=null;run([]);};list.appendChild(next);return wrap;
    }
   }catch(e){if(!same())return wrap;status.textContent='Проверка прежней отправки не завершена: '+e.message+'. Повтор не создаёт новую заявку.';}
   await run([]);
   return wrap;
  }
- global.StudIntake={open:open};
+ global.StudIntake={open:open,DETAILS:DETAILS,LINK:LINK};
 })(window);
