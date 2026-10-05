@@ -2,6 +2,7 @@ import {intakeReceive} from './intake-receive.mjs';
 import {intakeRead} from './intake-reading.mjs';
 import {analysisPlan} from '../_shared/intake-analysis.mjs';
 import {intakeSubmission} from './intake-submission.mjs';
+import {checkCloudLink,downloadYandexFile,cloudService} from './cloud-link.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // R3-A: фото и снимки экрана принимаются наравне с документами; программа их не читает.
 const formats={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp'};
@@ -23,16 +24,39 @@ export async function intakeBytes(input){
   typeof hash!=='string'||!/^[a-f0-9]{64}$/.test(hash)||typeof encoded!=='string'||encoded.length!==4*Math.ceil(size/3)||!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))throw Error('Проверьте файл: Word, PDF, Excel или фото (JPEG, PNG, WebP), до 5 МБ');
  let raw;try{raw=atob(encoded);}catch{throw Error('Не удалось прочитать выбранный файл');}
  const bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));
- const actual=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(x=>x.toString(16).padStart(2,'0')).join('');
+ const actual=await sha256(bytes);
  if(bytes.length!==size||actual!==hash)throw Error('Файл передан не полностью. Повторите загрузку');
- // Only a container signature here; semantic readability is checked in step 3.
+ if(!signatureOk(type,bytes))throw Error('Содержимое не соответствует формату файла');
+ return {name,type,size,hash,bytes};
+}
+async function sha256(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(x=>x.toString(16).padStart(2,'0')).join('');}
+// Проверяется только подпись формата; содержимое программа не толкует.
+function signatureOk(type,bytes){
  const ascii=(a,b)=>new TextDecoder().decode(bytes.slice(a,b));
  const signature=type==='application/pdf'?ascii(0,5)==='%PDF-':type==='image/jpeg'?bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff:
   type==='image/png'?bytes[0]===0x89&&ascii(1,4)==='PNG':type==='image/webp'?ascii(0,4)==='RIFF'&&ascii(8,12)==='WEBP':bytes[0]===80&&bytes[1]===75&&bytes[2]===3&&bytes[3]===4;
- if(!signature)throw Error('Содержимое не соответствует формату файла');
- return {name,type,size,hash,bytes};
+ return signature;
 }
-export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,validatePayload}){
+// R3-B: файл, скачанный из папки Яндекс Диска, проходит те же проверки, что и загрузка из кабинета.
+export async function cloudBytes(fileName,bytes){
+ const name=String(fileName||'').replace(/[\\/\u0000-\u001f]/g,'_').trim(),type=formats[name.toLowerCase().split('.').at(-1)];
+ if(!name||name.length>180||!type)throw Error((name||'Файл')+': такой вид файла не принимается — исполнитель откроет его по ссылке');
+ if(!bytes.length||bytes.length>5242880)throw Error(name+': файл больше 5 МБ');
+ if(!signatureOk(type,bytes))throw Error(name+': содержимое не соответствует формату файла');
+ return {name,type,size:bytes.length,hash:await sha256(bytes),bytes};
+}
+async function storeFile(f,input,user,{db,saveIntake},supersedes=null){
+ const reserved=await db('rpc/studkab_intake_reserve','POST',{p_student:user.id,p_draft:input.id,p_name:f.name,p_type:f.type,p_size:f.size,p_hash:f.hash,p_supersedes:supersedes});
+ const error=resultError(reserved);if(error)return error;
+ const file=reserved.file;
+ if(!uuid.test(file?.id)||file.file_hash!==f.hash||file.storage_path!==user.id+'/'+input.id+'/'+file.id)throw Error('Intake unavailable');
+ if(file.state==='saved')return {data:{file:safeFile(file),duplicate:true}};
+ await saveIntake(file.storage_path,f.type,f.bytes,f.hash);
+ // A lost finish response is safe: the next upload reserves the same file/path.
+ const finished=await db('rpc/studkab_intake_finish','POST',{p_student:user.id,p_draft:input.id,p_file:file.id,p_hash:f.hash});
+ return resultError(finished)||{data:{file:safeFile(finished.file),duplicate:finished.duplicate}};
+}
+export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,validatePayload,fetchCloud=globalThis.fetch}){
  if(typeof isMember!=='function'||await isMember(user.id)!==true)return {status:403,data:{error:'Загрузка доступна после входа по приглашению исполнителя'}};
  if(input.action==='intake-open'){
   const draft=await db('rpc/studkab_intake_open','POST',{p_student:user.id});
@@ -42,7 +66,7 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   return {data:{draft:{id:draft.id,state:draft.state,revision:draft.revision,notes:draft.notes,receiptMode:draft.reception_version===2},files:files.map(safeFile),limits:{files:INTAKE_FILE_LIMIT,bytes:5242880,historyBytes:104857600}}};
  }
  if(!uuid.test(input.id||''))return {status:400,data:{error:'Неверный черновик'}};
- if(['intake-receive-state','intake-receive'].includes(input.action))return intakeReceive(input,user,{db,transferIntake});
+ if(['intake-receive-state','intake-receive'].includes(input.action))return intakeReceive(input,user,{db,transferIntake,fetchCloud});
  if(['intake-submission-state','intake-submit'].includes(input.action))return intakeSubmission(input,user,{db,transferIntake,validatePayload});
  const [draft]=await db('studkab_intake_drafts?id=eq.'+input.id+'&student_id=eq.'+user.id+'&state=eq.open&select=id,revision');
  if(!draft)return missing;
@@ -82,17 +106,20 @@ export async function intakeAction(input,user,{db,isMember,saveIntake,downloadIn
   if(!file)return {status:404,data:{error:'Файл не найден'}};
   return {data:await downloadIntake(file.storage_path,file.file_name)};
  }
+ // R3-B: проверка ссылки на облако и копия файлов папки Яндекс Диска в черновик.
+ if(input.action==='intake-link-check'){
+  if(!cloudService(input.link))return {status:400,data:{error:'Ссылка должна начинаться с https:// и вести на Яндекс Диск, Google Диск или Облако Mail.ru'}};
+  return {data:{link:await checkCloudLink(input.link,{fetcher:fetchCloud})}};
+ }
+ if(input.action==='intake-link-copy'){
+  if(cloudService(input.link)!=='yandex')return {status:400,data:{error:'Копия делается только для Яндекс Диска'}};
+  let f;try{const got=await downloadYandexFile(input.link,input.path,{fetcher:fetchCloud});f=await cloudBytes(got.name,got.bytes);}
+  catch(e){return {status:409,data:{error:e.message}};}
+  return storeFile(f,input,user,{db,saveIntake});
+ }
  if(input.action!=='intake-upload')return {status:400,data:{error:'Неизвестное действие черновика'}};
  const supersedes=input.replacesId??null;
  if(supersedes!==null&&!uuid.test(supersedes))return {status:400,data:{error:'Неверная версия файла'}};
  let f;try{f=await intakeBytes(input);}catch(e){return {status:400,data:{error:e.message}};}
- const reserved=await db('rpc/studkab_intake_reserve','POST',{p_student:user.id,p_draft:input.id,p_name:f.name,p_type:f.type,p_size:f.size,p_hash:f.hash,p_supersedes:supersedes});
- const error=resultError(reserved);if(error)return error;
- const file=reserved.file;
- if(!uuid.test(file?.id)||file.file_hash!==f.hash||file.storage_path!==user.id+'/'+input.id+'/'+file.id)throw Error('Intake unavailable');
- if(file.state==='saved')return {data:{file:safeFile(file),duplicate:true}};
- await saveIntake(file.storage_path,f.type,f.bytes,f.hash);
- // A lost finish response is safe: the next upload reserves the same file/path.
- const finished=await db('rpc/studkab_intake_finish','POST',{p_student:user.id,p_draft:input.id,p_file:file.id,p_hash:f.hash});
- return resultError(finished)||{data:{file:safeFile(finished.file),duplicate:finished.duplicate}};
+ return storeFile(f,input,user,{db,saveIntake},supersedes);
 }

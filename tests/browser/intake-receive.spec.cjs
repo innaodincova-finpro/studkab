@@ -23,6 +23,15 @@ async function setup(page,{restored=false}={}){
     if(!state.receipt){state.receipt={submitted:true,ready:true,id:crypto.randomUUID(),number:15,payload:{route:'r3',id:'intake_'+state.draft.id,t:'',...input.details,lk:input.link,dl:input.deadline,rq:input.description,cn:'student@example.invalid'}};state.writes=(state.writes||0)+1;save();}
     if(window.loseReceiptReply)throw Error('Ответ потерян');return {submission:state.receipt};
    }
+   if(input.action==='intake-link-check'){
+    if(!window.cloud)throw Error('Нет сети');
+    return {link:window.cloud};
+   }
+   if(input.action==='intake-link-copy'){
+    const f=(window.cloud.files||[]).find(x=>x.path===input.path);if(f.fail)throw Error(f.name+': файл больше 5 МБ');
+    if(!state.files.some(x=>x.file_name===f.name)){state.files.push({id:crypto.randomUUID(),file_name:f.name,content_type:'application/pdf',file_hash:f.path.length.toString(16).repeat(64).slice(0,64),state:'saved',size_bytes:10});state.draft.revision++;save();}
+    return {file:state.files.at(-1)};
+   }
    throw Error('Unexpected API: '+input.action);
   };
  });
@@ -105,4 +114,32 @@ test('R3-A: registry card shows title-page details and materials, opens no study
  await page.locator('.request-action [data-act="r3-materials"]').click();
  await expect(page.locator('#request-panel-materials')).toContainText('Фото · 4 КБ');
  expect(await page.evaluate(()=>cardCalls.some(a=>/passport|registered-study/.test(a)))).toBe(false);
+});
+test('R3-B: Yandex folder is checked and its files are copied into the request; closed link blocks sending',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{window.cloud={state:'closed',service:'yandex'};});
+ await page.locator('#intakeLink').fill('https://disk.yandex.ru/d/Mt7abc');await page.locator('#intakeLink').blur();
+ await expect(page.locator('[data-intake-link-status]')).toContainText('Ссылка закрыта');
+ await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');await page.locator('[data-intake-receive]').click();
+ await expect(page.locator('[data-intake-status]')).toContainText('Ссылка закрыта');
+ expect(await page.evaluate(()=>receiptCalls.includes('intake-receive'))).toBe(false);
+ await page.evaluate(()=>{window.cloud={state:'open',service:'yandex',folders:1,files:[{name:'Практика1.pdf',path:'/Практика1.pdf'},{name:'Практика2.pdf',path:'/Практика2.pdf'},{name:'Большой.pdf',path:'/Большой.pdf',fail:true}]};});
+ await page.locator('#intakeLink').fill('https://disk.yandex.ru/d/Mt7abc2');await page.locator('#intakeLink').blur();
+ await expect(page.locator('[data-intake-link-status]')).toContainText('скопировано в заявку: 2 из 3');
+ await expect(page.locator('[data-intake-link-status]')).toContainText('Большой.pdf: файл больше 5 МБ');
+ await expect(page.locator('[data-intake-link-status]')).toContainText('Вложенные папки');
+ await expect(page.locator('[data-intake-download]')).toHaveCount(2);
+ await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
+ expect(await page.evaluate(()=>receiptInputs[0].link)).toBe('https://disk.yandex.ru/d/Mt7abc2');
+});
+test('R3-B: Google Drive link is checked without copying; failed check does not block sending',async({page})=>{
+ await setup(page);await page.evaluate(()=>{window.cloud={state:'open',service:'google'};});
+ await page.locator('#intakeLink').fill('https://drive.google.com/drive/folders/1AbC');await page.locator('#intakeLink').blur();
+ await expect(page.locator('[data-intake-link-status]')).toContainText('С этого облака копию сделать нельзя');
+ expect(await page.evaluate(()=>receiptCalls.includes('intake-link-copy'))).toBe(false);
+ await page.evaluate(()=>{window.cloud=null;});
+ await page.locator('#intakeLink').fill('https://cloud.mail.ru/public/x/y');await page.locator('#intakeLink').blur();
+ await expect(page.locator('[data-intake-link-status]')).toContainText('Не удалось проверить ссылку');
+ await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');await page.locator('[data-intake-receive]').click();
+ await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
 });

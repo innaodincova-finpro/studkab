@@ -1583,7 +1583,9 @@ function r3Overview(x){
   (x.deadline?'<div class="stat"><span>Когда нужна работа</span><b>'+esc(ruDate(x.deadline))+'</b></div>':'')+
   (x.requirements?lab('Пожелания студента')+'<p>'+esc(x.requirements)+'</p>':'')+r3LinkHtml(x);
 }
-function r3LinkHtml(x){return x.link?lab('Ссылка на папку в облаке')+'<p><a href="'+esc(x.link)+'" target="_blank" rel="noopener noreferrer">'+esc(x.link)+'</a></p><p class="hint">Копия материалов по ссылке появится на следующем этапе.</p>':'';}
+// R3-B: с Яндекс Диска файлы папки копируются в заявку ещё в кабинете студента; другие облака — только ссылка.
+function r3LinkHtml(x){if(!x.link)return '';var yandex=/^https:\/\/(disk\.yandex\.|yadi\.sk\/|disk\.360\.yandex\.)/.test(x.link);
+ return lab('Ссылка на папку в облаке')+'<p><a href="'+esc(x.link)+'" target="_blank" rel="noopener noreferrer">'+esc(x.link)+'</a></p><p class="hint">'+(yandex?'Яндекс Диск: файлы папки до 5 МБ скопированы в материалы заявки при отправке. Вложенные папки и крупные файлы — только по ссылке.':'Копия не сделана: это облако не даёт скачать папку автоматически. Сохраните материалы себе — студент может удалить их.')+'</p>';}
 function r3FileKind(a){var t=a.content_type||'';return /^image\//.test(t)?'Фото':/pdf/.test(t)?'PDF':/spreadsheet/.test(t)?'Excel':/word/.test(t)?'Word':'Файл';}
 async function loadR3(x){
  if(!window.Oblako||!Oblako.requestApi)throw Error('Войдите в аккаунт реестра');

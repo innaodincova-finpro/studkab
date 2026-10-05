@@ -1,4 +1,5 @@
-// ROUTE-03, R3-A: заявка по форме. Программа не читает и не толкует файлы:
+import {checkCloudLink} from './cloud-link.mjs';
+// ROUTE-03, R3-A/R3-B: заявка по форме. Программа не читает и не толкует файлы:
 // сведения для титульного листа берутся только из формы студента.
 // Материалы — сохранённые файлы любого допустимого вида и/или ссылка на папку в облаке.
 export const R3_FIELDS={k:100,d:200,u:300,kf:300,pr:200,fo:100,g:100,n:200,s:200};
@@ -15,7 +16,7 @@ export function r3Details(value){
  if(R3_REQUIRED.some(k=>!out[k]))return {error:'Заполните обязательные сведения: вид работы, дисциплина, вуз, форма обучения, курс и группа, фамилия, имя, отчество'};
  return {details:out};
 }
-export async function intakeReceive(input,user,{db,transferIntake}){
+export async function intakeReceive(input,user,{db,transferIntake,fetchCloud=globalThis.fetch}){
  const src=await db('rpc/studkab_intake_receive_snapshot','POST',{p_student:user.id,p_draft:input.id});
  if(src.missing)return {status:404,data:{error:'Черновик не найден'}};
  if(src.gone)return {status:410,data:{error:'Заявка удалена или передана другому аккаунту. Повторно она не создаётся'}};
@@ -32,6 +33,10 @@ export async function intakeReceive(input,user,{db,transferIntake}){
  if(typeof link!=='string'||link.length>500||(link&&!R3_LINK.test(link)))return {status:400,data:{error:'Ссылка должна начинаться с https:// и вести на Яндекс Диск, Google Диск или Облако Mail.ru'}};
  if(!src.files.length&&!link)return {status:400,data:{error:'Приложите файлы задания или ссылку на папку в облаке'}};
  const checked=r3Details(input.details);if(checked.error)return {status:400,data:{error:checked.error}};
+ // R3-B: закрытая или удалённая папка не принимается; если облако не ответило, исполнитель проверит ссылку сам.
+ if(link){const state=(await checkCloudLink(link,{fetcher:fetchCloud})).state;
+  if(state==='closed')return {status:400,data:{error:'Ссылка закрыта. Откройте доступ «всем, у кого есть ссылка» и отправьте снова'}};
+  if(state==='missing')return {status:400,data:{error:'Папка по ссылке не найдена. Проверьте ссылку'}};}
  if(!contact.trim()||contact.length>200)return {status:400,data:{error:'Нужна подтверждённая почта аккаунта'}};
  if(typeof transferIntake!=='function')throw Error('Transfer unavailable');
  // Проверенные файлы копируются до публикации. При частичном сбое оригиналы сохраняются.
