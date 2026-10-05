@@ -326,6 +326,16 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .r3fn{min-width:0}.r3fn b{display:block;font-size:14px;overflow-wrap:anywhere}.r3fn small{display:block;color:var(--mut);font-size:12px}
 .r3passed{display:none;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:8px 12px;font-size:14px;color:var(--mut);margin-bottom:14px}.r3passed .r3mk{width:22px;height:22px;margin:0;font-size:11px}.r3passed b{color:var(--ink);font-weight:500}
 @media (max-width:600px){.r3head{flex-direction:column}.r3due{text-align:left}.r3s.done{display:none}.r3passed{display:flex}.r3card{padding:18px 16px}.r3card button.b{width:100%;margin:6px 0 0}}
+.r3hc-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.r3strip{display:flex;list-style:none;padding:0;margin:16px 0 4px;gap:4px}.r3strip li{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:#8697A7;text-align:center;position:relative}
+.r3strip li span{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:#fff;border:2px solid #CBD8E3;color:#9AABBA;position:relative;z-index:1}
+.r3strip li:not(:first-child)::before{content:"";position:absolute;top:12px;right:50%;width:100%;height:2px;background:#DCE6EE}.r3strip li.done:not(:first-child)::before,.r3strip li.cur:not(:first-child)::before{background:#9DBDAA}
+.r3strip li.done{color:var(--ink)}.r3strip li.done span{background:var(--ok);border-color:var(--ok);color:#fff}.r3strip li.cur{color:var(--accent);font-weight:600}.r3strip li.cur span{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 4px rgba(47,96,145,.13)}
+.r3next{display:flex;justify-content:space-between;align-items:center;gap:14px;background:#F7FAFC;border-radius:14px;padding:12px 14px;margin-top:12px}.r3next b{font-size:15px}.r3next button.b{flex:none;margin:0}
+.r3newtask{margin:0 0 14px;grid-column:1/-1}.r3newtask button.b{width:auto}.r3open{background:none;border:0;padding:0;margin-top:12px;color:var(--accent);font:inherit;font-weight:600;cursor:pointer}
+.r3row{align-items:center}.r3row small{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.r3rowdue{flex:none;text-align:right;font-size:12px;color:var(--mut)}.r3rowdue span{display:block}.r3rowdue b{display:block;font-size:14px;color:var(--ink)}
+.r3dots{display:inline-flex;align-items:center;gap:3px}.r3dots i{width:8px;height:8px;border-radius:50%;background:#DCE6EE}.r3dots i.done{background:var(--ok)}.r3dots i.cur{background:var(--accent);box-shadow:0 0 0 3px rgba(47,96,145,.15)}
+@media (max-width:600px){.r3hc-top{flex-direction:column}.r3strip li{font-size:10.5px}.r3next{flex-direction:column;align-items:stretch}.r3next button.b{width:100%}}
 .r3-quote{border-left:3px solid #B08347;background:#FBF7F0;border-radius:0 12px 12px 0;padding:10px 14px;margin:10px 0;overflow-wrap:anywhere}.r3-retf{border:1px solid #DCE6EE;border-radius:14px;padding:14px;margin:12px 0}.r3-retf textarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #DCE6EE;border-radius:10px;margin:6px 0}.r3-files{list-style:none;padding:0;margin:8px 0}.r3-files li{overflow-wrap:anywhere;padding:4px 0;font-size:13px}
 .r3-download,button.b.r3-download{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}[data-r3-ready] button.b.b-alt{background:#fff;border:1px solid var(--line);color:var(--accent);box-shadow:none}[data-r3-ready] button.b{margin:6px 6px 0 0}
 </style>
@@ -1732,7 +1742,7 @@ function nearestWork(){
   var t = today();
   var list = D.works.filter(function(w){
     var st = getStatus(w);
-    return w.deadline && st !== "accepted" && st !== "graded";
+    return w.deadline && st !== "accepted" && st !== "graded" && !isR3Work(w);
   }).sort(function(a,b){ return a.deadline < b.deadline ? -1 : 1 });
   return list[0] || null;
 }
@@ -1746,6 +1756,11 @@ function viewToday(){
   if (!storageOk) h += '<div class="warnbar">Браузер не сохраняет данные — возможно, открыт режим инкогнито.</div>';
   var t = today(), warn = D.settings.warnDays || 3, all = reminders();
 
+  var r3w=D.works.filter(function(x){return isR3Work(x)&&x.status!=='graded'&&x.status!=='accepted';}).sort(function(a,b){return (a.deadline||'9999')<(b.deadline||'9999')?-1:1;});
+  r3w.forEach(function(x){h+='<div class="card r3hc" data-r3-home="'+esc(x.id)+'">'+r3HomeInner(x)+'</div>';});
+  if(r3w.length)h+='<div class="r3newtask"><button type="button" class="b b-alt r3-alt" data-act="intake-materials">+ Отправить новое задание</button></div>';
+  var r3q=r3w.concat(D.works.filter(r3Unknown));
+  if(r3q.length)setTimeout(function(){r3Fetch(r3q,r3HomeRefresh);},0);
   var todayItems = all.filter(function(x){ return x.due === t });
   h += card(lab("Сегодня") + (todayItems.length ? todayItems.map(renderItem).join("")
     : '<div class="empty">На сегодня ничего не назначено.</div>'));
@@ -1769,7 +1784,7 @@ function viewToday(){
         '<button type="button" class="chip" data-act="open-work" data-id="' + w.id + '">Открыть работу</button>' +
         '<button type="button" class="chip warn" data-act="send-request" data-id="' + w.id + '">' + (w.req&&w.req.serverId?'Условия заявки':'Отправить заявку') + '</button>' +
       '</div>', "now");
-  } else {
+  } else if (!r3w.length) {
     h += card(lab(D.works.length ? "Ближайшая сдача" : "С чего начать") +
       '<div class="mut">' + (D.works.length ? "Работ со сроком пока нет."
         : "Создайте работу с темой и сроком. Затем отправьте заявку исполнителю с материалами или ведите собственные разделы.") + '</div>' +
@@ -2044,6 +2059,9 @@ function viewWorks(){
     (filtered.length ? card(filtered.map(function(w){
       var st = getStatus(w), p = getProgress(w);
       var over = w.deadline && w.deadline < today() && st !== "accepted" && st !== "graded";
+      if (isR3Work(w)) return '<div class="item tapline r3row" data-act="open-work" data-id="' + w.id + '">' +
+        '<div class="txt"><b>' + esc(w.topic) + '</b><small data-r3-row="' + esc(w.id) + '">' + r3RowStage(w) + '</small></div>' +
+        (w.deadline ? '<div class="r3rowdue"><span>Сдать до</span><b>' + esc(ruDate(w.deadline)) + '</b>' + (over ? '<span>срок прошёл</span>' : '') + '</div>' : '') + '</div>';
       return '<div class="item tapline" data-act="open-work" data-id="' + w.id + '">' +
         '<div class="ic">' + p + '%</div>' +
         '<div class="txt"><b>' + esc(w.topic) + '</b><small>' +
@@ -2051,7 +2069,7 @@ function viewWorks(){
           (w.deadline ? ' · ' + ruDate(w.deadline) : '') + (over ? ' · срок прошёл' : '') + '</small></div>' +
         (w.req && w.req.serverId ? '<span class="pill">Заявка №'+esc(w.req.number||'')+'</span>' : pill(st)) + '</div>';
     }).join(""))
-    : '<div class="empty">' + (D.works.length ? 'В этом отборе пусто.' : 'Работ пока нет. Нажмите «Новая работа» внизу.') + '</div>');
+    : '<div class="empty">' + (D.works.length ? 'В этом отборе пусто.' : 'Работ пока нет. Нажмите «Новая работа» внизу.') + '</div>') + (function(){var r=filtered.filter(function(x){return isR3Work(x)||r3Unknown(x);});if(r.length)setTimeout(function(){r3Fetch(r,r3HomeRefresh);},0);return '';})();
 }
 
 /* ---------- КАРТОЧКА РАБОТЫ ---------- */
@@ -2112,6 +2130,43 @@ function r3RouteHtml(w,result){
   var passed=c.i?'<div class="r3passed"><span class="r3mk">✓</span><span>Пройдено: <b>'+R3_STEPS.slice(0,c.i).join(', ')+'</b></span></div>':'';
   return passed+out.join('');
 }
+// R3-E (часть 2): на главной и в списке работ — этап заявки по форме (UX-02b).
+var r3Fetched={};
+function isR3Work(w){return !!(w&&w.req&&w.req.serverId&&w.req.route==='r3');}
+// Работы из формы, созданные до отметки маршрута: этап уточняется у сервера один раз.
+function r3Unknown(w){return !!(w&&w.req&&w.req.serverId&&w.req.intake&&!w.req.route);}
+function r3Fetch(list,done){
+  if(!window.Oblako||!Oblako.requestApi||Oblako.mode!=='cloud')return;
+  var now=Date.now(),identity=Oblako.identity();
+  list.slice(0,10).forEach(function(w){
+    if(r3Fetched[w.id]&&now-r3Fetched[w.id]<30000)return;r3Fetched[w.id]=now;
+    Oblako.requestApi({action:'student-progress',id:w.req.serverId}).then(function(r){
+      if(Oblako.identity()!==identity)return;
+      if(r.route!=='r3'){if(!w.req.route)change(function(){w.req.route=r.route||'other';});return;}
+      var fresh=w.req.route!=='r3';
+      if(fresh)change(function(){w.req.route='r3';});
+      r3Last[w.id]=r;if(fresh)render();else done(w);
+    }).catch(function(){r3Fetched[w.id]=0;});
+  });
+}
+function r3Strip(c){
+  return '<ol class="r3strip">'+R3_STEPS.map(function(s,i){var st=i<c.i?'done':i===c.i?'cur':'fut';return '<li class="'+st+'"><span>'+(st==='done'?'✓':i+1)+'</span>'+s+'</li>';}).join('')+'</ol>';
+}
+function r3Dots(c){var h='';for(var i=0;i<5;i++)h+='<i class="'+(i<c.i?'done':i===c.i?'cur':'')+'"></i>';return '<span class="r3dots" aria-hidden="true">'+h+'</span>';}
+function r3HomeInner(w){
+  var res=r3Last[w.id],id=esc(w.id),left=w.deadline?daysLeft(w.deadline):null;
+  var head='<div class="r3hc-top"><div style="min-width:0"><div class="title">'+esc(w.topic)+'</div><div class="mut" style="margin-top:3px">Заявка №'+esc(w.req.number||'')+(w.format&&w.format.univ?' · '+esc(w.format.univ):'')+'</div></div>'+
+   (w.deadline?'<div class="r3due"><span>Сдать до</span><b>'+esc(ruDate(w.deadline))+'</b><small>'+(left>=0?'осталось '+left+' '+ruDays(left):'срок прошёл')+'</small></div>':'')+'</div>';
+  if(!res)return head+'<p class="hint" role="status">Проверяем этап заявки…</p><button type="button" class="r3open" data-act="open-work" data-id="'+id+'">Открыть маршрут работы →</button>';
+  var c=r3StepCard(w,res),act='';
+  if(res.stage==='needs_answer')act='<button type="button" class="b r3-download" data-act="student-clarifications" data-id="'+id+'">Ответить на вопросы</button>';
+  else if(c.i===3)act='<button type="button" class="b r3-download" data-act="r3-download" data-id="'+id+'">Скачать работу</button>';
+  else if(c.i===4&&!(res.result&&res.result.handedAt))act='<button type="button" class="b r3-download" data-act="open-work" data-id="'+id+'">Отметить сдачу</button>';
+  var now=c.title+(c.extra?' ('+c.extra.replace(/^ · /,'')+')':'');
+  return head+r3Strip(c)+'<div class="r3next"><div><div class="r3cap" style="margin-top:0">Что сейчас</div><b>'+esc(now)+'</b></div>'+act+'</div><button type="button" class="r3open" data-act="open-work" data-id="'+id+'">Открыть маршрут работы →</button>';
+}
+function r3HomeRefresh(w){var el=document.querySelector('[data-r3-home="'+w.id+'"]');if(el)el.innerHTML=r3HomeInner(w);var row=document.querySelector('[data-r3-row="'+w.id+'"]');if(row)row.innerHTML=r3RowStage(w);}
+function r3RowStage(w){var res=r3Last[w.id];if(!res)return 'Заявка №'+esc(w.req.number||'')+' · проверяем этап…';var c=r3StepCard(w,res);return r3Dots(c)+'Шаг '+(c.i+1)+' из 5 · '+esc(c.title);}
 function viewWork(id){
   var w = work(id);
   if (!w) return linkedDialogRequest?'<div class="empty"><h2>Новый вопрос по заявке</h2><p>Откройте вопросы в защищённом кабинете. Для доступа войдите в аккаунт этой заявки.</p><button type="button" class="btn" data-act="linked-dialog">Открыть вопросы</button></div>':'<div class="empty">Работа не найдена</div>';

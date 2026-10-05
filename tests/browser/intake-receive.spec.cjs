@@ -235,7 +235,7 @@ test('R3-D: registry shows hand-in, then the return with remarks; corrected file
  // Длинное имя файла не выходит за край карточки.
  expect(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
  await page.evaluate(()=>{const x=D.items[0];Object.assign(r3,{handedAt:null,returns:1,returnedAt:'2026-10-09T06:00:00Z',returnList:[{n:1,comment:'Задание 3: показать решение подробно.',at:'2026-10-09T06:00:00Z',files:[{id:'f1',name:'Замечания.jpg',size:819200,type:'image/jpeg'}]}]});x.r3=structuredClone(r3);render();});
- await expect(panel).toContainText('Шаг 3 из 5 · доработка № 1');await expect(panel).toContainText('Работу вернули на доработку');
+ await expect(panel).toContainText('Шаг 3 из 5 · В работе · доработка № 1');await expect(panel).toContainText('Работу вернули на доработку');
  await expect(panel.locator('.r3-quote')).toContainText('Задание 3: показать решение подробно.');
  await expect(panel).toContainText('Версия 1 передана');await expect(panel).toContainText('Прикрепите исправленную работу');
  expect(await page.evaluate(()=>stageBucket(D.items[0]))).toBe('new');
@@ -304,5 +304,59 @@ test('R3-E1: the work page shows the five-step route; passed steps fold into one
  await expect(route.locator('.r3s.cur')).toContainText('Шаг 3 из 5 · В работе');await expect(route.locator('.r3passed')).toContainText('Задание, Вопросы');
  await page.setViewportSize({width:1280,height:900});
  await expect(route.locator('.r3s.done')).toHaveCount(2);await expect(route.locator('.r3s.done').first()).toBeVisible();await expect(route.locator('.r3passed')).toBeHidden();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+test('R3-E2: home shows one card per form request with the route strip and one action; the works list shows the step',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  Oblako.mode='cloud';window.calls=[];
+  const st={'11111111-1111-4111-8111-111111111111':{stage:'needs_answer',openQuestions:2,route:'r3',returns:0},'22222222-2222-4222-8222-222222222222':{stage:'r3_ready',openQuestions:0,route:'r3',returns:0,result:{name:'Работа.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:null,handedAt:null}},'33333333-3333-4333-8333-333333333333':{stage:'r3_in_work',openQuestions:0,route:'r3',returns:0}};
+  Oblako.requestApi=async d=>{calls.push(d.action+':'+d.id);if(d.action==='student-progress')return st[d.id];if(d.action==='clarification-unread')return {question:0};throw Error('Unexpected '+d.action);};
+  const base=(id,topic,dl,sid,n,extra)=>({id,topic,created:today(),deadline:dl,status:'draft',format:{workType:'Работа'},structure:emptyStructure(),tasks:[],req:{id:'i'+n,serverId:sid,number:n,sent:'2026-10-05',...extra}});
+  change(function(){
+   D.works.push(base('w-1','Математика — практические задания','2027-01-25','11111111-1111-4111-8111-111111111111',15,{route:'r3',intake:true}));
+   D.works.push(base('w-2','Экономика — контрольная работа','2026-12-20','22222222-2222-4222-8222-222222222222',16,{route:'r3',intake:true}));
+   // Работа из формы без отметки маршрута — маршрут определяется по ответу сервера.
+   D.works.push(base('w-3','История — реферат','2026-12-01','33333333-3333-4333-8333-333333333333',17,{intake:true}));
+   D.works.push({id:'w-own',topic:'Своя курсовая',created:today(),deadline:'2026-11-30',status:'draft',format:{workType:'Курсовая'},structure:emptyStructure(),tasks:[]});
+  });
+  tab='today';openWorkId=null;render();
+ });
+ await expect(page.locator('[data-r3-home]')).toHaveCount(3);
+ const econ=page.locator('[data-r3-home="w-2"]');
+ await expect(econ.locator('.r3strip li.cur')).toContainText('Готово');await expect(econ.locator('[data-act="r3-download"]')).toHaveText('Скачать работу');
+ const math=page.locator('[data-r3-home="w-1"]');
+ await expect(math.locator('[data-act="student-clarifications"]')).toHaveText('Ответить на вопросы');
+ await expect(page.locator('[data-r3-home="w-3"] .r3strip li.cur')).toContainText('В работе');
+ expect(await page.evaluate(()=>work('w-3').req.route)).toBe('r3');
+ // «Ближайшая сдача» показывает только работу без заявки по форме.
+ await expect(page.locator('.card.now')).toContainText('Своя курсовая');
+ await expect(page.locator('[data-act="intake-materials"]',{hasText:'Отправить новое задание'})).toBeVisible();
+ await page.evaluate(()=>{tab='works';render();});
+ await expect(page.locator('[data-r3-row="w-1"]')).toContainText('Шаг 2 из 5 · Ответьте на вопрос исполнителя');
+ await expect(page.locator('[data-r3-row="w-2"]')).toContainText('Шаг 4 из 5 · Работа готова');
+ await expect(page.locator('[data-r3-row="w-2"] .r3dots i.done')).toHaveCount(3);
+ // Повторный показ не дёргает сервер чаще раза в 30 секунд.
+ const before=await page.evaluate(()=>calls.length);await page.evaluate(()=>{tab='today';render();});await page.waitForTimeout(300);
+ expect(await page.evaluate(()=>calls.length)).toBe(before);
+});
+test('R3-E3: registry card shows the route on the left and title-page details on the right; tabs and history work',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  const v1={name:'Работа.docx',size:49152,at:'2026-10-06T15:15:00Z',hash:'a'.repeat(64)};
+  window.r3={takenAt:'2026-10-05T07:40:00Z',result:{...v1,at:'2026-10-06T15:12:00Z'},delivered:v1,downloadedAt:'2026-10-07T09:00:00Z',handedAt:null,returns:1,returnedAt:'2026-10-09T06:00:00Z',versions:[{n:1,name:v1.name,size:v1.size,at:v1.at}],returnList:[{n:1,comment:'Задание 3 подробно.',at:'2026-10-09T06:00:00Z',files:[]}]};
+  window.qcalls=0;
+  Oblako.requestApi=async d=>{if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:3}};if(d.action==='attachment-context')return {attachments:[{id:'a1',category:'unclassified',file_name:'Практика1.pdf',content_type:'application/pdf',size_bytes:2048,file_hash:'a'.repeat(64)}],materialRevision:3};if(d.action==='clarification-list'){qcalls++;return {questions:[]};}if(d.action==='r3-state')return {work:structuredClone(r3)};throw Error('Unexpected '+d.action);};
+  const x=fromPayload({id:'r3-e3',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
+  D.items=[x];openId=x.id;render();
+ });
+ const route=page.locator('.r3route');
+ await expect(route.locator('.r3s.done')).toHaveCount(2);await expect(route.locator('.r3s.cur')).toContainText('Шаг 3 из 5 · В работе · доработка № 1');
+ await expect(route.locator('.r3s.fut').first()).toContainText('Студент получает исправленную работу.');
+ await expect(page.locator('.r3head')).toContainText('Возвратов на доработку: 1');await expect(page.locator('.r3due')).toContainText('25 января');
+ const box=await route.boundingBox(),side=await page.locator('.r3side').boundingBox();expect(box.x).toBeLessThan(side.x);expect(box.width).toBeGreaterThan(side.width);
+ await page.locator('#request-tab-history').click();
+ await expect(page.locator('#request-panel-history')).toContainText('Версия 1');await expect(page.locator('#request-panel-history')).toContainText('Задание 3 подробно.');
+ await page.locator('#request-tab-materials').click();await expect(page.locator('#request-panel-materials')).toContainText('Практика1.pdf');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
