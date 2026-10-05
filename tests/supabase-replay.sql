@@ -65,11 +65,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 50 then
-    raise exception 'Expected 50 STUDKAB tables, found %', table_count;
+  if table_count <> 51 then
+    raise exception 'Expected 51 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 50 then
-    raise exception 'RLS enabled on only % of 50 STUDKAB tables', rls_count;
+  if rls_count <> 51 then
+    raise exception 'RLS enabled on only % of 51 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -90,6 +90,10 @@ begin
   if to_regclass('public.studkab_kit_bench_policy') is null
     or to_regclass('public.studkab_kit_bench_runs') is null then
     raise exception 'BENCH-01 bench tables are missing';
+  end if;
+  -- ROUTE-03 R3-C: работа исполнителя по заявке, поданной по форме.
+  if to_regclass('public.studkab_r3_work') is null then
+    raise exception 'R3-C work table is missing';
   end if;
 end
 $$;
@@ -413,4 +417,24 @@ do $$ declare signature text;role_name text;begin
  if has_function_privilege(role_name,signature,'execute') then raise exception 'Exposed private dialog RPC: %',signature;end if;end loop;
  end loop;
  if has_table_privilege('service_role','public.studkab_private_dialog','update,delete') or has_table_privilege('service_role','public.studkab_telegram_dialog_context','update,delete') then raise exception 'Mutable private dialog history';end if;
+end $$;
+
+-- ROUTE-03 R3-C: работа исполнителя закрыта для браузера; функции — только для сервера, с правами вызывающего.
+do $$ declare signature text;role_name text;begin
+ foreach signature in array array[
+ 'public.studkab_r3_take(uuid)',
+ 'public.studkab_r3_result_set(uuid,text,text,integer,text,text)',
+ 'public.studkab_r3_deliver(uuid,text)',
+ 'public.studkab_r3_downloaded(uuid,uuid)'] loop
+  if to_regprocedure(signature) is null
+   or (select prosecdef from pg_proc where oid=to_regprocedure(signature))
+   or not has_function_privilege('service_role',signature,'execute') then raise exception 'R3-C RPC missing or not service-only: %',signature;end if;
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'R3-C RPC exposed: %',signature;end if;
+  end loop;
+ end loop;
+ foreach role_name in array array['anon','authenticated'] loop
+  if has_table_privilege(role_name,'public.studkab_r3_work','select,insert,update,delete') then raise exception 'R3-C work table exposed to %',role_name;end if;
+ end loop;
+ if not (has_table_privilege('service_role','public.studkab_r3_work','select') and has_table_privilege('service_role','public.studkab_r3_work','insert') and has_table_privilege('service_role','public.studkab_r3_work','update')) then raise exception 'R3-C work table not writable by server';end if;
 end $$;

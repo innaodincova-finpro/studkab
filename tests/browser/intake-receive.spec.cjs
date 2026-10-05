@@ -100,6 +100,7 @@ test('R3-A: registry card shows title-page details and materials, opens no study
    if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:3}};
    if(d.action==='attachment-context')return {attachments:[{id:'a1',category:'unclassified',file_name:'Практика1.pdf',content_type:'application/pdf',size_bytes:2048,file_hash:'a'.repeat(64)},{id:'a2',category:'unclassified',file_name:'Страница.jpg',content_type:'image/jpeg',size_bytes:4096,file_hash:'b'.repeat(64)}],materialRevision:3};
    if(d.action==='clarification-list')return {questions:[]};
+   if(d.action==='r3-state')return {work:{takenAt:null,result:null,delivered:null,downloadedAt:null}};
    throw Error('Unexpected '+d.action);};
   const x=fromPayload({id:'r3-card',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',s:'',lk:'https://disk.yandex.ru/d/Mt7abc',dl:'2027-01-25',rq:'Любые 2 задания',cn:'student@example.invalid'});x.requestNumber=15;
   D.items=[x];openId=x.id;render();
@@ -108,10 +109,11 @@ test('R3-A: registry card shows title-page details and materials, opens no study
  expect(r.topic).toBe('Математика — практические задания');expect(r.bucket).toBe('new');
  expect(r.copy).toContain('Дисциплина: Математика');expect(r.copy).toContain('Преподаватель: не указано');
  await expect(page.locator('.request-action')).toContainText('Новая заявка — откройте материалы');
- await expect(page.locator('.request-action')).toContainText('2 файла и ссылку на папку в облаке');
+ await expect(page.locator('.request-action [data-act="r3-take"]')).toHaveText('Взять в работу');
+ await expect(page.locator('.request-action [data-act="r3-bundle"]')).toHaveText('Скачать всё');
  await expect(page.locator('#request-panel-overview')).toContainText('Курс и группа');await expect(page.locator('#request-panel-overview')).toContainText('26М214в');
  await expect(page.locator('#request-panel-overview a[href="https://disk.yandex.ru/d/Mt7abc"]')).toHaveAttribute('rel','noopener noreferrer');
- await page.locator('.request-action [data-act="r3-materials"]').click();
+ await page.locator('#request-tab-materials').click();
  await expect(page.locator('#request-panel-materials')).toContainText('Фото · 4 КБ');
  expect(await page.evaluate(()=>cardCalls.some(a=>/passport|registered-study/.test(a)))).toBe(false);
 });
@@ -142,4 +144,69 @@ test('R3-B: Google Drive link is checked without copying; failed check does not 
  await expect(page.locator('[data-intake-link-status]')).toContainText('Не удалось проверить ссылку');
  await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');await page.locator('[data-intake-receive]').click();
  await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
+});
+// ROUTE-03, R3-C: работа исполнителя в реестре и готовая работа у студента.
+test('R3-C: registry card — take, attach result, deliver; new file must be delivered again',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  window.r3={takenAt:null,result:null,delivered:null,downloadedAt:null};window.r3Calls=[];
+  Oblako.requestApi=async d=>{r3Calls.push(d.action);
+   if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:3}};
+   if(d.action==='attachment-context')return {attachments:[{id:'a1',category:'unclassified',file_name:'Практика1.pdf',content_type:'application/pdf',size_bytes:2048,file_hash:'a'.repeat(64)}],materialRevision:3};
+   if(d.action==='clarification-list')return {questions:[]};
+   if(d.action==='r3-state')return {work:structuredClone(r3)};
+   if(d.action==='r3-take'){r3.takenAt=r3.takenAt||'2026-10-05T07:40:00Z';return {work:structuredClone(r3)};}
+   if(d.action==='r3-result-upload'){r3.result={name:d.fileName,size:d.sizeBytes,at:'2026-10-06T15:12:00Z',hash:d.fileHash};return {work:structuredClone(r3)};}
+   if(d.action==='r3-deliver'){if(d.fileHash!==r3.result.hash)throw Error('changed');r3.delivered={name:r3.result.name,size:r3.result.size,at:'2026-10-06T15:15:00Z',hash:r3.result.hash};return {work:structuredClone(r3)};}
+   throw Error('Unexpected '+d.action);};
+  const x=fromPayload({id:'r3-work',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
+  D.items=[x];openId=x.id;render();
+ });
+ const panel=page.locator('.request-action');
+ await expect(panel).toContainText('Новая заявка — откройте материалы');
+ await expect(panel.locator('[data-act="r3-bundle"]')).toBeVisible();await expect(panel.locator('[data-act="registered-study"]')).toBeVisible();
+ await panel.locator('[data-act="r3-take"]').click();
+ await expect(panel).toContainText('Выполните работу и прикрепите готовый файл');
+ await expect(panel.locator('button[disabled]',{hasText:'Передать студенту'})).toBeVisible();
+ await panel.locator('input[data-r3-result-file]').setInputFiles({name:'Зеленская_Математика.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from([80,75,3,4,9])});
+ await expect(panel).toContainText('Зеленская_Математика.docx');
+ await panel.locator('[data-act="r3-deliver"]').click();
+ await expect(panel).toContainText('Работа передана студенту');await expect(panel).toContainText('Студент ещё не скачал работу');
+ await expect(panel.locator('[data-act="r3-deliver"]')).toHaveCount(0);
+ await panel.locator('input[data-r3-result-file]').setInputFiles({name:'Версия2.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-2')});
+ await expect(panel.locator('[data-act="r3-deliver"]')).toHaveText('Передать новую версию');
+ expect(await page.evaluate(()=>stageBucket(D.items[0]))).toBe('delivered');
+});
+test('R3-C: «Скачать всё» builds one archive with the student files and the title-page details',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ const names=await page.evaluate(async()=>{
+  window.fetch=async u=>new Response(String(u).endsWith('a1')?'%PDF-one':'jpeg-two');
+  Oblako.requestApi=async d=>{if(d.action==='attachment-download')return {url:'https://storage.example/'+d.attachmentId};throw Error('Unexpected '+d.action);};
+  const x=fromPayload({id:'r3-zip',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'26М214в',n:'Зеленская А.А.',dl:'2027-01-25',rq:'Любые 2',lk:'https://disk.yandex.ru/d/x',cn:'s@e'});
+  x.requestNumber=15;x.attachments=[{id:'a1',file_name:'Задание.pdf'},{id:'a2',file_name:'Задание.pdf'}];
+  let blob;const real=URL.createObjectURL;URL.createObjectURL=b=>{blob=b;return 'blob:x';};
+  await r3Bundle(x);URL.createObjectURL=real;
+  const bytes=new Uint8Array(await blob.arrayBuffer()),dec=new TextDecoder(),out=[];
+  for(let i=0;i<bytes.length-4;i++)if(bytes[i]===0x50&&bytes[i+1]===0x4b&&bytes[i+2]===1&&bytes[i+3]===2){const n=bytes[i+28]|(bytes[i+29]<<8);out.push(dec.decode(bytes.slice(i+46,i+46+n)));}
+  const text=dec.decode(bytes);return {out,hasInfo:text.includes('Дисциплина: Математика')&&text.includes('https://disk.yandex.ru/d/x')};
+ });
+ expect(names.out).toEqual(['Задание.pdf','Задание (2).pdf','Сведения для титульного листа.txt']);expect(names.hasInfo).toBe(true);
+});
+test('R3-C: student sees «Работа готова» with one download button; the old result block is hidden',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  Oblako.mode='cloud';window.dl=[];window.opened=[];HTMLAnchorElement.prototype.click=function(){opened.push(this.download);};
+  Oblako.requestApi=async d=>{
+   if(d.action==='student-progress')return {stage:'r3_ready',openQuestions:0,route:'r3',result:{name:'Зеленская_Математика.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:null}};
+   if(d.action==='r3-download'){dl.push(d.id);return {url:new URL('/storage/v1/object/sign/x?token=t',OBLAKO_CONFIG.url).href,fileName:'Зеленская_Математика.docx'};}
+   if(d.action==='clarification-unread')return {question:0};
+   throw Error('Unexpected '+d.action);};
+  change(function(){D.works.push({id:'w-r3',topic:'Математика — практические задания',created:today(),deadline:'2027-01-25',status:'draft',format:{workType:'Практические задания',discipline:'Математика'},structure:emptyStructure(),tasks:[],req:{id:'intake_x',serverId:'11111111-1111-4111-8111-111111111111',number:15}});});
+  tab='works';openWorkId='w-r3';render();
+ });
+ await expect(page.locator('[data-student-progress]')).toHaveText('Работа готова.');
+ await expect(page.locator('[data-r3-ready]')).toContainText('Зеленская_Математика.docx · 48 КБ');
+ await expect(page.locator('[data-legacy-result]')).toBeHidden();
+ await page.locator('[data-act="r3-download"]').click();
+ await expect.poll(()=>page.evaluate(()=>opened)).toEqual(['Зеленская_Математика.docx']);expect(await page.evaluate(()=>dl)).toEqual(['11111111-1111-4111-8111-111111111111']);
 });

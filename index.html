@@ -303,6 +303,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
   .screen{min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding-bottom:90px;-webkit-overflow-scrolling:touch}
   .tabs{position:relative;left:auto;bottom:auto;transform:none;flex-shrink:0;margin-top:auto}
 }
+.r3-download{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}
 </style>
 <link rel="stylesheet" href="desktop.css?v=7">
 </head>
@@ -2047,11 +2048,11 @@ function viewWork(id){
     '<button type="button" class="chip warn" data-act="send-request" data-id="'+esc(w.id)+'">Заполнить и отправить заявку</button>');
 
   if(w.req && w.req.serverId){
-    h += card(lab('Ход заявки №'+esc(w.req.number||''))+'<p class="hint" data-student-progress role="status">Проверяем этап заявки…</p><button type="button" class="btn" data-act="student-progress" data-id="'+esc(w.id)+'">Обновить этап</button>');
+    h += card(lab('Ход заявки №'+esc(w.req.number||''))+'<p class="hint" data-student-progress role="status">Проверяем этап заявки…</p><div data-r3-ready hidden></div><button type="button" class="btn" data-act="student-progress" data-id="'+esc(w.id)+'">Обновить этап</button>');
     h += card(lab('Материалы заявки')+'<p class="hint">Здесь можно посмотреть полученные файлы. Добавить новые получится, если исполнитель откроет дополнение материалов.</p><button type="button" class="btn" data-act="student-materials" data-id="'+esc(w.id)+'">Открыть материалы заявки</button>');
     h += card(lab("Вопросы исполнителя")+'<p class="hint" data-dialog-unread role="status">Проверяем новые вопросы…</p><p class="hint">Чтобы получать сообщения при закрытом кабинете, включите уведомления в разделе «Профиль» → «Уведомления» на этом устройстве.</p><button type="button" class="btn" data-act="student-clarifications" data-id="'+esc(w.id)+'">Открыть вопросы и ответы</button>');
     h += '<section data-test-delivery-host hidden></section>';
-    h += card(lab("Результат заявки") + '<p class="hint">Проверьте, доступен ли документ Word для скачивания.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>');
+    h += '<div data-legacy-result>'+card(lab("Результат заявки") + '<p class="hint">Проверьте, доступен ли документ Word для скачивания.</p><button type="button" class="btn" data-act="receive-result" data-id="'+esc(w.id)+'">Открыть результат заявки</button>')+'</div>';
     h += '<details class="fold"><summary>Мои разделы и доработка</summary><div class="in"><p class="hint">Здесь текст, который вы редактируете в кабинете. Процент ниже относится только к этим разделам. Документ исполнителя доступен отдельно, в результате заявки.</p>';
   }
 
@@ -2417,14 +2418,25 @@ function render(){
   refreshStudentDialogue();
   refreshStudentProgress();
 }
+// R3-C: заявка по форме — готовая работа скачивается прямо в карточке; прежний блок «Результат заявки» скрыт.
+function r3ReadyBlock(w,result){
+ var box=document.querySelector('[data-r3-ready]'),legacy=document.querySelector('[data-legacy-result]');
+ if(result.route==='r3'&&legacy)legacy.hidden=true;
+ if(!box)return;
+ if(!result.result){box.hidden=true;box.innerHTML='';return;}
+ var d=new Date(result.result.at),when=isNaN(d)?'':d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})+' в '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+ var size=result.result.size>=1048576?(result.result.size/1048576).toFixed(1).replace('.',',')+' МБ':Math.max(1,Math.round(result.result.size/1024))+' КБ';
+ box.innerHTML='<p><b>Работа готова</b> · передана '+esc(when)+'</p><p class="small" style="overflow-wrap:anywhere">'+esc(result.result.name)+' · '+esc(size)+'</p><button type="button" class="b r3-download" data-act="r3-download" data-id="'+esc(w.id)+'">Скачать работу</button><p class="hint">Прочитайте работу целиком, затем загрузите её в раздел дисциплины на сайте вуза.</p>';
+ box.hidden=false;
+}
 function refreshStudentProgress(){
  var w=tab==='works'&&openWorkId&&work(openWorkId),host=document.querySelector('[data-student-progress]');
  if(!w||!w.req||!w.req.serverId||!host||!window.Oblako||!Oblako.requestApi)return;
  var identity=Oblako.identity(),requestId=w.req.serverId;
  host.textContent='Проверяем этап заявки…';
- var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Исполнитель готовит или проверяет Word; передача студенту ещё не зарегистрирована.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
+ var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Исполнитель готовит или проверяет Word; передача студенту ещё не зарегистрирована.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',r3_received:'Заявка у исполнителя. Он откроет материалы и, если чего-то не хватает, спросит здесь.',r3_in_work:'Исполнитель выполняет работу. Мы пришлём уведомление, когда она будет готова.',r3_ready:'Работа готова.',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
  Oblako.requestApi({action:'student-progress',id:requestId}).then(function(result){
-  if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)host.textContent=(labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Открытых вопросов: '+result.openQuestions+'.':'');
+  if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id){host.textContent=(labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Вопросов без ответа: '+result.openQuestions+'.':'');r3ReadyBlock(w,result);}
  },function(err){if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)host.textContent='Не удалось получить этап из реестра: '+(err.message||'повторите позже');});
 }
 async function refreshStudentDialogue(){
@@ -2717,6 +2729,7 @@ document.addEventListener("click", function(ev){
   }
   if(act==='student-clarifications'){var cw=work(id);if(cw&&cw.req&&cw.req.serverId)StudClarifications.show({requestId:cw.req.serverId,requestNumber:cw.req.number,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal,onRead:refreshStudentDialogue});return;}
   if (act === "receive-result") return StudResults.receive(work(id));
+  if (act === "r3-download"){var rw=work(id);if(!rw||!rw.req||!rw.req.serverId)return;el.disabled=true;Oblako.requestApi({action:'r3-download',id:rw.req.serverId}).then(function(r){var u=new URL(r.url);if(u.origin!==new URL(window.OBLAKO_CONFIG.url).origin)throw Error('Не удалось подтвердить ссылку');var a=document.createElement('a');a.href=u.href;a.download=r.fileName;a.rel='noopener';a.click();}).catch(function(e){toast(e.message||'Файл недоступен');}).finally(function(){el.disabled=false;});return;}
   if (act === "export-word") return exportWord(id);
   if (act === "save-template") return saveAsTemplate(id);
   if (act === "apply-template") return applyTemplate(id);

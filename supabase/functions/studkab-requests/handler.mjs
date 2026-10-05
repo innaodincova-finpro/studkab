@@ -1,3 +1,4 @@
+import {r3WorkAction,R3_ACTIONS} from './r3-work.mjs';
 import {qualityAction,qualityError} from './quality-evidence.mjs';
 import {testDeliveryAction} from './test-delivery.mjs';
 import {registeredStudyAction} from './registered-study.mjs';
@@ -38,7 +39,7 @@ export function validatePayload(p,{newSubmission=false,previous=null}={}) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,fetchCloud=globalThis.fetch,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,fetchCloud=globalThis.fetch,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -113,6 +114,11 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(['passport-get','passport-ensure','passport-save','passport-approve','passport-structure-audit'].includes(input.action)){
     const r=await requirementAction(input,user,{db,config});return json(r.data,r.status||200);
    }
+   // ROUTE-03, R3-C: работа исполнителя и выдача результата по заявке, поданной по форме.
+   if(R3_ACTIONS.includes(input.action)){
+    if(input.action!=='r3-result-upload'&&raw.length>16000)return json({error:'Запрос слишком большой'},413);
+    const r=await r3WorkAction(input,user,{db,config,download,saveResult});return json(r.data,r.status||200);
+   }
    if(['attachment-upload','attachment-list','attachment-context','attachment-download'].includes(input.action)){
     const r=await attachmentAction(input,user,{db,config,upload,download,remove});return json(r.data,r.status||200);
    }
@@ -135,9 +141,18 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(input.action==='student-progress'){
     if(typeof isMember!=='function'||await isMember(user.id)!==true)return json({error:'Нет доступа'},403);
     if(!/^[a-f0-9-]{36}$/i.test(String(input.id||'')))return json({error:'Неверная заявка'},400);
-    const [row]=await db('studkab_requests?select=id,ready_at&deleting_at=is.null&id=eq.'+input.id+'&student_id=eq.'+user.id+'&limit=1');
+    const [row]=await db('studkab_requests?select=id,ready_at,payload&deleting_at=is.null&id=eq.'+input.id+'&student_id=eq.'+user.id+'&limit=1');
     if(!row)return json({error:'Заявка не найдена'},404);
     if(!row.ready_at)return json({stage:'awaiting_materials',openQuestions:0});
+    // R3-C: заявка по форме — этапы «Получена / Вопросы / В работе / Готово».
+    if(row.payload?.route==='r3'){
+     const [questions,work]=await Promise.all([
+      db('studkab_clarifications?select=id&request_id=eq.'+input.id+'&answered_at=is.null&limit=100'),
+      db('studkab_r3_work?select=taken_at,delivered_name,delivered_size,delivered_at,downloaded_at&request_id=eq.'+input.id+'&limit=1')]);
+     const w=work[0],openQuestions=questions.length;
+     const stage=w?.delivered_at?'r3_ready':openQuestions?'needs_answer':w?.taken_at?'r3_in_work':'r3_received';
+     return json({stage,openQuestions,route:'r3',...(w?.delivered_at?{result:{name:w.delivered_name,size:w.delivered_size,at:w.delivered_at,downloadedAt:w.downloaded_at}}:{})});
+    }
     const [questions,passports,delivered]=await Promise.all([
      db('studkab_clarifications?select=id,answered_at&request_id=eq.'+input.id+'&answered_at=is.null&limit=100'),
      db('studkab_requirement_passports?select=status&request_id=eq.'+input.id+'&order=revision.desc&limit=1'),
