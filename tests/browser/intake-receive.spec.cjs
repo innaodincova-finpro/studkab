@@ -235,7 +235,7 @@ test('R3-D: registry shows hand-in, then the return with remarks; corrected file
  // Длинное имя файла не выходит за край карточки.
  expect(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
  await page.evaluate(()=>{const x=D.items[0];Object.assign(r3,{handedAt:null,returns:1,returnedAt:'2026-10-09T06:00:00Z',returnList:[{n:1,comment:'Задание 3: показать решение подробно.',at:'2026-10-09T06:00:00Z',files:[{id:'f1',name:'Замечания.jpg',size:819200,type:'image/jpeg'}]}]});x.r3=structuredClone(r3);render();});
- await expect(panel).toContainText('Шаг 3 из 5 · доработка № 1');await expect(panel).toContainText('Работу вернули на доработку');
+ await expect(panel).toContainText('Шаг 3 из 5 · В работе · доработка № 1');await expect(panel).toContainText('Работу вернули на доработку');
  await expect(panel.locator('.r3-quote')).toContainText('Задание 3: показать решение подробно.');
  await expect(panel).toContainText('Версия 1 передана');await expect(panel).toContainText('Прикрепите исправленную работу');
  expect(await page.evaluate(()=>stageBucket(D.items[0]))).toBe('new');
@@ -339,4 +339,24 @@ test('R3-E2: home shows one card per form request with the route strip and one a
  // Повторный показ не дёргает сервер чаще раза в 30 секунд.
  const before=await page.evaluate(()=>calls.length);await page.evaluate(()=>{tab='today';render();});await page.waitForTimeout(300);
  expect(await page.evaluate(()=>calls.length)).toBe(before);
+});
+test('R3-E3: registry card shows the route on the left and title-page details on the right; tabs and history work',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  const v1={name:'Работа.docx',size:49152,at:'2026-10-06T15:15:00Z',hash:'a'.repeat(64)};
+  window.r3={takenAt:'2026-10-05T07:40:00Z',result:{...v1,at:'2026-10-06T15:12:00Z'},delivered:v1,downloadedAt:'2026-10-07T09:00:00Z',handedAt:null,returns:1,returnedAt:'2026-10-09T06:00:00Z',versions:[{n:1,name:v1.name,size:v1.size,at:v1.at}],returnList:[{n:1,comment:'Задание 3 подробно.',at:'2026-10-09T06:00:00Z',files:[]}]};
+  window.qcalls=0;
+  Oblako.requestApi=async d=>{if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:3}};if(d.action==='attachment-context')return {attachments:[{id:'a1',category:'unclassified',file_name:'Практика1.pdf',content_type:'application/pdf',size_bytes:2048,file_hash:'a'.repeat(64)}],materialRevision:3};if(d.action==='clarification-list'){qcalls++;return {questions:[]};}if(d.action==='r3-state')return {work:structuredClone(r3)};throw Error('Unexpected '+d.action);};
+  const x=fromPayload({id:'r3-e3',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
+  D.items=[x];openId=x.id;render();
+ });
+ const route=page.locator('.r3route');
+ await expect(route.locator('.r3s.done')).toHaveCount(2);await expect(route.locator('.r3s.cur')).toContainText('Шаг 3 из 5 · В работе · доработка № 1');
+ await expect(route.locator('.r3s.fut').first()).toContainText('Студент получает исправленную работу.');
+ await expect(page.locator('.r3head')).toContainText('Возвратов на доработку: 1');await expect(page.locator('.r3due')).toContainText('25 января');
+ const box=await route.boundingBox(),side=await page.locator('.r3side').boundingBox();expect(box.x).toBeLessThan(side.x);expect(box.width).toBeGreaterThan(side.width);
+ await page.locator('#request-tab-history').click();
+ await expect(page.locator('#request-panel-history')).toContainText('Версия 1');await expect(page.locator('#request-panel-history')).toContainText('Задание 3 подробно.');
+ await page.locator('#request-tab-materials').click();await expect(page.locator('#request-panel-materials')).toContainText('Практика1.pdf');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

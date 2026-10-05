@@ -305,7 +305,21 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .toast{position:fixed;left:50%;transform:translateX(-50%) translateY(8px);bottom:150px;z-index:60;width:min(480px,92%);background:var(--toast);color:#fff;border-radius:12px;padding:11px 14px;font-size:13px;box-shadow:0 12px 28px var(--greet-sh);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
-.r3-main{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}.r3-main[disabled]{opacity:.55;box-shadow:none}.r3-file{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;border:1px solid var(--line,#DCE6EE);border-radius:12px;padding:10px 12px;margin:10px 0}.r3-file b{flex:1 1 100%;overflow-wrap:anywhere}.r3-file small{flex:1;color:#6B7F92}.r3-attach{display:inline-block;cursor:pointer;color:#2F6091;font-weight:600;border:1px dashed #9FB7CC;border-radius:12px;padding:10px 14px;margin:10px 0 4px}.r3-quote{border-left:3px solid #B08347;background:#FBF7F0;border-radius:0 12px 12px 0;padding:10px 14px;margin:10px 0;font-size:14px;line-height:1.45;overflow-wrap:anywhere}.r3-qfiles{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:13px;color:#4A5B6B}.r3-wrap,.workflow-next .hint,.workflow-next .workflow-copy{overflow-wrap:anywhere}.linkbtn{background:none;border:0;padding:0;color:#2F6091;font:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
+.r3-main{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}.r3-main[disabled]{opacity:.55;box-shadow:none}.r3-file{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;border:1px solid var(--line,#DCE6EE);border-radius:12px;padding:10px 12px;margin:10px 0}.r3-file b{flex:1 1 100%;overflow-wrap:anywhere}.r3-file small{flex:1;color:#6B7F92}.r3-attach{display:inline-block;cursor:pointer;color:#2F6091;font-weight:600;border:1px dashed #9FB7CC;border-radius:12px;padding:10px 14px;margin:10px 0 4px}.r3head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.r3facts{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--mut);font-size:14px;margin-bottom:6px}.r3facts span:first-child{color:var(--ink);font-weight:600}
+.r3due{flex:none;text-align:right;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px 16px;min-width:130px}.r3due span,.r3due small{display:block;font-size:12px;color:var(--mut)}.r3due b{display:block;font-size:16px}
+.r3tabs{display:flex;flex-wrap:wrap;align-items:center}.r3tabq{background:none;border:0;padding:8px 12px;font:inherit;color:var(--mut);cursor:pointer}.r3tabq:hover{color:var(--accent)}
+.r3grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:22px;align-items:start}.r3grid .request-action.r3route{grid-column:1;grid-row:1;position:static}.r3grid .r3side{grid-column:2;grid-row:1}.r3side{border:1px solid var(--line);border-radius:18px;padding:16px;background:#fff;overflow-wrap:break-word;hyphens:manual}.r3side .stat span{flex:0 0 42%}.r3side a{overflow-wrap:anywhere}
+.r3route{position:relative}.r3s{display:grid;grid-template-columns:36px 1fr;column-gap:14px;position:relative;padding-bottom:18px}
+.r3s:not(:last-child)::before{content:"";position:absolute;left:17px;top:36px;bottom:0;width:2px;background:repeating-linear-gradient(to bottom,#C9D6E1 0 5px,transparent 5px 10px)}.r3s.done:not(:last-child)::before{background:#9DBDAA}
+.r3mk{width:30px;height:30px;margin:3px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;position:relative;z-index:1}
+.r3s.done .r3mk{background:var(--ok);color:#fff}.r3s.fut .r3mk{background:#fff;border:2px solid #CBD8E3;color:#9AABBA}.r3s.cur .r3mk{background:linear-gradient(140deg,var(--accent),var(--head));color:#fff;box-shadow:0 0 0 5px rgba(47,96,145,.13)}
+.r3b{min-width:0;padding-top:6px}.r3b>b{display:block;font-weight:600}.r3b>small{display:block;color:var(--mut);font-size:13px;margin-top:2px}.r3s.fut .r3b>b{color:#8697A7;font-weight:500}.r3s.fut .r3b>small{color:#A3B1BE}.r3s.cur .r3b{padding-top:0}
+.r3rc{background:#fff;border:1px solid #BFD2E2;border-radius:20px;padding:20px 22px;box-shadow:0 14px 34px -22px rgba(34,48,63,.35)}
+.r3eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}.r3h{font-family:'Spectral',serif;font-size:22px;line-height:1.2;margin:6px 0 4px}
+.r3cap{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:14px 0 6px}.r3later{color:var(--mut);font-size:14px;margin:0}.r3sep{border-top:1px solid var(--line);margin-top:16px}
+.r3rc .btn.r3-main{display:inline-block;width:auto;margin:8px 8px 0 0}
+@media (max-width:900px){.r3grid{grid-template-columns:1fr}.r3grid .r3side{grid-column:1;grid-row:2}.r3head{flex-direction:column}.r3due{text-align:left}}
+.r3-quote{border-left:3px solid #B08347;background:#FBF7F0;border-radius:0 12px 12px 0;padding:10px 14px;margin:10px 0;font-size:14px;line-height:1.45;overflow-wrap:anywhere}.r3-qfiles{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:13px;color:#4A5B6B}.r3-wrap,.workflow-next .hint,.workflow-next .workflow-copy{overflow-wrap:anywhere}.linkbtn{background:none;border:0;padding:0;color:#2F6091;font:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
 </style>
 <link rel="stylesheet" href="desktop.css?v=7">
 </head>
@@ -1578,7 +1592,7 @@ function r3Workflow(x){
  // R3-D: после возврата заявка снова в работе, пока не передана новая версия.
  var rework=!!w.returnedAt;
  if(rework)return Object.assign(base,{step:3,key:'r3-rework',rework:w.returns,title:'Работу вернули на доработку',copy:r3When(w.returnedAt)+' студент сообщил: преподаватель вернул работу. Исправьте работу по замечаниям и передайте новую версию.'});
- if(w.delivered&&w.handedAt)return Object.assign(base,{step:5,complete:true,key:'r3-handed',title:'Студент сдал работу',copy:'Студент отметил сдачу '+r3When(w.handedAt)+'. Действий не требуется. Если преподаватель вернёт работу, студент приложит замечания, и заявка вернётся на шаг «В работе».'});
+ if(w.delivered&&w.handedAt)return Object.assign(base,{step:5,complete:true,key:'r3-handed',title:'Студент сдал работу',copy:'Студент отметил сдачу '+r3When(w.handedAt)+'. Действий не требуется.'});
  if(w.delivered)return Object.assign(base,{step:4,key:'r3-delivered',title:'Работа передана студенту',copy:'Передана '+r3When(w.delivered.at)+'. '+(w.downloadedAt?'Студент скачал работу '+r3When(w.downloadedAt)+'.':'Студент ещё не скачал работу.')});
  if(w.takenAt)return Object.assign(base,{step:3,key:'r3-work',title:'Выполните работу и прикрепите готовый файл',copy:'Вы взяли заявку в работу '+r3When(w.takenAt)+'. Студент видит этап «В работе». Когда работа готова — прикрепите файл и передайте студенту.'});
  if(open)return Object.assign(base,{step:2,key:'r3-questions',title:'Вопрос у студента — ждём ответа',copy:'Вопросов без ответа: '+open+'. Можно взять заявку в работу, не дожидаясь ответа.'});
@@ -1587,8 +1601,12 @@ function r3Workflow(x){
 function r3When(v){var d=new Date(v);return isNaN(d)?'':d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})+' в '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
 function r3Size(n){return n>=1048576?(n/1048576).toFixed(1).replace('.',',')+' МБ':Math.max(1,Math.round(n/1024))+' КБ';}
 // R3-C: карточка шага для заявки по форме — одно главное действие и материалы под рукой.
-function r3Card(x){
- var w=requestWorkflow(x),r=x.r3||{},id=esc(x.id),h=workflowSteps(w)+lab('Шаг '+w.step+' из 5'+(w.rework?' · доработка № '+w.rework:''))+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p>';
+// R3-E (часть 3): в карточке маршрута шаг показывается как «Что сейчас / Что будет дальше» (картинки 2, 4, 9).
+function r3Later(w){return w.step<3?'После «Взять в работу» студент увидит этап «В работе». Готовую работу прикрепите на следующем шаге и нажмите «Передать студенту».':w.key==='r3-rework'?'Студент получит уведомление «Исправленная работа готова», скачает её и снова отметит сдачу.':w.step===3?'Студент получит уведомление и скачает работу в кабинете. Заявка перейдёт на шаг «Передана».':w.step===4?'Когда студент сдаст работу преподавателю, он отметит это — заявка перейдёт на шаг «Сдана».':'Если преподаватель вернёт работу, студент приложит замечания, и заявка вернётся на шаг «В работе».';}
+function r3Card(x,route){
+ var w=requestWorkflow(x),r=x.r3||{},id=esc(x.id),h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(R3_STEPS[w.step-1].label)+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(w.title)+'</h3><div class="r3cap">Что сейчас</div><p class="workflow-copy">'+esc(w.copy)+'</p>'
+  :workflowSteps(w)+lab('Шаг '+w.step+' из 5'+(w.rework?' · доработка № '+w.rework:''))+'<p class="workflow-title">'+esc(w.title)+'</p><p class="workflow-copy">'+esc(w.copy)+'</p>';
+ var card=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'<div class="r3sep"></div><div class="r3cap">Что будет дальше</div><p class="r3later">'+esc(r3Later(w))+'</p></div>';}:window.card;
  // R3-D: замечания преподавателя при возврате и история переданных версий.
  var rets=r.returnList||[],last=rets[rets.length-1],vers=r.versions||[];
  if(w.rework&&last)h+='<div class="r3-quote"><b>Замечания преподавателя:</b> '+esc(last.comment)+(last.files&&last.files.length?'<div class="r3-qfiles">'+last.files.map(function(f){return '<span>'+esc(f.name)+' · '+esc(r3Size(f.size))+' <button type="button" class="linkbtn" data-act="r3-return-file-download" data-id="'+id+'" data-file="'+esc(f.id)+'">Скачать</button></span>';}).join('')+'</div>':'')+'</div>';
@@ -1602,7 +1620,7 @@ function r3Card(x){
  var fresh=r.result&&(!r.delivered||r.delivered.hash!==r.result.hash);
  var send=fresh?'<button type="button" class="btn r3-main" data-act="r3-deliver" data-id="'+id+'">'+(r.delivered?'Передать новую версию':'Передать студенту')+'</button>':r.delivered?'':'<button type="button" class="btn r3-main" disabled>Передать студенту</button>';
  if(w.rework&&!fresh)send='<p class="hint">Прикрепите исправленную работу кнопкой «Заменить». Затем появится кнопка «Передать новую версию».</p>';
- return card(h+file+send+tools+(w.rework?'':r.delivered?'<p class="hint">Студенту передан файл «'+esc(r.delivered.name)+'». Если прикрепите другой файл, его нужно будет передать отдельно.</p>':'<p class="hint">Студент получит уведомление и скачает работу в кабинете.</p>'),'workflow-next');
+ return card(h+file+send+tools+(w.rework||(route&&!r.delivered)?'':r.delivered?'<p class="hint">Студенту передан файл «'+esc(r.delivered.name)+'». Если прикрепите другой файл, его нужно будет передать отдельно.</p>':'<p class="hint">Студент получит уведомление и скачает работу в кабинете.</p>'),'workflow-next');
 }
 // «Скачать всё»: материалы студента и сведения для титульного листа одним архивом (собирается в браузере).
 var R3_CRC=(function(){var t=[];for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
@@ -2409,6 +2427,41 @@ async function editPassport(x,fullRevision){
  });
 }
 
+function r3RouteReg(x){
+ var w=requestWorkflow(x),r=x.r3||{},cur=w.step-1,qs=(x.clarifications||[]);
+ var files=Array.isArray(x.attachments)?x.attachments.length:null,what=files?files+' '+plural(files,'файл','файла','файлов'):'';if(x.link)what=what?what+' и ссылка на папку':'ссылка на папку';
+ var res=[(x.created?ruDate(String(x.created).slice(0,10))+(what?' · ':''):'')+(what||'Материалы получены'),qs.length?'Вопросы закрыты':'Вопросов не было','Взята в работу '+r3When(r.takenAt)+(r.versions&&r.versions.length?' · версий передано: '+r.versions.length:''),r.delivered?'Передана '+r3When(r.delivered.at)+(r.downloadedAt?' · студент скачал '+r3When(r.downloadedAt):''):'Передана'];
+ var fut=['','Если чего-то не хватает — вопрос студенту и его ответ. Шаг пропускается, если вопросов нет.','Вы выполняете работу и прикрепляете готовый файл.',w.rework?'Студент получает исправленную работу.':'Студент получает уведомление и скачивает работу.',w.rework?'Студент снова отмечает сдачу.':'Студент отмечает сдачу. Если преподаватель вернёт работу — заявка пройдёт круг ещё раз.'];
+ return R3_STEPS.map(function(s,i){
+  if(i<cur)return '<div class="r3s done"><span class="r3mk">✓</span><div class="r3b"><b>'+esc(s.label)+'</b><small>'+esc(res[i])+'</small></div></div>';
+  if(i===cur)return '<div class="r3s cur"><span class="r3mk">'+(i+1)+'</span><div class="r3b">'+r3Card(x,true)+'</div></div>';
+  return '<div class="r3s fut"><span class="r3mk">'+(i+1)+'</span><div class="r3b"><b>'+esc(s.label)+'</b><small>'+esc(fut[i])+'</small></div></div>';
+ }).join('');
+}
+function r3History(x){
+ var r=x.r3||{},v=r.versions||[],ret=r.returnList||[];
+ return lab('Переданные версии')+(v.length?'<ul class="request-history">'+v.map(function(a){return '<li>Версия '+esc(a.n)+' · '+esc(r3When(a.at))+' · '+esc(a.name)+'</li>';}).join('')+'</ul>':'<p class="hint">Работа ещё не передавалась.</p>')+
+  lab('Возвраты на доработку')+(ret.length?'<ul class="request-history">'+ret.map(function(a){return '<li>№ '+esc(a.n)+' · '+esc(r3When(a.at))+' · '+esc(a.comment)+(a.files&&a.files.length?' (файлов: '+a.files.length+')':'')+'</li>';}).join('')+'</ul>':'<p class="hint">Возвратов не было.</p>');
+}
+function r3DaysLeft(iso){var d=new Date(iso+'T00:00:00'),t=new Date();t.setHours(0,0,0,0);return isNaN(d)?0:Math.round((d-t)/86400000);}
+function viewItemR3(x,materials){
+ var tab=['overview','materials','history'].indexOf(requestTabs[x.id])>=0?requestTabs[x.id]:'overview',id=esc(x.id),left=x.deadline?r3DaysLeft(x.deadline):null;
+ function group(key,inner){return '<section class="request-panel card" id="request-panel-'+key+'" role="tabpanel" aria-labelledby="request-tab-'+key+'"'+(tab!==key?' hidden':'')+'>'+inner+'</section>';}
+ var title=requestLabel(x)+' · '+(x.topic||'Тема не указана');
+ var h='<button type="button" class="mini" data-act="back">← Заявки</button>'+
+  '<header class="request-head r3head"><div style="min-width:0"><h1>'+esc(title)+'</h1>'+
+  '<div class="r3facts">'+[x.workType,x.univ,x.group].filter(Boolean).map(function(t){return '<span>'+esc(t)+'</span>';}).join('')+((x.r3||{}).returns?'<span>Возвратов на доработку: <b>'+esc(x.r3.returns)+'</b></span>':'')+'</div>'+
+  '<div class="request-contact"><span class="mut">Студент: <b>'+esc(x.student||'не указан')+'</b></span>'+(x.contact?'<button type="button" class="mini" data-act="copy-contact" data-id="'+id+'">Скопировать контакт</button>':'')+'</div></div>'+
+  (x.deadline?'<div class="r3due"><span>Сдать до</span><b>'+esc(ruDate(x.deadline))+'</b><small>'+(left>=0?'осталось '+left+' '+plural(left,'день','дня','дней'):'срок прошёл')+'</small></div>':'')+'</header>';
+ h+='<div class="request-tabs r3tabs" role="tablist" aria-label="Разделы заявки">'+[['overview','Маршрут'],['materials','Материалы'],['history','История']].map(function(t){return '<button type="button" role="tab" id="request-tab-'+t[0]+'" aria-controls="request-panel-'+t[0]+'" aria-selected="'+(tab===t[0])+'" tabindex="'+(tab===t[0]?'0':'-1')+'" data-act="request-tab" data-key="'+t[0]+'" data-id="'+id+'">'+t[1]+'</button>';}).join('')+'<button type="button" class="r3tabq" data-act="executor-clarifications" data-id="'+id+'">Вопросы и ответы</button></div>';
+ var route=x.r3Loaded?r3RouteReg(x):'<div class="r3s cur"><span class="r3mk">…</span><div class="r3b">'+r3Card(x,true)+'</div></div>';
+ var note='<details class="request-maintenance"><summary>Заметка и управление карточкой</summary><div class="fld"><label for="note">Заметка исполнителя</label><textarea id="note" style="min-height:70px" placeholder="Заметка для себя">'+esc(x.note||'')+'</textarea></div><button type="button" class="chip" data-act="save-note" data-id="'+id+'">Сохранить заметку</button><div><button type="button" class="del" data-act="delete" data-id="'+id+'">Удалить карточку заявки</button></div></details>';
+ h+='<section data-test-delivery-host hidden></section>';
+ h+=group('overview','<div class="r3grid"><div class="request-action r3route" aria-label="Маршрут заявки">'+route+'</div><aside class="r3side">'+r3Overview(x)+'</aside></div>'+note);
+ h+=group('materials',materials);
+ h+=group('history',r3History(x));
+ return h;
+}
 var passportLoads=new WeakSet();var r3Seen=new WeakSet();
 function viewItem(id){
   var x = item(id);
@@ -2466,6 +2519,7 @@ function viewItem(id){
   if(x.requestNumber)materials+='<button type="button" class="chip" data-act="materials-refresh" data-id="'+esc(x.id)+'">Обновить материалы</button>';
   if(x.intakeContext){var ic=x.intakeContext;materials+='<details><summary>Сведения и требования из общей загрузки</summary><p class="hint">'+(ic.stale?'После отправки сведения изменились; исходный анализ показан только как история.':'Кандидаты из документов, не утверждённый паспорт. Ответы студента сохранены отдельно.')+'</p>'+(ic.analysis.requirements||[]).map(function(q){return '<p class="small">'+esc(q.value)+(q.condition?'<br>Условие: '+esc(q.condition):'')+'<br>'+q.refs.map(function(r){return esc(r.fileName||'Примечание студента')+': '+esc(r.quote);}).join('<br>')+'</p>';}).join('')+'</details>';}
   if(x.requestNumber)materials+='<div style="margin-top:12px"><p role="status">'+esc(x.materialRevision&&x.materialRevision.state==='open'?'Ожидаются дополнительные материалы: '+x.materialRevision.reason:x.materialRevision?(x.materialRevision.state==='initial'?'Первичный комплект ещё можно дополнить из кабинета студента.':'Комплект закрыт для изменений после начала проверки.'):'Состояние дополнения ещё не проверено.')+'</p><button type="button" class="chip" data-act="materials-reopen" data-id="'+esc(x.id)+'">'+(x.materialRevision&&x.materialRevision.state==='open'?'Посмотреть запрос дополнения':'Запросить дополнение материалов')+'</button></div>';
+  if(x.route3&&x.requestNumber&&x.status!=='off')return viewItemR3(x,materials);
   h+=group('materials','Материалы',materials);
   if(x.route3) requirements = '<p class="hint">Требования этой работы — в материалах студента. Программа не составляет их автоматически.</p>'+'<details class="requirement-original"><summary>Исходные сведения заявки</summary>'+requirements+'</details>';
   else if(x.requestNumber) requirements = passportContent(x)+'<details class="requirement-original"><summary>Исходные сведения заявки и требования вуза</summary>'+requirements+'</details>';
