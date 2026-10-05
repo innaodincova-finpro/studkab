@@ -3,10 +3,10 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v112-request-form";
+const CACHE = "studkab-v113-cloud-link";
 const SHELL = [
   "./file-prep.js?v=1",
-  "./intake-ui.js?v=7",
+  "./intake-ui.js?v=8",
   "./intake-confirmation-ui.js?v=2",
   "./desktop.css?v=7",
   "./",

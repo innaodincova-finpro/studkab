@@ -74,7 +74,7 @@
     '<button type="button" class="b b-quiet b-sm" data-intake-retry hidden style="display:none">Повторить сохранение</button>'+
     '<div class="or">или</div>'+
     '<div class="field"><label for="intakeLink">Ссылка на папку в облаке</label><input type="url" id="intakeLink" maxlength="500" placeholder="https://disk.yandex.ru/d/…" inputmode="url" autocomplete="off"></div>'+
-    '<p class="hint">Яндекс Диск, Google Диск, Облако Mail.ru. Доступ — «всем, у кого есть ссылка».</p>'+
+    '<p class="hint" role="status" aria-live="polite" data-intake-link-status>Яндекс Диск, Google Диск, Облако Mail.ru. Доступ — «всем, у кого есть ссылка». С Яндекс Диска файлы копируются в заявку.</p>'+
    '</section>'+
    '<section class="grp"><h3>Для титульного листа</h3><div class="grid">'+DETAILS.map(function(d){return fieldHtml(d,esc);}).join('')+'</div></section>'+
    '<div class="grid" style="margin-top:14px"><div class="field"><label for="intakeDeadline">Когда нужна работа<span class="req">*</span></label><input id="intakeDeadline" type="date"></div>'+
@@ -165,10 +165,40 @@
   try{fill(JSON.parse(localStorage.getItem(receiptKey)||'null'));}catch(_){}
   wrap.addEventListener('input',function(e){if(same()&&e.target.closest('[data-intake-detail],#intakeLink,#intakeDeadline,#intakeDescription'))try{localStorage.setItem(receiptKey,JSON.stringify(values()));}catch(_){}});
   wrap.addEventListener('change',function(e){if(same()&&e.target.matches('select[data-intake-detail]'))try{localStorage.setItem(receiptKey,JSON.stringify(values()));}catch(_){}});
+  // R3-B: проверка ссылки и копия файлов папки Яндекс Диска в заявку (по одному файлу).
+  var copying=false,linkState={link:'',state:''},linkBox=wrap.querySelector('[data-intake-link-status]'),linkRun=0;
+  function linkSay(text){linkBox.textContent=text;}
+  async function checkLink(){
+   var link=wrap.querySelector('#intakeLink').value.trim(),run=++linkRun;
+   if(!link){linkState={link:'',state:''};linkSay('Яндекс Диск, Google Диск, Облако Mail.ru. Доступ — «всем, у кого есть ссылка». С Яндекс Диска файлы копируются в заявку.');return;}
+   if(!LINK.test(link)){linkState={link:link,state:'invalid'};linkSay('Ссылка должна начинаться с https:// и вести на Яндекс Диск, Google Диск или Облако Mail.ru');return;}
+   if(!draft||submitted())return;
+   linkSay('Проверяем ссылку…');
+   var r;try{r=(await options.api({action:'intake-link-check',id:draft.id,link:link})).link;current();}catch(e){if(!same()||!wrap.isConnected)return;r={state:'unknown'};}
+   if(run!==linkRun)return;
+   linkState={link:link,state:r.state};
+   if(r.state==='closed'){linkSay('Ссылка закрыта: откройте доступ «всем, у кого есть ссылка» и вставьте ссылку снова.');return;}
+   if(r.state==='missing'){linkSay('Папка по ссылке не найдена — проверьте ссылку.');return;}
+   if(r.state!=='open'){linkSay('Не удалось проверить ссылку. Её можно отправить — исполнитель откроет папку сам.');return;}
+   if(r.service!=='yandex'){linkSay('✓ Открывается. С этого облака копию сделать нельзя — не удаляйте файлы до сдачи работы.');return;}
+   var list=r.files||[],done=0,skipped=[];copying=true;
+   try{for(var i=0;i<list.length;i++){
+    if(run!==linkRun||!wrap.isConnected)return;
+    if(visible(files).length>=LIMIT){skipped.push('остальные файлы — предел '+LIMIT+' файлов');break;}
+    linkSay('✓ Открывается · файлов: '+list.length+'. Копируем в заявку: '+(i+1)+' из '+list.length+'…');
+    try{await options.api({action:'intake-link-copy',id:draft.id,link:link,path:list[i].path});current();done++;await refresh();}
+    catch(e){if(!same()||!wrap.isConnected)return;skipped.push(e.message);}
+   }}finally{copying=false;}
+   if(run!==linkRun)return;
+   linkSay('✓ Открывается · скопировано в заявку: '+done+' из '+list.length+'.'+(skipped.length?' Не скопированы: '+skipped.join('; ')+'.':'')+(r.folders?' Вложенные папки исполнитель откроет по ссылке.':'')+(r.more?' В папке больше 100 файлов — остальные исполнитель откроет по ссылке.':''));
+  }
+  wrap.querySelector('#intakeLink').addEventListener('change',function(){checkLink();});
   function check(v){
    var missing=DETAILS.filter(function(d){return d[2]&&!v.details[d[0]];}).map(function(d){return d[1].toLowerCase();});
    if(!visible(files).length&&!v.link)return 'Приложите файлы задания или ссылку на папку в облаке';
    if(v.link&&!LINK.test(v.link))return 'Ссылка должна начинаться с https:// и вести на Яндекс Диск, Google Диск или Облако Mail.ru';
+   if(v.link&&linkState.link===v.link&&linkState.state==='closed')return 'Ссылка закрыта: откройте доступ «всем, у кого есть ссылка»';
+   if(v.link&&linkState.link===v.link&&linkState.state==='missing')return 'Папка по ссылке не найдена — проверьте ссылку';
    if(missing.length)return 'Заполните: '+missing.join(', ');
    if(!v.deadline||Number.isNaN(Date.parse(v.deadline))||new Date(v.deadline).toISOString().slice(0,10)!==v.deadline)return 'Укажите, когда нужна работа';
    return '';
@@ -183,7 +213,7 @@
   send.addEventListener('click',async function(){
    if(busy||!draft||submitted())return;
    // Проверка заполнения — до блокировки кнопки: подсказка появляется сразу, кнопка остаётся доступной.
-   var v=values(),problem=check(v);
+   var v=values(),problem=copying?'Дождитесь окончания копирования файлов из папки':check(v);
    if(problem){status.textContent=problem;return;}
    busy=true;send.disabled=true;
    try{
@@ -211,6 +241,7 @@
    }
   }catch(e){if(!same())return wrap;status.textContent='Проверка прежней отправки не завершена: '+e.message+'. Повтор не создаёт новую заявку.';}
   await run([]);
+  if(wrap.querySelector('#intakeLink').value.trim())checkLink();
   return wrap;
  }
  global.StudIntake={open:open,DETAILS:DETAILS,LINK:LINK};
