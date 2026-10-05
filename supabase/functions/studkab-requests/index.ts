@@ -52,6 +52,8 @@ const download=(path:string,name:string)=>downloadFrom(bucket,path,name);
 const downloadIntake=(path:string,name:string)=>downloadFrom('studkab-intake-materials',path,name);
 const saveIntake=(path:string,type:string,bytes:Uint8Array,hash:string)=>saveOriginal({base,key,path,type,bytes,hash});
 const loadIntake=(path:string,size:number,hash:string)=>loadOriginal({base,key,path,size,hash});
+// R3-C: готовая работа исполнителя хранится рядом с материалами заявки; путь закреплён за содержимым.
+const saveResult=(path:string,type:string,bytes:Uint8Array,hash:string)=>saveOriginal({base,key,bucket,path,type,bytes,hash});
 const transferIntake=async(f:any)=>{
  const bytes=await loadIntake(f.storage_path,f.size_bytes,f.file_hash);
  await saveOriginal({base,key,bucket,path:f.storage_path,type:f.content_type,bytes,hash:f.file_hash});
@@ -62,4 +64,4 @@ async function remove(path:string){
 }
 Deno.serve(handler({auth,db,send,
  emailSettings:()=>({}), // C175: email is superseded by app push; never claim its queue.
- invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
+ invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));
