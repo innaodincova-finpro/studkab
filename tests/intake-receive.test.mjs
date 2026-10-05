@@ -9,7 +9,7 @@ const migration=fs.readFileSync(new URL('../supabase/migrations/20261001162253_r
 // R3-A: регистрация по форме (сведения для титульного листа и ссылка на облако).
 const r3=fs.readFileSync(new URL('../supabase/migrations/20261005090000_route03_a_request_form.sql',import.meta.url),'utf8');
 const formFunction=r3.slice(r3.indexOf('-- R3-A: регистрация заявки по форме'));
-const details={k:'Практические задания',d:'Математика',u:'Московский международный университет',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна'};
+const details={k:'Практические задания',d:'Математика',u:'Московский международный университет',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна'};
 async function fixture(){
  const db=new PGlite();await db.exec(schema()+submissionExtension()+migration+formFunction);await db.exec('set role service_role');
  const api=apiDatabase(db),rpc=(name,args)=>api('rpc/studkab_intake_'+name,'POST',args);
