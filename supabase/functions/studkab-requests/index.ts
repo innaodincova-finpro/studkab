@@ -5,6 +5,7 @@ import {handler} from './handler.mjs';
 import {extract} from './extract.ts';
 import {attachmentDownloadUrl} from './download-url.mjs';
 import {saveOriginal} from './original-storage.mjs';
+import {removeStorageObject} from './storage-remove.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const bucket='studkab-request-materials';
 async function db(path:string,method='GET',body?:unknown){
@@ -58,10 +59,7 @@ const transferIntake=async(f:any)=>{
  const bytes=await loadIntake(f.storage_path,f.size_bytes,f.file_hash);
  await saveOriginal({base,key,bucket,path:f.storage_path,type:f.content_type,bytes,hash:f.file_hash});
 };
-async function removeFrom(sourceBucket:string,path:string){
- const r=await fetch(base+'/storage/v1/object/'+sourceBucket+'/'+path,{method:'DELETE',headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(10000)});
- if(!r.ok&&r.status!==404)throw Error('Storage cleanup unavailable');
-}
+const removeFrom=(sourceBucket:string,path:string)=>removeStorageObject(fetch,base,key,sourceBucket,path);
 const remove=(path:string)=>removeFrom(bucket,path);
 // Полное удаление заявки: исходные файлы, загруженные студентом.
 const removeIntake=(path:string)=>removeFrom('studkab-intake-materials',path);
