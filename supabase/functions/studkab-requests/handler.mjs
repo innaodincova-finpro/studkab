@@ -1,4 +1,4 @@
-import {r3WorkAction,R3_ACTIONS} from './r3-work.mjs';
+import {r3WorkAction,R3_ACTIONS,R3_UPLOADS} from './r3-work.mjs';
 import {qualityAction,qualityError} from './quality-evidence.mjs';
 import {testDeliveryAction} from './test-delivery.mjs';
 import {registeredStudyAction} from './registered-study.mjs';
@@ -116,8 +116,8 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    }
    // ROUTE-03, R3-C: работа исполнителя и выдача результата по заявке, поданной по форме.
    if(R3_ACTIONS.includes(input.action)){
-    if(input.action!=='r3-result-upload'&&raw.length>16000)return json({error:'Запрос слишком большой'},413);
-    const r=await r3WorkAction(input,user,{db,config,download,saveResult});return json(r.data,r.status||200);
+    if(!R3_UPLOADS.includes(input.action)&&raw.length>16000)return json({error:'Запрос слишком большой'},413);
+    const r=await r3WorkAction(input,user,{db,config,download,saveResult,remove});return json(r.data,r.status||200);
    }
    if(['attachment-upload','attachment-list','attachment-context','attachment-download'].includes(input.action)){
     const r=await attachmentAction(input,user,{db,config,upload,download,remove});return json(r.data,r.status||200);
@@ -144,14 +144,24 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
     const [row]=await db('studkab_requests?select=id,ready_at,payload&deleting_at=is.null&id=eq.'+input.id+'&student_id=eq.'+user.id+'&limit=1');
     if(!row)return json({error:'Заявка не найдена'},404);
     if(!row.ready_at)return json({stage:'awaiting_materials',openQuestions:0});
-    // R3-C: заявка по форме — этапы «Получена / Вопросы / В работе / Готово».
+    // R3-C/R3-D: заявка по форме — этапы «Задание / Вопросы / В работе / Готово / Сдача».
     if(row.payload?.route==='r3'){
      const [questions,work]=await Promise.all([
       db('studkab_clarifications?select=id&request_id=eq.'+input.id+'&answered_at=is.null&limit=100'),
-      db('studkab_r3_work?select=taken_at,delivered_name,delivered_size,delivered_at,downloaded_at&request_id=eq.'+input.id+'&limit=1')]);
-     const w=work[0],openQuestions=questions.length;
-     const stage=w?.delivered_at?'r3_ready':openQuestions?'needs_answer':w?.taken_at?'r3_in_work':'r3_received';
-     return json({stage,openQuestions,route:'r3',...(w?.delivered_at?{result:{name:w.delivered_name,size:w.delivered_size,at:w.delivered_at,downloadedAt:w.downloaded_at}}:{})});
+      db('studkab_r3_work?select=taken_at,delivered_name,delivered_size,delivered_at,downloaded_at,handed_at,returns,returned_at&request_id=eq.'+input.id+'&limit=1')]);
+     const w=work[0],openQuestions=questions.length,returns=w?.returns||0;
+     // Работа на доработке, пока после возврата не передана новая версия (передача очищает returned_at).
+     const reworking=!!w?.returned_at;
+     const current=!!w?.delivered_at&&!reworking;
+     const stage=current?(w.handed_at?'r3_handed':'r3_ready'):openQuestions?'needs_answer':w?.taken_at?'r3_in_work':'r3_received';
+     let lastReturn=null;
+     if(reworking){
+      const [ret]=await db('studkab_r3_returns?select=n,comment,created_at&request_id=eq.'+input.id+'&order=n.desc&limit=1');
+      const files=ret?await db('studkab_r3_return_files?select=name&request_id=eq.'+input.id+'&return_n=eq.'+ret.n+'&order=created_at.asc&limit=10'):[];
+      if(ret)lastReturn={n:ret.n,comment:ret.comment,at:ret.created_at,files:files.map(f=>f.name)};
+     }
+     return json({stage,openQuestions,route:'r3',returns,...(lastReturn?{lastReturn}:{}),
+      ...(current?{result:{name:w.delivered_name,size:w.delivered_size,at:w.delivered_at,downloadedAt:w.downloaded_at,handedAt:w.handed_at}}:{})});
     }
     const [questions,passports,delivered]=await Promise.all([
      db('studkab_clarifications?select=id,answered_at&request_id=eq.'+input.id+'&answered_at=is.null&limit=100'),

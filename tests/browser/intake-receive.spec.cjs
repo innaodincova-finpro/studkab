@@ -210,3 +210,75 @@ test('R3-C: student sees «Работа готова» with one download button;
  await page.locator('[data-act="r3-download"]').click();
  await expect.poll(()=>page.evaluate(()=>opened)).toEqual(['Зеленская_Математика.docx']);expect(await page.evaluate(()=>dl)).toEqual(['11111111-1111-4111-8111-111111111111']);
 });
+test('R3-D: registry shows hand-in, then the return with remarks; corrected file is delivered as a new version',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  const v1={name:'Зеленская_26М214в_Математика_Практические_задания.docx',size:49152,at:'2026-10-06T15:15:00Z',hash:'a'.repeat(64)};
+  window.r3={takenAt:'2026-10-05T07:40:00Z',result:{...v1,at:'2026-10-06T15:12:00Z'},delivered:v1,downloadedAt:'2026-10-07T09:00:00Z',handedAt:'2026-10-08T08:30:00Z',returns:0,returnedAt:null,versions:[{n:1,name:v1.name,size:v1.size,at:v1.at}],returnList:[],pendingFiles:[]};
+  window.r3Calls=[];
+  Oblako.requestApi=async d=>{r3Calls.push(d.action+(d.fileId?':'+d.fileId:''));
+   if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:3}};
+   if(d.action==='attachment-context')return {attachments:[],materialRevision:3};
+   if(d.action==='clarification-list')return {questions:[]};
+   if(d.action==='r3-state')return {work:structuredClone(r3)};
+   if(d.action==='r3-return-file-download')return {url:'about:blank',fileName:'Замечания.jpg'};
+   if(d.action==='r3-result-upload'){r3.result={name:d.fileName,size:d.sizeBytes,at:'2026-10-09T17:05:00Z',hash:d.fileHash};return {work:structuredClone(r3)};}
+   if(d.action==='r3-deliver'){r3.delivered={...r3.result,at:'2026-10-09T17:10:00Z'};r3.returnedAt=null;r3.handedAt=null;r3.downloadedAt=null;r3.versions.push({n:2,name:r3.result.name,size:r3.result.size,at:r3.delivered.at});return {work:structuredClone(r3)};}
+   throw Error('Unexpected '+d.action);};
+  window.open=()=>null;
+  const x=fromPayload({id:'r3-d',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
+  D.items=[x];openId=x.id;render();
+ });
+ const panel=page.locator('.request-action');
+ await expect(panel).toContainText('Студент сдал работу');await expect(panel).toContainText('Шаг 5 из 5');
+ expect(await page.evaluate(()=>stageBucket(D.items[0]))).toBe('delivered');
+ // Длинное имя файла не выходит за край карточки.
+ expect(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+ await page.evaluate(()=>{const x=D.items[0];Object.assign(r3,{handedAt:null,returns:1,returnedAt:'2026-10-09T06:00:00Z',returnList:[{n:1,comment:'Задание 3: показать решение подробно.',at:'2026-10-09T06:00:00Z',files:[{id:'f1',name:'Замечания.jpg',size:819200,type:'image/jpeg'}]}]});x.r3=structuredClone(r3);render();});
+ await expect(panel).toContainText('Шаг 3 из 5 · доработка № 1');await expect(panel).toContainText('Работу вернули на доработку');
+ await expect(panel.locator('.r3-quote')).toContainText('Задание 3: показать решение подробно.');
+ await expect(panel).toContainText('Версия 1 передана');await expect(panel).toContainText('Прикрепите исправленную работу');
+ expect(await page.evaluate(()=>stageBucket(D.items[0]))).toBe('new');
+ await panel.locator('[data-act="r3-return-file-download"]').click();
+ await expect.poll(()=>page.evaluate(()=>r3Calls.includes('r3-return-file-download:f1'))).toBe(true);
+ await panel.locator('input[data-r3-result-file]').setInputFiles({name:'Исправленная.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 v2')});
+ await expect(panel.locator('[data-act="r3-deliver"]')).toHaveText('Передать новую версию');
+ expect(await page.evaluate(()=>stageBucket(D.items[0]))).toBe('preparation');
+ await panel.locator('[data-act="r3-deliver"]').click();
+ await expect(panel).toContainText('Работа передана студенту');await expect(panel).toContainText('Возвратов на доработку: 1');
+});
+test('R3-D: student hands in, then sends the teacher remarks with a photo; the card shows the rework',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  Oblako.mode='cloud';window.calls=[];window.st={stage:'r3_ready',openQuestions:0,route:'r3',returns:0,result:{name:'Зеленская_Математика.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:'2026-10-07T09:00:00Z',handedAt:null}};window.pending=[];
+  Oblako.requestApi=async d=>{calls.push(d);
+   if(d.action==='student-progress')return structuredClone(st);
+   if(d.action==='clarification-unread')return {question:0};
+   if(d.action==='r3-hand'){st.stage='r3_handed';st.result.handedAt='2026-10-08T08:30:00Z';return {work:{}};}
+   if(d.action==='r3-state')return {work:{pendingFiles:pending}};
+   if(d.action==='r3-return-upload'){pending.push({id:'p'+pending.length,name:d.fileName,size:d.sizeBytes,type:d.contentType});return {work:{pendingFiles:pending},fileId:'p0'};}
+   if(d.action==='r3-return-file-remove'){pending=pending.filter(f=>f.id!==d.fileId);return {work:{pendingFiles:pending}};}
+   if(d.action==='r3-return'){st={stage:'r3_in_work',openQuestions:0,route:'r3',returns:1,lastReturn:{n:1,comment:d.comment,at:'2026-10-09T06:00:00Z',files:pending.map(f=>f.name)}};return {work:{},n:1};}
+   throw Error('Unexpected '+d.action);};
+  change(function(){D.works.push({id:'w-r3',topic:'Математика — практические задания',created:today(),deadline:'2027-01-25',status:'draft',format:{workType:'Практические задания',discipline:'Математика'},structure:emptyStructure(),tasks:[],req:{id:'intake_x',serverId:'11111111-1111-4111-8111-111111111111',number:15}});});
+  tab='works';openWorkId='w-r3';render();
+ });
+ const box=page.locator('[data-r3-ready]');
+ await expect(box).toContainText('Сдайте работу преподавателю');
+ await box.locator('[data-act="r3-hand"]').click();
+ await expect(box).toContainText('Работа сдана');await expect(page.locator('[data-student-progress]')).toHaveText('Работа сдана.');
+ await box.locator('[data-act="r3-return-open"]').click();
+ await box.locator('[data-act="r3-return-send"]').click();
+ await expect(box.locator('[data-r3-form-status]')).toHaveText('Напишите, что сказал преподаватель.');
+ await box.locator('[data-r3-comment]').fill('Задание 3: показать решение подробно.');
+ await box.locator('input[data-r3-return-file]').setInputFiles([{name:'Замечания.png',mimeType:'image/png',buffer:Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])},{name:'Лишний.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4')}]);
+ await expect(box.locator('.r3-files li')).toHaveCount(2);
+ // Набранный текст сохраняется, пока форма перерисовывается.
+ await expect(box.locator('[data-r3-comment]')).toHaveValue('Задание 3: показать решение подробно.');
+ await box.locator('[data-act="r3-return-file-remove"]').nth(1).click();
+ await expect(box.locator('.r3-files li')).toHaveCount(1);
+ await box.locator('[data-act="r3-return-send"]').click();
+ await expect(box).toContainText('Работу исправляют');await expect(box).toContainText('доработка № 1');await expect(box).toContainText('Приложено: Замечания.png');
+ await expect(page.locator('[data-student-progress]')).toContainText('Работа на доработке');
+ expect(await page.evaluate(()=>calls.find(c=>c.action==='r3-return').comment)).toBe('Задание 3: показать решение подробно.');
+});

@@ -65,11 +65,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 51 then
-    raise exception 'Expected 51 STUDKAB tables, found %', table_count;
+  if table_count <> 54 then
+    raise exception 'Expected 54 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 51 then
-    raise exception 'RLS enabled on only % of 51 STUDKAB tables', rls_count;
+  if rls_count <> 54 then
+    raise exception 'RLS enabled on only % of 54 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -94,6 +94,12 @@ begin
   -- ROUTE-03 R3-C: работа исполнителя по заявке, поданной по форме.
   if to_regclass('public.studkab_r3_work') is null then
     raise exception 'R3-C work table is missing';
+  end if;
+  -- ROUTE-03 R3-D: версии, возвраты на доработку, файлы с замечаниями.
+  if to_regclass('public.studkab_r3_versions') is null
+    or to_regclass('public.studkab_r3_returns') is null
+    or to_regclass('public.studkab_r3_return_files') is null then
+    raise exception 'R3-D tables are missing';
   end if;
 end
 $$;
@@ -437,4 +443,28 @@ do $$ declare signature text;role_name text;begin
   if has_table_privilege(role_name,'public.studkab_r3_work','select,insert,update,delete') then raise exception 'R3-C work table exposed to %',role_name;end if;
  end loop;
  if not (has_table_privilege('service_role','public.studkab_r3_work','select') and has_table_privilege('service_role','public.studkab_r3_work','insert') and has_table_privilege('service_role','public.studkab_r3_work','update')) then raise exception 'R3-C work table not writable by server';end if;
+end $$;
+
+-- ROUTE-03 R3-D: «Я сдал работу» и «Вернули на доработку» — только для сервера; новые таблицы закрыты для браузера.
+do $$ declare signature text;role_name text;tbl text;begin
+ foreach signature in array array[
+ 'public.studkab_r3_hand(uuid,uuid)',
+ 'public.studkab_r3_return_file_add(uuid,uuid,text,text,integer,text,text)',
+ 'public.studkab_r3_return_file_remove(uuid,uuid,uuid)',
+ 'public.studkab_r3_return(uuid,uuid,text)',
+ 'public.studkab_r3_deliver(uuid,text)'] loop
+  if to_regprocedure(signature) is null
+   or (select prosecdef from pg_proc where oid=to_regprocedure(signature))
+   or not has_function_privilege('service_role',signature,'execute') then raise exception 'R3-D RPC missing or not service-only: %',signature;end if;
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'R3-D RPC exposed: %',signature;end if;
+  end loop;
+ end loop;
+ foreach tbl in array array['public.studkab_r3_versions','public.studkab_r3_returns','public.studkab_r3_return_files'] loop
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_table_privilege(role_name,tbl,'select,insert,update,delete') then raise exception 'R3-D table % exposed to %',tbl,role_name;end if;
+  end loop;
+  if not (has_table_privilege('service_role',tbl,'select') and has_table_privilege('service_role',tbl,'insert')) then raise exception 'R3-D table % not writable by server',tbl;end if;
+ end loop;
+ if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_r3_work' and column_name='returned_at') then raise exception 'R3-D work columns missing';end if;
 end $$;

@@ -303,7 +303,8 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
   .screen{min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding-bottom:90px;-webkit-overflow-scrolling:touch}
   .tabs{position:relative;left:auto;bottom:auto;transform:none;flex-shrink:0;margin-top:auto}
 }
-.r3-download{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}
+.r3-quote{border-left:3px solid #B08347;background:#FBF7F0;border-radius:0 12px 12px 0;padding:10px 14px;margin:10px 0;overflow-wrap:anywhere}.r3-retf{border:1px solid #DCE6EE;border-radius:14px;padding:14px;margin:12px 0}.r3-retf textarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #DCE6EE;border-radius:10px;margin:6px 0}.r3-files{list-style:none;padding:0;margin:8px 0}.r3-files li{overflow-wrap:anywhere;padding:4px 0;font-size:13px}
+.r3-download,button.b.r3-download{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}[data-r3-ready] button.b.b-alt{background:#fff;border:1px solid var(--line);color:var(--accent);box-shadow:none}[data-r3-ready] button.b{margin:6px 6px 0 0}
 </style>
 <link rel="stylesheet" href="desktop.css?v=7">
 </head>
@@ -2418,25 +2419,69 @@ function render(){
   refreshStudentDialogue();
   refreshStudentProgress();
 }
-// R3-C: заявка по форме — готовая работа скачивается прямо в карточке; прежний блок «Результат заявки» скрыт.
+// R3-C/R3-D: заявка по форме — готовая работа, «Я сдал работу», «Вернули на доработку». Прежний блок «Результат заявки» скрыт.
+var r3Forms={},r3Pending={},r3Drafts={},r3Last={};
+function r3When(v){var d=new Date(v);return isNaN(d)?'':d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})+' в '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
+function r3Size(n){return n>=1048576?(n/1048576).toFixed(1).replace('.',',')+' МБ':Math.max(1,Math.round(n/1024))+' КБ';}
+function r3ReturnForm(w){
+ var files=r3Pending[w.id]||[];
+ return '<div class="r3-retf" data-r3-form="'+esc(w.id)+'"><p><b>Вернули на доработку</b></p>'+
+  '<label class="small" for="r3c-'+esc(w.id)+'">Что сказал преподаватель *</label>'+
+  '<textarea id="r3c-'+esc(w.id)+'" rows="4" maxlength="2000" data-r3-comment="'+esc(w.id)+'" placeholder="Например: «Задание 3: показать решение подробно»">'+esc(r3Drafts[w.id]||'')+'</textarea>'+
+  '<p class="small">Замечания файлами — если есть: фото, снимки экрана, Word, PDF. До 10 файлов, до 5 МБ каждый.</p>'+
+  (files.length?'<ul class="r3-files">'+files.map(function(f){return '<li><span>'+esc(f.name)+' · '+esc(r3Size(f.size))+' · сохранён</span> <button type="button" class="mini" data-act="r3-return-file-remove" data-id="'+esc(w.id)+'" data-file="'+esc(f.id)+'">Убрать</button></li>';}).join('')+'</ul>':'')+
+  '<label class="mini" style="cursor:pointer">Добавить файлы<input type="file" hidden multiple data-r3-return-file="'+esc(w.id)+'" accept="'+esc(window.StudFilePrep?StudFilePrep.ACCEPT:'')+'"></label>'+
+  '<p class="small" data-r3-form-status role="status"></p>'+
+  '<button type="button" class="b r3-download" data-act="r3-return-send" data-id="'+esc(w.id)+'">Отправить на доработку</button> <button type="button" class="b b-alt" data-act="r3-return-cancel" data-id="'+esc(w.id)+'">Отмена</button></div>';
+}
 function r3ReadyBlock(w,result){
  var box=document.querySelector('[data-r3-ready]'),legacy=document.querySelector('[data-legacy-result]');
  if(result.route==='r3'&&legacy)legacy.hidden=true;
  if(!box)return;
+ r3Last[w.id]=result;
+ var id=esc(w.id),returns=result.returns?'<p class="small">Возвратов на доработку: '+esc(result.returns)+'</p>':'';
+ if(result.lastReturn){
+  var lr=result.lastReturn;
+  box.innerHTML='<p><b>Работу исправляют</b> · доработка № '+esc(lr.n)+'</p><div class="r3-quote">'+esc(lr.comment)+(lr.files&&lr.files.length?'<br><span class="small">Приложено: '+esc(lr.files.join(', '))+'</span>':'')+'</div><p class="hint">Вы вернули работу '+esc(r3When(lr.at))+'. Придёт уведомление, когда исправленная работа будет готова. Затем снова скачайте её и сдайте.</p>'+returns;
+  box.hidden=false;return;
+ }
  if(!result.result){box.hidden=true;box.innerHTML='';return;}
- var d=new Date(result.result.at),when=isNaN(d)?'':d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})+' в '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
- var size=result.result.size>=1048576?(result.result.size/1048576).toFixed(1).replace('.',',')+' МБ':Math.max(1,Math.round(result.result.size/1024))+' КБ';
- box.innerHTML='<p><b>Работа готова</b> · передана '+esc(when)+'</p><p class="small" style="overflow-wrap:anywhere">'+esc(result.result.name)+' · '+esc(size)+'</p><button type="button" class="b r3-download" data-act="r3-download" data-id="'+esc(w.id)+'">Скачать работу</button><p class="hint">Прочитайте работу целиком, затем загрузите её в раздел дисциплины на сайте вуза.</p>';
+ var r=result.result,file='<p class="small" style="overflow-wrap:anywhere">'+esc(r.name)+' · '+esc(r3Size(r.size))+'</p>';
+ if(r.handedAt){
+  box.innerHTML='<p><b>Работа сдана</b> · '+esc(r3When(r.handedAt))+'</p><p class="hint">Ждём оценку преподавателя. Если преподаватель вернёт работу с замечаниями — нажмите «Вернули на доработку».</p>'+file+
+   '<button type="button" class="mini" data-act="r3-download" data-id="'+id+'">Скачать ещё раз</button> '+(r3Forms[w.id]?r3ReturnForm(w):'<button type="button" class="b b-alt" data-act="r3-return-open" data-id="'+id+'">Вернули на доработку</button>')+returns;
+ }else if(r.downloadedAt){
+  box.innerHTML='<p><b>Сдайте работу преподавателю</b></p><p class="hint">Вы скачали работу '+esc(r3When(r.downloadedAt))+'. Загрузите её в раздел дисциплины на сайте вуза. Когда загрузите — нажмите «Я сдал работу».</p>'+file+
+   '<button type="button" class="mini" data-act="r3-download" data-id="'+id+'">Скачать ещё раз</button> <button type="button" class="b r3-download" data-act="r3-hand" data-id="'+id+'">Я сдал работу</button>'+returns;
+ }else{
+  box.innerHTML='<p><b>'+(result.returns?'Исправленная работа готова':'Работа готова')+'</b> · передана '+esc(r3When(r.at))+'</p>'+file+'<button type="button" class="b r3-download" data-act="r3-download" data-id="'+id+'">Скачать работу</button><p class="hint">Прочитайте работу целиком, затем загрузите её в раздел дисциплины на сайте вуза.</p>'+returns;
+ }
  box.hidden=false;
+}
+function r3Rerender(w){var res=r3Last[w.id];if(res)r3ReadyBlock(w,res);}
+function r3Status(t){var el=document.querySelector('[data-r3-form-status]');if(el)el.textContent=t;}
+async function r3FileBody(file){
+ var f=await StudFilePrep.prepare(file),bytes=new Uint8Array(f.bytes);
+ var hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(function(x){return x.toString(16).padStart(2,'0');}).join('');
+ var bin='',chunk=32768;for(var i=0;i<bytes.length;i+=chunk)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
+ return {fileName:f.name,contentType:f.type,sizeBytes:f.size,fileHash:hash,base64:btoa(bin)};
+}
+async function r3AddFiles(w,list){
+ for(var i=0;i<list.length;i++){
+  r3Status('Сохраняем «'+list[i].name+'»…');
+  try{var body=await r3FileBody(list[i]);var r=await Oblako.requestApi(Object.assign({action:'r3-return-upload',id:w.req.serverId},body));r3Pending[w.id]=r.work.pendingFiles||[];}
+  catch(e){r3Rerender(w);r3Status(e.message||'Файл не сохранён');return;}
+ }
+ r3Rerender(w);r3Status('Файлы сохранены.');
 }
 function refreshStudentProgress(){
  var w=tab==='works'&&openWorkId&&work(openWorkId),host=document.querySelector('[data-student-progress]');
  if(!w||!w.req||!w.req.serverId||!host||!window.Oblako||!Oblako.requestApi)return;
  var identity=Oblako.identity(),requestId=w.req.serverId;
  host.textContent='Проверяем этап заявки…';
- var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Исполнитель готовит или проверяет Word; передача студенту ещё не зарегистрирована.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',r3_received:'Заявка у исполнителя. Он откроет материалы и, если чего-то не хватает, спросит здесь.',r3_in_work:'Исполнитель выполняет работу. Мы пришлём уведомление, когда она будет готова.',r3_ready:'Работа готова.',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
+ var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Исполнитель готовит или проверяет Word; передача студенту ещё не зарегистрирована.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',r3_received:'Заявка у исполнителя. Он откроет материалы и, если чего-то не хватает, спросит здесь.',r3_in_work:'Исполнитель выполняет работу. Мы пришлём уведомление, когда она будет готова.',r3_ready:'Работа готова.',r3_handed:'Работа сдана.',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
  Oblako.requestApi({action:'student-progress',id:requestId}).then(function(result){
-  if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id){host.textContent=(labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Вопросов без ответа: '+result.openQuestions+'.':'');r3ReadyBlock(w,result);}
+  if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id){host.textContent=(result.lastReturn&&result.stage==='r3_in_work'?'Работа на доработке. Исполнитель исправляет её по замечаниям.':labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Вопросов без ответа: '+result.openQuestions+'.':'');r3ReadyBlock(w,result);}
  },function(err){if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)host.textContent='Не удалось получить этап из реестра: '+(err.message||'повторите позже');});
 }
 async function refreshStudentDialogue(){
@@ -2672,8 +2717,10 @@ function exportWord(workId){
 /* ==================================================================
    ДЕЙСТВИЯ
    ================================================================== */
+document.addEventListener("input", function(ev){var t=ev.target;if(t.getAttribute&&t.getAttribute("data-r3-comment")!==null)r3Drafts[t.getAttribute("data-r3-comment")]=t.value;});
 document.addEventListener("change", function(ev){
   var el = ev.target;
+  if (el.getAttribute && el.getAttribute("data-r3-return-file")!==null){var rw=work(el.getAttribute("data-r3-return-file")),list=Array.from(el.files||[]);el.value='';if(rw&&rw.req&&list.length)r3AddFiles(rw,list);return;}
   if (el.getAttribute && el.getAttribute("data-cal")){
     var v = el.value; if (!v) return;
     if (el.getAttribute("data-cal") === "from"){ calFrom = v; if (calTo && calTo < v) calTo = v; }
@@ -2729,6 +2776,15 @@ document.addEventListener("click", function(ev){
   }
   if(act==='student-clarifications'){var cw=work(id);if(cw&&cw.req&&cw.req.serverId)StudClarifications.show({requestId:cw.req.serverId,requestNumber:cw.req.number,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal,onRead:refreshStudentDialogue});return;}
   if (act === "receive-result") return StudResults.receive(work(id));
+  if (act === "r3-hand"||act === "r3-return-send"){var hw=work(id);if(!hw||!hw.req||!hw.req.serverId)return;
+   var payload={action:act==='r3-hand'?'r3-hand':'r3-return',id:hw.req.serverId};
+   if(act==='r3-return-send'){var ta=document.querySelector('[data-r3-comment]');payload.comment=(ta&&ta.value||'').trim();if(payload.comment.length<3){r3Status('Напишите, что сказал преподаватель.');if(ta)ta.focus();return;}}
+   el.disabled=true;Oblako.requestApi(payload).then(function(){if(act==='r3-return-send'){delete r3Forms[hw.id];delete r3Drafts[hw.id];delete r3Pending[hw.id];toast('Замечания отправлены исполнителю. Заявка вернулась в работу.');}else toast('Сдача отмечена.');refreshStudentProgress();})
+   .catch(function(e){if(act==='r3-return-send')r3Status(e.message||'Не удалось отправить');else toast(e.message||'Не удалось отметить сдачу');}).finally(function(){el.disabled=false;});return;}
+  if (act === "r3-return-open"){var ow=work(id);if(!ow||!ow.req||!ow.req.serverId)return;r3Forms[ow.id]=true;r3Rerender(ow);
+   Oblako.requestApi({action:'r3-state',id:ow.req.serverId}).then(function(r){r3Pending[ow.id]=(r.work&&r.work.pendingFiles)||[];if(r3Forms[ow.id])r3Rerender(ow);var t=document.querySelector('[data-r3-comment]');if(t)t.focus();}).catch(function(e){r3Status(e.message||'Не удалось загрузить файлы формы');});return;}
+  if (act === "r3-return-cancel"){var cw=work(id);if(!cw)return;delete r3Forms[cw.id];r3Rerender(cw);return;}
+  if (act === "r3-return-file-remove"){var fw=work(id);if(!fw||!fw.req)return;el.disabled=true;Oblako.requestApi({action:'r3-return-file-remove',id:fw.req.serverId,fileId:el.getAttribute('data-file')}).then(function(r){r3Pending[fw.id]=r.work.pendingFiles||[];r3Rerender(fw);}).catch(function(e){el.disabled=false;r3Status(e.message||'Не удалось убрать файл');});return;}
   if (act === "r3-download"){var rw=work(id);if(!rw||!rw.req||!rw.req.serverId)return;el.disabled=true;Oblako.requestApi({action:'r3-download',id:rw.req.serverId}).then(function(r){var u=new URL(r.url);if(u.origin!==new URL(window.OBLAKO_CONFIG.url).origin)throw Error('Не удалось подтвердить ссылку');var a=document.createElement('a');a.href=u.href;a.download=r.fileName;a.rel='noopener';a.click();}).catch(function(e){toast(e.message||'Файл недоступен');}).finally(function(){el.disabled=false;});return;}
   if (act === "export-word") return exportWord(id);
   if (act === "save-template") return saveAsTemplate(id);
