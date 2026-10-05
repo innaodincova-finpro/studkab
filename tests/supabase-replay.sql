@@ -468,3 +468,14 @@ do $$ declare signature text;role_name text;tbl text;begin
  end loop;
  if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_r3_work' and column_name='returned_at') then raise exception 'R3-D work columns missing';end if;
 end $$;
+
+-- ROUTE-03 R3-F: уведомления о возврате — функции только для сервера.
+do $$ declare signature text;role_name text;begin
+ foreach signature in array array['public.claim_studkab_r3_return_telegram()','public.studkab_r3_return_push_targets(uuid)'] loop
+  if to_regprocedure(signature) is null or not has_function_privilege('service_role',signature,'execute') then raise exception 'R3-F RPC missing: %',signature;end if;
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'R3-F RPC exposed: %',signature;end if;
+  end loop;
+ end loop;
+ if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_r3_returns' and column_name='telegram_sent_at') then raise exception 'R3-F columns missing';end if;
+end $$;

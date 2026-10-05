@@ -625,6 +625,14 @@
       "status": "pending",
       "note": "ROUTE-03 R3-D: «Я сдал работу», «Вернули на доработку» с замечаниями и файлами, история версий, удаление файлов вместе с заявкой",
       "sha256": "c5c86203f5d48f17a38a30cc598f0ece2cd6ac516822f646a6ccf571188d853a"
+    },
+    {
+      "file": "20261006150000_route03_f_return_notify.sql",
+      "version": "20261006150000",
+      "name": "route03_f_return_notify",
+      "status": "pending",
+      "note": "ROUTE-03 R3-F: уведомление исполнителю о возврате работы — Telegram с повтором и push на устройства исполнителя",
+      "sha256": "ce0eb74a4dd855607c095903702f292106a5d950eb0c1875aacc3f9b5a70df03"
     }
   ],
   "production_reconciled_at": "2026-09-23"
