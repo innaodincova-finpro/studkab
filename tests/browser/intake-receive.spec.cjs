@@ -360,3 +360,27 @@ test('R3-E3: registry card shows the route on the left and title-page details on
  await page.locator('#request-tab-materials').click();await expect(page.locator('#request-panel-materials')).toContainText('Практика1.pdf');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+test('R3-E4: registry list shows route dots and whose turn; «Сегодня» groups requests by who acts next',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  const z={takenAt:null,resultAt:null,deliveredAt:null,downloadedAt:null,handedAt:null,returns:0,returnedAt:null,openQuestions:0};
+  const mk=(n,dl,sum)=>{const x=fromPayload({id:'00000000-0000-4000-8000-00000000000'+n,route:'r3',t:'Тема '+n,k:'Реферат',d:'Предмет',u:'ВУЗ',fo:'Очная',g:'1 курс',n:'Студент '+n,dl:dl,cn:'s@example.invalid'});x.requestNumber=n;x.r3Summary=sum;return x;};
+  const soon=new Date(Date.now()+3*86400000).toISOString().slice(0,10);
+  D.items=[mk(1,'2027-01-25',{...z}),mk(2,soon,{...z,takenAt:'2026-10-03T09:00:00Z',resultAt:'2026-10-05T09:00:00Z'}),mk(3,'2027-02-01',{...z,openQuestions:1}),
+   mk(4,'2027-03-01',{...z,takenAt:'2026-09-20T09:00:00Z',resultAt:'2026-09-25T09:00:00Z',deliveredAt:'2026-09-25T10:00:00Z',downloadedAt:'2026-09-26T10:00:00Z',handedAt:'2026-09-27T10:00:00Z'})];
+  tab='today';openId=null;render();
+ });
+ await expect(page.locator('#tabbar [data-tab="today"]')).toContainText('2');
+ const you=page.locator('.r3ts').filter({hasText:'Ждут вашего действия'});
+ await expect(you.locator('.r3tl')).toHaveCount(2);await expect(you.locator('.r3tact').first()).toHaveText('Передать студенту');
+ await expect(page.locator('.r3ts').filter({hasText:'Ждём студента'}).locator('.r3tl')).toHaveCount(1);
+ await expect(page.locator('.r3ts').filter({hasText:'Сроки ближе 7 дней'}).locator('.r3tl')).toHaveCount(1);
+ await expect(page.locator('.r3ts').filter({hasText:'Новые заявки'}).locator('.r3tl')).toHaveCount(1);
+ await you.locator('.r3tact').first().click();
+ await expect.poll(()=>page.evaluate(()=>[tab,openId])).toEqual(['list','00000000-0000-4000-8000-000000000002']);
+ await page.evaluate(()=>{openId=null;render();});
+ const rows=page.locator('tr.r3-row');await expect(rows).toHaveCount(4);
+ await expect(rows.filter({hasText:'№ 3'}).locator('.r3turn')).toHaveText('Студент');
+ await expect(rows.filter({hasText:'№ 4'}).locator('.r3turn')).toHaveText('Сдана');await expect(rows.filter({hasText:'№ 4'}).locator('.r3dots i.done')).toHaveCount(5);
+ await expect(rows.filter({hasText:'№ 2'})).toContainText('Файл прикреплён — передайте студенту');
+});

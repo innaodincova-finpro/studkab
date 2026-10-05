@@ -319,6 +319,15 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .r3cap{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:14px 0 6px}.r3later{color:var(--mut);font-size:14px;margin:0}.r3sep{border-top:1px solid var(--line);margin-top:16px}
 .r3rc .btn.r3-main{display:inline-block;width:auto;margin:8px 8px 0 0}
 @media (max-width:900px){.r3grid{grid-template-columns:1fr}.r3grid .r3side{grid-column:1;grid-row:2}.r3head{flex-direction:column}.r3due{text-align:left}}
+.r3cell{display:flex;align-items:center;justify-content:space-between;gap:10px}.r3cell small{display:block;color:var(--mut);font-size:12px}.r3now{display:block;font-size:13px}.r3hot{color:#A85147;font-weight:600}
+.r3dots{display:inline-flex;align-items:center;gap:3px}.r3dots i{width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid #CBD8E3}.r3dots i.done{background:var(--ok);border-color:var(--ok)}.r3dots i.cur{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,96,145,.15)}
+.r3turn{flex:none;border-radius:10px;padding:5px 12px;font-size:12px;font-weight:600}.r3turn.you{background:#F6EEE1;color:#8F6A3A}.r3turn.st{background:#EAF1F7;color:var(--accent)}.r3turn.done{background:#E7F0EA;color:var(--ok)}
+.r3badge{display:inline-flex;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font-size:11px;align-items:center;justify-content:center}
+.r3today{display:block;grid-column:1/-1;width:100%}.r3today .registry-toolbar{margin-bottom:16px}.r3tgrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px;align-items:start}.r3ts h3{font-size:16px;margin:0 0 8px}
+.r3tl{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}.r3tl:first-of-type{border-top:0}.r3num{flex:none;background:#EAF1F7;color:var(--accent);border-radius:8px;padding:4px 8px;font-size:12px;font-weight:600}
+.r3tlb{flex:1;min-width:0}.r3tlb b{display:block;font-size:14px;font-weight:500}.r3tlb small{display:block;color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r3tact{flex:none;border:0;border-radius:10px;padding:8px 12px;background:#F6EEE1;color:#8F6A3A;font:inherit;font-size:13px;font-weight:600;cursor:pointer}.r3tld{flex:none;font-size:13px;color:var(--mut)}.r3tld.hot{color:#A85147;font-weight:600}
+@media (max-width:900px){.r3tgrid{grid-template-columns:1fr}.r3cell{flex-direction:column;align-items:flex-start}}
 .r3-quote{border-left:3px solid #B08347;background:#FBF7F0;border-radius:0 12px 12px 0;padding:10px 14px;margin:10px 0;font-size:14px;line-height:1.45;overflow-wrap:anywhere}.r3-qfiles{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:13px;color:#4A5B6B}.r3-wrap,.workflow-next .hint,.workflow-next .workflow-copy{overflow-wrap:anywhere}.linkbtn{background:none;border:0;padding:0;color:#2F6091;font:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
 </style>
 <link rel="stylesheet" href="desktop.css?v=7">
@@ -1585,10 +1594,25 @@ function validateRequest(rec){
 // для титульного листа и материалы, исполнитель открывает их сам.
 function r3Title(p){var k=String(p.k||'').trim(),d=String(p.d||'').trim();return d&&k?d+' — '+k.charAt(0).toLowerCase()+k.slice(1):d||k||'Новое задание';}
 var R3_STEPS=[{key:'received',label:'Получена'},{key:'questions',label:'Вопросы'},{key:'work',label:'В работе'},{key:'delivered',label:'Передана'},{key:'done',label:'Сдана'}];
+// R3-E (часть 4): краткое состояние из входящих — для списка и «Сегодня», пока карточка не открыта.
+function r3FromSummary(x){var s=x.r3Summary;if(!s)return x.r3||{};return {takenAt:s.takenAt,result:s.resultAt?{at:s.resultAt}:null,delivered:s.deliveredAt?{at:s.deliveredAt}:null,downloadedAt:s.downloadedAt,handedAt:s.handedAt,returns:s.returns||0,returnedAt:s.returnedAt};}
+// Чей ход и что сейчас — короткой строкой.
+function r3Turn(x){
+ var w=requestWorkflow(x),r=x.r3Loaded?(x.r3||{}):r3FromSummary(x);
+ if(w.key==='r3-received')return {who:'you',now:'Новая заявка — откройте материалы',act:'Взять в работу'};
+ if(w.key==='r3-questions')return {who:'student',now:'Вопрос у студента — ждём ответа'};
+ if(w.key==='r3-rework')return {who:'you',now:'Вернули на доработку'+(r.result&&r.returnedAt&&Date.parse(r.result.at)>Date.parse(r.returnedAt)?' — передайте новую версию':' — исправьте работу'),act:'Открыть замечания'};
+ if(w.key==='r3-work')return {who:'you',now:r.result?'Файл прикреплён — передайте студенту':'Выполните работу и прикрепите файл',act:r.result?'Передать студенту':'Открыть'};
+ if(w.key==='r3-delivered')return {who:'student',now:r.downloadedAt?'Студент скачал работу — ждём отметку о сдаче':'Передана — студент ещё не скачал'};
+ if(w.key==='r3-handed')return {who:'done',now:'Студент сдал работу'};
+ return {who:'',now:w.title||''};
+}
+function r3TurnPill(t){return t.who==='you'?'<span class="r3turn you">Вы</span>':t.who==='student'?'<span class="r3turn st">Студент</span>':t.who==='done'?'<span class="r3turn done">Сдана</span>':'';}
+function r3Dots(x){var w=requestWorkflow(x),h='';for(var i=1;i<=5;i++)h+='<i class="'+(i<w.step||w.complete?'done':i===w.step?'cur':'')+'"></i>';return '<span class="r3dots" aria-hidden="true">'+h+'</span>';}
 function r3Workflow(x){
  var files=Array.isArray(x.attachments)?x.attachments.length:null,what=files===null?'материалы':files?files+' '+plural(files,'файл','файла','файлов'):'';
  if(x.link)what=what?what+' и ссылку на папку в облаке':'ссылку на папку в облаке';
- var w=x.r3||{},open=(x.clarifications||[]).filter(function(q){return !q.answer;}).length,base={action:null,label:'',blocker:'',complete:false,steps:R3_STEPS};
+ var w=x.r3Loaded?(x.r3||{}):r3FromSummary(x),open=Array.isArray(x.clarifications)?x.clarifications.filter(function(q){return !q.answer;}).length:(x.r3Summary?x.r3Summary.openQuestions||0:0),base={action:null,label:'',blocker:'',complete:false,steps:R3_STEPS};
  // R3-D: после возврата заявка снова в работе, пока не передана новая версия.
  var rework=!!w.returnedAt;
  if(rework)return Object.assign(base,{step:3,key:'r3-rework',rework:w.returns,title:'Работу вернули на доработку',copy:r3When(w.returnedAt)+' студент сообщил: преподаватель вернул работу. Исправьте работу по замечаниям и передайте новую версию.'});
@@ -2011,9 +2035,10 @@ function markSaved(){}
 function render(){
   var c = counts();
   var bar = document.getElementById("tabbar");
-  bar.innerHTML = [["list","Заявки","▤"],["refs","Вузы","🏛"],["more","Ещё","≡"]].map(function(x){
+  var mine=r3TodayLists().you.length;
+  bar.innerHTML = [["today","Сегодня","☼"],["list","Заявки","▤"],["refs","Вузы","🏛"],["more","Ещё","≡"]].map(function(x){
     return '<button type="button" data-tab="' + x[0] + '" aria-selected="' + (tab===x[0]) + '"><i aria-hidden="true">' + x[2] + '</i>' + x[1] +
-      (x[0]==="list" && c.all ? " · " + c.all : "") + '</button>';
+      (x[0]==="list" && c.all ? " · " + c.all : "") + (x[0]==="today" && mine ? ' <span class="r3badge">' + mine + '</span>' : "") + '</button>';
   }).join("");
   var t = today();
   document.getElementById("today-date").textContent = weekdayRu(t) + ", " + ruDate(t);
@@ -2022,6 +2047,7 @@ function render(){
   if(existingFab&&p.contains(existingFab))p.after(existingFab);
   p.dataset.view=tab; p.dataset.detail=String(!!openId);
   if (tab === "more") p.innerHTML = viewMore();
+  else if (tab === "today") p.innerHTML = viewTodayR3();
   else if (tab === "refs") p.innerHTML = openRefId ? viewRef(openRefId) : viewRefs();
   else p.innerHTML = openId ? viewItem(openId) : viewList();
   if(openId&&tab==='list')StudResults.mountTestDelivery(item(openId),p.querySelector('[data-test-delivery-host]'),false);
@@ -2083,19 +2109,20 @@ async function receiveInbox() {
   var match=location.hash.match(/^#request=([a-f0-9-]{36})$/);
   try {
     do {
-      var result=await Oblako.requestApi({action:"inbox",includeDeliveryState:true,after:cursor,id:match?match[1]:undefined});
+      var result=await Oblako.requestApi({action:"inbox",includeDeliveryState:true,includeR3:true,after:cursor,id:match?match[1]:undefined});
       if(D!==expectedData||Oblako.identity()!==expectedIdentity) throw new Error("Реестр изменился. Повторите получение заявок");
       if(!Array.isArray(result.rows))throw new Error("Не удалось прочитать входящие");
       result.rows.forEach(function(row){
         var rec=fromPayload(Object.assign({},row.payload,{id:row.id}));
         rec.requestNumber=row.number;rec.submissionRevision=row.revision||0;
         if(row.deliveryState&&typeof row.deliveryState.checkedAt==='string'&&Object.prototype.hasOwnProperty.call(row.deliveryState,'last'))rec.deliveryState=row.deliveryState;
+        if(row.r3Summary)rec.r3Summary=row.r3Summary;
         received.push(rec);
       });
       cursor=result.next;
     } while(cursor && !match);
     var count=0;
-    received.forEach(function(rec){var existing=item(rec.id);if(!existing){D.items.unshift(rec);refIntake(rec);count++;}else{if(rec.submissionRevision>(existing.submissionRevision||0))mergeInto(existing,rec);if(rec.deliveryState)existing.deliveryState=rec.deliveryState;existing.serverMissing=false;}});
+    received.forEach(function(rec){var existing=item(rec.id);if(!existing){D.items.unshift(rec);refIntake(rec);count++;}else{if(rec.submissionRevision>(existing.submissionRevision||0))mergeInto(existing,rec);if(rec.deliveryState)existing.deliveryState=rec.deliveryState;if(rec.r3Summary)existing.r3Summary=rec.r3Summary;existing.serverMissing=false;}});
     if(!match){
       var live=new Set(received.map(function(rec){return rec.id;}));
       D.items.forEach(function(rec){if(rec.requestNumber&&/^[a-f0-9-]{36}$/i.test(rec.id))rec.serverMissing=!live.has(rec.id);});
@@ -2106,6 +2133,27 @@ async function receiveInbox() {
     render();toast(stored ? (count?"Получено заявок: "+count:"Входящие проверены") : "Заявки есть на сервере, но сохранить их на устройстве не удалось");
   } catch(e){toast(e.message || "Не удалось получить заявки");}
   finally{inboxBusy=false;}
+}
+// R3-E (часть 4): «Сегодня» в реестре — что ждёт вашего действия, что ждёт студента, ближайшие сроки, новые заявки (UX-03a).
+function r3TodayLists(){
+ var items=(D.items||[]).filter(function(x){return x.route3&&x.requestNumber&&!x.serverMissing&&x.status!=='off';});
+ var you=[],st=[],soon=[],fresh=[];
+ items.forEach(function(x){var t=r3Turn(x),w=requestWorkflow(x);if(t.who==='you')you.push(x);else if(t.who==='student')st.push(x);if(w.key==='r3-received')fresh.push(x);var d=x.deadline?r3DaysLeft(x.deadline):null;if(d!==null&&d<=7&&t.who!=='done')soon.push(x);});
+ var byDl=function(a,b){return (a.deadline||'9999')<(b.deadline||'9999')?-1:1;};
+ return {you:you.sort(byDl),st:st.sort(byDl),soon:soon.sort(byDl),fresh:fresh};
+}
+function viewTodayR3(){
+ var L=r3TodayLists();
+ function line(x,right){var t=r3Turn(x);return '<div class="r3tl" data-act="open-today" data-id="'+esc(x.id)+'"><span class="r3num">'+esc(requestLabel(x))+'</span><div class="r3tlb"><b>'+esc(t.now)+'</b><small>'+esc(x.topic||'Тема не указана')+(x.student?' · '+esc(x.student):'')+'</small></div>'+right+'</div>';}
+ function due(x){if(!x.deadline)return '';var d=r3DaysLeft(x.deadline);return '<span class="r3tld'+(d<=3?' hot':'')+'">'+(d<0?'срок прошёл':d+' дн.')+'</span>';}
+ function sec(title,list,render,empty){return '<section class="card r3ts"><h3>'+title+' <span class="mut">· '+list.length+'</span></h3>'+(list.length?list.map(render).join(''):'<p class="hint">'+empty+'</p>')+'</section>';}
+ var h='<div class="registry-toolbar"><div><h1>Сегодня</h1><p class="mut">'+[L.fresh.length+' '+plural(L.fresh.length,'новая заявка','новые заявки','новых заявок'),L.you.length+' ждут вашего действия',L.st.length+' ждём студентов',L.soon.length+' '+plural(L.soon.length,'срок','срока','сроков')+' ближе 7 дней'].join(' · ')+'</p></div>'+(window.Oblako&&Oblako.mode==='cloud'?'<div class="chips"><button type="button" class="chip" data-act="receive-inbox">Получить заявки из кабинетов</button></div>':'')+'</div>';
+ h+='<div class="r3tgrid"><div>'+sec('Ждут вашего действия',L.you,function(x){var t=r3Turn(x);return line(x,'<button type="button" class="r3tact" data-act="open-today" data-id="'+esc(x.id)+'">'+esc(t.act||'Открыть')+'</button>');},'Сейчас ничего не ждёт вашего действия.')+
+  sec('Новые заявки',L.fresh,function(x){return line(x,due(x));},'Новых заявок нет.')+'</div><div>'+
+  sec('Ждём студента',L.st,function(x){return line(x,due(x));},'Студентов ждать не нужно.')+
+  sec('Сроки ближе 7 дней',L.soon,function(x){return line(x,due(x));},'Ближайших сроков нет.')+'</div></div>';
+ if(!L.you.length&&!L.st.length&&!L.fresh.length&&!(D.items||[]).some(function(x){return x.route3;}))h+='<p class="hint">Заявок по форме пока нет. Нажмите «Получить заявки из кабинетов», чтобы проверить облачный реестр.</p>';
+ return '<div class="r3today">'+h+'</div>';
 }
 function viewList(){
   var list=list0(filter,query), chips=[{k:"all",t:"Все"}].concat(STAGE_FILTERS.map(function(s){return {k:s[0],t:s[1]};}));
@@ -2124,6 +2172,8 @@ function viewList(){
   if(!D.items.length)return h+'<div class="empty">'+(inAccount?'На этом устройстве заявки пока не загружены. Нажмите «Получить заявки из кабинетов», чтобы проверить облачный реестр.':'Вы сейчас без входа в аккаунт. Здесь показаны только записи этого браузера; состояние облачных заявок неизвестно. Войдите в тот же аккаунт, которым пользуетесь в реестре.')+'</div>';
   h+=list.length?card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Заявка / студент</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Этап и следующий шаг</th></tr></thead><tbody>'+list.slice(start,start+listPageSize).map(function(x){
     var w=requestWorkflow(x),over=x.deadline&&x.deadline<today()&&!w.complete&&w.key!=='cancelled';
+    if(x.route3&&x.requestNumber&&!x.serverMissing&&x.status!=='off'){var t=r3Turn(x),dl=x.deadline?r3DaysLeft(x.deadline):null;
+     return '<tr class="request-row r3-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button><small data-dialog-count="'+esc(x.id)+'" role="status"></small><small>'+esc(x.student||'')+'</small></td><td>'+esc(x.univ||'')+'</td><td><b>'+esc(x.topic||'Тема не указана')+'</b><small>'+esc(x.workType||'')+'</small></td><td>'+(x.deadline?esc(ruDate(x.deadline))+'<small class="'+(dl!==null&&dl<=7?'r3hot':'')+'">'+(dl<0?'срок прошёл':dl+' дн.')+'</small>':'—')+'</td><td><div class="r3cell"><div>'+r3Dots(x)+'<small>'+esc(R3_STEPS[w.step-1].label)+'</small><span class="r3now">'+esc(t.now)+'</span></div>'+r3TurnPill(t)+'</div></td></tr>';}
     var next=x.requestNumber?w.label:'Открыть документ';
     var previous=x.deliveryState&&x.deliveryState.last;
     return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button><small data-dialog-count="'+esc(x.id)+'" role="status"></small>'+(previous?'<small>Ранее передано '+esc(ruDate(String(previous.createdAt).slice(0,10)))+'</small>':'')+'<small>'+esc(x.student||'Студент не указан')+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||'Вуз не указан')+'</td><td><span class="registry-topic">'+esc(x.topic||'Тема не указана')+'</span></td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small class="deadline-overdue">Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(w.title)+'</span>'+(w.blocker?'<small>'+esc(w.blocker)+'</small>':'')+(next?'<small class="request-next">Исполнитель: '+esc(next)+'</small>':'')+'</td></tr>';
@@ -2962,6 +3012,7 @@ document.addEventListener("click", function(ev){
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
   if (act === "r3-copy"){ var rc = item(id); if (rc) copyText(r3TitleText(rc)); return; }
   if (act === "r3-take"||act === "r3-deliver"){var rx=item(id);if(!rx)return;el.disabled=true;Oblako.requestApi(act==='r3-take'?{action:'r3-take',id:id}:{action:'r3-deliver',id:id,fileHash:rx.r3&&rx.r3.result&&rx.r3.result.hash}).then(function(r){rx.r3=r.work||rx.r3;render();toast(act==='r3-take'?'Заявка в работе. Студент видит этот шаг.':'Работа передана студенту.');}).catch(function(e){toast(e.message||'Не удалось выполнить действие');}).finally(function(){el.disabled=false;});return;}
+  if (act === "open-today"){tab='list';openId=id;render();window.scrollTo(0,0);return;}
   if (act === "r3-return-file-download"){el.disabled=true;Oblako.requestApi({action:'r3-return-file-download',id:id,fileId:el.getAttribute('data-file')}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Файл недоступен');}).finally(function(){el.disabled=false;});return;}
   if (act === "r3-result-download"){el.disabled=true;Oblako.requestApi({action:'r3-result-download',id:id}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Файл недоступен');}).finally(function(){el.disabled=false;});return;}
   if (act === "r3-bundle"){var bx=item(id);if(!bx)return;el.disabled=true;var was=el.textContent;el.textContent='Собираем архив…';r3Bundle(bx).catch(function(e){toast(e.message||'Архив не собран');}).finally(function(){el.disabled=false;el.textContent=was;});return;}
