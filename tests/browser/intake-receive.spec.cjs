@@ -306,3 +306,37 @@ test('R3-E1: the work page shows the five-step route; passed steps fold into one
  await expect(route.locator('.r3s.done')).toHaveCount(2);await expect(route.locator('.r3s.done').first()).toBeVisible();await expect(route.locator('.r3passed')).toBeHidden();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+test('R3-E2: home shows one card per form request with the route strip and one action; the works list shows the step',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  Oblako.mode='cloud';window.calls=[];
+  const st={'11111111-1111-4111-8111-111111111111':{stage:'needs_answer',openQuestions:2,route:'r3',returns:0},'22222222-2222-4222-8222-222222222222':{stage:'r3_ready',openQuestions:0,route:'r3',returns:0,result:{name:'Работа.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:null,handedAt:null}},'33333333-3333-4333-8333-333333333333':{stage:'r3_in_work',openQuestions:0,route:'r3',returns:0}};
+  Oblako.requestApi=async d=>{calls.push(d.action+':'+d.id);if(d.action==='student-progress')return st[d.id];if(d.action==='clarification-unread')return {question:0};throw Error('Unexpected '+d.action);};
+  const base=(id,topic,dl,sid,n,extra)=>({id,topic,created:today(),deadline:dl,status:'draft',format:{workType:'Работа'},structure:emptyStructure(),tasks:[],req:{id:'i'+n,serverId:sid,number:n,sent:'2026-10-05',...extra}});
+  change(function(){
+   D.works.push(base('w-1','Математика — практические задания','2027-01-25','11111111-1111-4111-8111-111111111111',15,{route:'r3',intake:true}));
+   D.works.push(base('w-2','Экономика — контрольная работа','2026-12-20','22222222-2222-4222-8222-222222222222',16,{route:'r3',intake:true}));
+   // Работа из формы без отметки маршрута — маршрут определяется по ответу сервера.
+   D.works.push(base('w-3','История — реферат','2026-12-01','33333333-3333-4333-8333-333333333333',17,{intake:true}));
+   D.works.push({id:'w-own',topic:'Своя курсовая',created:today(),deadline:'2026-11-30',status:'draft',format:{workType:'Курсовая'},structure:emptyStructure(),tasks:[]});
+  });
+  tab='today';openWorkId=null;render();
+ });
+ await expect(page.locator('[data-r3-home]')).toHaveCount(3);
+ const econ=page.locator('[data-r3-home="w-2"]');
+ await expect(econ.locator('.r3strip li.cur')).toContainText('Готово');await expect(econ.locator('[data-act="r3-download"]')).toHaveText('Скачать работу');
+ const math=page.locator('[data-r3-home="w-1"]');
+ await expect(math.locator('[data-act="student-clarifications"]')).toHaveText('Ответить на вопросы');
+ await expect(page.locator('[data-r3-home="w-3"] .r3strip li.cur')).toContainText('В работе');
+ expect(await page.evaluate(()=>work('w-3').req.route)).toBe('r3');
+ // «Ближайшая сдача» показывает только работу без заявки по форме.
+ await expect(page.locator('.card.now')).toContainText('Своя курсовая');
+ await expect(page.locator('[data-act="intake-materials"]',{hasText:'Отправить новое задание'})).toBeVisible();
+ await page.evaluate(()=>{tab='works';render();});
+ await expect(page.locator('[data-r3-row="w-1"]')).toContainText('Шаг 2 из 5 · Ответьте на вопрос исполнителя');
+ await expect(page.locator('[data-r3-row="w-2"]')).toContainText('Шаг 4 из 5 · Работа готова');
+ await expect(page.locator('[data-r3-row="w-2"] .r3dots i.done')).toHaveCount(3);
+ // Повторный показ не дёргает сервер чаще раза в 30 секунд.
+ const before=await page.evaluate(()=>calls.length);await page.evaluate(()=>{tab='today';render();});await page.waitForTimeout(300);
+ expect(await page.evaluate(()=>calls.length)).toBe(before);
+});
