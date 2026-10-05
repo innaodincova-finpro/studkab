@@ -60,7 +60,7 @@ async function open(page){await page.evaluate(()=>{StudIntake.open({api:Oblako.r
 async function saved(page,n){await expect(page.locator('[data-intake-download]')).toHaveCount(n);await expect(page.locator('[data-intake-status]')).toContainText(n?'Материалы сохранены':'Приложите файлы задания');}
 test('one choice saves DOCX/PDF/XLSX before work creation; reopening/reload retain originals without publishing',async({page})=>{
  await setup(page);await page.evaluate(()=>{tab='works';render();});
- await page.getByRole('button',{name:'Отправить задание',exact:true}).click();await expect(page.locator('#intakeFiles')).toBeEnabled();
+ await page.getByRole('button',{name:'Отправить задание',exact:true}).first().click();await expect(page.locator('#intakeFiles')).toBeEnabled();
  await page.locator('#intakeFiles').setInputFiles([word,pdf('Методичка'),excel]);await saved(page,3);
  await page.locator('[data-intake-dialog] .close').click();await open(page);await saved(page,3);
  await setup(page);await open(page);await saved(page,3);

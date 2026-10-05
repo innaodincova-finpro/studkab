@@ -2,7 +2,7 @@ const {test,expect}=require('@playwright/test');
 
 test('C150 creating a work tells the student that the request has not been sent',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
- await page.getByRole('button',{name:'Новая работа'}).first().click();
+ await page.getByRole('button',{name:'Вести работу самостоятельно'}).click();
  const modal=page.getByRole('dialog',{name:'Новая работа'});
  await expect(modal).toContainText('Исполнителю она пока не отправляется');
  await modal.getByRole('textbox',{name:'Тема'}).fill('Проверка первого шага');
@@ -46,4 +46,15 @@ test('C151 approved requirements do not claim Word was delivered or materials ca
  await expect(page.locator('[data-student-progress]')).toContainText('передача студенту ещё не зарегистрирована');
  await expect(page.getByText('Добавить новые получится, если исполнитель откроет дополнение материалов.')).toBeVisible();
  await expect(page.getByRole('button',{name:'Открыть материалы заявки'})).toBeVisible();
+});
+
+test('Home leads to «Отправить задание»; the own-work window offers practical and laboratory work',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await expect(page.locator('#page')).toContainText('Пришлите задание от преподавателя');
+ await expect(page.locator('#page [data-act="intake-materials"]')).toHaveText('Отправить задание');
+ await expect(page.locator('#fab')).toHaveAttribute('data-act','intake-materials');await expect(page.locator('#fab')).toContainText('Отправить задание');
+ await expect(page.locator('#page')).not.toContainText('Новая работа');
+ await page.getByRole('button',{name:'Вести работу самостоятельно'}).click();
+ const kinds=await page.locator('#nType option').allTextContents();
+ expect(kinds.slice(0,2)).toEqual(['Практические задания','Лабораторная работа']);expect(kinds).toContain('Курсовая работа');expect(kinds).toContain('Другое');
 });
