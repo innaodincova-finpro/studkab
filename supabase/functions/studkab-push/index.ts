@@ -42,11 +42,11 @@ async function dialoguePush(sub:any,c:any){
  }
  return {sent,failed};
 }
-// ROUTE-03, R3-C: студенту — «Работа готова», пока переданный файл не скачан (не позже 7 дней после передачи).
+// ROUTE-03, R3-C/R3-D: студенту — «Работа готова» (после возврата — «Исправленная работа готова»), пока переданный файл не скачан (не позже 7 дней после передачи).
 async function readyPush(sub:any,c:any){
  let sent=0,failed=0;
  const since=new Date(Date.now()-7*86400000).toISOString();
- const rows=await db('studkab_r3_work?select=request_id,delivered_at&student_id=eq.'+sub.user_id+'&downloaded_at=is.null&delivered_at=gt.'+encodeURIComponent(since)+'&order=delivered_at.asc&limit=20');
+ const rows=await db('studkab_r3_work?select=request_id,delivered_at,returns&student_id=eq.'+sub.user_id+'&downloaded_at=is.null&delivered_at=gt.'+encodeURIComponent(since)+'&order=delivered_at.asc&limit=20');
  for(const row of rows){
   const key=sub.id+':r3ready:'+row.request_id+':'+row.delivered_at;
   if(!await db('rpc/claim_studkab_push_delivery','POST',{delivery_key:key,subscription_id:sub.id}))continue;
@@ -54,7 +54,7 @@ async function readyPush(sub:any,c:any){
    const [fresh]=await db('studkab_r3_work?request_id=eq.'+row.request_id+'&student_id=eq.'+sub.user_id+'&downloaded_at=is.null&delivered_at=eq.'+encodeURIComponent(row.delivered_at)+'&select=request_id');
    const [currentSub]=await db('studkab_push_subscriptions?id=eq.'+sub.id+'&user_id=eq.'+sub.user_id+'&enabled=eq.true');
    if(!fresh||!currentSub){await db('studkab_push_deliveries?key=eq.'+encodeURIComponent(key),'PATCH',{sent_at:new Date().toISOString(),result:'cancelled'});continue;}
-   await send(currentSub,{title:'Кабинет студента',body:'Работа готова. Откройте кабинет, чтобы скачать её.',tag:key,url:'./index.html#request='+row.request_id},c);
+   await send(currentSub,{title:'Кабинет студента',body:row.returns>0?'Исправленная работа готова. Откройте кабинет, чтобы скачать её.':'Работа готова. Откройте кабинет, чтобы скачать её.',tag:key,url:'./index.html#request='+row.request_id},c);
    const at=new Date().toISOString();await db('studkab_push_deliveries?key=eq.'+encodeURIComponent(key),'PATCH',{sent_at:at,result:'accepted'});
    await db('studkab_push_subscriptions?id=eq.'+sub.id,'PATCH',{last_sent_at:at,last_error:null});sent++;
   }catch{failed++;await db('studkab_push_subscriptions?id=eq.'+sub.id,'PATCH',{last_error:'Уведомление не доставлено. Сервер повторит попытку.'});}
