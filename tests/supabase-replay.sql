@@ -65,11 +65,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 54 then
-    raise exception 'Expected 54 STUDKAB tables, found %', table_count;
+  if table_count <> 55 then
+    raise exception 'Expected 55 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 54 then
-    raise exception 'RLS enabled on only % of 54 STUDKAB tables', rls_count;
+  if rls_count <> 55 then
+    raise exception 'RLS enabled on only % of 55 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -478,4 +478,18 @@ do $$ declare signature text;role_name text;begin
   end loop;
  end loop;
  if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='studkab_r3_returns' and column_name='telegram_sent_at') then raise exception 'R3-F columns missing';end if;
+end $$;
+
+-- Полное удаление заявки: перечень оставшихся файлов и очистка черновика — только для сервера.
+do $$ declare signature text;role_name text;begin
+ foreach signature in array array['public.prepare_studkab_request_delete(uuid)','public.studkab_request_delete_intake(uuid[],uuid,jsonb)'] loop
+  if to_regprocedure(signature) is null or not has_function_privilege('service_role',signature,'execute') then raise exception 'Delete RPC missing: %',signature;end if;
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'Delete RPC exposed: %',signature;end if;
+  end loop;
+ end loop;
+ if to_regclass('public.studkab_storage_leftovers') is null then raise exception 'Leftovers table missing';end if;
+ foreach role_name in array array['anon','authenticated'] loop
+  if has_table_privilege(role_name,'public.studkab_storage_leftovers','select,insert,update,delete') then raise exception 'Leftovers table exposed to %',role_name;end if;
+ end loop;
 end $$;

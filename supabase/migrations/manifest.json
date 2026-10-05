@@ -633,6 +633,14 @@
       "status": "pending",
       "note": "ROUTE-03 R3-F: уведомление исполнителю о возврате работы — Telegram с повтором и push на устройства исполнителя",
       "sha256": "ce0eb74a4dd855607c095903702f292106a5d950eb0c1875aacc3f9b5a70df03"
+    },
+    {
+      "file": "20261006170000_request_delete_complete.sql",
+      "version": "20261006170000",
+      "name": "request_delete_complete",
+      "status": "pending",
+      "note": "Полное удаление заявки: вместе с заявкой удаляются исходные файлы студента, черновик и отмеченные оставшиеся файлы",
+      "sha256": "f694cbf90084c781a1885764f4882f55339d2826d08e1b44061ab91329ad2980"
     }
   ],
   "production_reconciled_at": "2026-09-23"

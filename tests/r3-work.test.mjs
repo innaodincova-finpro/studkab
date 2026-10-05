@@ -5,7 +5,7 @@ import {schema,submissionExtension,student,other,apiDatabase} from './intake-fix
 import {handler} from '../supabase/functions/studkab-requests/handler.mjs';
 const read=n=>fs.readFileSync(new URL('../supabase/migrations/'+n,import.meta.url),'utf8');
 const r3a=read('20261005090000_route03_a_request_form.sql');
-const DETAILS={k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна'};
+const DETAILS={k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна'};
 const EXEC='executor@example.invalid',STUDENT='student@example.invalid';
 const DOCX=Buffer.from([80,75,3,4,9,9,9]);
 async function body(name,bytes,type){return {fileName:name,contentType:type,sizeBytes:bytes.length,fileHash:Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex'),base64:bytes.toString('base64')};}
@@ -47,8 +47,8 @@ test('R3-C: executor takes the request, attaches a result, delivers it; student 
   assert.equal((await f.call({action:'r3-take',id})).work.takenAt,taken.takenAt);
   assert.equal((await f.call({action:'r3-deliver',id,fileHash:'a'.repeat(64)})).status,409);
   assert.equal((await f.call({action:'r3-result-upload',id,...await body('Работа.txt',Buffer.from('text'),'text/plain')})).status,400);
-  const b=await body('Зеленская_Математика.docx',DOCX,'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-  const up=(await f.call({action:'r3-result-upload',id,...b})).work;assert.equal(up.result.name,'Зеленская_Математика.docx');assert.ok(f.saved.has('r3-results/'+id+'/'+b.fileHash));
+  const b=await body('Иванова_Математика.docx',DOCX,'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  const up=(await f.call({action:'r3-result-upload',id,...b})).work;assert.equal(up.result.name,'Иванова_Математика.docx');assert.ok(f.saved.has('r3-results/'+id+'/'+b.fileHash));
   // Студент не видит рабочий файл до передачи.
   f.as(student,STUDENT);
   assert.equal((await f.call({action:'r3-state',id})).work.result,null);assert.equal((await f.call({action:'r3-download',id})).status,404);
@@ -56,16 +56,16 @@ test('R3-C: executor takes the request, attaches a result, delivers it; student 
   const progress=await f.call({action:'student-progress',id});assert.equal(progress.stage,'r3_in_work');
   f.as(other,EXEC);
   assert.equal((await f.call({action:'r3-deliver',id,fileHash:'b'.repeat(64)})).status,409);
-  const sent=await f.call({action:'r3-deliver',id,fileHash:b.fileHash});assert.equal(sent.status,200);assert.equal(sent.work.delivered.name,'Зеленская_Математика.docx');
+  const sent=await f.call({action:'r3-deliver',id,fileHash:b.fileHash});assert.equal(sent.status,200);assert.equal(sent.work.delivered.name,'Иванова_Математика.docx');
   assert.equal((await f.call({action:'r3-deliver',id,fileHash:b.fileHash})).duplicate,true);
   f.as(student,STUDENT);
-  const ready=await f.call({action:'student-progress',id});assert.equal(ready.stage,'r3_ready');assert.equal(ready.result.name,'Зеленская_Математика.docx');assert.equal(ready.result.downloadedAt,null);
+  const ready=await f.call({action:'student-progress',id});assert.equal(ready.stage,'r3_ready');assert.equal(ready.result.name,'Иванова_Математика.docx');assert.equal(ready.result.downloadedAt,null);
   const link=await f.call({action:'r3-download',id});assert.equal(link.url,'https://storage.example/r3-results/'+id+'/'+b.fileHash);
   assert.ok((await f.call({action:'student-progress',id})).result.downloadedAt);
   // Новый рабочий файл не меняет переданный, пока его не передадут отдельно.
   f.as(other,EXEC);const b2=await body('Версия2.pdf',Buffer.from('%PDF-1.4 v2'),'application/pdf');
   await f.call({action:'r3-result-upload',id,...b2});
-  f.as(student,STUDENT);assert.equal((await f.call({action:'r3-download',id})).fileName,'Зеленская_Математика.docx');
+  f.as(student,STUDENT);assert.equal((await f.call({action:'r3-download',id})).fileName,'Иванова_Математика.docx');
   f.as(other,EXEC);await f.call({action:'r3-deliver',id,fileHash:b2.fileHash});
   f.as(student,STUDENT);const again=await f.call({action:'student-progress',id});assert.equal(again.result.name,'Версия2.pdf');assert.equal(again.result.downloadedAt,null);
  }finally{await f.db.close();}

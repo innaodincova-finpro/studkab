@@ -554,7 +554,7 @@ test('UX-02a, R3-A: после начала подготовки добавле�
  }finally{await f.db.close();}
 });
 // ROUTE-03, R3-A: заявка по форме — сведения для титульного листа, фото, ссылка на облако.
-const R3_DETAILS={k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',s:''};
+const R3_DETAILS={k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна',s:''};
 async function r3Draft(f,files){
  const d=await f.rpc('studkab_intake_open',{p_student:student});const saved=[];
  for(const [name,type,hash] of files){const {file}=await f.rpc('studkab_intake_reserve',{p_student:student,p_draft:d.id,p_name:name,p_type:type,p_size:20,p_hash:hash,p_supersedes:null});await f.rpc('studkab_intake_finish',{p_student:student,p_draft:d.id,p_file:file.id,p_hash:hash});saved.push(file);}

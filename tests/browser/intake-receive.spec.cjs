@@ -1,6 +1,6 @@
 // ROUTE-03, R3-A: окно «Отправьте задание» и карточка новой заявки в реестре.
 const {test,expect}=require('@playwright/test');
-const DETAILS={k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна'};
+const DETAILS={k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна'};
 const pdf=n=>({name:n+'.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-'+n)});
 const jpg={name:'Страница учебника.jpg',mimeType:'image/jpeg',buffer:Buffer.from([0xff,0xd8,0xff,0xe0,1,2,3])};
 async function setup(page,{restored=false}={}){
@@ -102,7 +102,7 @@ test('R3-A: registry card shows title-page details and materials, opens no study
    if(d.action==='clarification-list')return {questions:[]};
    if(d.action==='r3-state')return {work:{takenAt:null,result:null,delivered:null,downloadedAt:null}};
    throw Error('Unexpected '+d.action);};
-  const x=fromPayload({id:'r3-card',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',s:'',lk:'https://disk.yandex.ru/d/Mt7abc',dl:'2027-01-25',rq:'Любые 2 задания',cn:'student@example.invalid'});x.requestNumber=15;
+  const x=fromPayload({id:'r3-card',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна',s:'',lk:'https://disk.yandex.ru/d/Mt7abc',dl:'2027-01-25',rq:'Любые 2 задания',cn:'student@example.invalid'});x.requestNumber=15;
   D.items=[x];openId=x.id;render();
   return {topic:x.topic,bucket:stageBucket(x),copy:r3TitleText(x)};
  });
@@ -111,7 +111,7 @@ test('R3-A: registry card shows title-page details and materials, opens no study
  await expect(page.locator('.request-action')).toContainText('Новая заявка — откройте материалы');
  await expect(page.locator('.request-action [data-act="r3-take"]')).toHaveText('Взять в работу');
  await expect(page.locator('.request-action [data-act="r3-bundle"]')).toHaveText('Скачать всё');
- await expect(page.locator('#request-panel-overview')).toContainText('Курс и группа');await expect(page.locator('#request-panel-overview')).toContainText('26М214в');
+ await expect(page.locator('#request-panel-overview')).toContainText('Курс и группа');await expect(page.locator('#request-panel-overview')).toContainText('26Т101а');
  await expect(page.locator('#request-panel-overview a[href="https://disk.yandex.ru/d/Mt7abc"]')).toHaveAttribute('rel','noopener noreferrer');
  await page.locator('#request-tab-materials').click();
  await expect(page.locator('#request-panel-materials')).toContainText('Фото · 4 КБ');
@@ -159,7 +159,7 @@ test('R3-C: registry card — take, attach result, deliver; new file must be del
    if(d.action==='r3-result-upload'){r3.result={name:d.fileName,size:d.sizeBytes,at:'2026-10-06T15:12:00Z',hash:d.fileHash};return {work:structuredClone(r3)};}
    if(d.action==='r3-deliver'){if(d.fileHash!==r3.result.hash)throw Error('changed');r3.delivered={name:r3.result.name,size:r3.result.size,at:'2026-10-06T15:15:00Z',hash:r3.result.hash};return {work:structuredClone(r3)};}
    throw Error('Unexpected '+d.action);};
-  const x=fromPayload({id:'r3-work',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
+  const x=fromPayload({id:'r3-work',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
   D.items=[x];openId=x.id;render();
  });
  const panel=page.locator('.request-action');
@@ -168,8 +168,8 @@ test('R3-C: registry card — take, attach result, deliver; new file must be del
  await panel.locator('[data-act="r3-take"]').click();
  await expect(panel).toContainText('Выполните работу и прикрепите готовый файл');
  await expect(panel.locator('button[disabled]',{hasText:'Передать студенту'})).toBeVisible();
- await panel.locator('input[data-r3-result-file]').setInputFiles({name:'Зеленская_Математика.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from([80,75,3,4,9])});
- await expect(panel).toContainText('Зеленская_Математика.docx');
+ await panel.locator('input[data-r3-result-file]').setInputFiles({name:'Иванова_Математика.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from([80,75,3,4,9])});
+ await expect(panel).toContainText('Иванова_Математика.docx');
  await panel.locator('[data-act="r3-deliver"]').click();
  await expect(panel).toContainText('Работа передана студенту');await expect(panel).toContainText('Студент ещё не скачал работу');
  await expect(panel.locator('[data-act="r3-deliver"]')).toHaveCount(0);
@@ -182,7 +182,7 @@ test('R3-C: «Скачать всё» builds one archive with the student files 
  const names=await page.evaluate(async()=>{
   window.fetch=async u=>new Response(String(u).endsWith('a1')?'%PDF-one':'jpeg-two');
   Oblako.requestApi=async d=>{if(d.action==='attachment-download')return {url:'https://storage.example/'+d.attachmentId};throw Error('Unexpected '+d.action);};
-  const x=fromPayload({id:'r3-zip',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'26М214в',n:'Зеленская А.А.',dl:'2027-01-25',rq:'Любые 2',lk:'https://disk.yandex.ru/d/x',cn:'s@e'});
+  const x=fromPayload({id:'r3-zip',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'26Т101а',n:'Иванова М.П.',dl:'2027-01-25',rq:'Любые 2',lk:'https://disk.yandex.ru/d/x',cn:'s@e'});
   x.requestNumber=15;x.attachments=[{id:'a1',file_name:'Задание.pdf'},{id:'a2',file_name:'Задание.pdf'}];
   let blob;const real=URL.createObjectURL;URL.createObjectURL=b=>{blob=b;return 'blob:x';};
   await r3Bundle(x);URL.createObjectURL=real;
@@ -197,23 +197,23 @@ test('R3-C: student sees «Работа готова» with one download button;
  await page.evaluate(()=>{
   Oblako.mode='cloud';window.dl=[];window.opened=[];HTMLAnchorElement.prototype.click=function(){opened.push(this.download);};
   Oblako.requestApi=async d=>{
-   if(d.action==='student-progress')return {stage:'r3_ready',openQuestions:0,route:'r3',result:{name:'Зеленская_Математика.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:null}};
-   if(d.action==='r3-download'){dl.push(d.id);return {url:new URL('/storage/v1/object/sign/x?token=t',OBLAKO_CONFIG.url).href,fileName:'Зеленская_Математика.docx'};}
+   if(d.action==='student-progress')return {stage:'r3_ready',openQuestions:0,route:'r3',result:{name:'Иванова_Математика.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:null}};
+   if(d.action==='r3-download'){dl.push(d.id);return {url:new URL('/storage/v1/object/sign/x?token=t',OBLAKO_CONFIG.url).href,fileName:'Иванова_Математика.docx'};}
    if(d.action==='clarification-unread')return {question:0};
    throw Error('Unexpected '+d.action);};
   change(function(){D.works.push({id:'w-r3',topic:'Математика — практические задания',created:today(),deadline:'2027-01-25',status:'draft',format:{workType:'Практические задания',discipline:'Математика'},structure:emptyStructure(),tasks:[],req:{id:'intake_x',serverId:'11111111-1111-4111-8111-111111111111',number:15}});});
   tab='works';openWorkId='w-r3';render();
  });
  await expect(page.locator('[data-student-progress]')).toHaveText('Работа готова.');
- await expect(page.locator('[data-r3-ready]')).toContainText('Зеленская_Математика.docx · 48 КБ');
+ await expect(page.locator('[data-r3-ready]')).toContainText('Иванова_Математика.docx · 48 КБ');
  await expect(page.locator('[data-legacy-result]')).toBeHidden();
  await page.locator('[data-act="r3-download"]').click();
- await expect.poll(()=>page.evaluate(()=>opened)).toEqual(['Зеленская_Математика.docx']);expect(await page.evaluate(()=>dl)).toEqual(['11111111-1111-4111-8111-111111111111']);
+ await expect.poll(()=>page.evaluate(()=>opened)).toEqual(['Иванова_Математика.docx']);expect(await page.evaluate(()=>dl)).toEqual(['11111111-1111-4111-8111-111111111111']);
 });
 test('R3-D: registry shows hand-in, then the return with remarks; corrected file is delivered as a new version',async({page})=>{
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>{
-  const v1={name:'Зеленская_26М214в_Математика_Практические_задания.docx',size:49152,at:'2026-10-06T15:15:00Z',hash:'a'.repeat(64)};
+  const v1={name:'Иванова_26Т101а_Математика_Практические_задания.docx',size:49152,at:'2026-10-06T15:15:00Z',hash:'a'.repeat(64)};
   window.r3={takenAt:'2026-10-05T07:40:00Z',result:{...v1,at:'2026-10-06T15:12:00Z'},delivered:v1,downloadedAt:'2026-10-07T09:00:00Z',handedAt:'2026-10-08T08:30:00Z',returns:0,returnedAt:null,versions:[{n:1,name:v1.name,size:v1.size,at:v1.at}],returnList:[],pendingFiles:[]};
   window.r3Calls=[];
   Oblako.requestApi=async d=>{r3Calls.push(d.action+(d.fileId?':'+d.fileId:''));
@@ -226,7 +226,7 @@ test('R3-D: registry shows hand-in, then the return with remarks; corrected file
    if(d.action==='r3-deliver'){r3.delivered={...r3.result,at:'2026-10-09T17:10:00Z'};r3.returnedAt=null;r3.handedAt=null;r3.downloadedAt=null;r3.versions.push({n:2,name:r3.result.name,size:r3.result.size,at:r3.delivered.at});return {work:structuredClone(r3)};}
    throw Error('Unexpected '+d.action);};
   window.open=()=>null;
-  const x=fromPayload({id:'r3-d',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
+  const x=fromPayload({id:'r3-d',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
   D.items=[x];openId=x.id;render();
  });
  const panel=page.locator('.request-action');
@@ -250,7 +250,7 @@ test('R3-D: registry shows hand-in, then the return with remarks; corrected file
 test('R3-D: student hands in, then sends the teacher remarks with a photo; the card shows the rework',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
  await page.evaluate(()=>{
-  Oblako.mode='cloud';window.calls=[];window.st={stage:'r3_ready',openQuestions:0,route:'r3',returns:0,result:{name:'Зеленская_Математика.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:'2026-10-07T09:00:00Z',handedAt:null}};window.pending=[];
+  Oblako.mode='cloud';window.calls=[];window.st={stage:'r3_ready',openQuestions:0,route:'r3',returns:0,result:{name:'Иванова_Математика.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:'2026-10-07T09:00:00Z',handedAt:null}};window.pending=[];
   Oblako.requestApi=async d=>{calls.push(d);
    if(d.action==='student-progress')return structuredClone(st);
    if(d.action==='clarification-unread')return {question:0};
@@ -347,7 +347,7 @@ test('R3-E3: registry card shows the route on the left and title-page details on
   window.r3={takenAt:'2026-10-05T07:40:00Z',result:{...v1,at:'2026-10-06T15:12:00Z'},delivered:v1,downloadedAt:'2026-10-07T09:00:00Z',handedAt:null,returns:1,returnedAt:'2026-10-09T06:00:00Z',versions:[{n:1,name:v1.name,size:v1.size,at:v1.at}],returnList:[{n:1,comment:'Задание 3 подробно.',at:'2026-10-09T06:00:00Z',files:[]}]};
   window.qcalls=0;
   Oblako.requestApi=async d=>{if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:3}};if(d.action==='attachment-context')return {attachments:[{id:'a1',category:'unclassified',file_name:'Практика1.pdf',content_type:'application/pdf',size_bytes:2048,file_hash:'a'.repeat(64)}],materialRevision:3};if(d.action==='clarification-list'){qcalls++;return {questions:[]};}if(d.action==='r3-state')return {work:structuredClone(r3)};throw Error('Unexpected '+d.action);};
-  const x=fromPayload({id:'r3-e3',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26М214в',n:'Зеленская Анастасия Анатольевна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
+  const x=fromPayload({id:'r3-e3',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=15;
   D.items=[x];openId=x.id;render();
  });
  const route=page.locator('.r3route');

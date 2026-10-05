@@ -39,7 +39,7 @@ export function validatePayload(p,{newSubmission=false,previous=null}={}) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,fetchCloud=globalThis.fetch,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,removeIntake,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,fetchCloud=globalThis.fetch,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -132,7 +132,13 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
     const plan=await db('rpc/prepare_studkab_request_delete','POST',{p_request:id});
     if(plan.absent)return json({deleted:true,absent:true,id});
     for(const path of plan.paths||[])await remove(path);
+    // Полное удаление: исходные файлы студента и оставшиеся без записей файлы этого студента.
+    const leftovers=Array.isArray(plan.leftovers)?plan.leftovers:[];
+    if((plan.intakePaths||[]).length||leftovers.some(l=>l.bucket==='studkab-intake-materials')){if(typeof removeIntake!=='function')throw Error('Intake storage cleanup unavailable');}
+    for(const path of plan.intakePaths||[])await removeIntake(path);
+    for(const l of leftovers)await (l.bucket==='studkab-intake-materials'?removeIntake:remove)(l.path);
     const result=await db('rpc/delete_studkab_request','POST',{p_request:id,p_actor:user.id,p_reason:reason});
+    if(plan.student&&((plan.drafts||[]).length||leftovers.length))result.intake=await db('rpc/studkab_request_delete_intake','POST',{p_drafts:plan.drafts||[],p_student:plan.student,p_leftovers:leftovers});
     return json(result);
    }
    if(['test-delivery-state','test-deliver','test-result'].includes(input.action)){
