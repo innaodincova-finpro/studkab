@@ -2,6 +2,7 @@ import webpush from 'npm:web-push@3.6.7';
 import {dueEvents,validSubscription} from './schedule.js';
 import {cronAllowed,memberAllowed} from './access.mjs';
 import {requestPush} from './request-push.mjs';
+import {returnPush,returnTelegram} from './r3-notify.mjs';
 const URL_BASE=Deno.env.get('SUPABASE_URL')!;
 const SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const cors={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS'};
@@ -91,6 +92,8 @@ async function dispatch(c:any){
    try{
     try{const dialogue=await dialoguePush(sub,c);sent+=dialogue.sent;failed+=dialogue.failed;}catch{failed++;}
     try{const ready=await readyPush(sub,c);sent+=ready.sent;failed+=ready.failed;}catch{failed++;}
+    // R3-F: исполнителю — «Работу вернули на доработку».
+    try{const ret=await returnPush({db,send,sub,configuration:c});sent+=ret.sent;failed+=ret.failed;}catch{failed++;}
     const now=Date.now();const [row]=await db('app_data?app=eq.kabinet&user_id=eq.'+sub.user_id+'&select=data');
     const items=dueEvents(row?.data,sub.timezone,now);
     if(sub.test_due&&now>=Date.parse(sub.test_due)&&now<Date.parse(sub.test_due)+300000)items.push({key:'test:'+sub.test_due,title:'Кабинет студента',body:'Проверка: уведомления приходят при закрытом приложении.',at:now+300000});
@@ -111,6 +114,7 @@ async function dispatch(c:any){
   if(subs.length<100)break;cursor=subs[subs.length-1].id;
  }
  try{const telegram=await dialogueTelegram();sent+=telegram.sent;failed+=telegram.failed;}catch{failed++;}
+ try{const ret=await returnTelegram({db,fetch,token:Deno.env.get('STUDKAB_TELEGRAM_BOT_TOKEN')});sent+=ret.sent;failed+=ret.failed;}catch{failed++;}
  await db('studkab_push_configuration?id=eq.1','PATCH',{last_run_at:new Date().toISOString(),last_result:{sent,failed}});
  return {sent,failed};
 }

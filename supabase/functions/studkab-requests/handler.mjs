@@ -235,6 +235,21 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
       row.deliveryState={checkedAt:new Date(now()).toISOString(),last:last?{deliveryId:last.delivery_id,versionId:last.version_id,createdAt:last.created_at}:null};
      }));
     }
+    // R3-E (часть 4): этап маршрута заявок по форме — одной выборкой на страницу входящих.
+    if(input.includeR3===true){
+     const ids=rows.filter(r=>r.payload?.route==='r3').map(r=>r.id);
+     if(ids.length){
+      const list='('+ids.join(',')+')';
+      const [work,open]=await Promise.all([
+       db('studkab_r3_work?select=request_id,taken_at,result_at,delivered_at,downloaded_at,handed_at,returns,returned_at&request_id=in.'+list),
+       db('studkab_clarifications?select=request_id&answered_at=is.null&request_id=in.'+list+'&limit=1000')]);
+      for(const row of rows){
+       if(row.payload?.route!=='r3')continue;
+       const w=work.find(x=>x.request_id===row.id);
+       row.r3Summary={takenAt:w?.taken_at||null,resultAt:w?.result_at||null,deliveredAt:w?.delivered_at||null,downloadedAt:w?.downloaded_at||null,handedAt:w?.handed_at||null,returns:w?.returns||0,returnedAt:w?.returned_at||null,openQuestions:open.filter(x=>x.request_id===row.id).length};
+      }
+     }
+    }
     return json({rows,next:rows.length===100?rows.at(-1).number:null});
    }
    return json({error:'Неизвестное действие'},400);
