@@ -2444,10 +2444,10 @@ function viewMore(){
 
   h += section("Хранение записей", CloudUI.panel());
 
-  h += section("Уведомления", (window.Oblako && Oblako.mode === "cloud") ? '<p class="hint">Новые вопросы приходят после сохранения исполнителем. Напоминания о сроках приходят в 10:00 за указанное число дней. Уведомления работают на подключённом устройстве, даже когда кабинет закрыт.</p>' +
+  h += section("Уведомления", (window.Oblako && Oblako.mode === "cloud") ? '<p class="hint">Новые вопросы приходят после сохранения исполнителем. Напоминания о сроках приходят в 10:00 за указанное число дней, о парах — за 30 минут до начала. Уведомления работают на подключённом устройстве, даже когда кабинет закрыт.</p>' +
     '<p class="hint">На iPhone откройте кабинет с ярлыка на экране «Домой» (iOS 16.4 или новее).</p>' +
     '<div class="chips"><button class="chip" data-act="push-enable">Включить уведомления</button><button class="chip" data-act="push-test">Проверить через минуту</button><button class="chip" data-act="push-status">Проверить состояние</button><button class="chip" data-act="push-disable">Отключить</button></div>' +
-    '<p class="hint" id="push-status" role="status" aria-live="polite">Уведомления подключаются отдельно на каждом устройстве.</p>' : '<p class="hint">Напоминания о сроках приходят на этот телефон, даже когда кабинет закрыт. Для этого нужен вход и сохранение работ в облаке.</p><button class="chip" data-act="cloud">Войти, чтобы включить уведомления</button>');
+    '<p class="hint" id="push-status" role="status" aria-live="polite">Уведомления подключаются отдельно на каждом устройстве.</p>' : '<p class="hint">Напоминания о сроках и парах приходят на этот телефон, даже когда кабинет закрыт. Для этого нужен вход и сохранение работ в облаке.</p><button class="chip" data-act="cloud">Войти, чтобы включить уведомления</button>');
 
   h += section("Настройки",
     '<div class="fld"><label for="stWarn">Предупреждать заранее, дней</label><input type="number" id="stWarn" min="1" max="30" value="' + (s.warnDays || 3) + '"></div>' +
