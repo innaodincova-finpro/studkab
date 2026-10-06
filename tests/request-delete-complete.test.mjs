@@ -44,6 +44,35 @@ test('SQL: the delete plan lists the student originals and leftovers; cleanup re
    await assert.rejects(()=>db.query('select * from studkab_storage_leftovers'),/permission denied/);await db.exec('reset role');}
  }finally{await db.close();}
 });
+test('SQL: draft with analysis runs keeps cost history; file records and leftovers are removed',async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(schema()+submissionExtension()+read('20261001162253_route02_receive_before_analysis.sql')+r3a.slice(r3a.indexOf('-- R3-A: регистрация заявки по форме'))+read('20261005120000_route03_c_work.sql')+read('20261006090000_route03_d_hand_return.sql'));
+  await db.exec(`create table if not exists studkab_gen_jobs(id uuid,request_id text);alter table studkab_gen_jobs add column if not exists id uuid;
+   create table if not exists studkab_gen_attempts(request_id uuid,job_id uuid);alter table studkab_gen_attempts add column if not exists job_id uuid;
+   create table if not exists studkab_gen_reconciliations(request_ids uuid[]);
+   create table if not exists studkab_intake_analysis_jobs(id uuid primary key default gen_random_uuid(),draft_id uuid references studkab_intake_drafts(id));
+   create table if not exists studkab_intake_confirmations(id uuid primary key default gen_random_uuid(),draft_id uuid references studkab_intake_drafts(id));
+   create table cost_ref(job_id uuid references studkab_intake_analysis_jobs(id));`);
+  await db.exec(read('20261006170000_request_delete_complete.sql')+read('20261007090000_request_delete_keep_cost.sql'));
+  const d1=(await db.query("insert into studkab_intake_drafts(student_id,state) values($1,'submitted') returning id",[student])).rows[0].id;
+  const d2=(await db.query("insert into studkab_intake_drafts(student_id,state) values($1,'submitted') returning id",[student])).rows[0].id;
+  for(const [d,n] of [[d1,'a.pdf'],[d1,'b.pdf'],[d2,'c.pdf']])await db.query("insert into studkab_intake_files(draft_id,file_name,content_type,size_bytes,file_hash,storage_path) values($1,$2,'application/pdf',10,$3,$4)",[d,n,H(n[0]),'s/'+d+'/'+n]);
+  await db.exec('set session_replication_role=replica');
+  const job=(await db.query("insert into studkab_intake_analysis_jobs(draft_id,manifest,version,plan,state) values($1,$2,'intake-analysis-1','[{}]','done') returning id",[d1,H('a')])).rows[0].id;
+  await db.exec('set session_replication_role=origin');
+  await db.query('insert into cost_ref(job_id) values($1)',[job]);
+  await db.query("insert into studkab_storage_leftovers(bucket,path,student_id) values('studkab-request-materials','s/old/x.txt',$1)",[student]);
+  await db.exec(`set role service_role;select set_config('request.jwt.claims','{"role":"service_role"}',false)`);
+  const out=(await db.query('select studkab_request_delete_intake($1,$2,$3) r',[[d1,d2],student,JSON.stringify([{bucket:'studkab-request-materials',path:'s/old/x.txt'}])])).rows[0].r;
+  assert.deepEqual(out,{drafts:1,files:3,leftovers:1,kept:1});
+  await db.exec('reset role');
+  assert.deepEqual((await db.query('select id from studkab_intake_drafts')).rows.map(r=>r.id),[d1]);
+  assert.equal((await db.query('select count(*)::int n from studkab_intake_files')).rows[0].n,0);
+  assert.equal((await db.query('select count(*)::int n from studkab_intake_analysis_jobs')).rows[0].n,1);
+  assert.equal((await db.query('select count(*)::int n from studkab_storage_leftovers')).rows[0].n,0);
+ }finally{await db.close();}
+});
 test('handler: removes request files, student originals and leftovers, then deletes the request and the draft records',async()=>{
  const id='11111111-1111-4111-8111-111111111111',owner={id:'22222222-2222-4222-8222-222222222222',email:'owner@example.test',email_confirmed_at:'yes'};
  const order=[];
