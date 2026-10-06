@@ -65,3 +65,18 @@ test('student loads the university schedule, reloads it without duplicates and k
   await page.locator('[data-d="2026-10-12"]').click();
   await expect(page.locator('.item').filter({ hasText: 'Информационные технологии — лабораторная работа' })).toBeVisible();
 });
+
+test('month view: tapping a day shows its list right away (the list is below three months)', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-06T10:00:00'));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('http://127.0.0.1:4173/index.html');
+  await page.evaluate(() => {
+    D.works = [];
+    D.events = [{ id: 'ev-p', kind: 'cls', title: 'История России — практическое занятие', date: '2026-10-10', time: '09:00', wid: '', note: 'до 10:20', src: 'vuz' }];
+    save(); tab = 'cal'; calMode = 'month'; calCursor = '2026-10-01'; calSel = null; render();
+  });
+  await expect(page.locator('#cal-day-list')).toHaveCount(0);
+  await page.locator('[data-act="cal-day"][data-d="2026-10-10"]').first().click();
+  await expect(page.locator('#cal-day-list')).toBeInViewport();
+  await expect(page.locator('[data-act="edit-event"][data-id="ev-p"]')).toBeInViewport();
+});

@@ -1941,7 +1941,7 @@ function viewCal(){
   dates.forEach(function(k){
     body += '<div class="dategroup">' + ruDate(k) + ' · ' + weekdayRu(k) + '</div>' + by[k].map(renderItem).join("");
   });
-  h += card((calSel ? '<div class="row" style="margin-bottom:6px">' + lab(ruDate(calSel)).replace("margin-bottom:8px","") +
+  h += card((calSel ? '<div class="row" id="cal-day-list" style="margin-bottom:6px;scroll-margin-top:12px">' + lab(ruDate(calSel)).replace("margin-bottom:8px","") +
       '<button type="button" class="mini" data-act="cal-day" data-d="' + calSel + '">весь ' + (calMode === "month" ? "месяц" : calMode === "week" ? "неделю" : "период") + '</button></div>'
       : lab(calMode === "month" ? "За месяц" : calMode === "week" ? "За неделю" : "За период")) +
     (body || '<div class="empty">' + (calSel ? 'На этот день ничего нет.' : 'За этот период планов нет.') + '</div>'));
@@ -3092,7 +3092,13 @@ document.addEventListener("click", function(ev){
     else calCursor = addDays(calCursor, 7 * n);
     calSel = null; return render();
   }
-  if (act === "cal-day"){ var dsel = el.getAttribute("data-d"); calSel = (calSel === dsel) ? null : dsel; return render(); }
+  if (act === "cal-day"){
+    var dsel = el.getAttribute("data-d"); calSel = (calSel === dsel) ? null : dsel; render();
+    /* Список выбранного дня стоит под календарём: показываем его сразу, иначе нажатие выглядит как пустое. */
+    var dayList = calSel && !el.classList.contains("mini") && document.getElementById("cal-day-list");
+    if (dayList) requestAnimationFrame(function(){ dayList.scrollIntoView({ behavior:"smooth", block:"start" }); });
+    return;
+  }
   if (act === "theme"){
     var th = el.getAttribute("data-k");
     change(function(){ D.settings.theme = th; });
