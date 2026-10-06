@@ -1,5 +1,24 @@
-// Date-only deadlines: notify at 10:00 in the device's saved time zone.
 export function dueEvents(data, zone, now) {
+ return [...classEvents(data, zone, now), ...deadlineEvents(data, zone, now)];
+}
+// Пары (события вида «Пара», в том числе загруженные из вуза): напоминание за 30 минут до начала
+// во времени устройства. Если планировщик задержался, напоминание уходит до начала пары, не позже.
+export const CLASS_LEAD_MIN=30;
+export function classEvents(data, zone, now) {
+ const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));
+ const today=p.year+'-'+p.month+'-'+p.day,nowMin=+p.hour*60+ +p.minute,out=[];
+ for(const e of Array.isArray(data?.events)?data.events:[]){
+  if(!e?.id || e.kind!=='cls' || e.date!==today)continue;
+  const t=String(e.time||'').match(/^(\d{1,2}):(\d{2})$/);if(!t)continue;
+  const start=+t[1]*60+ +t[2],left=start-nowMin;
+  if(left<=0 || left>CLASS_LEAD_MIN)continue;
+  const title=String(e.title||'Пара').slice(0,120);
+  out.push({key:'class:'+e.id+':'+e.date+':'+e.time,title:'Кабинет студента',body:'Через '+left+' мин, в '+t[1].padStart(2,'0')+':'+t[2]+': '+title+'.',at:now+left*60000});
+ }
+ return out;
+}
+// Date-only deadlines: notify at 10:00 in the device's saved time zone.
+function deadlineEvents(data, zone, now) {
  const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));
  // Allow recovery until the end of the morning if the scheduler was unavailable.
  if(+p.hour<10 || +p.hour>=12)return [];
