@@ -63,7 +63,7 @@ test('corrupt draft and missing template never block opening or execute markup',
  await expect(page.locator('[data-new-work-status]')).toContainText('Не удалось прочитать');
  await page.evaluate(()=>{document.querySelector('.sheet').remove();localStorage.setItem(KEY+':new-work-draft',JSON.stringify({version:1,fields:{topic:'<img src=x onerror="window.injected=1">',type:'Несуществующий',due:'2026-10-30',template:'removed'}}));openNewWork();});
  await expect(page.locator('#nTpl')).toHaveValue('');
- await expect(page.locator('#nType')).toHaveValue('Курсовая работа');
+ await expect(page.locator('#nType')).toHaveValue('Практические задания');
  expect(await page.evaluate(()=>window.injected)).toBeUndefined();
 });
 test('narrow screen restores changed type and intentionally empty date',async({page})=>{

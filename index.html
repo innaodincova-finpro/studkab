@@ -361,7 +361,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 
   <section class="screen" id="page"></section>
 
-  <button class="fab" id="fab" type="button" data-act="new-work"><i aria-hidden="true">＋</i><span>Новая работа</span></button>
+  <button class="fab" id="fab" type="button" data-act="intake-materials"><i aria-hidden="true">＋</i><span>Отправить задание</span></button>
 
   <nav class="tabs" id="tabbar" aria-label="Основная навигация"></nav>
 </div>
@@ -1578,8 +1578,7 @@ function openNewWork(){
     '<p class="small">Здесь создаётся запись в вашем кабинете. Исполнителю она пока не отправляется. После создания нажмите «Заполнить и отправить заявку» в карточке работы, приложите материалы и подтвердите отправку.</p>'+
     '<div class="field" style="margin-top:14px"><label for="nTopic">Тема</label><input type="text" id="nTopic" placeholder="Например: Организация работы проектной команды"></div>'+
     '<div class="field"><label for="nType">Вид работы</label>'+
-      '<select id="nType"><option>Курсовая работа</option><option>Выпускная квалификационная работа</option>'+
-      '<option>Реферат</option><option>Контрольная работа</option><option>Эссе</option><option>Отчёт по практике</option></select></div>'+
+      '<select id="nType">'+['Практические задания','Лабораторная работа','Контрольная работа','Реферат','Эссе','Курсовая работа','Отчёт по практике','Выпускная квалификационная работа','Другое'].map(function(k){return '<option>'+k+'</option>';}).join('')+'</select></div>'+
     '<div class="field"><label for="nDue">Срок сдачи</label><input type="date" id="nDue" value="'+addDays(today(),30)+'"></div>'+
     '<div class="field"><label for="nTpl">Оформление</label><select id="nTpl">'+
       '<option value="">Общий ГОСТ (уточнить по методичке)</option>'+
@@ -1787,9 +1786,9 @@ function viewToday(){
   } else if (!r3w.length) {
     h += card(lab(D.works.length ? "Ближайшая сдача" : "С чего начать") +
       '<div class="mut">' + (D.works.length ? "Работ со сроком пока нет."
-        : "Создайте работу с темой и сроком. Затем отправьте заявку исполнителю с материалами или ведите собственные разделы.") + '</div>' +
-      '<div class="chips"><button type="button" class="chip" data-act="new-work">Новая работа</button>' +
-      (D.works.length ? '' : '<button type="button" class="chip" data-act="go-profile">Данные о себе</button>') + '</div>');
+        : "Пришлите задание от преподавателя — исполнитель выполнит работу и передаст её сюда. Каждый шаг виден в карточке работы.") + '</div>' +
+      '<div class="rowbtns" style="margin-top:12px"><button type="button" class="b b-main" data-act="intake-materials">Отправить задание</button>' +
+      '<button type="button" class="b b-quiet" data-act="new-work">Вести работу самостоятельно</button></div>');
   }
 
   var hot = all.filter(function(x){ var d2 = daysLeft(x.due); return d2 !== 0 && d2 <= warn });
@@ -2069,7 +2068,7 @@ function viewWorks(){
           (w.deadline ? ' · ' + ruDate(w.deadline) : '') + (over ? ' · срок прошёл' : '') + '</small></div>' +
         (w.req && w.req.serverId ? '<span class="pill">Заявка №'+esc(w.req.number||'')+'</span>' : pill(st)) + '</div>';
     }).join(""))
-    : '<div class="empty">' + (D.works.length ? 'В этом отборе пусто.' : 'Работ пока нет. Нажмите «Новая работа» внизу.') + '</div>') + (function(){var r=filtered.filter(function(x){return isR3Work(x)||r3Unknown(x);});if(r.length)setTimeout(function(){r3Fetch(r,r3HomeRefresh);},0);return '';})();
+    : '<div class="empty">' + (D.works.length ? 'В этом отборе пусто.' : 'Работ пока нет. Нажмите «Отправить задание».') + '</div>') + (function(){var r=filtered.filter(function(x){return isR3Work(x)||r3Unknown(x);});if(r.length)setTimeout(function(){r3Fetch(r,r3HomeRefresh);},0);return '';})();
 }
 
 /* ---------- КАРТОЧКА РАБОТЫ ---------- */
@@ -2545,8 +2544,8 @@ function render(){
     var fw=work(openWorkId);fab.hidden = !!(fw.req&&fw.req.serverId&&fw.req.route==='r3'); fab.setAttribute("data-act", "send-request"); fab.setAttribute("data-id", openWorkId);
     fab.innerHTML = '<i aria-hidden="true">✉</i><span>Заявка</span>';
   } else {
-    fab.hidden = false; fab.setAttribute("data-act", "new-work"); fab.removeAttribute("data-id");
-    fab.innerHTML = '<i aria-hidden="true">＋</i><span>Новая работа</span>';
+    fab.hidden = false; fab.setAttribute("data-act", "intake-materials"); fab.removeAttribute("data-id");
+    fab.innerHTML = '<i aria-hidden="true">＋</i><span>Отправить задание</span>';
   }
   document.getElementById("page").scrollTop = 0;
   window.scrollTo(0, 0);
