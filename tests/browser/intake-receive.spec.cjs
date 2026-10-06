@@ -110,7 +110,7 @@ test('R3-A: registry card shows title-page details and materials, opens no study
  expect(r.topic).toBe('Математика — практические задания');expect(r.bucket).toBe('new');
  expect(r.copy).toContain('Дисциплина: Математика');expect(r.copy).toContain('Преподаватель: не указано');
  await expect(page.locator('.request-action')).toContainText('Новая заявка — откройте материалы');
- await expect(page.locator('.request-action [data-act="r3-take"]')).toHaveText('Взять в работу');
+ await expect(page.locator('.request-action [data-act="claude-queue"]')).toHaveText('Передать Claude');await expect(page.locator('.request-action [data-act="r3-take"]')).toHaveText('Сделаю сама');
  await expect(page.locator('.request-action [data-act="r3-bundle"]')).toHaveText('Скачать всё');
  await expect(page.locator('#request-panel-overview')).toContainText('Курс и группа');await expect(page.locator('#request-panel-overview')).toContainText('26Т101а');
  await expect(page.locator('#request-panel-overview a[href="https://disk.yandex.ru/d/Mt7abc"]')).toHaveAttribute('rel','noopener noreferrer');
@@ -165,10 +165,10 @@ test('R3-C: registry card — take, attach result, deliver; new file must be del
  });
  const panel=page.locator('.request-action');
  await expect(panel).toContainText('Новая заявка — откройте материалы');
- await expect(panel.locator('[data-act="r3-bundle"]')).toBeVisible();await expect(panel.locator('[data-act="registered-study"]')).toBeVisible();
+ await expect(panel.locator('[data-act="r3-bundle"]')).toBeVisible();await expect(panel.locator('[data-act="registered-study"]')).toHaveCount(0);
  await panel.locator('[data-act="r3-take"]').click();
  await expect(panel).toContainText('Выполните работу и прикрепите готовый файл');
- await expect(panel.locator('button[disabled]',{hasText:'Передать студенту'})).toBeVisible();
+ await expect(panel.locator('[data-act="r3-deliver"]')).toHaveCount(0);
  await panel.locator('input[data-r3-result-file]').setInputFiles({name:'Иванова_Математика.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from([80,75,3,4,9])});
  await expect(panel).toContainText('Иванова_Математика.docx');
  await panel.locator('[data-act="r3-deliver"]').click();
@@ -246,7 +246,7 @@ test('R3-D: registry shows hand-in, then the return with remarks; corrected file
  await expect(panel.locator('[data-act="r3-deliver"]')).toHaveText('Передать новую версию');
  expect(await page.evaluate(()=>stageBucket(D.items[0]))).toBe('preparation');
  await panel.locator('[data-act="r3-deliver"]').click();
- await expect(panel).toContainText('Работа передана студенту');await expect(panel).toContainText('Возвратов на доработку: 1');
+ await expect(panel).toContainText('Работа передана студенту');await expect(page.locator('.r3head')).toContainText('Возвратов на доработку: 1');
 });
 test('R3-D: student hands in, then sends the teacher remarks with a photo; the card shows the rework',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
@@ -353,7 +353,7 @@ test('R3-E3: registry card shows the route on the left and title-page details on
  });
  const route=page.locator('.r3route');
  await expect(route.locator('.r3s.done')).toHaveCount(2);await expect(route.locator('.r3s.cur')).toContainText('Шаг 3 из 5 · В работе · доработка № 1');
- await expect(route.locator('.r3s.fut').first()).toContainText('Студент получает исправленную работу.');
+ await expect(route.locator('.r3s.fut').first()).toHaveText('4Передана');
  await expect(page.locator('.r3head')).toContainText('Возвратов на доработку: 1');await expect(page.locator('.r3due')).toContainText('25 января');
  const box=await route.boundingBox(),side=await page.locator('.r3side').boundingBox();expect(box.x).toBeLessThan(side.x);expect(box.width).toBeGreaterThan(side.width);
  await page.locator('#request-tab-history').click();
@@ -400,4 +400,31 @@ test('Title-page details come from the profile and the sent details go back to t
  await page.locator('#intakeDeadline').fill('2027-01-25');await page.locator('[data-intake-receive]').click();
  await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
  expect(await page.evaluate(()=>({k:D.settings.kafedra,c:D.settings.course,g:D.settings.group,f:D.settings.form,n:D.settings.name}))).toEqual({k:'экономики и управления',c:'2',g:'26Т201а',f:'очно-заочная',n:'Петрова Мария Ивановна'});
+});
+test('«Передать Claude»: registry copies the materials for Claude, then the file prepared by Claude appears as the finished work',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  window.r3={takenAt:null,result:null,delivered:null,downloadedAt:null};window.cl=null;window.calls=[];
+  Oblako.requestApi=async d=>{calls.push(d.action);
+   if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:3}};
+   if(d.action==='attachment-context')return {attachments:[{id:'a1',category:'unclassified',file_name:'Практика1.pdf',content_type:'application/pdf',size_bytes:2048,file_hash:'a'.repeat(64)}],materialRevision:3};
+   if(d.action==='clarification-list')return {questions:[]};
+   if(d.action==='claude-state'){if(cl&&cl.readyAt&&!cl.attachedAt){cl.attachedAt='2026-10-07T10:05:00Z';r3.result={name:'Иванова_Математика.docx',size:40960,at:cl.attachedAt,hash:'b'.repeat(64)};}return {claude:cl&&structuredClone(cl)};}
+   if(d.action==='claude-queue'){r3.takenAt='2026-10-07T09:00:00Z';cl={queuedAt:'2026-10-07T09:00:00Z',startedAt:null,readyAt:null,attachedAt:null,error:null,files:1};return {claude:structuredClone(cl)};}
+   if(d.action==='r3-state')return {work:structuredClone(r3)};
+   throw Error('Unexpected '+d.action);};
+  const x=fromPayload({id:'r3-claude',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна',dl:'2027-01-25',cn:'student@example.invalid'});x.requestNumber=3;
+  D.items=[x];openId=x.id;render();
+ });
+ const panel=page.locator('.request-action');
+ await expect(panel.locator('[data-act="claude-queue"]')).toHaveText('Передать Claude');
+ await expect(panel).toContainText('Студент прислал 1 файл.');
+ await panel.locator('[data-act="claude-queue"]').click();
+ await expect(panel).toContainText('Claude готовит работу');await expect(panel).toContainText('Напишите в чат: «заявка №3»');
+ await expect(panel.locator('[data-act="claude-queue"]')).toHaveCount(0);
+ // Claude положил файл: при следующем открытии он прикреплён как готовая работа.
+ await page.evaluate(async()=>{cl.readyAt='2026-10-07T10:00:00Z';await loadR3(D.items[0]);});
+ await expect(panel).toContainText('Иванова_Математика.docx');await expect(panel).toContainText('Проверьте работу и передайте студенту');await expect(panel).toContainText('Работу подготовил Claude');
+ await expect(panel.locator('[data-act="r3-deliver"]')).toHaveText('Передать студенту');
+ await expect(panel.locator('[data-act="claude-queue"]')).toHaveText('Передать Claude заново');
 });

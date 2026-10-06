@@ -1,4 +1,5 @@
 import {r3WorkAction,R3_ACTIONS,R3_UPLOADS} from './r3-work.mjs';
+import {claudeAction,CLAUDE_ACTIONS} from './claude-exec.mjs';
 import {qualityAction,qualityError} from './quality-evidence.mjs';
 import {testDeliveryAction} from './test-delivery.mjs';
 import {registeredStudyAction} from './registered-study.mjs';
@@ -39,7 +40,7 @@ export function validatePayload(p,{newSubmission=false,previous=null}={}) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,removeIntake,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,fetchCloud=globalThis.fetch,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,removeIntake,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,loadRequestFile,fetchCloud=globalThis.fetch,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -118,6 +119,11 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(R3_ACTIONS.includes(input.action)){
     if(!R3_UPLOADS.includes(input.action)&&raw.length>16000)return json({error:'Запрос слишком большой'},413);
     const r=await r3WorkAction(input,user,{db,config,download,saveResult,remove});return json(r.data,r.status||200);
+   }
+   // «Передать Claude»: материалы — в базу для Claude, готовый файл Claude — в заявку.
+   if(CLAUDE_ACTIONS.includes(input.action)){
+    if(raw.length>16000)return json({error:'Запрос слишком большой'},413);
+    const r=await claudeAction(input,user,{db,config,loadRequestFile,saveResult});return json(r.data,r.status||200);
    }
    if(['attachment-upload','attachment-list','attachment-context','attachment-download'].includes(input.action)){
     const r=await attachmentAction(input,user,{db,config,upload,download,remove});return json(r.data,r.status||200);
