@@ -3,7 +3,7 @@ const {test,expect}=require('@playwright/test');
 const DETAILS={k:'Практические задания',d:'Математика',u:'Московский международный университет',kf:'Экономики и управления',pr:'38.03.02 Менеджмент',fo:'Очно-заочная',g:'1 курс, 26Т101а',n:'Иванова Мария Петровна'};
 const pdf=n=>({name:n+'.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-'+n)});
 const jpg={name:'Страница учебника.jpg',mimeType:'image/jpeg',buffer:Buffer.from([0xff,0xd8,0xff,0xe0,1,2,3])};
-async function setup(page,{restored=false}={}){
+async function setup(page,{restored=false,withProfile=false}={}){
  await page.goto('http://127.0.0.1:4173/index.html');
  await page.evaluate(()=>{
   window.receiptCalls=[];window.receiptInputs=[];Oblako.mode='cloud';
@@ -35,7 +35,8 @@ async function setup(page,{restored=false}={}){
    throw Error('Unexpected API: '+input.action);
   };
  });
- await page.evaluate(()=>StudIntake.open({api:Oblako.requestApi,openModal,esc,owner:()=>KEY,identity:Oblako.identity,submitted:s=>{window.lastReceipt=s;}}));
+ if(withProfile)await page.evaluate(()=>{D.settings.name='Петрова Мария Ивановна';D.settings.univ='АНО ВО «Московский международный университет»';D.settings.kafedra='';D.settings.program='38.03.02 Менеджмент';D.settings.form='очно-заочная';D.settings.course='1';D.settings.group='26Т101а';save();});
+ await page.evaluate(w=>StudIntake.open({api:Oblako.requestApi,openModal,esc,owner:()=>KEY,identity:Oblako.identity,...(w?{profile:intakeProfile,remember:rememberIntakeProfile}:{}),submitted:s=>{window.lastReceipt=s;}}),withProfile);
  if(restored)await expect(page.locator('#intakeFiles')).toBeDisabled();
  else await expect(page.locator('#intakeFiles')).toBeEnabled();
 }
@@ -383,4 +384,20 @@ test('R3-E4: registry list shows route dots and whose turn; «Сегодня» g
  await expect(rows.filter({hasText:'№ 3'}).locator('.r3turn')).toHaveText('Студент');
  await expect(rows.filter({hasText:'№ 4'}).locator('.r3turn')).toHaveText('Сдана');await expect(rows.filter({hasText:'№ 4'}).locator('.r3dots i.done')).toHaveCount(5);
  await expect(rows.filter({hasText:'№ 2'})).toContainText('Файл прикреплён — передайте студенту');
+});
+
+test('Title-page details come from the profile and the sent details go back to the profile',async({page})=>{
+ await setup(page,{withProfile:true});
+ await expect(page.locator('[data-intake-detail="n"]')).toHaveValue('Петрова Мария Ивановна');
+ await expect(page.locator('[data-intake-detail="u"]')).toHaveValue('АНО ВО «Московский международный университет»');
+ await expect(page.locator('[data-intake-detail="pr"]')).toHaveValue('38.03.02 Менеджмент');
+ await expect(page.locator('[data-intake-detail="fo"]')).toHaveValue('Очно-заочная');
+ await expect(page.locator('[data-intake-detail="g"]')).toHaveValue('1 курс, 26Т101а');
+ await expect(page.locator('[data-intake-detail="kf"]')).toHaveValue('');
+ await page.locator('#intakeFiles').setInputFiles([pdf('Практика1')]);await expect(page.locator('[data-intake-status]')).toContainText('Материалы сохранены: 1');
+ await page.locator('[data-intake-detail="k"]').selectOption('Практические задания');await page.locator('[data-intake-detail="d"]').fill('Математика');
+ await page.locator('[data-intake-detail="kf"]').fill('экономики и управления');await page.locator('[data-intake-detail="g"]').fill('2 курс, 26Т201а');
+ await page.locator('#intakeDeadline').fill('2027-01-25');await page.locator('[data-intake-receive]').click();
+ await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
+ expect(await page.evaluate(()=>({k:D.settings.kafedra,c:D.settings.course,g:D.settings.group,f:D.settings.form,n:D.settings.name}))).toEqual({k:'экономики и управления',c:'2',g:'26Т201а',f:'очно-заочная',n:'Петрова Мария Ивановна'});
 });

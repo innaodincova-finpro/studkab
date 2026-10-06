@@ -19,7 +19,7 @@
 <script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=4"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script>
 <script src="push.js?v=3"></script>
 <script src="intake-confirmation-ui.js?v=2"></script>
-<script src="file-prep.js?v=1"></script><script src="intake-ui.js?v=8"></script>
+<script src="file-prep.js?v=1"></script><script src="intake-ui.js?v=9"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -427,6 +427,28 @@ function defaultFormat(){
 /* Общие сведения вводятся один раз в профиле. В работе заполняем ими только
    пустые поля: специальные требования конкретной работы никогда не затираются. */
 var PROFILE_FORMAT_FIELDS = ["univ","faculty","kafedra","program","form","course","city"];
+/* Сведения для титульного листа: форма «Отправить задание» берёт их из профиля и после отправки возвращает в профиль. */
+function intakeProfile(){
+  var s = D.settings || {}, course = String(s.course || "").trim();
+  if (course && !/курс/i.test(course)) course += " курс";
+  return { n:s.name || "", u:s.univ || "", kf:s.kafedra || "", pr:s.program || "",
+    fo:s.form ? s.form.charAt(0).toUpperCase() + s.form.slice(1) : "",
+    g:[course, String(s.group || "").trim()].filter(Boolean).join(", ") };
+}
+function rememberIntakeProfile(d){
+  if (!d) return;
+  change(function(){
+    var s = D.settings = D.settings || {};
+    if (d.n) s.name = d.n; if (d.u) s.univ = d.u; if (d.kf) s.kafedra = d.kf; if (d.pr) s.program = d.pr;
+    if (d.fo) s.form = String(d.fo).toLowerCase();
+    if (d.g){
+      var re = /(\d+)\s*-?\s*(?:й\s*)?курс[а-я]*/i, m = String(d.g).match(re);
+      var rest = String(d.g).replace(re, "").replace(/^[\s,;.]+|[\s,;.]+$/g, "");
+      if (m) s.course = m[1];
+      if (rest) s.group = rest; else if (!m) s.group = d.g;
+    }
+  });
+}
 function applyProfileDefaults(format, settings){
   format = format || defaultFormat(); settings = settings || {};
   PROFILE_FORMAT_FIELDS.forEach(function(k){ if (!format[k] && settings[k]) format[k] = settings[k]; });
@@ -3045,7 +3067,7 @@ document.addEventListener("click", function(ev){
   if (act === "new-work") return openNewWork();
   if (act === 'intake-materials') {
     if (!window.Oblako || Oblako.mode !== 'cloud') return toast('Для сохранения материалов войдите в аккаунт кабинета');
-    return StudIntake.open({api:Oblako.requestApi,openModal:openModal,esc:esc,owner:function(){return KEY;},identity:Oblako.identity,submitted:function(s){
+    return StudIntake.open({api:Oblako.requestApi,openModal:openModal,esc:esc,owner:function(){return KEY;},identity:Oblako.identity,profile:intakeProfile,remember:rememberIntakeProfile,submitted:function(s){
       if(D.works.some(function(w){return w.req&&w.req.serverId===s.id;}))return;
       var p=s.payload;if(!p)throw Error('Не получены сведения отправленной заявки');
       change(function(){D.works.push({id:p.id,topic:p.t||(p.route==='r3'?r3Title(p):p.route==='received'?'Заявка №'+s.number+' — материалы получены':''),student:p.n,group:p.g,created:today(),deadline:p.dl,requirements:p.rq,status:'draft',

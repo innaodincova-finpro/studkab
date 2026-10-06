@@ -163,6 +163,11 @@
   }
   var receiptKey='studkab-intake-reception:'+owner;
   try{fill(JSON.parse(localStorage.getItem(receiptKey)||'null'));}catch(_){}
+  // Сведения из профиля студента подставляются в пустые поля, чтобы не вводить одно и то же дважды.
+  try{var pre=typeof options.profile==='function'?options.profile():null;
+   if(pre)Object.keys(pre).forEach(function(k){var el=wrap.querySelector('[data-intake-detail="'+k+'"]');if(!el||el.value||!pre[k])return;
+    if(el.tagName==='SELECT'&&![].some.call(el.options,function(o){return o.value===pre[k];}))return;el.value=pre[k];});
+  }catch(_){}
   wrap.addEventListener('input',function(e){if(same()&&e.target.closest('[data-intake-detail],#intakeLink,#intakeDeadline,#intakeDescription'))try{localStorage.setItem(receiptKey,JSON.stringify(values()));}catch(_){}});
   wrap.addEventListener('change',function(e){if(same()&&e.target.matches('select[data-intake-detail]'))try{localStorage.setItem(receiptKey,JSON.stringify(values()));}catch(_){}});
   // R3-B: проверка ссылки и копия файлов папки Яндекс Диска в заявку (по одному файлу).
@@ -220,6 +225,8 @@
     current();if((await pending()).length)throw Error('Сначала завершите сохранение выбранных файлов');
     localStorage.setItem('studkab-intake-submit:'+owner,JSON.stringify({draftId:draft.id,receiptMode:true}));
     receiptUnknown=true;var result=await options.api({action:'intake-receive',id:draft.id,revision:draft.revision,deadline:v.deadline,description:v.description,details:v.details,link:v.link});current();
+    // Отправленные сведения запоминаются в профиле: в следующей заявке они подставятся сами.
+    if(typeof options.remember==='function')try{options.remember(v.details);}catch(_){}
     acceptReceipt(result.submission);
    }catch(e){
     if(!same()||!wrap.isConnected)return;

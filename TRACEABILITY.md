@@ -2589,3 +2589,4 @@ duplicate при параллельном выполнении; текст и е
 | Удаление заявки сохраняет историю расходов изучения | 20261007090000: черновик с записями изучения остаётся, записи о файлах стираются | request-delete-complete.test «draft with analysis runs keeps cost history» | Код готов |
 | R16: напоминание о паре за 30 минут уведомлением из кабинета | studkab-push/schedule.js classEvents | push.test «class reminder 30 minutes before start…» | Код готов |
 | Календарь: нажатие на день показывает список дня | index.html: cal-day → прокрутка к #cal-day-list | vuz-schedule.spec «month view: tapping a day…» | Код готов |
+| «Отправить задание» берёт сведения титульного листа из профиля и возвращает их в профиль | intake-ui.js (profile/remember), index.html intakeProfile/rememberIntakeProfile | intake-receive.spec «Title-page details come from the profile…» | Код готов |
