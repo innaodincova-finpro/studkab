@@ -1960,12 +1960,162 @@ function openCalAdd(){
     '<button type="button" class="close" data-x="1">✕</button>' +
     '<h3>Что добавить</h3>' +
     '<div class="item tapline" data-pick="task"><div class="ic">•</div><div class="txt"><b>Дело</b><small>Что нужно сделать к дате: дописать главу, собрать источники</small></div></div>' +
-    '<div class="item tapline" data-pick="event"><div class="ic">◷</div><div class="txt"><b>Событие</b><small>Экзамен, зачёт, консультация, защита — с датой и временем</small></div></div>'
+    '<div class="item tapline" data-pick="event"><div class="ic">◷</div><div class="txt"><b>Событие</b><small>Экзамен, зачёт, консультация, защита — с датой и временем</small></div></div>' +
+    '<div class="item tapline" data-pick="vuz"><div class="ic">▦</div><div class="txt"><b>Расписание из вуза</b><small>Скопируйте страницу „Предстоящие события“ из кабинета вуза и вставьте сюда</small></div></div>'
   );
   wrap.addEventListener("click", function(ev){
     var el = ev.target.closest("[data-pick]"); if (!el) return;
     var k = el.getAttribute("data-pick"); wrap.remove();
-    if (k === "task") openNewTask(null, calSel); else openEvent(null, calSel);
+    if (k === "task") openNewTask(null, calSel);
+    else if (k === "vuz") openVuzSchedule();
+    else openEvent(null, calSel);
+  });
+}
+
+/* ---------- R16: РАСПИСАНИЕ ИЗ ВУЗА (страница «Предстоящие события» Moodle) ----------
+   Текст разбирается здесь, без нейросети и без отправки куда-либо. */
+var VUZ_MONTHS = { "января":1,"февраля":2,"марта":3,"апреля":4,"мая":5,"июня":6,"июля":7,"августа":8,"сентября":9,"октября":10,"ноября":11,"декабря":12 };
+var VUZ_DATE_RE = /^([А-ЯЁа-яё]+),?\s+(\d{1,2})\s+([а-яё]+),?\s+(\d{1,2}):(\d{2})\s*(?:»|›|-|–|—)\s*(\d{1,2}):(\d{2})$/i;
+var VUZ_REL_RE = /^(сегодня|завтра),?\s+(\d{1,2}):(\d{2})\s*(?:»|›|-|–|—)\s*(\d{1,2}):(\d{2})$/i;
+var VUZ_SERVICE_RE = /^(предстоящие события|событие (группы|курса|пользователя|категории|сайта)|перейти к .*|подробнее.*)$/i;
+function vuzPad(n){ return (n < 10 ? "0" : "") + n; }
+/* год в тексте не указан: ближайший год, при котором дата не раньше чем за 60 дней до сегодняшней */
+function vuzDateIso(day, month, todayIso){
+  var t = todayIso.split("-").map(Number);
+  var limit = new Date(t[0], t[1]-1, t[2] - 60);
+  for (var y = t[0]-1; y <= t[0]+1; y++){
+    var d = new Date(y, month-1, day);
+    if (d.getMonth() !== month-1 || d.getDate() !== day) continue;
+    if (d >= limit) return y + "-" + vuzPad(month) + "-" + vuzPad(day);
+  }
+  return null;
+}
+function vuzDateLine(line, todayIso){
+  var m = line.match(VUZ_DATE_RE), date, h1, m1, h2, m2;
+  if (m){
+    var mon = VUZ_MONTHS[m[3].toLowerCase()];
+    if (!mon) return null;
+    date = vuzDateIso(+m[2], mon, todayIso);
+    h1 = +m[4]; m1 = +m[5]; h2 = +m[6]; m2 = +m[7];
+  } else {
+    m = line.match(VUZ_REL_RE);
+    if (!m) return null;
+    var t = todayIso.split("-").map(Number);
+    var d = new Date(t[0], t[1]-1, t[2] + (m[1].toLowerCase() === "завтра" ? 1 : 0));
+    date = d.getFullYear() + "-" + vuzPad(d.getMonth()+1) + "-" + vuzPad(d.getDate());
+    h1 = +m[2]; m1 = +m[3]; h2 = +m[4]; m2 = +m[5];
+  }
+  if (!date || h1 > 23 || h2 > 23 || m1 > 59 || m2 > 59) return null;
+  return { date:date, start:vuzPad(h1) + ":" + vuzPad(m1), end:vuzPad(h2) + ":" + vuzPad(m2) };
+}
+function vuzEvent(lines, todayIso){
+  var when = vuzDateLine(lines[1] || "", todayIso);
+  var kind = (lines[0] || "").trim();
+  if (!when || !kind) return null;
+  var rest = lines.slice(2).filter(function(s){ return !VUZ_SERVICE_RE.test(s); });
+  var di = -1, disc = "";
+  for (var i = 0; i < rest.length; i++){
+    var p = rest[i].search(/по дисциплине\s+/i);
+    if (p >= 0){ di = i; disc = rest[i].slice(p).replace(/^по дисциплине\s+/i, "").trim(); break; }
+  }
+  if (!disc) return null;
+  var teacher = "", group = "", ti = di + 1;
+  var tl = rest[ti] || "";
+  if (tl && tl.indexOf(disc) === 0){
+    var tm = tl.match(/([А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ]\.\s*[А-ЯЁ]?\.?))\s*$/);
+    teacher = tm ? tm[1].replace(/\s+/g, " ").trim() : tl.slice(disc.length).replace(/^\s*\([^)]*\)/, "").trim();
+    group = (rest[ti+1] || "").trim();
+  } else {
+    group = tl.trim();
+  }
+  return { kind:kind, date:when.date, start:when.start, end:when.end, discipline:disc, teacher:teacher, group:group,
+           key:[when.date, when.start, disc, kind].join("|") };
+}
+function parseVuzSchedule(text, todayIso){
+  var lines = String(text || "").replace(/\r/g, "").split("\n").map(function(s){ return s.replace(/ /g, " ").replace(/\s+/g, " ").trim(); });
+  var chunks = [], cur = [];
+  lines.forEach(function(s){
+    if (!s){ if (cur.length) chunks.push(cur); cur = []; return; }
+    cur.push(s);
+  });
+  if (cur.length) chunks.push(cur);
+  var events = [], unknown = 0, seen = {};
+  chunks.forEach(function(chunk){
+    var body = chunk.filter(function(s){ return !/^предстоящие события$/i.test(s); });
+    if (!body.length) return;
+    /* в одном куске может оказаться несколько занятий, если при копировании пропали пустые строки */
+    var starts = [];
+    for (var i = 1; i < body.length; i++) if (vuzDateLine(body[i], todayIso) || /\d{1,2}:\d{2}\s*(»|›)/.test(body[i])) starts.push(i - 1);
+    if (!starts.length){
+      if (body.some(function(s){ return /по дисциплине|событие группы/i.test(s); })) unknown++;
+      return;
+    }
+    starts.forEach(function(st, k){
+      var part = body.slice(st, k + 1 < starts.length ? starts[k+1] : body.length);
+      var e = vuzEvent(part, todayIso);
+      if (!e){ unknown++; return; }
+      if (seen[e.key]) return;
+      seen[e.key] = 1; events.push(e);
+    });
+  });
+  return { events:events, unknown:unknown };
+}
+/* Повторная загрузка обновляет занятия по ключу; ручные события не трогаются никогда;
+   прежние занятия из вуза, которых нет в новом тексте, удаляются только в его диапазоне дат. */
+function mergeVuzSchedule(list, parsed, makeId){
+  var added = 0, updated = 0, removed = 0;
+  if (!parsed.events.length) return { added:0, updated:0, removed:0 };
+  var byKey = {}, fresh = {}, from = parsed.events[0].date, to = from;
+  list.forEach(function(e){ if (e && e.src === "vuz" && e.vuzKey) byKey[e.vuzKey] = e; });
+  parsed.events.forEach(function(p){
+    fresh[p.key] = 1;
+    if (p.date < from) from = p.date;
+    if (p.date > to) to = p.date;
+    var note = ["до " + p.end, p.teacher, p.group ? "группа " + p.group : ""].filter(Boolean).join(" · ");
+    var fields = { kind:"cls", title:p.discipline + " — " + p.kind.toLowerCase(), date:p.date, time:p.start, note:note, src:"vuz", vuzKey:p.key };
+    var old = byKey[p.key];
+    if (old){ for (var f in fields) old[f] = fields[f]; updated++; }
+    else { fields.id = makeId(); fields.wid = ""; list.push(fields); added++; }
+  });
+  for (var i = list.length - 1; i >= 0; i--){
+    var e = list[i];
+    if (e && e.src === "vuz" && e.vuzKey && !fresh[e.vuzKey] && e.date >= from && e.date <= to){ list.splice(i, 1); removed++; }
+  }
+  return { added:added, updated:updated, removed:removed };
+}
+function vuzResultText(r, unknown){
+  return "Добавлено: " + r.added + ", обновлено: " + r.updated + ", не распознано: " + unknown +
+    (r.removed ? ". Убрано занятий, которых больше нет в расписании: " + r.removed : "");
+}
+var VUZ_EMPTY_HINT = "Занятий в тексте не найдено. Вероятно, скопирована не та страница: в кабинете вуза откройте «Календарь» → «Предстоящие события» и скопируйте её целиком.";
+function openVuzSchedule(){
+  var wrap = openModal(
+    '<button type="button" class="close" data-x="1">✕</button>' +
+    '<h3>Расписание из вуза</h3>' +
+    '<ol class="vuz-steps" style="margin:12px 0 0;padding-left:20px;line-height:1.5">' +
+      '<li>В кабинете вуза откройте «Календарь» → «Предстоящие события».</li>' +
+      '<li>Скопируйте всю страницу: Ctrl+A, затем Ctrl+C. На телефоне — «Выделить всё» → «Копировать».</li>' +
+      '<li>Вставьте текст в поле ниже и нажмите «Загрузить».</li>' +
+    '</ol>' +
+    '<div class="fld" style="margin-top:12px"><label for="vuzText">Текст страницы</label>' +
+      '<textarea id="vuzText" rows="8" style="width:100%;box-sizing:border-box" placeholder="Вставьте сюда скопированную страницу"></textarea></div>' +
+    '<p class="vuz-result" id="vuzResult" role="status" aria-live="polite" style="margin:8px 0 0"></p>' +
+    '<p class="muted" style="margin:6px 0 0;font-size:13px">Текст разбирается здесь, в кабинете, и никуда не отправляется. Ваши собственные события не изменяются.</p>' +
+    '<div class="rowbtns"><button type="button" class="btn" data-load="1" style="flex:1">Загрузить</button>' +
+    '<button type="button" class="btn ghost" data-x="1" style="flex:1">Закрыть</button></div>'
+  );
+  wrap.addEventListener("click", function(ev){
+    if (!ev.target.closest("[data-load]")) return;
+    var out = wrap.querySelector("#vuzResult");
+    var parsed = parseVuzSchedule(wrap.querySelector("#vuzText").value, today());
+    if (!parsed.events.length){
+      out.textContent = "Добавлено: 0, обновлено: 0, не распознано: " + parsed.unknown + ". " + VUZ_EMPTY_HINT;
+      return;
+    }
+    var r;
+    change(function(){ r = mergeVuzSchedule(D.events, parsed, function(){ return uid("ev"); }); });
+    render();
+    out.textContent = vuzResultText(r, parsed.unknown);
   });
 }
 
