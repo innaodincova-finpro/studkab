@@ -468,9 +468,11 @@ for(const width of [390,1440])test('UX-R02 failed registry load has a persistent
    if(d.action==='r3-state'){loadAttempts++;if(loadAttempts===1)throw Error('Нет сети');await new Promise(r=>window.finishCardLoad=r);return {work:{takenAt:null}};}
    throw Error('Unexpected '+d.action);
   };
-  const x=fromPayload({id:'ux-local-card',route:'r3',k:'Практические задания',d:'Математика',n:'Локальная проверка',cn:'local@example.invalid'});x.requestNumber=15;D.items=[x];tab='list';openId=x.id;render();
+  const x=fromPayload({id:'ux-local-card',route:'r3',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс',n:'Локальная проверка',dl:'2027-01-25',cn:'local@example.invalid'});x.requestNumber=15;D.items=[x];tab='list';openId=null;render();
  });
+ await page.locator('[data-act="open"][data-id="ux-local-card"]').click();
  await expect.poll(()=>page.evaluate(()=>({attempts:loadAttempts,error:!!D.items[0].r3LoadError,route3:D.items[0].route3,loaded:D.items[0].r3Loaded,tab,openId,text:document.querySelector('.request-action')?.textContent}))).toMatchObject({error:true});
+ console.log('UX-R02 observed',await page.evaluate(()=>({attempts:loadAttempts,error:!!D.items[0].r3LoadError,route3:D.items[0].route3,loaded:D.items[0].r3Loaded,tab,openId,id:D.items[0].id,text:document.querySelector('.request-action')?.textContent})));
  await expect(page.getByRole('heading',{name:'Не удалось загрузить заявку'})).toBeVisible();
  await expect(page.locator('[data-act="back"]')).toBeVisible();
  await page.evaluate(()=>render());await expect(page.locator('[data-act="r3-retry-load"]')).toBeVisible();expect(await page.evaluate(()=>loadAttempts)).toBe(1);
