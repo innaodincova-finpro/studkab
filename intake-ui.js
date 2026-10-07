@@ -67,6 +67,7 @@
   var wrap=options.openModal('<button type="button" class="close" data-x>✕</button><h2>Отправьте задание</h2>'+
    '<p class="lead">Приложите задание от преподавателя и заполните сведения для титульного листа. Звёздочкой отмечено обязательное.</p>'+
    '<p class="hint" role="status" aria-live="polite" data-intake-status>Открываем сохранённые материалы…</p>'+
+   '<button type="button" class="b b-main" data-intake-check hidden style="display:none">Проверить отправку</button>'+
    '<section class="grp"><h3>Задание от преподавателя<small>файлы или ссылка — как удобнее</small></h3>'+
     '<div data-intake-files></div>'+
     '<label class="addf">+ Добавить файлы<input id="intakeFiles" type="file" multiple accept="'+global.StudFilePrep.ACCEPT+'" disabled></label>'+
@@ -85,6 +86,7 @@
   wrap.setAttribute('data-intake-dialog','');wrap.classList.add('r3f');
   var status=wrap.querySelector('[data-intake-status]'),list=wrap.querySelector('[data-intake-files]'),input=wrap.querySelector('#intakeFiles'),retry=wrap.querySelector('[data-intake-retry]'),send=wrap.querySelector('[data-intake-receive]');
   var formInputs=function(){return Array.from(wrap.querySelectorAll('[data-intake-detail],#intakeLink,#intakeDeadline,#intakeDescription'));};
+  var receiptCheck=wrap.querySelector('[data-intake-check]');
   function same(){return options.owner()===owner&&options.identity()===identity;}
   function current(allowClosed){if(!same()||(!allowClosed&&!wrap.isConnected))throw Error('Аккаунт или окно изменились. Откройте материалы заново');}
   async function pending(){return await queue('getAll',owner);}
@@ -105,6 +107,7 @@
    retry.hidden=!queued.length||submitted();retry.style.display=retry.hidden?'none':'';retry.disabled=locked;
    formInputs().forEach(function(el){el.disabled=receiptUnknown||submitted();});
    send.disabled=locked||queued.length>0||shown.some(function(f){return f.state!=='saved';});
+   receiptCheck.hidden=!receiptUnknown;receiptCheck.style.display=receiptUnknown?'':'none';receiptCheck.disabled=busy;
   }
   async function refresh(){var result=await options.api({action:'intake-open'});current();draft=result.draft;files=result.files;await paint();}
   async function transmit(){
@@ -216,7 +219,7 @@
    if(options.submitted)options.submitted(receipt);
   }
   send.addEventListener('click',async function(){
-   if(busy||!draft||submitted())return;
+   if(busy||receiptUnknown||!draft||submitted())return;
    // Проверка заполнения — до блокировки кнопки: подсказка появляется сразу, кнопка остаётся доступной.
    var v=values(),problem=copying?'Дождитесь окончания копирования файлов из папки':check(v);
    if(problem){status.textContent=problem;return;}
@@ -231,22 +234,35 @@
    }catch(e){
     if(!same()||!wrap.isConnected)return;
     if(receiptUnknown){
-     try{var recovered=(await options.api({action:'intake-receive-state',id:draft.id})).submission;current();if(recovered&&recovered.submitted){acceptReceipt(recovered);return;}receiptUnknown=false;}
+     try{var recovered=(await options.api({action:'intake-receive-state',id:draft.id})).submission;current();if(recovered&&recovered.submitted){acceptReceipt(recovered);return;}if(!recovered||typeof recovered.canReceive!=='boolean')throw Error('Результат отправки не подтверждён');receiptUnknown=false;}
      catch(_){if(!same()||!wrap.isConnected)return;}
     }
-    status.textContent='Задание не отправлено: '+e.message+'. Заполненное и файлы сохранены; повтор не создаёт новую заявку.';
+    status.textContent=receiptUnknown?'Не удалось подтвердить отправку. Заявка могла быть получена. Проверьте отправку, чтобы узнать результат.':'Задание не отправлено: '+e.message+'. Заполненное и файлы сохранены; повтор не создаёт новую заявку.';
    }
    finally{busy=false;if(same()&&wrap.isConnected)await paint();}
+  });
+  receiptCheck.addEventListener('click',async function(){
+   if(busy||!receiptUnknown||!draft)return;
+   busy=true;receiptCheck.disabled=true;receiptCheck.textContent='Проверяем отправку…';status.textContent='Проверяем, получена ли заявка…';
+   try{
+    var receipt=(await options.api({action:'intake-receive-state',id:draft.id})).submission;current();
+    if(receipt&&receipt.submitted){acceptReceipt(receipt);return;}
+    if(!receipt||typeof receipt.canReceive!=='boolean')throw Error('Результат отправки не подтверждён');
+    await refresh();current();receiptUnknown=false;
+    status.textContent='Отправка не подтверждена: заявка пока не получена. Материалы сохранены; можно повторить отправку.';
+   }catch(e){if(same()&&wrap.isConnected)status.textContent='Не удалось подтвердить отправку. Заявка могла быть получена. Проверьте отправку, чтобы узнать результат.';}
+   finally{busy=false;if(same()&&wrap.isConnected){receiptCheck.textContent='Проверить отправку';await paint();}}
   });
   var intent;try{intent=JSON.parse(localStorage.getItem('studkab-intake-submit:'+owner)||'null');}catch(_){}
   if(intent&&intent.draftId)try{
    var previous=(await options.api({action:'intake-receive-state',id:intent.draftId})).submission;current();
+   if(!previous||!previous.submitted&&typeof previous.canReceive!=='boolean')throw Error('Результат отправки не подтверждён');
    if(previous&&previous.submitted){
     if(options.submitted)options.submitted(previous);status.textContent='Заявка №'+previous.number+' уже отправлена.';
     input.disabled=true;send.disabled=true;formInputs().forEach(function(el){el.disabled=true;});
     var next=document.createElement('button');next.type='button';next.className='b b-main';next.textContent='Новое задание';next.onclick=function(){localStorage.removeItem('studkab-intake-submit:'+owner);try{localStorage.removeItem(receiptKey);}catch(_){}formInputs().forEach(function(el){el.value='';});next.remove();draft=null;run([]);};list.appendChild(next);return wrap;
    }
-  }catch(e){if(!same())return wrap;status.textContent='Проверка прежней отправки не завершена: '+e.message+'. Повтор не создаёт новую заявку.';}
+  }catch(e){if(!same()||!wrap.isConnected)return wrap;draft={id:intent.draftId,state:'open'};receiptUnknown=true;status.textContent='Не удалось подтвердить отправку. Заявка могла быть получена. Проверьте отправку, чтобы узнать результат.';await paint();return wrap;}
   await run([]);
   if(wrap.querySelector('#intakeLink').value.trim())checkLink();
   return wrap;

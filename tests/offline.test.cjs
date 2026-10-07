@@ -7,9 +7,9 @@ test('both entry pages and offline shell use the AI criterion assistance scripts
  for(const page of ['index.html','reestr.html'])
   assert.match(fs.readFileSync(page,'utf8'),/quality-evidence-ui\.js\?v=8.*results-ui\.js\?v=23/);
  const shell=fs.readFileSync('sw.js','utf8');
- assert.match(shell,/studkab-v127-volume/);
- assert.match(shell,/intake-ui\.js\?v=10/);
- assert.match(fs.readFileSync('index.html','utf8'),/intake-ui\.js\?v=10/);
+ assert.match(shell,/studkab-v128-ux-recovery/);
+ assert.match(shell,/intake-ui\.js\?v=11/);
+ assert.match(fs.readFileSync('index.html','utf8'),/intake-ui\.js\?v=11/);
  assert.match(shell,/quality-evidence-ui\.js\?v=8/);
  // Общий слой оформления подключён на обеих страницах и сохраняется для работы без сети.
  assert.match(shell,/volume\.css\?v=1/);

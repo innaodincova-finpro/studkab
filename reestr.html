@@ -1638,6 +1638,7 @@ function r3Name(n){return String(n||'').replace(/_+/g,' ');}
 function r3Links(x,list){var id=esc(x.id);return '<div class="r3links">'+list.map(function(a){return a[0]==='r3-file'?'<label class="linkbtn r3-own">'+esc(a[1])+'<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>':'<button type="button" class="linkbtn" data-act="'+a[0]+'" data-id="'+id+'">'+esc(a[1])+'</button>';}).join('<span aria-hidden="true"> · </span>')+'</div>';}
 function r3Card(x,route){
  var w=requestWorkflow(x),r=x.r3||{},id=esc(x.id),c=x.claude||null,num=x.requestNumber?'«заявка №'+x.requestNumber+'»':'номер заявки';
+ if(x.r3LoadError)return card('<h3>Не удалось загрузить заявку</h3><p role="status">Проверьте соединение и повторите загрузку.</p><button type="button" class="btn" data-act="r3-retry-load" data-id="'+id+'">Повторить загрузку</button>','workflow-next');
  var title=w.title,copy=w.copy;
  var claudeBusy=c&&!c.attachedAt&&!c.error;
  if(w.step===3&&!w.rework&&!r.result&&claudeBusy){title='Claude готовит работу';copy='Напишите Claude в проекте «Студенты»: '+num+'. Готовый файл появится здесь.';}
@@ -1651,7 +1652,7 @@ function r3Card(x,route){
  if(w.rework&&last)h+='<div class="r3-quote"><b>Замечания преподавателя:</b> '+esc(last.comment)+(last.files&&last.files.length?'<div class="r3-qfiles">'+last.files.map(function(f){return '<span>'+esc(f.name)+' · '+esc(r3Size(f.size))+' <button type="button" class="linkbtn" data-act="r3-return-file-download" data-id="'+id+'" data-file="'+esc(f.id)+'">Скачать</button></span>';}).join('')+'</div>':'')+'</div>';
  if(vers.length&&(w.rework||vers.length>1))h+='<p class="hint r3-wrap">'+vers.map(function(v){return 'Версия '+v.n+' передана '+esc(r3When(v.at))+': '+esc(v.name);}).join('<br>')+'</p>';
  var base=[['r3-bundle','Скачать задание (архив)'],['executor-clarifications','Задать вопрос студенту']];
- if(!x.r3Loaded)return card(h+'<div class="skel" role="status" aria-label="Загружаем состояние заявки"><i></i><i></i><i></i></div>','workflow-next');
+ if(!x.r3Loaded)return card(h+'<p role="status">Загружаем заявку…</p><div class="skel" aria-hidden="true"><i></i><i></i><i></i></div>','workflow-next');
  if(w.step<3)return card(h+'<button type="button" class="btn r3-main" data-act="claude-queue" data-id="'+id+'">Передать Claude</button>'+r3Links(x,base.concat([['r3-take','Сделаю сама']])),'workflow-next');
  var attach='<label class="r3-attach">Прикрепить готовую работу<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>';
  var file=r.result?'<div class="r3-file"><b>'+esc(r3Name(r.result.name))+'</b><small>'+esc(r3Size(r.result.size)+' · прикреплён '+r3When(r.result.at))+'</small><button type="button" class="mini" data-act="r3-result-download" data-id="'+id+'">Скачать</button><label class="mini" title="Загрузить другой файл вместо этого">Заменить файл<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label></div>'
@@ -2546,7 +2547,7 @@ function viewItem(id){
   if(x.serverMissing)return '<button type="button" class="mini" data-act="back">← Заявки</button><h1>'+esc(requestLabel(x))+' — '+esc(x.topic||'Тема не указана')+'</h1>'+card('<p role="status">Эта заявка отсутствует на сервере. Локальная карточка сохранена, но обработка и передача недоступны.</p><p class="hint">Если вам нужны местные заметки или текст, сохраните копию реестра в разделе «Ещё». После проверки удалите эту карточку.</p><button type="button" class="del" data-act="delete" data-id="'+esc(x.id)+'">Удалить локальную карточку</button>');
   if(x.receivedBeforeAnalysis&&!x.studySummary)loadStudySummary(x);
   if(x.requestNumber&&(x.route3?!r3Seen.has(x):(!Array.isArray(x.passports)||!x.materialRevision))&&!passportLoads.has(x)){
-    passportLoads.add(x);if(x.route3)r3Seen.add(x);setTimeout(function(){(x.route3?loadR3(x):loadPassports(x)).catch(function(e){toast(e.message||(x.route3?'Не удалось загрузить материалы':'Не удалось создать паспорт'));}).finally(function(){passportLoads.delete(x);});},0);
+    passportLoads.add(x);if(x.route3)r3Seen.add(x);var loadData=D,loadIdentity=Oblako.identity();setTimeout(function(){(x.route3?loadR3(x):loadPassports(x)).catch(function(e){if(D!==loadData||Oblako.identity()!==loadIdentity)return;if(x.route3){x.r3LoadError=true;x.r3Loaded=false;}else toast(e.message||'Не удалось создать паспорт');}).finally(function(){passportLoads.delete(x);if(x.route3&&D===loadData&&Oblako.identity()===loadIdentity&&tab==='list'&&openId===x.id)render();});},0);
   }
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
   var r = x.refId ? refById(x.refId) : findRef(x);
@@ -3027,7 +3028,8 @@ document.addEventListener("click", function(ev){
     if (xx.methodNotes && (rr2.notes||"").indexOf(xx.methodNotes) < 0) rr2.notes = (rr2.notes ? rr2.notes + "\n" : "") + "Из заявки " + (xx.student||"") + ": " + xx.methodNotes;
     var ok7 = save(); render(); toast(ok7 ? "Справочник обновлён по заявке" : "Не сохранено: браузер не разрешает хранение"); return;
   }
-  if (act === "open"){ listScroll=window.scrollY;listReturnId=id;openId = id;var opening=item(id);if(opening&&opening.requestNumber)delete opening.materialRevision;render();document.querySelector('[data-act="back"]').focus({preventScroll:true});return; }
+  if (act === "open"){ listScroll=window.scrollY;listReturnId=id;openId = id;var opening=item(id);if(opening&&opening.requestNumber)delete opening.materialRevision;if(opening&&opening.r3LoadError){delete opening.r3LoadError;r3Seen.delete(opening);}render();document.querySelector('[data-act="back"]').focus({preventScroll:true});return; }
+  if(act==='r3-retry-load'){var retryItem=item(id);if(!retryItem||passportLoads.has(retryItem))return;delete retryItem.r3LoadError;retryItem.r3Loaded=false;r3Seen.delete(retryItem);render();return;}
   if(act==='request-tab'){
     var key=el.dataset.key;requestTabs[id]=key;
     document.querySelectorAll('.request-tabs [role="tab"]').forEach(function(b){var selected=b.dataset.key===key;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});

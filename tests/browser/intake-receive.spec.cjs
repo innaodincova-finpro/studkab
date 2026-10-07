@@ -426,3 +426,55 @@ test('«Передать Claude»: registry copies the materials for Claude, the
  await expect(panel.locator('[data-act="r3-deliver"]')).toHaveText('Передать студенту');
  await expect(panel.locator('[data-act="claude-queue"]')).toHaveText('Попросить Claude переделать');
 });
+
+// UX-RECOVERY-01 stage 1: isolated fault checks, not production acceptance.
+for(const width of [390,1440])test('UX-R01 unknown receipt can be checked without resending at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await setup(page);
+ await page.locator('#intakeFiles').setInputFiles(pdf('Receipt recovery'));await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');
+ await page.evaluate(()=>{const original=Oblako.requestApi;window.receiptStateFails=true;window.loseReceiptReply=true;Oblako.requestApi=async d=>{if(d.action==='intake-receive-state'&&receiptStateFails)throw Error('Нет сети');return original(d);};});
+ await page.locator('[data-intake-receive]').click();
+ await expect(page.locator('[data-intake-status]')).toContainText('Не удалось подтвердить отправку');
+ await expect(page.locator('[data-intake-status]')).not.toContainText('Задание не отправлено');
+ await expect(page.locator('[data-intake-receive]')).toBeDisabled();
+ await expect(page.locator('[data-intake-check]')).toBeVisible();
+ await page.locator('[data-x]').click();
+ await page.evaluate(()=>StudIntake.open({api:Oblako.requestApi,openModal,esc,owner:()=>KEY,identity:Oblako.identity,submitted:s=>{window.lastReceipt=s;}}));
+ await expect(page.locator('[data-intake-check]')).toBeVisible();await expect(page.locator('[data-intake-receive]')).toBeDisabled();
+ await page.evaluate(()=>{receiptStateFails=false;const original=Oblako.requestApi;Oblako.requestApi=async d=>{if(d.action==='intake-receive-state')await new Promise(r=>{window.finishReceiptCheck=r;});return original(d);};const b=document.querySelector('[data-intake-check]');b.click();b.click();});
+ await expect(page.locator('[data-intake-check]')).toHaveText('Проверяем отправку…');await expect(page.locator('[data-intake-check]')).toBeDisabled();
+ await page.evaluate(()=>finishReceiptCheck());
+ await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
+ await expect(page.locator('[data-intake-check]')).toBeHidden();
+ expect(await page.evaluate(()=>receiptCalls.filter(a=>a==='intake-receive').length)).toBe(1);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('receipt-fixture:'+KEY)).writes)).toBe(1);
+});
+test('UX-R01 confirmed unsubmitted receipt unlocks the preserved form',async({page})=>{
+ await setup(page);await page.locator('#intakeFiles').setInputFiles(pdf('Unsubmitted'));await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');
+ await page.evaluate(()=>{const original=Oblako.requestApi;window.checkFails=true;window.sendFails=true;Oblako.requestApi=async d=>{if(d.action==='intake-receive'&&sendFails||d.action==='intake-receive-state'&&checkFails)throw Error('Нет сети');return original(d);};});
+ await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-check]')).toBeVisible();
+ await page.evaluate(()=>{checkFails=false;sendFails=false;});await page.locator('[data-intake-check]').click();
+ await expect(page.locator('[data-intake-status]')).toContainText('заявка пока не получена');await expect(page.locator('[data-intake-receive]')).toBeEnabled();
+ await expect(page.locator('[data-intake-detail="n"]')).toHaveValue(DETAILS.n);
+ await page.locator('[data-intake-receive]').click();await expect(page.locator('[data-intake-status]')).toContainText('Заявка №15 отправлена');
+});
+for(const width of [390,1440])test('UX-R02 failed registry load has a persistent retry at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  window.loadAttempts=0;Oblako.requestApi=async d=>{
+   if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:1}};
+   if(d.action==='attachment-context')return {attachments:[],materialRevision:1};
+   if(d.action==='clarification-list')return {questions:[]};
+   if(d.action==='claude-state')return {claude:null};
+   if(d.action==='r3-state'){loadAttempts++;if(loadAttempts===1)throw Error('Нет сети');await new Promise(r=>window.finishCardLoad=r);return {work:{takenAt:null}};}
+   throw Error('Unexpected '+d.action);
+  };
+  const x=fromPayload({id:'ux-local-card',route:'r3',k:'Практические задания',d:'Математика',n:'Локальная проверка',cn:'local@example.invalid'});x.requestNumber=15;D.items=[x];tab='list';openId=x.id;render();
+ });
+ await expect(page.getByRole('heading',{name:'Не удалось загрузить заявку'})).toBeVisible();
+ await expect(page.locator('[data-act="back"]')).toBeVisible();
+ await page.evaluate(()=>render());await expect(page.locator('[data-act="r3-retry-load"]')).toBeVisible();expect(await page.evaluate(()=>loadAttempts)).toBe(1);
+ await page.evaluate(()=>{const b=document.querySelector('[data-act="r3-retry-load"]');b.click();b.click();});
+ await expect(page.getByText('Загружаем заявку…',{exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>loadAttempts)).toBe(2);
+ await page.evaluate(()=>finishCardLoad());await expect(page.locator('[data-act="r3-retry-load"]')).toHaveCount(0);await expect(page.locator('[data-act="r3-take"]')).toBeVisible();
+ expect(await page.evaluate(()=>loadAttempts)).toBe(2);
+});
