@@ -1638,6 +1638,7 @@ function r3Name(n){return String(n||'').replace(/_+/g,' ');}
 function r3Links(x,list){var id=esc(x.id);return '<div class="r3links">'+list.map(function(a){return a[0]==='r3-file'?'<label class="linkbtn r3-own">'+esc(a[1])+'<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>':'<button type="button" class="linkbtn" data-act="'+a[0]+'" data-id="'+id+'">'+esc(a[1])+'</button>';}).join('<span aria-hidden="true"> · </span>')+'</div>';}
 function r3Card(x,route){
  var w=requestWorkflow(x),r=x.r3||{},id=esc(x.id),c=x.claude||null,num=x.requestNumber?'«заявка №'+x.requestNumber+'»':'номер заявки';
+ var card=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'</div>';}:window.card;
  if(x.r3LoadError)return card('<h3>Не удалось загрузить заявку</h3><p role="status">Проверьте соединение и повторите загрузку.</p><button type="button" class="btn" data-act="r3-retry-load" data-id="'+id+'">Повторить загрузку</button>','workflow-next');
  var title=w.title,copy=w.copy;
  var claudeBusy=c&&!c.attachedAt&&!c.error;
@@ -1646,7 +1647,6 @@ function r3Card(x,route){
  if(c&&c.error)copy='Файл Claude не прикрепился: '+c.error+' Нажмите «Попросить Claude переделать» или прикрепите файл сами.';
  var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(R3_STEPS[w.step-1].label)+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'
   :workflowSteps(w)+lab('Шаг '+w.step+' из 5'+(w.rework?' · доработка № '+w.rework:''))+'<p class="workflow-title">'+esc(title)+'</p><p class="workflow-copy">'+esc(copy)+'</p>';
- var card=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'</div>';}:window.card;
  // R3-D: замечания преподавателя при возврате и история переданных версий.
  var rets=r.returnList||[],last=rets[rets.length-1],vers=r.versions||[];
  if(w.rework&&last)h+='<div class="r3-quote"><b>Замечания преподавателя:</b> '+esc(last.comment)+(last.files&&last.files.length?'<div class="r3-qfiles">'+last.files.map(function(f){return '<span>'+esc(f.name)+' · '+esc(r3Size(f.size))+' <button type="button" class="linkbtn" data-act="r3-return-file-download" data-id="'+id+'" data-file="'+esc(f.id)+'">Скачать</button></span>';}).join('')+'</div>':'')+'</div>';
