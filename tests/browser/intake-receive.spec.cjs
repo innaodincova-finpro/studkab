@@ -36,7 +36,7 @@ async function setup(page,{restored=false,withProfile=false}={}){
   };
  });
  if(withProfile)await page.evaluate(()=>{D.settings.name='Петрова Мария Ивановна';D.settings.univ='АНО ВО «Московский международный университет»';D.settings.kafedra='';D.settings.program='38.03.02 Менеджмент';D.settings.form='очно-заочная';D.settings.course='1';D.settings.group='26Т101а';save();});
- await page.evaluate(w=>StudIntake.open({api:Oblako.requestApi,openModal,esc,owner:()=>KEY,identity:Oblako.identity,...(w?{profile:intakeProfile,remember:rememberIntakeProfile}:{}),submitted:s=>{window.lastReceipt=s;}}),withProfile);
+ await page.evaluate(w=>StudIntake.open({api:d=>Oblako.requestApi(d),openModal,esc,owner:()=>KEY,identity:Oblako.identity,...(w?{profile:intakeProfile,remember:rememberIntakeProfile}:{}),submitted:s=>{window.lastReceipt=s;}}),withProfile);
  if(restored)await expect(page.locator('#intakeFiles')).toBeDisabled();
  else await expect(page.locator('#intakeFiles')).toBeEnabled();
 }
@@ -71,7 +71,7 @@ test('R3-A: link instead of files — only listed cloud services are accepted',a
 test('R3-A: entered details survive closing the window; pending file blocks sending; lost reply/reopen restores one receipt',async({page})=>{
  await setup(page);await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');
  await page.locator('[data-intake-dialog] .close').click();
- await page.evaluate(()=>StudIntake.open({api:Oblako.requestApi,openModal,esc,owner:()=>KEY,identity:Oblako.identity}));
+ await page.evaluate(()=>StudIntake.open({api:d=>Oblako.requestApi(d),openModal,esc,owner:()=>KEY,identity:Oblako.identity}));
  await expect(page.locator('[data-intake-detail="n"]')).toHaveValue(DETAILS.n);await expect(page.locator('[data-intake-detail="fo"]')).toHaveValue(DETAILS.fo);
  await page.evaluate(()=>window.failReceiptUpload=true);
  await page.locator('#intakeFiles').setInputFiles(pdf('Задание'));
@@ -438,7 +438,7 @@ for(const width of [390,1440])test('UX-R01 unknown receipt can be checked withou
  await expect(page.locator('[data-intake-receive]')).toBeDisabled();
  await expect(page.locator('[data-intake-check]')).toBeVisible();
  await page.locator('[data-x]').click();
- await page.evaluate(()=>StudIntake.open({api:Oblako.requestApi,openModal,esc,owner:()=>KEY,identity:Oblako.identity,submitted:s=>{window.lastReceipt=s;}}));
+ await page.evaluate(()=>StudIntake.open({api:d=>Oblako.requestApi(d),openModal,esc,owner:()=>KEY,identity:Oblako.identity,submitted:s=>{window.lastReceipt=s;}}));
  await expect(page.locator('[data-intake-check]')).toBeVisible();await expect(page.locator('[data-intake-receive]')).toBeDisabled();
  await page.evaluate(()=>{receiptStateFails=false;const original=Oblako.requestApi;Oblako.requestApi=async d=>{if(d.action==='intake-receive-state')await new Promise(r=>{window.finishReceiptCheck=r;});return original(d);};const b=document.querySelector('[data-intake-check]');b.click();b.click();});
  await expect(page.locator('[data-intake-check]')).toHaveText('Проверяем отправку…');await expect(page.locator('[data-intake-check]')).toBeDisabled();
@@ -470,6 +470,7 @@ for(const width of [390,1440])test('UX-R02 failed registry load has a persistent
   };
   const x=fromPayload({id:'ux-local-card',route:'r3',k:'Практические задания',d:'Математика',n:'Локальная проверка',cn:'local@example.invalid'});x.requestNumber=15;D.items=[x];tab='list';openId=x.id;render();
  });
+ await expect.poll(()=>page.evaluate(()=>({attempts:loadAttempts,error:!!D.items[0].r3LoadError,route3:D.items[0].route3,loaded:D.items[0].r3Loaded,tab,openId,text:document.querySelector('.request-action')?.textContent}))).toMatchObject({error:true});
  await expect(page.getByRole('heading',{name:'Не удалось загрузить заявку'})).toBeVisible();
  await expect(page.locator('[data-act="back"]')).toBeVisible();
  await page.evaluate(()=>render());await expect(page.locator('[data-act="r3-retry-load"]')).toBeVisible();expect(await page.evaluate(()=>loadAttempts)).toBe(1);
