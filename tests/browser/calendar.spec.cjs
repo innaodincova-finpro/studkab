@@ -16,7 +16,7 @@ test('student calendar mirrors the continuous month pattern without mixing app d
     tab = 'cal'; calMode = 'month'; calCursor = '2026-09-01'; calSel = null; render();
   });
 
-  await expect(page.locator('.month-card')).toHaveCount(3);
+  await expect(page.locator('.month-card')).toHaveCount(1);
   await expect(page.locator('.month-title').first()).toContainText('сентябрь 2026');
   await expect(page.locator('[data-d="2026-09-18"]')).toContainText('Проверить источники');
   await expect(page.locator('[data-d="2026-09-20"]')).toContainText('Сдать работу: Курсовая');

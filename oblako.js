@@ -265,11 +265,17 @@
     var expected = userId, expectedEpoch = epoch;
     var r = await client.auth.getSession(), session = r.data && r.data.session;
     if (!session || session.user.id !== expected || epoch !== expectedEpoch) throw new Error("Войдите заново");
-    var res = await fetch(global.OBLAKO_CONFIG.url + "/functions/v1/studkab-requests", {
-      method:"POST", headers:{"Content-Type":"application/json",Authorization:"Bearer " + session.access_token},
-      body:JSON.stringify(body),signal:AbortSignal.timeout(body&&['attachment-upload','intake-upload','intake-read'].includes(body.action)?60000:20000)
-    });
-    var data = await res.json();
+    var res, data;
+    // Сбой связи — понятной фразой, а не служебным текстом браузера («Failed to fetch» и т. п.).
+    try {
+      res = await fetch(global.OBLAKO_CONFIG.url + "/functions/v1/studkab-requests", {
+        method:"POST", headers:{"Content-Type":"application/json",Authorization:"Bearer " + session.access_token},
+        body:JSON.stringify(body),signal:AbortSignal.timeout(body&&['attachment-upload','intake-upload','intake-read'].includes(body.action)?60000:20000)
+      });
+    } catch (e) {
+      throw new Error(e && (e.name === "TimeoutError" || e.name === "AbortError") ? "Сервер долго не отвечает. Попробуйте ещё раз" : "Нет связи. Проверьте интернет и попробуйте ещё раз");
+    }
+    try { data = await res.json(); } catch (e) { throw new Error("Сервер временно недоступен. Попробуйте ещё раз"); }
     if (epoch !== expectedEpoch || userId !== expected) throw new Error("Аккаунт изменился. Повторите действие");
     if (!res.ok) { var failure = new Error(data.error || "Не удалось передать заявку"); failure.status = res.status; throw failure; }
     return data;

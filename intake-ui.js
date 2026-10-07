@@ -23,7 +23,7 @@
   '.r3f .field label{font-size:13px;font-weight:600;color:var(--ink,#22303F)}.r3f .req{color:#8F6A3A;margin-left:2px}'+
   '.r3f input[type=text],.r3f input[type=url],.r3f input[type=date],.r3f select,.r3f textarea{width:100%;box-sizing:border-box}'+
   '.r3f .or{display:flex;align-items:center;gap:10px;color:var(--mut,#6B7F92);font-size:13px;margin:6px 0 10px}.r3f .or:before,.r3f .or:after{content:"";flex:1;border-top:1px solid var(--line,#DCE6EE)}'+
-  '.r3f .addf{display:inline-flex;align-items:center;gap:8px;cursor:pointer;color:var(--accent,#2F6091);font-weight:500;font-size:14px;padding:8px 0}'+
+  '.r3f .addf{display:flex;justify-content:center;align-items:center;gap:8px;cursor:pointer;color:var(--accent,#2F6091);font-weight:600;font-size:15px;padding:12px 16px;border:1.5px dashed var(--accent,#2F6091);border-radius:12px;background:#F5F9FC}'+
   '.r3f .addf input{position:absolute;width:1px;height:1px;opacity:0}'+
   '.r3f .rowbtns .send{flex:0 0 auto;padding:13px 26px}@media(max-width:640px){.r3f .rowbtns .send{flex:1 1 auto}}.r3f .send{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}'+
   '.r3f .next{border-top:1px solid var(--line,#DCE6EE);margin-top:16px;padding-top:12px}'+
@@ -74,7 +74,7 @@
     '<button type="button" class="b b-quiet b-sm" data-intake-retry hidden style="display:none">Повторить сохранение</button>'+
     '<div class="or">или</div>'+
     '<div class="field"><label for="intakeLink">Ссылка на папку в облаке</label><input type="url" id="intakeLink" maxlength="500" placeholder="https://disk.yandex.ru/d/…" inputmode="url" autocomplete="off"></div>'+
-    '<p class="hint" role="status" aria-live="polite" data-intake-link-status>Яндекс Диск, Google Диск, Облако Mail.ru. Доступ — «всем, у кого есть ссылка». С Яндекс Диска файлы копируются в заявку.</p>'+
+    '<p class="hint" role="status" aria-live="polite" data-intake-link-status>Яндекс Диск, Google Диск или Облако Mail.ru. Откройте доступ по ссылке для всех, иначе файлы не будут видны.</p>'+
    '</section>'+
    '<section class="grp"><h3>Для титульного листа</h3><div class="grid">'+DETAILS.map(function(d){return fieldHtml(d,esc);}).join('')+'</div></section>'+
    '<div class="grid" style="margin-top:14px"><div class="field"><label for="intakeDeadline">Когда нужна работа<span class="req">*</span></label><input id="intakeDeadline" type="date"></div>'+

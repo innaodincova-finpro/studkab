@@ -3,7 +3,7 @@ for(const file of ['index.html','reestr.html']){
  test(file+': login form, autosave, reload offline edits and explicit conflict choice',async({page})=>{
   await page.goto('http://127.0.0.1:4173/'+file);
   await page.locator('[data-tab="more"]').click();
-  await page.getByText('Хранение записей',{exact:true}).click();
+  await page.getByText(file==='index.html'?'Вход и копия данных':'Хранение записей',{exact:true}).click();
   await expect(page.getByRole('button',{name:'Войти через Google',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Войти по почте и паролю',exact:true}).click();
   await page.getByLabel('Электронная почта',{exact:true}).fill('cloud-flow@example.test');
@@ -33,7 +33,7 @@ for(const file of ['index.html','reestr.html']){
   expect(await page.evaluate(()=>D.settings.name)).toBe('Местная версия');
   expect(await page.evaluate(()=>QA.rows[QA.user+':'+CLOUD_APP].data.settings.name)).toBe('Другое устройство');
   await page.locator('[data-tab="more"]').click();
-  await page.getByText('Хранение записей',{exact:true}).click();
+  await page.getByText(file==='index.html'?'Вход и копия данных':'Хранение записей',{exact:true}).click();
   await page.getByRole('button',{name:'Проверить записи',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Записи на устройствах различаются'})).toBeVisible();
   await page.getByRole('button',{name:'Использовать записи из облака',exact:true}).click();
@@ -63,7 +63,7 @@ for(const file of ['index.html','reestr.html']){
    CloudUI.sync=()=>new Promise(resolve=>{window.qaFinishSync=resolve;});
   });
   await page.locator('[data-tab="more"]').click();
-  await page.getByText('Хранение записей',{exact:true}).click();
+  await page.getByText(file==='index.html'?'Вход и копия данных':'Хранение записей',{exact:true}).click();
   await page.getByRole('button',{name:'Войти по почте и паролю',exact:true}).click();
   await page.getByLabel('Электронная почта',{exact:true}).fill('login-pending@example.test');
   await page.getByLabel('Пароль приложения',{exact:true}).fill('test-password-123');
