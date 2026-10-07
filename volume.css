@@ -1,0 +1,96 @@
+/* Объём и воздух: общий слой оформления реестра и кабинета студента (07.10.2026).
+   Цвета не меняются — берутся из тем. Слой можно отключить, убрав подключение файла. */
+:root{
+ --sh1:0 1px 2px rgba(28,52,80,.06),0 3px 8px -2px rgba(28,52,80,.08);
+ --sh2:0 1px 2px rgba(28,52,80,.04),0 12px 30px -8px rgba(28,52,80,.16);
+ --sh3:0 2px 6px rgba(28,52,80,.06),0 24px 50px -14px rgba(28,52,80,.28);
+ --surf:linear-gradient(180deg,rgba(255,255,255,.97) 0%,rgba(247,250,253,.93) 100%);
+ --edge:inset 0 1px 0 rgba(255,255,255,.95);
+ --glass:rgba(255,255,255,.72);
+}
+
+/* 1. Фон: два световых пятна неподвижным слоем; поверхности без обводок, разделены тенью. */
+body:before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--body-bg)}
+.phone{background:transparent}
+.card{background:var(--surf);border:1px solid rgba(255,255,255,.75);box-shadow:var(--sh2),var(--edge);border-radius:22px}
+.card.now{border-color:rgba(255,255,255,.75);box-shadow:var(--sh3),var(--edge),0 0 0 2px var(--days-bg)}
+.fold{background:var(--surf);border:1px solid rgba(255,255,255,.75);box-shadow:var(--sh1),var(--edge);border-radius:18px}
+.fold[open]{box-shadow:var(--sh2),var(--edge)}
+.fold[open] summary,.stat,.item{border-color:rgba(205,218,230,.6)}
+.greeting{box-shadow:var(--sh3),inset 0 1px 0 rgba(255,255,255,.3)}
+
+/* Крупнее и спокойнее заголовки: главное отличается от второстепенного размером. */
+.title{font-size:20px;letter-spacing:-.005em}
+.registry-toolbar h1{font-size:32px;letter-spacing:-.01em}
+.lab{letter-spacing:.12em}
+.mut{line-height:1.5}
+
+/* 2. Стеклянные шапка и нижние вкладки; выбранная вкладка — объёмная плашка. */
+.appbar{box-shadow:0 12px 34px -10px var(--appbar-sh)}
+.tabs{background:var(--glass);-webkit-backdrop-filter:saturate(1.6) blur(18px);backdrop-filter:saturate(1.6) blur(18px);border-top:1px solid rgba(255,255,255,.7);box-shadow:0 -10px 30px -16px rgba(28,52,80,.3)}
+.tabs button{border-radius:16px;margin:5px 2px;padding:4px 0;transition:background .2s,box-shadow .2s,color .2s}
+.tabs button[aria-selected="true"]{background:linear-gradient(180deg,#fff 0%,#EEF4F9 100%);box-shadow:var(--sh1),var(--edge);transform:none}
+
+/* 3. Кнопки с объёмом: светлая кромка сверху, тень, мягкое «вдавливание» при нажатии. */
+.btn,button.b-main,.r3-main{box-shadow:0 10px 22px -8px var(--btn-sh),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -2px 0 rgba(0,0,0,.08);transition:transform .15s,box-shadow .15s,filter .15s}
+.btn:hover,button.b-main:hover,.r3-main:hover{filter:brightness(1.04);transform:translateY(-1px)}
+.btn:active,button.b-main:active,.r3-main:active{transform:translateY(1px);box-shadow:0 4px 10px -6px var(--btn-sh),inset 0 2px 4px rgba(0,0,0,.12)}
+.chip{box-shadow:var(--sh1),var(--edge);transition:transform .15s,box-shadow .15s}
+.chip:active{transform:translateY(1px);box-shadow:inset 0 1px 3px rgba(0,0,0,.1)}
+.mini{border-color:rgba(205,218,230,.8);border-radius:10px;box-shadow:var(--sh1);padding:6px 11px}
+.fab{box-shadow:0 16px 32px -10px var(--fab-sh),inset 0 1px 0 rgba(255,255,255,.35)}
+.fab.quiet{background:var(--surf);border-color:rgba(255,255,255,.8);box-shadow:var(--sh2),var(--edge)}
+input,select,textarea{transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px var(--days-bg)}
+
+/* 5. Список заявок на телефоне — отдельные карточки вместо строк таблицы. */
+@media(max-width:959px){
+ .card:has(>.registry-table){background:none;border:0;box-shadow:none;padding:0;-webkit-backdrop-filter:none;backdrop-filter:none}
+ .registry-table tr{background:var(--surf);border:1px solid rgba(255,255,255,.75);border-bottom:1px solid rgba(255,255,255,.75)!important;border-radius:18px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--sh1),var(--edge)}
+ .registry-table td:last-child{right:16px}
+ .registry-table tr.r3-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px}
+ .registry-table tr.r3-row td{padding:0!important;position:static!important;min-width:0}
+ .r3-row td:nth-child(1){grid-column:1;grid-row:1}
+ .r3-row td:nth-child(1) small:empty{display:none}
+ .r3-row td:nth-child(2){display:none!important}
+ .r3-row td:nth-child(3){grid-column:1/-1;grid-row:2;color:var(--ink)!important;font-size:15px!important}
+ .r3-row td:nth-child(3) small{display:none}
+ .r3-row td:nth-child(4){grid-column:2;grid-row:1;text-align:right;color:var(--ink)!important;font-size:13px!important}
+ .r3-row td:nth-child(5){grid-column:1/-1;grid-row:3;padding-top:8px!important;border-top:1px solid rgba(205,218,230,.6)}
+ .r3-row .r3cell{flex-direction:row!important;align-items:center!important;justify-content:space-between;gap:10px}
+}
+@media(min-width:960px){
+ .tabs{background:rgba(255,255,255,.62);border-right:1px solid rgba(255,255,255,.7);border-top:0;box-shadow:10px 0 30px -18px rgba(28,52,80,.25)}
+ .tabs button{margin:0}
+ .tabs button[aria-selected=true]{background:linear-gradient(180deg,#fff 0%,#EEF4F9 100%);box-shadow:var(--sh1),var(--edge)}
+ .card{border-radius:20px;box-shadow:var(--sh2),var(--edge)}
+ .registry-table tbody tr{transition:background .15s}
+}
+
+/* 6. Плавность: экран появляется мягко, карточки — друг за другом; заготовки вместо «Загружаем…». */
+@keyframes vol-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.screen.enter>*{animation:vol-rise .38s cubic-bezier(.2,.7,.2,1) both}
+.screen.enter>*:nth-child(2){animation-delay:.04s}.screen.enter>*:nth-child(3){animation-delay:.08s}
+.screen.enter>*:nth-child(4){animation-delay:.12s}.screen.enter>*:nth-child(5){animation-delay:.16s}
+.screen.enter>*:nth-child(n+6){animation-delay:.2s}
+@keyframes vol-shine{from{background-position:-200px 0}to{background-position:calc(200px + 100%) 0}}
+.skel{display:grid;gap:10px;padding:6px 0}
+.skel i{display:block;height:14px;border-radius:8px;background:linear-gradient(90deg,#E9EFF5 0,#F6F9FC 50%,#E9EFF5 100%) no-repeat;background-size:200px 100%;background-color:#E9EFF5;animation:vol-shine 1.2s linear infinite}
+.skel i:nth-child(1){width:45%;height:18px}.skel i:nth-child(2){width:90%}.skel i:nth-child(3){width:70%}
+@media (prefers-reduced-motion:reduce){.screen.enter>*,.skel i{animation:none}.btn,.chip,.tabs button{transition:none}}
+
+/* 7. Пустые экраны: знак, короткий текст и одно действие. */
+.empty-state{text-align:center;padding:34px 18px 30px}
+.empty-state:before{content:'✦';display:flex;align-items:center;justify-content:center;width:64px;height:64px;margin:0 auto 14px;border-radius:20px;background:var(--ic-bg);color:var(--ic-fg);font-size:26px;box-shadow:var(--sh1),var(--edge)}
+.empty-state b{display:block;font-family:'Spectral',Georgia,serif;font-size:20px;font-weight:600;margin-bottom:6px;color:var(--ink)}
+.empty-state p{margin:0 auto 16px;max-width:340px;color:var(--mut);font-size:14px;line-height:1.5}
+
+/* 4. Телефон: главное действие карточки всегда под пальцем, над нижними вкладками. */
+@media(max-width:600px){
+ body,.screen{overflow-x:clip}
+ .request-action .r3-main{width:100%;position:sticky;bottom:calc(78px + env(safe-area-inset-bottom));z-index:4}
+ .screen[data-detail=true] [data-r3-route] .b:not(.b-alt):not(.mini){position:sticky;bottom:12px;z-index:4}
+ .greeting .send{margin-top:14px}
+}
+.greeting .send{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:10px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.2);color:#fff;font:inherit;font-weight:600;font-size:14px;cursor:pointer;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 8px 18px -10px rgba(0,0,0,.35)}
+.greeting .send:active{transform:translateY(1px)}

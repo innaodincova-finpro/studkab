@@ -336,6 +336,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .r3links{margin-top:12px;font-size:14px;line-height:1.8}.r3links .linkbtn,.r3own,.r3-own{font-size:14px}.r3-own{display:inline;cursor:pointer}
 </style>
 <link rel="stylesheet" href="desktop.css?v=8">
+<link rel="stylesheet" href="volume.css?v=1">
 </head>
 <body data-theme="blue">
 <div class="phone">
@@ -1650,7 +1651,7 @@ function r3Card(x,route){
  if(w.rework&&last)h+='<div class="r3-quote"><b>Замечания преподавателя:</b> '+esc(last.comment)+(last.files&&last.files.length?'<div class="r3-qfiles">'+last.files.map(function(f){return '<span>'+esc(f.name)+' · '+esc(r3Size(f.size))+' <button type="button" class="linkbtn" data-act="r3-return-file-download" data-id="'+id+'" data-file="'+esc(f.id)+'">Скачать</button></span>';}).join('')+'</div>':'')+'</div>';
  if(vers.length&&(w.rework||vers.length>1))h+='<p class="hint r3-wrap">'+vers.map(function(v){return 'Версия '+v.n+' передана '+esc(r3When(v.at))+': '+esc(v.name);}).join('<br>')+'</p>';
  var base=[['r3-bundle','Скачать задание (архив)'],['executor-clarifications','Задать вопрос студенту']];
- if(!x.r3Loaded)return card(h+'<p class="hint" role="status">Загружаем состояние заявки…</p>','workflow-next');
+ if(!x.r3Loaded)return card(h+'<div class="skel" role="status" aria-label="Загружаем состояние заявки"><i></i><i></i><i></i></div>','workflow-next');
  if(w.step<3)return card(h+'<button type="button" class="btn r3-main" data-act="claude-queue" data-id="'+id+'">Передать Claude</button>'+r3Links(x,base.concat([['r3-take','Сделаю сама']])),'workflow-next');
  var attach='<label class="r3-attach">Прикрепить готовую работу<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>';
  var file=r.result?'<div class="r3-file"><b>'+esc(r3Name(r.result.name))+'</b><small>'+esc(r3Size(r.result.size)+' · прикреплён '+r3When(r.result.at))+'</small><button type="button" class="mini" data-act="r3-result-download" data-id="'+id+'">Скачать</button><label class="mini" title="Загрузить другой файл вместо этого">Заменить файл<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label></div>'
@@ -2076,6 +2077,7 @@ function render(){
   else if (tab === "today") p.innerHTML = viewTodayR3();
   else if (tab === "refs") p.innerHTML = openRefId ? viewRef(openRefId) : viewRefs();
   else p.innerHTML = openId ? viewItem(openId) : viewList();
+  var __sig=tab+'|'+(openId||'');if(__sig!==window.__vsig){window.__vsig=__sig;p.classList.add('enter');clearTimeout(window.__vt);window.__vt=setTimeout(function(){p.classList.remove('enter');},700);}
   if(openId&&tab==='list')StudResults.mountTestDelivery(item(openId),p.querySelector('[data-test-delivery-host]'),false);
   if(openId&&tab==='list'){
     var primary=p.querySelector('.request-action [data-act]');
@@ -2176,7 +2178,7 @@ function viewTodayR3(){
  var h='<div class="registry-toolbar"><div><h1>Сегодня</h1></div></div>';
  h+='<div class="r3tgrid"><div>'+sec('Ваш ход',L.you,function(x){var t=r3Turn(x);return line(x,due(x)+'<button type="button" class="r3tact" data-act="open-today" data-id="'+esc(x.id)+'">'+esc(t.act||'Открыть')+'</button>');},'Сейчас ничего не ждёт вашего действия.')+'</div><div>'+
   sec('Ждём студента',L.st,function(x){return line(x,due(x));},'Студентов ждать не нужно.')+'</div></div>';
- if(!L.you.length&&!L.st.length&&!(D.items||[]).some(function(x){return x.route3;}))h+='<p class="hint">Заявок пока нет. Новые заявки студентов появятся здесь.</p>';
+ if(!L.you.length&&!L.st.length&&!(D.items||[]).some(function(x){return x.route3;}))h+='<div class="empty-state"><b>Заявок пока нет</b><p>Новые заявки студентов появятся здесь.</p></div>';
  return '<div class="r3today">'+h+'</div>';
 }
 function viewList(){

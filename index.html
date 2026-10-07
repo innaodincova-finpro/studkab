@@ -341,6 +341,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .r3-download,button.b.r3-download{background:linear-gradient(120deg,#B08347,#D2A46A);box-shadow:0 8px 20px -8px rgba(176,131,71,.65)}[data-r3-ready] button.b.b-alt{background:#fff;border:1px solid var(--line);color:var(--accent);box-shadow:none}[data-r3-ready] button.b{margin:6px 6px 0 0}
 </style>
 <link rel="stylesheet" href="desktop.css?v=8">
+<link rel="stylesheet" href="volume.css?v=1">
 </head>
 <body>
 <div class="phone">
@@ -1747,7 +1748,7 @@ function firstName(){
   var parts = n.split(/\s+/);
   return parts.length >= 3 ? parts[1] : parts[0];
 }
-function greetingCard(){
+function greetingCard(send){
   var now = new Date(), hour = now.getHours();
   var hello = hour < 5 ? "Доброй ночи" : hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
   var period = hour < 5 ? "night" : hour < 12 ? "morning" : hour < 18 ? "day" : "evening";
@@ -1758,6 +1759,7 @@ function greetingCard(){
   var name = firstName();
   return '<div class="greeting ' + period + '">' +
     '<div class="hello">' + hello + (name ? ", " + esc(name) : "") + '!</div>' +
+    (send ? '<button type="button" class="send" data-act="intake-materials" data-start-send><span aria-hidden="true">＋</span>Отправить задание</button>' : '') +
     '</div>';
 }
 function nearestWork(){
@@ -1774,7 +1776,7 @@ function lab(t){ return '<div class="lab">' + esc(t) + '</div>'; }
 
 /* ---------- СЕГОДНЯ ---------- */
 function viewToday(){
-  var h = greetingCard();
+  var h = greetingCard(D.works.some(function(x){return isR3Work(x)&&x.status!=='graded'&&x.status!=='accepted';})||!!nearestWork());
   if (!storageOk) h += '<div class="warnbar">Браузер не сохраняет данные — возможно, открыт режим инкогнито.</div>';
   var t = today(), warn = D.settings.warnDays || 3, all = reminders();
 
@@ -2235,7 +2237,7 @@ function viewWorks(){
           (w.deadline ? ' · ' + ruDate(w.deadline) : '') + (over ? ' · срок прошёл' : '') + '</small></div>' +
         (w.req && w.req.serverId ? '<span class="pill">Заявка №'+esc(w.req.number||'')+'</span>' : pill(st)) + '</div>';
     }).join(""))
-    : '<div class="empty">' + (D.works.length ? 'В этом отборе пусто.' : 'Работ пока нет. Нажмите «Отправить задание».') + '</div>') + (function(){var r=filtered.filter(function(x){return isR3Work(x)||r3Unknown(x);});if(r.length)setTimeout(function(){r3Fetch(r,r3HomeRefresh);},0);return '';})();
+    : (D.works.length ? '<div class="empty">В этом отборе пусто.</div>' : '<div class="empty-state"><b>Работ пока нет</b><p>Пришлите задание от преподавателя — работу выполнят и передадут сюда.</p><button type="button" class="b b-main" data-act="intake-materials" data-start-send>Отправить задание</button></div>')) + (function(){var r=filtered.filter(function(x){return isR3Work(x)||r3Unknown(x);});if(r.length)setTimeout(function(){r3Fetch(r,r3HomeRefresh);},0);return '';})();
 }
 
 /* ---------- КАРТОЧКА РАБОТЫ ---------- */
@@ -2259,7 +2261,7 @@ function r3Day(v){var d=new Date(v);return isNaN(d)?'':d.toLocaleDateString('ru-
 // Шаг, на котором стоит заявка, и содержимое открытой карточки.
 function r3StepCard(w,result){
   var id=esc(w.id),returns=result.returns||0,r=result.result,lr=result.lastReturn;
-  var file=r?'<div class="r3file"><span class="r3ic">'+esc(String(r.name).split('.').pop().slice(0,4).toUpperCase())+'</span><span class="r3fn"><b>'+esc(r.name)+' · '+esc(r3Size(r.size))+'</b><small>передана '+esc(r3When(r.at))+'</small></span></div>':'';
+  var file=r?'<div class="r3file"><span class="r3ic">'+esc(String(r.name).split('.').pop().slice(0,4).toUpperCase())+'</span><span class="r3fn"><b>'+esc(String(r.name).replace(/_+/g,' '))+' · '+esc(r3Size(r.size))+'</b><small>передана '+esc(r3When(r.at))+'</small></span></div>':'';
   if(lr&&result.stage!=='needs_answer')return {i:2,extra:' · доработка № '+lr.n,title:'Работу исправляют',
    now:'<p>Вы вернули работу '+esc(r3When(lr.at))+'. Работу исправляют по замечаниям преподавателя.</p><div class="r3-quote">'+esc(lr.comment)+(lr.files&&lr.files.length?'<br><span class="small">Приложено: '+esc(lr.files.join(', '))+'</span>':'')+'</div>',
    after:'Вам придёт уведомление, когда исправленная работа будет готова. Затем снова скачайте её и сдайте.'};
@@ -2671,6 +2673,7 @@ function render(){
   else if (tab === "cal") p.innerHTML = viewCal();
   else if (tab === "works") p.innerHTML = openWorkId ? viewWork(openWorkId) : viewWorks();
   else p.innerHTML = viewMore();
+  var __sig=tab+'|'+(openWorkId||'');if(__sig!==window.__vsig){window.__vsig=__sig;p.classList.add('enter');clearTimeout(window.__vt);window.__vt=setTimeout(function(){p.classList.remove('enter');},700);}
   if(tab==="works"&&openWorkId&&work(openWorkId))StudResults.mountTestDelivery(work(openWorkId),p.querySelector('[data-test-delivery-host]'),true);
   var fab = document.getElementById("fab");
   if (tab === "more"){ fab.hidden = true; }
@@ -2722,7 +2725,7 @@ function r3ReadyBlock(w,result){
   box.hidden=false;return;
  }
  if(!result.result){box.hidden=true;box.innerHTML='';return;}
- var r=result.result,file='<p class="small" style="overflow-wrap:anywhere">'+esc(r.name)+' · '+esc(r3Size(r.size))+'</p>';
+ var r=result.result,file='<p class="small" style="overflow-wrap:anywhere">'+esc(String(r.name).replace(/_+/g,' '))+' · '+esc(r3Size(r.size))+'</p>';
  if(r.handedAt){
   box.innerHTML='<p><b>Работа сдана</b> · '+esc(r3When(r.handedAt))+'</p><p class="hint">Ждём оценку преподавателя. Если преподаватель вернёт работу с замечаниями — нажмите «Вернули на доработку».</p>'+file+
    '<button type="button" class="mini" data-act="r3-download" data-id="'+id+'">Скачать ещё раз</button> '+(r3Forms[w.id]?r3ReturnForm(w):'<button type="button" class="b b-alt" data-act="r3-return-open" data-id="'+id+'">Вернули на доработку</button>')+returns;

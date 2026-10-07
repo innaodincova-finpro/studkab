@@ -206,7 +206,7 @@ test('R3-C: student sees «Работа готова» with one download button;
   tab='works';openWorkId='w-r3';render();
  });
  await expect(page.locator('[data-student-progress]')).toHaveText('Работа готова.');
- await expect(page.locator('[data-r3-ready]')).toContainText('Иванова_Математика.docx · 48 КБ');
+ await expect(page.locator('[data-r3-ready]')).toContainText('Иванова Математика.docx · 48 КБ');
  await expect(page.locator('[data-legacy-result]')).toBeHidden();
  await page.locator('[data-act="r3-download"]').click();
  await expect.poll(()=>page.evaluate(()=>opened)).toEqual(['Иванова_Математика.docx']);expect(await page.evaluate(()=>dl)).toEqual(['11111111-1111-4111-8111-111111111111']);
@@ -332,7 +332,8 @@ test('R3-E2: home shows one card per form request with the route strip and one a
  expect(await page.evaluate(()=>work('w-3').req.route)).toBe('r3');
  // «Ближайшая сдача» показывает только работу без заявки по форме.
  await expect(page.locator('.card.now')).toContainText('Своя курсовая');
- await expect(page.locator('[data-act="intake-materials"]',{hasText:'Отправить задание'})).toBeVisible();
+ // Кнопка «Отправить задание» — в приветствии, плавающая на главной скрыта.
+ await expect(page.locator('.greeting [data-act="intake-materials"]')).toBeVisible();await expect(page.locator('#fab')).toBeHidden();
  await page.evaluate(()=>{tab='works';render();});
  await expect(page.locator('[data-r3-row="w-1"]')).toContainText('Шаг 2 из 5 · Ответьте на вопрос по заданию');
  await expect(page.locator('[data-r3-row="w-2"]')).toContainText('Шаг 4 из 5 · Работа готова');
