@@ -65,11 +65,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 55 then
-    raise exception 'Expected 55 STUDKAB tables, found %', table_count;
+  if table_count <> 58 then
+    raise exception 'Expected 58 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 55 then
-    raise exception 'RLS enabled on only % of 55 STUDKAB tables', rls_count;
+  if rls_count <> 58 then
+    raise exception 'RLS enabled on only % of 58 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';
@@ -491,5 +491,21 @@ do $$ declare signature text;role_name text;begin
  if to_regclass('public.studkab_storage_leftovers') is null then raise exception 'Leftovers table missing';end if;
  foreach role_name in array array['anon','authenticated'] loop
   if has_table_privilege(role_name,'public.studkab_storage_leftovers','select,insert,update,delete') then raise exception 'Leftovers table exposed to %',role_name;end if;
+ end loop;
+end $$;
+
+-- «Передать Claude»: таблицы и функции только для сервера.
+do $$ declare signature text;role_name text;tbl text;begin
+ foreach signature in array array['public.studkab_claude_queue(uuid,text)','public.studkab_claude_file_put(uuid,uuid,text,text,integer,text,text)','public.studkab_claude_attached(uuid)'] loop
+  if to_regprocedure(signature) is null or not has_function_privilege('service_role',signature,'execute') then raise exception 'Claude RPC missing: %',signature;end if;
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_function_privilege(role_name,signature,'execute') then raise exception 'Claude RPC exposed: %',signature;end if;
+  end loop;
+ end loop;
+ foreach tbl in array array['public.studkab_claude_jobs','public.studkab_claude_files','public.studkab_claude_results'] loop
+  if to_regclass(tbl) is null then raise exception 'Claude table missing: %',tbl;end if;
+  foreach role_name in array array['anon','authenticated'] loop
+   if has_table_privilege(role_name,tbl,'select,insert,update,delete') then raise exception 'Claude table % exposed to %',tbl,role_name;end if;
+  end loop;
  end loop;
 end $$;

@@ -20,8 +20,9 @@ export async function intakeRead(input,user,{db,loadIntake,readIntake}){
  if(result.invalid)throw Error('Invalid reading result');
  return {data:{reading:result.file.read_result,cached:false}};
 }
-export async function loadOriginal({base,key,path,size,hash,fetcher=fetch}){
- const response=await fetcher(base+'/storage/v1/object/studkab-intake-materials/'+path,{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(15000)});
+export async function loadOriginal({base,key,path,size,hash,bucket='studkab-intake-materials',fetcher=fetch}){
+ if(!['studkab-intake-materials','studkab-request-materials'].includes(bucket))throw Error('Invalid storage');
+ const response=await fetcher(base+'/storage/v1/object/'+bucket+'/'+path,{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(15000)});
  if(!response.ok||!response.body)throw Error('Storage unavailable');
  const reader=response.body.getReader(),chunks=[];let length=0;
  try{while(true){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>size||length>5242880)throw Error('Storage mismatch');chunks.push(value);}}catch(e){await reader.cancel();throw e;}finally{reader.releaseLock();}

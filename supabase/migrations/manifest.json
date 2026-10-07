@@ -649,6 +649,14 @@
       "status": "pending",
       "note": "Полное удаление заявки: записи о файлах черновика стираются, записи изучения с расходами сохраняются",
       "sha256": "be6d5825731efca680dd3c72da223c2dcd93749613c2789a96186a78d23058ec"
+    },
+    {
+      "file": "20261007150000_claude_executor.sql",
+      "version": "20261007150000",
+      "name": "claude_executor",
+      "status": "pending",
+      "note": "«Передать Claude»: копия материалов заявки для Claude и готовый файл Claude, прикрепляемый как готовая работа",
+      "sha256": "e886a93204b8447b5d793fa0f6aca50a0260e9c0b5a86be29b85d12623bc7223"
     }
   ],
   "production_reconciled_at": "2026-09-23"

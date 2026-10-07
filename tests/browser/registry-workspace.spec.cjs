@@ -2,9 +2,9 @@ const {test,expect}=require('@playwright/test');
 test('empty registry distinguishes local view from cloud applications',async({page})=>{
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await expect(page.locator('#page')).toContainText('состояние облачных заявок неизвестно');
- await expect(page.getByRole('button',{name:'Войти и открыть облачные заявки'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Войти',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Получить заявки из кабинетов'})).toHaveCount(0);
- await page.getByRole('button',{name:'Войти и открыть облачные заявки'}).click();
+ await page.getByRole('button',{name:'Войти',exact:true}).click();
  await expect(page.getByRole('heading',{name:/Вход в аккаунт|Облачное хранение недоступно/})).toBeVisible();
 });
 async function seed(page){
@@ -26,8 +26,8 @@ test('attached Word appears in review filter and review tab gives the current ac
   render();
  });
  await expect.poll(()=>page.evaluate(()=>requestWorkflow(D.items[0]).key)).toBe('external-review');
- await expect(page.getByRole('button',{name:'Проверка · 1'})).toBeVisible();
- await page.getByRole('button',{name:'Проверка · 1'}).click();
+ await expect(page.getByRole('button',{name:'В работе · 1'})).toBeVisible();
+ await page.getByRole('button',{name:'В работе · 1'}).click();
  await expect(page.locator('.request-row')).toHaveCount(1);
  await page.locator('.open-request').click();
  await page.getByRole('tab',{name:'Проверка',exact:true}).click();
@@ -51,8 +51,8 @@ test('pagination, number search and return preserve list context',async({page})=
  await page.getByRole('searchbox',{name:'Поиск заявок'}).fill('1267');
  await expect(page.locator('.request-row')).toHaveCount(1);
  await expect(page.locator('.registry-filters')).toContainText('Все · 1');
- await page.locator('.registry-filters').getByRole('button',{name:'Подготовка · 0',exact:true}).click();
- await expect(page.locator('.request-row')).toHaveCount(0);
+ // Пустые отборы не показываются.
+ await expect(page.locator('.registry-filters').getByRole('button',{name:/^Сданы/})).toHaveCount(0);
  await page.locator('.registry-filters').getByRole('button',{name:'Все · 1',exact:true}).click();
  await expect(page.getByRole('searchbox')).toHaveValue('1267');
  await page.locator('.open-request').focus();await page.keyboard.press('Enter');
