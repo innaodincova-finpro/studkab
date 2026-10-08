@@ -418,7 +418,7 @@ test('«Передать Claude»: registry copies the materials for Claude, the
  await expect(panel.locator('[data-act="claude-queue"]')).toHaveText('Передать Claude');
  await expect(panel).toContainText('Студент прислал 1 файл.');
  await panel.locator('[data-act="claude-queue"]').click();
- await expect(panel).toContainText('Ожидается запуск Claude');await expect(panel).toContainText('Начало выполнения ещё не подтверждено.');
+ await expect(panel).toContainText('Ожидается запуск Claude');await expect(panel).toContainText('Начало выполнения ещё не подтверждено.');await expect(panel.locator('.r3eyebrow')).toContainText('Ожидается запуск');await expect(panel).toContainText('Напишите в чат проекта «Студенты»: «заявка №3»');
  await expect(panel).not.toContainText('Claude готовит работу');
  await page.evaluate(async()=>{cl.startedAt='2026-10-07T09:05:00Z';await loadR3(D.items[0]);});
  await expect(panel).toContainText('Claude готовит работу');await expect(panel).toContainText('Начало выполнения подтверждено.');
@@ -529,7 +529,7 @@ for(const width of [390,1440])test('UX-R03/06 background refresh and back retain
  await page.evaluate(()=>{D=structuredClone(D);render();});
  const after=await page.evaluate(()=>({page:document.getElementById('page').scrollTop,window:scrollY}));
  expect(Math.abs(after.page-before.page)).toBeLessThan(3);expect(Math.abs(after.window-before.window)).toBeLessThan(3);
- await row.click();await page.locator('[data-act="back"]').click();
+ await row.click();await page.locator('[data-act="back"]').click();await expect.poll(()=>page.evaluate(()=>openWorkId)).toBeNull();
  const returned=await page.evaluate(()=>({page:document.getElementById('page').scrollTop,window:scrollY,tab,openWorkId}));
  expect(returned.tab).toBe('works');expect(returned.openWorkId).toBeNull();
  expect(Math.abs(returned.page-before.page)).toBeLessThan(3);expect(Math.abs(returned.window-before.window)).toBeLessThan(3);
@@ -597,4 +597,35 @@ for(const width of [390,1440])test('UX-R07 manual file and self-reported handove
  await page.evaluate(()=>{D.items[0].r3.handedAt='2026-10-07T12:00:00Z';render();});
  await expect(panel).toContainText('Студент отметил сдачу');
  await expect(panel).not.toContainText('Студент сдал работу');
+});
+
+// UX-R06: browser Back/Forward and application Back share the same route.
+for(const width of [390,1440])test('UX-R06 browser history restores the student route at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await page.goto('http://127.0.0.1:4173/index.html');
+ await page.locator('#tabbar [data-tab="works"]').click();
+ await page.locator('#tabbar [data-tab="cal"]').click();
+ await page.goBack();await expect(page.locator('#tabbar [data-tab="works"]')).toHaveAttribute('aria-selected','true');
+ await page.goForward();await expect(page.locator('#tabbar [data-tab="cal"]')).toHaveAttribute('aria-selected','true');
+ await page.goBack();await expect.poll(()=>page.evaluate(()=>tab)).toBe('works');
+ await page.locator('#tabbar [data-tab="more"]').click();
+ await page.goBack();await expect.poll(()=>page.evaluate(()=>tab)).toBe('works');
+ await page.goForward();await expect.poll(()=>page.evaluate(()=>tab)).toBe('more');
+});
+for(const width of [390,1440])test('UX-R06 registry browser history retains materials and filters at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await stageTwoRegistry(page);
+ await page.locator('#tabbar [data-tab="more"]').click();
+ await page.goBack();await expect.poll(()=>page.evaluate(()=>openId)).toBe('ux-pending-card');
+ await expect(page.locator('#request-panel-overview')).toContainText('Математика');
+ await page.goForward();await expect.poll(()=>page.evaluate(()=>tab)).toBe('more');
+ await page.goBack();await expect.poll(()=>page.evaluate(()=>openId)).toBe('ux-pending-card');
+ const snapshot=await page.evaluate(()=>JSON.stringify(D.items[0]));
+ await page.locator('[data-act="back"]').click();await expect.poll(()=>page.evaluate(()=>openId)).toBeNull();
+ await page.goForward();await expect.poll(()=>page.evaluate(()=>openId)).toBe('ux-pending-card');
+ expect(await page.evaluate(()=>JSON.stringify(D.items[0]))).toBe(snapshot);
+});
+test('UX-R06 prior account history cannot reopen its request',async({page})=>{
+ await stageTwoRegistry(page);await page.locator('#tabbar [data-tab="more"]').click();
+ await page.evaluate(()=>{KEY+=':other';D={...D,items:[]};openId=null;tab='list';render();});
+ await page.goBack();await expect.poll(()=>page.evaluate(()=>openId)).toBeNull();
+ await expect(page.locator('#page')).not.toContainText('Проверка интерфейса');
 });

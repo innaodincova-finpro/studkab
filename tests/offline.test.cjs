@@ -7,7 +7,9 @@ test('both entry pages and offline shell use the AI criterion assistance scripts
  for(const page of ['index.html','reestr.html'])
   assert.match(fs.readFileSync(page,'utf8'),/quality-evidence-ui\.js\?v=8.*results-ui\.js\?v=23/);
  const shell=fs.readFileSync('sw.js','utf8');
- assert.match(shell,/studkab-v131-calendar-import/);
+ assert.match(shell,/app-navigation\.js\?v=1/);
+ for(const page of ['index.html','reestr.html'])assert.match(fs.readFileSync(page,'utf8'),/app-navigation\.js\?v=1/);
+ assert.match(shell,/studkab-v132-ux-recovery/);
  assert.match(shell,/calendar-import\.mjs\?v=1/);
  assert.match(shell,/calendar-import-ui\.mjs\?v=1/);
  assert.match(shell,/intake-ui\.js\?v=12/);

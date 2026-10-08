@@ -15,7 +15,7 @@
 <script src="vendor/supabase-2.57.4.js"></script>
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=19"></script><script src="push.js?v=4"></script>
-<script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="file-prep.js?v=1"></script><script src="clarifications.js?v=4"></script><script src="registered-study.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script><script src="request-workflow.js?v=3"></script>
+<script src="app-navigation.js?v=1"></script><script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="file-prep.js?v=1"></script><script src="clarifications.js?v=4"></script><script src="registered-study.js?v=2"></script><script src="financial-analysis.js?v=1"></script><script src="draft-quality.js?v=15"></script><script src="draft-editor.js?v=9"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script><script src="request-workflow.js?v=3"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1610,11 +1610,13 @@ function r3Turn(x){
  if(w.key==='r3-received')return {who:'you',now:'Новая заявка — передайте Claude',act:'Открыть'};
  if(w.key==='r3-questions')return {who:'student',now:'Вопрос у студента — ждём ответа'};
  if(w.key==='r3-rework')return {who:'you',now:'Вернули на доработку'+(r.result&&r.returnedAt&&Date.parse(r.result.at)>Date.parse(r.returnedAt)?' — передайте новую версию':' — исправьте работу'),act:'Открыть замечания'};
+ if(w.key==='r3-work'&&x.claude&&!x.claude.attachedAt&&!x.claude.error&&!r.result)return {who:'you',now:x.claude.startedAt?'Claude готовит работу':'Ожидается запуск Claude — напишите в чат',act:'Открыть'};
  if(w.key==='r3-work')return {who:'you',now:r.result?'Файл прикреплён — передайте студенту':'Выполните работу и прикрепите файл',act:r.result?'Передать студенту':'Открыть'};
  if(w.key==='r3-delivered')return {who:'student',now:r.downloadedAt?'Студент скачал работу — ждём отметку о сдаче':'Передана — студент ещё не скачал'};
  if(w.key==='r3-handed')return {who:'done',now:'Студент отметил сдачу'};
  return {who:'',now:w.title||''};
 }
+function r3CurrentLabel(x){var r=x.r3||{},c=x.claude,w=requestWorkflow(x);return w.step===3&&!w.rework&&!r.result&&c&&!c.attachedAt&&!c.error&&!c.startedAt?'Ожидается запуск':R3_STEPS[w.step-1].label;}
 function r3TurnPill(t){return t.who==='you'?'<span class="r3turn you">Вы</span>':t.who==='student'?'<span class="r3turn st">Студент</span>':t.who==='done'?'<span class="r3turn done">Сдана</span>':'';}
 function r3Dots(x){var w=requestWorkflow(x),h='';for(var i=1;i<=5;i++)h+='<i class="'+(i<w.step||w.complete?'done':i===w.step?'cur':'')+'"></i>';return '<span class="r3dots" aria-hidden="true">'+h+'</span>';}
 function r3Workflow(x){
@@ -1644,11 +1646,11 @@ function r3Card(x,route){
  if(x.r3LoadError)return card('<h3>Не удалось загрузить заявку</h3><p role="status">Проверьте соединение и повторите загрузку.</p><button type="button" class="btn" data-act="r3-retry-load" data-id="'+id+'">Повторить загрузку</button>','workflow-next');
  var title=w.title,copy=w.copy;
  var claudeBusy=c&&!c.attachedAt&&!c.error;
- if(w.step===3&&!w.rework&&!r.result&&claudeBusy){title=c.startedAt?'Claude готовит работу':'Ожидается запуск Claude';copy=c.startedAt?'Начало выполнения подтверждено. Готовый файл появится здесь.':'Материалы переданы Claude. Начало выполнения ещё не подтверждено.';}
+ if(w.step===3&&!w.rework&&!r.result&&claudeBusy){title=c.startedAt?'Claude готовит работу':'Ожидается запуск Claude';copy=c.startedAt?'Начало выполнения подтверждено. Готовый файл появится здесь.':'Материалы сохранены для Claude. Начало выполнения ещё не подтверждено. Напишите в чат проекта «Студенты»: '+num+'.';}
  if(w.step===3&&!w.rework&&r.result&&!r.delivered){title='Файл подготовлен. Проверьте и передайте студенту';copy='Готовый файл прикреплён. Проверьте его перед передачей студенту. Прикрепление файла не означает передачу студенту или сдачу преподавателю.';}
  if(w.step===3&&r.result&&c&&c.attachedAt&&!r.delivered){title='Проверьте работу и передайте студенту';copy='Работу подготовил Claude. Откройте файл и прочитайте его перед передачей.';}
  if(c&&c.error)copy='Файл Claude не прикрепился: '+c.error+' Нажмите «Попросить Claude переделать» или прикрепите файл сами.';
- var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(R3_STEPS[w.step-1].label)+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'
+ var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(r3CurrentLabel(x))+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'
   :workflowSteps(w)+lab('Шаг '+w.step+' из 5'+(w.rework?' · доработка № '+w.rework:''))+'<p class="workflow-title">'+esc(title)+'</p><p class="workflow-copy">'+esc(copy)+'</p>';
  var actionState=r3Actions.get(r3ActionKey(x));
  if(actionState&&actionState.busy)return card(h+'<p role="status">'+esc(actionState.message)+'</p><button type="button" class="btn" disabled>'+esc(actionState.message)+'</button>','workflow-next');
@@ -2066,7 +2068,9 @@ function listBucket(x){
 function stageCounts(){var c={all:D.items.length};STAGE_FILTERS.forEach(function(q){c[q[0]]=D.items.filter(function(x){return stageBucket(x)===q[0];}).length;});return c;}
 function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
+var appNavigation=StudNavigation.create({app:'executor',owner:function(){return KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():'');},read:function(){return {tab:tab,open:openId,ref:openRefId,filter:filter,query:query,page:listPage};},write:function(h){tab=['today','list','refs','more'].indexOf(h.tab)>=0?h.tab:'list';openId=h.open&&item(h.open)?h.open:null;openRefId=h.ref&&refById(h.ref)?h.ref:null;filter=h.filter||'all';query=h.query||'';listPage=h.page||1;},render:function(){render();}});
 function render(resetScroll){
+  appNavigation.sync();
   var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openId||'')+'|'+(openRefId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
   var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY;
   var c = counts();
@@ -2232,7 +2236,7 @@ function viewList(){
   h+=list.length?card('<table class="registry-table" aria-label="Заявки студентов"><thead><tr><th scope="col">Заявка / студент</th><th scope="col">Вуз</th><th scope="col">Тема работы</th><th scope="col">Срок</th><th scope="col">Этап и следующий шаг</th></tr></thead><tbody>'+list.slice(start,start+listPageSize).map(function(x){
     var w=requestWorkflow(x),over=x.deadline&&x.deadline<today()&&!w.complete&&w.key!=='cancelled';
     if(x.route3&&x.requestNumber&&!x.serverMissing&&x.status!=='off'){var t=r3Turn(x),dl=x.deadline?r3DaysLeft(x.deadline):null;
-     return '<tr class="request-row r3-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button><small data-dialog-count="'+esc(x.id)+'" role="status"></small><small>'+esc(x.student||'')+'</small></td><td>'+esc(x.univ||'')+'</td><td><b>'+esc(x.topic||'Тема не указана')+'</b><small>'+esc(x.workType||'')+'</small></td><td>'+(x.deadline?esc(ruDate(x.deadline))+'<small class="'+(dl!==null&&dl<=7?'r3hot':'')+'">'+(dl<0?'срок прошёл':dl+' дн.')+'</small>':'—')+'</td><td><div class="r3cell"><div>'+r3Dots(x)+'<small>'+esc(R3_STEPS[w.step-1].label)+'</small><span class="r3now">'+esc(t.now)+'</span></div>'+r3TurnPill(t)+'</div></td></tr>';}
+     return '<tr class="request-row r3-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button><small data-dialog-count="'+esc(x.id)+'" role="status"></small><small>'+esc(x.student||'')+'</small></td><td>'+esc(x.univ||'')+'</td><td><b>'+esc(x.topic||'Тема не указана')+'</b><small>'+esc(x.workType||'')+'</small></td><td>'+(x.deadline?esc(ruDate(x.deadline))+'<small class="'+(dl!==null&&dl<=7?'r3hot':'')+'">'+(dl<0?'срок прошёл':dl+' дн.')+'</small>':'—')+'</td><td><div class="r3cell"><div>'+r3Dots(x)+'<small>'+esc(r3CurrentLabel(x))+'</small><span class="r3now">'+esc(t.now)+'</span></div>'+r3TurnPill(t)+'</div></td></tr>';}
     var next=x.requestNumber?w.label:'Открыть документ';
     var previous=x.deliveryState&&x.deliveryState.last;
     return '<tr class="request-row" data-act="open" data-id="'+esc(x.id)+'"><td><button type="button" class="open-request" data-act="open" data-id="'+esc(x.id)+'">'+esc(requestLabel(x))+'</button><small data-dialog-count="'+esc(x.id)+'" role="status"></small>'+(previous?'<small>Ранее передано '+esc(ruDate(String(previous.createdAt).slice(0,10)))+'</small>':'')+'<small>'+esc(x.student||'Студент не указан')+(x.group?' · '+esc(x.group):'')+'</small></td><td>'+esc(x.univ||'Вуз не указан')+'</td><td><span class="registry-topic">'+esc(x.topic||'Тема не указана')+'</span></td><td>'+(x.deadline?esc(ruDate(x.deadline)):'Не указан')+(over?'<small class="deadline-overdue">Срок прошёл</small>':'')+'</td><td><span class="stage-pill">'+esc(w.title)+'</span>'+(w.blocker?'<small>'+esc(w.blocker)+'</small>':'')+(next?'<small class="request-next">Исполнитель: '+esc(next)+'</small>':'')+'</td></tr>';
@@ -3040,8 +3044,8 @@ document.addEventListener("click", function(ev){
   if (act === "cloud") return openCloud();
   if (act === "go-filter"){ tab = "list"; openId = null; filter = el.getAttribute("data-k"); query = ""; listPage=1; return render(); }
   if (act === "go-refs"){ tab = "refs"; openRefId = null; return render(); }
-  if (act === "back"){ openId = null; render();var backButton=Array.from(document.querySelectorAll('.open-request')).find(function(b){return b.dataset.id===listReturnId;});if(backButton)backButton.focus({preventScroll:true});window.scrollTo(0,listScroll);return; }
-  if (act === "ref-back"){ openRefId = null; return render(); }
+  if (act === "back"){appNavigation.back(function(){openId=null;tab="list";render();window.scrollTo(0,listScroll);});return; }
+  if (act === "ref-back"){appNavigation.back(function(){openRefId=null;tab="refs";render();});return; }
   if (act === "ref-open"){ tab = "refs"; openRefId = id; openId = null; return render(); }
   if (act === "open-from-ref"){ tab = "list"; openId = id; openRefId = null; return render(); }
   if (act === "ref-new") return newRef();

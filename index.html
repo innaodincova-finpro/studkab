@@ -17,7 +17,7 @@
 <script src="oblako-config.js"></script>
 <script src="oblako.js?v=19"></script>
 <script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=4"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script>
-<script src="push.js?v=3"></script>
+<script src="push.js?v=3"></script><script src="app-navigation.js?v=1"></script>
 <script src="intake-confirmation-ui.js?v=2"></script>
 <script src="file-prep.js?v=1"></script><script src="intake-ui.js?v=12"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -817,18 +817,12 @@ var calMode = "month", calCursor = null, calSel = null, calFrom = null, calTo = 
 var tab = "today", openWorkId = null, navHistory = [];
 var renderedOwner=null, renderedView=null;
 
+var appNavigation=StudNavigation.create({app:'student',owner:function(){return KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():'');},read:function(){return {tab:tab,open:openWorkId};},write:function(h){tab=['today','works','cal','more'].indexOf(h.tab)>=0?h.tab:'today';openWorkId=h.open&&D.works.some(function(w){return w.id===h.open;})?h.open:null;},render:function(){render();}});
 function go(t,id){
   if(tab===t&&openWorkId===(id||null))return render(true);
-  navHistory.push({ tab:tab, open:openWorkId, pageScroll:document.getElementById('page').scrollTop, windowScroll:window.scrollY });
-  if (navHistory.length > 30) navHistory.shift();
-  tab = t; openWorkId = id || null; render();
+  tab=t;openWorkId=id||null;render();
 }
-function back(){
-  var h = navHistory.pop();
-  if (!h){if(openWorkId){tab='works';openWorkId=null;render();}return;}
-  tab = h.tab; openWorkId = h.open; render();
-  document.getElementById('page').scrollTop=h.pageScroll||0;window.scrollTo(0,h.windowScroll||0);
-}
+function back(){appNavigation.back(function(){if(openWorkId){tab='works';openWorkId=null;render();}});}
 
 function counts(){
   return {
@@ -2692,6 +2686,7 @@ function pickTemplate(workId){
 
 /* ---------- ОТРИСОВКА ---------- */
 function render(resetScroll){
+  appNavigation.sync();
   var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openWorkId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
   var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY;
   var c = counts();
