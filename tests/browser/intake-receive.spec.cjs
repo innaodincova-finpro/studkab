@@ -654,6 +654,6 @@ for(const width of [390,1440])test('UX-ASSISTANT choice preserves old work and c
  expect(await page.evaluate(()=>assistantCalls)).toEqual(['capabilities','capabilities']);
  expect(await page.evaluate(()=>JSON.stringify({r3:D.items[0].r3,claude:D.items[0].claude,attachments:D.items[0].attachments})===assistantBefore)).toBe(true);
  await expect(panel).toContainText('previous.docx');await expect(panel.locator('[data-act="r3-deliver"]')).toBeVisible();
- await page.evaluate(()=>{D=JSON.parse(localStorage.getItem(KEY));render();});
+ await page.evaluate(()=>{D=JSON.parse(localStorage.getItem(KEY));r3Seen.add(D.items[0]);render();});
  await expect(panel.getByRole('button',{name:'DeepSeek — автоматически',exact:true})).toHaveAttribute('aria-pressed','true');
 });

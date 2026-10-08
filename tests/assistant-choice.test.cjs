@@ -27,3 +27,9 @@ test('manual chat keeps existing requirement blockers before copying or opening 
  const f=fixture();let copied=0,opened=0,modal='';f.c.preparationBlockers=()=>['ИИ запрещён'];f.c.copyText=()=>copied++;f.c.window={open:()=>opened++};f.c.openModal=h=>modal=h;
  f.c.openR3Chatgpt(f.x);assert.match(modal,/ИИ запрещён/);assert.equal(copied,0);assert.equal(opened,0);assert.equal(f.calls.length,0);
 });
+test('approved manual chat copies a prompt and opens chat without queueing work or transferring files',async()=>{
+ const f=fixture();let copied='',opened='',modal='',status={textContent:''};const before=JSON.stringify(f.x);
+ f.c.preparationBlockers=()=>[];f.c.buildChatgptPrompt=()=> 'Verified request';f.c.copyText=async text=>{copied=text;return true;};f.c.window={open:url=>{opened=url;}};f.c.openModal=h=>{modal=h;return {isConnected:true,querySelector:()=>status};};
+ f.c.openR3Chatgpt(f.x);await Promise.resolve();await Promise.resolve();
+ assert.equal(copied,'Verified request');assert.equal(opened,'https://chatgpt.com/');assert.match(modal,/readonly/);assert.match(modal,/приложите скачанные материалы вручную/);assert.match(status.textContent,/Запрос скопирован/);assert.equal(f.calls.length,0);assert.equal(JSON.stringify(f.x),before);
+});
