@@ -1,5 +1,19 @@
 export function dueEvents(data, zone, now) {
- return [...classEvents(data, zone, now), ...deadlineEvents(data, zone, now)];
+ return [...classEvents(data, zone, now), ...calendarActionEvents(data, zone, now), ...deadlineEvents(data, zone, now)];
+}
+// CAL-IMPORT-01: timed imported actions use the existing 30-minute reminder window.
+// Includes a start just after midnight, without sending a past event.
+export function calendarActionEvents(data,zone,now){
+ const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));
+ const date=p.year+'-'+p.month+'-'+p.day,next=new Date(Date.UTC(+p.year,+p.month-1,+p.day+1)).toISOString().slice(0,10),current=+p.hour*60+ +p.minute,out=[];
+ for(const e of Array.isArray(data?.events)?data.events:[]){
+  if(!e?.id||e.src!=='calendar-import'||e.kind!=='other'||!e.recordType||![date,next].includes(e.date))continue;
+  const t=/^(\d{2}):(\d{2})$/.exec(e.time||'');if(!t||+t[1]>23||+t[2]>59)continue;
+  const left=+t[1]*60+ +t[2]-current+(e.date===next?1440:0);
+  if(left<=0||left>CLASS_LEAD_MIN)continue;
+  out.push({key:'calendar:'+e.id+':'+e.date+':'+e.time,title:'Кабинет студента',body:'Через '+left+' мин, в '+e.time+': '+String(e.title||e.recordType).slice(0,120)+'.',at:now+left*60000});
+ }
+ return out;
 }
 // Пары (события вида «Пара», в том числе загруженные из вуза): напоминание за 30 минут до начала
 // во времени устройства. Если планировщик задержался, напоминание уходит до начала пары, не позже.

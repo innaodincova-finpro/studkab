@@ -1,6 +1,24 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
 const modulePromise=import('data:text/javascript;base64,'+fs.readFileSync('supabase/functions/studkab-push/schedule.js').toString('base64'));
 const data={settings:{warnDays:3},works:[{id:'a',deadline:'2026-09-20',status:'draft'}]};
+test('imported tests and work actions remind in device timezone, retries use the same key; ordinary events stay unchanged',async()=>{
+ const {dueEvents:f}=await modulePromise;
+ const event={id:'test1',src:'calendar-import',kind:'other',recordType:'Тест',title:'Промежуточный тест',date:'2026-11-01',time:'10:00'};
+ const run=(e,t)=>f({events:[e]},'Europe/Moscow',Date.parse(t));
+ assert.equal(run(event,'2026-11-01T06:29Z').length,0);
+ const a=run(event,'2026-11-01T06:30Z')[0],b=run(event,'2026-11-01T06:40Z')[0];
+ assert.equal(a.key,b.key);assert.match(a.body,/Через 30 мин/);
+ assert.equal(run(event,'2026-11-01T07:00Z').length,0);
+ for(const recordType of ['Сдача','Подготовка','Проверка','Контроль','Резерв'])assert.equal(run({...event,recordType},'2026-11-01T06:30Z').length,1);
+ for(const e of [{...event,src:undefined},{...event,time:'25:00'},{...event,date:'2026-11-02'}])assert.equal(run(e,'2026-11-01T06:30Z').length,0);
+});
+test('an imported midnight action reminds on the previous local date, with the event-date key',async()=>{
+ const {dueEvents:f}=await modulePromise;
+ const d={events:[{id:'night',src:'calendar-import',kind:'other',recordType:'Сдача',title:'Сдать работу',date:'2027-01-01',time:'00:10'}]};
+ const a=f(d,'Europe/Moscow',Date.parse('2026-12-31T20:40Z'));
+ assert.equal(a.length,1);assert.equal(a[0].key,'calendar:night:2027-01-01:00:10');
+ assert.equal(f(d,'Europe/Moscow',Date.parse('2026-12-31T21:10Z')).length,0);
+});
 test('deadline three days before at 10 local, not UTC',async()=>{const {dueEvents}=await modulePromise;assert.equal(dueEvents(data,'Europe/Moscow',Date.parse('2026-09-17T06:59Z')).length,0);assert.equal(dueEvents(data,'Europe/Moscow',Date.parse('2026-09-17T07:00Z')).length,1);assert.equal(dueEvents(data,'America/New_York',Date.parse('2026-09-17T07:00Z')).length,0);});
 test('no completed, deleted or moved deadline; no overdue catch-up',async()=>{const {dueEvents:f}=await modulePromise;const now=Date.parse('2026-09-17T07:00Z');for(const works of [[],[{...data.works[0],status:'accepted'}],[{...data.works[0],status:'graded'}],[{...data.works[0],deadline:'2026-09-21'}]])assert.equal(f({...data,works},'Europe/Moscow',now).length,0);assert.equal(f(data,'Europe/Moscow',Date.parse('2026-09-17T09:00Z')).length,0);});
 test('month boundaries and configurable warning',async()=>{const {dueEvents:f}=await modulePromise;assert.equal(f({settings:{warnDays:3},works:[{id:'b',deadline:'2027-01-02'}]},'UTC',Date.parse('2026-12-30T10:00Z')).length,1);assert.equal(f({...data,settings:{warnDays:2}},'UTC',Date.parse('2026-09-18T10:00Z')).length,1);});

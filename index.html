@@ -1982,15 +1982,47 @@ function openCalAdd(){
     '<h3>Что добавить</h3>' +
     '<div class="item tapline" data-pick="task"><div class="ic">•</div><div class="txt"><b>Дело</b><small>Что нужно сделать к дате: дописать главу, собрать источники</small></div></div>' +
     '<div class="item tapline" data-pick="event"><div class="ic">◷</div><div class="txt"><b>Событие</b><small>Экзамен, зачёт, консультация, защита — с датой и временем</small></div></div>' +
-    '<div class="item tapline" data-pick="vuz"><div class="ic">▦</div><div class="txt"><b>Расписание из вуза</b><small>Скопируйте страницу „Предстоящие события“ из кабинета вуза и вставьте сюда</small></div></div>'
+    '<div class="item tapline" data-pick="vuz"><div class="ic">▦</div><div class="txt"><b>Расписание из вуза</b><small>Скопируйте страницу „Предстоящие события“ из кабинета вуза и вставьте сюда</small></div></div>' +
+    '<div class="item tapline" data-pick="study"><div class="ic">▦</div><div class="txt"><b>Учебный график</b><small>Excel или текст · с проверкой</small></div></div>'
   );
   wrap.addEventListener("click", function(ev){
     var el = ev.target.closest("[data-pick]"); if (!el) return;
     var k = el.getAttribute("data-pick"); wrap.remove();
     if (k === "task") openNewTask(null, calSel);
     else if (k === "vuz") openVuzSchedule();
+    else if (k === "study") openCalendarImport();
     else openEvent(null, calSel);
   });
+}
+
+/* CAL-IMPORT-01: approved preview; commit to this account only, after durable local write. */
+async function openCalendarImport(){
+ var scope=KEY;
+ var wrap=openModal('<h3>Учебный график</h3><p role="status">Открываем загрузку…</p><button type="button" class="btn ghost" data-x>Отмена</button>');
+ wrap.dataset.calendarImport='1';
+ try{
+  var modules=await Promise.all([import('./calendar-import-ui.mjs?v=1'),import('./calendar-import.mjs?v=1')]);
+  if(!wrap.isConnected||scope!==KEY)return;
+  modules[0].mountCalendarImport(wrap,{
+   getData:function(){return D;},getScope:function(){return KEY;},esc:esc,
+   commit:function(preview,accepted,ownerScope){
+    if(ownerScope!==KEY)throw Error('Аккаунт изменился. Откройте загрузку заново.');
+    var result=modules[1].applyCalendarImport(D.events,preview,function(){return uid('ev');},{acceptChanges:accepted});
+    var previous=JSON.stringify(D),next=Object.assign({},D,{events:result.events});
+    try{localStorage.setItem(KEY,JSON.stringify(next));}
+    catch(error){storageOk=false;markSaved();throw Error('Не удалось сохранить на устройстве. Записи не добавлены. Освободите место и повторите.');}
+    undoStack.push(previous);if(undoStack.length>20)undoStack.shift();redoStack=[];
+    D=next;storageOk=true;lastSaved=new Date();markSaved();
+    // Local success is separate from the existing cloud receipt/status.
+    try{if(window.Oblako)Oblako.touch();}catch(error){cloudNote='Записи сохранены на устройстве; облачное сохранение ожидает восстановления связи.';}
+    return result;
+   },
+   onSaved:function(result){render();toast('В календарь добавлено: '+result.added+'. Обновлено: '+result.updated+'.');}
+  });
+ }catch(error){
+  if(!wrap.isConnected||scope!==KEY)return;
+  wrap.querySelector('[role="status"]').textContent='Не удалось открыть загрузку. Закройте окно и повторите.';
+ }
 }
 
 /* ---------- R16: РАСПИСАНИЕ ИЗ ВУЗА (страница «Предстоящие события» Moodle) ----------
@@ -2497,7 +2529,7 @@ var cloudNote = "";           /* короткая строка состояни�
 function cloudSwitchUser(id){
   var target = id ? CLOUD_LOCAL_KEY + ":user:" + id :
     (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped") ? CLOUD_LOCAL_KEY + ":guest" : CLOUD_LOCAL_KEY);
-  if (target !== KEY) document.querySelectorAll('[data-new-work-draft],[data-intake-dialog]').forEach(function(el){el.remove();});
+  if (target !== KEY) document.querySelectorAll('[data-new-work-draft],[data-intake-dialog],[data-calendar-import]').forEach(function(el){el.remove();});
   cloudGuestCandidate = null;
   var freshAccount = id && localStorage.getItem(target) === null;
   if (id && localStorage.getItem(target) === null && KEY === CLOUD_LOCAL_KEY + ":guest" && !cloudIsEmpty(D)) cloudGuestCandidate = JSON.parse(JSON.stringify(D));
