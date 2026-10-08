@@ -481,3 +481,89 @@ for(const width of [390,1440])test('UX-R02 failed registry load has a persistent
  await page.evaluate(()=>finishCardLoad());await expect(page.locator('[data-act="r3-retry-load"]')).toHaveCount(0);await expect(page.locator('[data-act="r3-take"]')).toBeVisible();
  expect(await page.evaluate(()=>loadAttempts)).toBe(2);
 });
+
+// UX-RECOVERY-01 stage 2: delayed replies, explicit navigation and retained position.
+for(const width of [390,1440])test('UX-R04/05 sending feedback and explicit receipt navigation at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await setup(page);
+ await page.locator('[data-x]').click();
+ await page.locator('[data-start-send]').click();
+ await expect(page.locator('#intakeFiles')).toBeEnabled();
+ await page.locator('#intakeFiles').setInputFiles(pdf('Explicit receipt'));
+ await expect(page.locator('[data-intake-status]')).toContainText('Материалы сохранены: 1');
+ await fill(page);await page.locator('#intakeDeadline').fill('2027-01-25');
+ await page.evaluate(()=>{
+  const original=Oblako.requestApi;window.sendAttempts=0;
+  Oblako.requestApi=async d=>{if(d.action==='intake-receive'){sendAttempts++;await new Promise(r=>window.finishSend=r);}return original(d);};
+  // Reopen with the real application handler so its API is the delayed dispatcher.
+ });
+ await page.locator('[data-x]').click();await page.locator('[data-start-send]').click();
+ await expect(page.locator('[data-intake-receive]')).toBeEnabled();
+ await page.evaluate(()=>{const b=document.querySelector('[data-intake-receive]');b.click();b.click();});
+ await expect(page.locator('[data-intake-receive]')).toHaveText('Отправляем задание…');
+ await expect(page.locator('[data-intake-receive]')).toBeDisabled();
+ await expect.poll(()=>page.evaluate(()=>sendAttempts)).toBe(1);
+ expect(await page.evaluate(()=>openWorkId)).toBeNull();
+ await page.evaluate(()=>finishSend());
+ const open=page.locator('[data-intake-open-receipt]');
+ await expect(open).toHaveText('Открыть заявку № 15');await expect(open).toBeInViewport();
+ expect(await page.evaluate(()=>D.works.length)).toBe(1);
+ expect(await page.evaluate(()=>openWorkId)).toBeNull();
+ await open.click();await expect(page.locator('[data-intake-dialog]')).toHaveCount(0);
+ expect(await page.evaluate(()=>work(openWorkId).req.number)).toBe(15);
+ await page.locator('[data-act="back"]').click();
+ expect(await page.evaluate(()=>({tab,openWorkId}))).toEqual({tab:'today',openWorkId:null});
+ expect(await page.evaluate(()=>sendAttempts)).toBe(1);
+});
+
+for(const width of [390,1440])test('UX-R03/06 background refresh and back retain the student list position at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{D.works=Array.from({length:35},(_,i)=>({id:'ux-scroll-'+i,topic:'Учебная работа '+i,student:'Проверка интерфейса',created:today(),status:'draft',format:{},structure:emptyStructure(),tasks:[]}));workFilter='all';render();});
+ await page.locator('#tabbar [data-tab="works"]').click();
+ const row=page.locator('[data-act="open-work"][data-id="ux-scroll-20"]');await row.scrollIntoViewIfNeeded();
+ const before=await page.evaluate(()=>({page:document.getElementById('page').scrollTop,window:scrollY}));
+ expect(before.page+before.window).toBeGreaterThan(100);
+ await page.evaluate(()=>{D=structuredClone(D);render();});
+ const after=await page.evaluate(()=>({page:document.getElementById('page').scrollTop,window:scrollY}));
+ expect(Math.abs(after.page-before.page)).toBeLessThan(3);expect(Math.abs(after.window-before.window)).toBeLessThan(3);
+ await row.click();await page.locator('[data-act="back"]').click();
+ const returned=await page.evaluate(()=>({page:document.getElementById('page').scrollTop,window:scrollY,tab,openWorkId}));
+ expect(returned.tab).toBe('works');expect(returned.openWorkId).toBeNull();
+ expect(Math.abs(returned.page-before.page)).toBeLessThan(3);expect(Math.abs(returned.window-before.window)).toBeLessThan(3);
+ await page.locator('#tabbar [data-tab="today"]').click();expect(await page.locator('#page').evaluate(p=>p.scrollTop)).toBe(0);
+});
+
+async function stageTwoRegistry(page){
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  window.takeAttempts=0;Oblako.requestApi=async d=>{
+   if(d.action==='r3-take'){takeAttempts++;return await new Promise((resolve,reject)=>{window.finishTake=resolve;window.failTake=reject;});}
+   throw Error('Unexpected '+d.action);
+  };
+  const x=fromPayload({id:'ux-pending-card',route:'r3',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс',n:'Проверка интерфейса',dl:'2027-01-25'});
+  x.requestNumber=15;x.r3Loaded=true;x.r3={};x.attachments=[];x.clarifications=[];r3Seen.add(x);
+  D.items=[x];tab='list';openId=null;render();
+ });
+ await page.locator('button[data-act="open"][data-id="ux-pending-card"]').click();
+}
+for(const width of [390,1440])test('UX-R04 registry shows pending action once and persistent failure at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await stageTwoRegistry(page);
+ await page.evaluate(()=>{const b=document.querySelector('[data-act="r3-take"]');b.click();b.click();render();});
+ await expect(page.getByRole('button',{name:'Берём в работу…',exact:true})).toBeDisabled();
+ await expect.poll(()=>page.evaluate(()=>takeAttempts)).toBe(1);
+ await page.evaluate(()=>{D=structuredClone(D);render();});
+ await expect(page.getByRole('button',{name:'Берём в работу…',exact:true})).toBeDisabled();
+ await page.evaluate(()=>failTake(Error('Нет сети')));
+ await expect(page.locator('.request-action [role="status"]')).toContainText('Нет сети');
+ await page.evaluate(()=>render());await expect(page.locator('.request-action [role="status"]')).toContainText('Нет сети');
+ await page.locator('[data-act="r3-take"]').click();await expect.poll(()=>page.evaluate(()=>takeAttempts)).toBe(2);
+ await page.evaluate(()=>finishTake({work:{takenAt:'2026-10-08T01:00:00Z'}}));
+ await expect(page.locator('.request-action')).toContainText('Выполните работу и прикрепите готовый файл');
+ await expect(page.locator('.request-action')).not.toContainText('Нет сети');
+});
+test('UX-R04 a late executor reply cannot modify another account or open its screen',async({page})=>{
+ await stageTwoRegistry(page);await page.locator('[data-act="r3-take"]').click();await expect.poll(()=>page.evaluate(()=>takeAttempts)).toBe(1);
+ await page.evaluate(()=>{window.previousCard=D.items[0];window.nextAccount={items:[],theme:'light'};D=nextAccount;Oblako.identity=()=> 'next-local-test-identity';openId=null;tab='list';render();finishTake({work:{takenAt:'2026-10-08T01:00:00Z'}});});
+ await expect(page.locator('.request-head')).toHaveCount(0);
+ await expect.poll(()=>page.evaluate(()=>!!(previousCard.r3||{}).takenAt)).toBe(false);
+ expect(await page.evaluate(()=>D===nextAccount&&D.items.length===0&&openId===null)).toBe(true);
+});

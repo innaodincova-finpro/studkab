@@ -387,6 +387,8 @@ try {
   else if (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped")) KEY += ":guest";
 } catch(e) {}
 var D = null, tab = "list", openId = null, openRefId = null, filter = "all", query = "", refQuery = "", refNeedsReview = false;
+var renderedOwner=null,renderedView=null,r3Actions=new Map();
+function r3ActionKey(x){return KEY+'|'+Oblako.identity()+'|'+x.id;}
 
 /* ---------- ХРАНЕНИЕ ---------- */
 function load(){
@@ -1647,6 +1649,9 @@ function r3Card(x,route){
  if(c&&c.error)copy='Файл Claude не прикрепился: '+c.error+' Нажмите «Попросить Claude переделать» или прикрепите файл сами.';
  var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(R3_STEPS[w.step-1].label)+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'
   :workflowSteps(w)+lab('Шаг '+w.step+' из 5'+(w.rework?' · доработка № '+w.rework:''))+'<p class="workflow-title">'+esc(title)+'</p><p class="workflow-copy">'+esc(copy)+'</p>';
+ var actionState=r3Actions.get(r3ActionKey(x));
+ if(actionState&&actionState.busy)return card(h+'<p role="status">'+esc(actionState.message)+'</p><button type="button" class="btn" disabled>'+esc(actionState.message)+'</button>','workflow-next');
+ if(actionState&&actionState.message)h+='<p role="status">'+esc(actionState.message)+'</p>';
  // R3-D: замечания преподавателя при возврате и история переданных версий.
  var rets=r.returnList||[],last=rets[rets.length-1],vers=r.versions||[];
  if(w.rework&&last)h+='<div class="r3-quote"><b>Замечания преподавателя:</b> '+esc(last.comment)+(last.files&&last.files.length?'<div class="r3-qfiles">'+last.files.map(function(f){return '<span>'+esc(f.name)+' · '+esc(r3Size(f.size))+' <button type="button" class="linkbtn" data-act="r3-return-file-download" data-id="'+id+'" data-file="'+esc(f.id)+'">Скачать</button></span>';}).join('')+'</div>':'')+'</div>';
@@ -2060,7 +2065,9 @@ function listBucket(x){
 function stageCounts(){var c={all:D.items.length};STAGE_FILTERS.forEach(function(q){c[q[0]]=D.items.filter(function(x){return stageBucket(x)===q[0];}).length;});return c;}
 function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
-function render(){
+function render(resetScroll){
+  var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openId||'')+'|'+(openRefId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
+  var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY;
   var c = counts();
   var bar = document.getElementById("tabbar");
   var mine=r3TodayLists().you.length;
@@ -2100,7 +2107,30 @@ function render(){
   }
   var toolbar=p.querySelector(".registry-toolbar");
   if(toolbar)toolbar.appendChild(fab);else p.after(fab);
-  window.scrollTo(0,0); showStorageWarn();
+  renderedOwner=ownerKey;renderedView=viewKey;p.scrollTop=keepScroll?previousPageScroll:0;
+  window.scrollTo(0,keepScroll?previousWindowScroll:0); showStorageWarn();
+}
+function performR3Action(x,act){
+ if(!x)return;
+ var key=r3ActionKey(x);if((r3Actions.get(key)||{}).busy)return;
+ var owner=KEY,identity=Oblako.identity();
+ function current(){return KEY===owner&&Oblako.identity()===identity&&!!item(x.id);}
+ var message=act==='r3-take'?'Берём в работу…':act==='r3-deliver'?'Передаём студенту…':'Передаём материалы Claude…';
+ var pendingAction={busy:true,message:message};r3Actions.set(key,pendingAction);render();
+ var input=act==='r3-deliver'?{action:act,id:x.id,fileHash:x.r3&&x.r3.result&&x.r3.result.hash}:{action:act,id:x.id};
+ Promise.resolve().then(function(){if(!current())return null;return Oblako.requestApi(input);}).then(async function(result){
+  if(!current())return;
+  var active=item(x.id);
+  if(act==='claude-queue'){active.claude=result.claude||null;await loadR3(active);if(!current())return;}
+  else active.r3=result.work||active.r3;
+  r3Actions.delete(key);render();
+  toast(act==='r3-take'?'Заявка в работе. Студент видит этот шаг.':act==='r3-deliver'?'Работа передана студенту.':'Передано. Напишите Claude в проекте «Студенты»: «заявка №'+(x.requestNumber||'')+'»');
+ }).catch(function(error){
+  if(!current())return;
+  r3Actions.set(key,{busy:false,message:error.message||'Не удалось выполнить действие'});render();
+ }).finally(function(){
+  if(r3Actions.get(key)===pendingAction)r3Actions.delete(key);
+ });
 }
 var dialogueRefreshBusy=false;
 async function refreshExecutorDialogue(){
@@ -2963,7 +2993,7 @@ document.addEventListener("input", function(ev){
 document.addEventListener("change", function(ev){
   var el = ev.target;
   if(el.matches('input[data-r3-result-file]')){var ux=item(el.getAttribute('data-r3-result-file')),uf=el.files&&el.files[0];if(!ux||!uf)return;el.disabled=true;toast('Прикрепляем файл…');r3Upload(ux,uf).then(function(){toast('Файл прикреплён. Проверьте и передайте студенту.');}).catch(function(e){toast(e.message||'Файл не прикреплён');}).finally(function(){el.disabled=false;el.value='';});return;}
-  if(el.matches('select[data-act="page-size"]')){listPageSize=Number(el.value)===50?50:25;listPage=1;render();document.querySelector('[data-act="page-size"]').focus();return;}
+  if(el.matches('select[data-act="page-size"]')){listPageSize=Number(el.value)===50?50:25;listPage=1;render(true);document.querySelector('[data-act="page-size"]').focus();return;}
   if (el.tagName === "SELECT" && el.getAttribute("data-act") === "status"){
     var x = item(el.getAttribute("data-id")); if (!x) return;
     x.status = el.value; var okk = save(); render(); toast(okk ? "Статус: " + STATUS[x.status] : "Не сохранено: браузер не разрешает хранение");
@@ -3035,17 +3065,15 @@ document.addEventListener("click", function(ev){
     document.querySelectorAll('.request-tabs [role="tab"]').forEach(function(b){var selected=b.dataset.key===key;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});
     document.querySelectorAll('.request-panel').forEach(function(panel){panel.hidden=panel.id!=='request-panel-'+key;});return;
   }
-  if(act==='list-page'){listPage=Number(el.dataset.page)||1;render();document.querySelector('.registry-pagination').setAttribute('tabindex','-1');document.querySelector('.registry-pagination').focus();return;}
+  if(act==='list-page'){listPage=Number(el.dataset.page)||1;render(true);document.querySelector('.registry-pagination').setAttribute('tabindex','-1');document.querySelector('.registry-pagination').focus();return;}
   if(act==='materials-refresh'){var mx=item(id);if(!mx)return;mx._attachmentsLoaded=false;el.disabled=true;(mx.route3?loadR3(mx):loadPassports(mx)).then(function(){render();}).catch(function(err){toast(err.message||'Не удалось обновить материалы');}).finally(function(){el.disabled=false;});return;}
   if(act==='materials-reopen'){openMaterialRevision(item(id));return;}
   if(act==='request-kind-correct'){correctRequestKind(item(id));return;}
 
-  if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(); }
+  if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(true); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
   if (act === "r3-copy"){ var rc = item(id); if (rc) copyText(r3TitleText(rc)); return; }
-  if (act === "claude-queue"){var cx=item(id);if(!cx)return;el.disabled=true;toast('Передаём материалы Claude…');
-    Oblako.requestApi({action:'claude-queue',id:id}).then(function(r){cx.claude=r.claude||null;toast('Передано. Напишите Claude в проекте «Студенты»: «заявка №'+(cx.requestNumber||'')+'»');return loadR3(cx);}).catch(function(e){el.disabled=false;toast(e.message||'Не удалось передать Claude');render();});return;}
-  if (act === "r3-take"||act === "r3-deliver"){var rx=item(id);if(!rx)return;el.disabled=true;Oblako.requestApi(act==='r3-take'?{action:'r3-take',id:id}:{action:'r3-deliver',id:id,fileHash:rx.r3&&rx.r3.result&&rx.r3.result.hash}).then(function(r){rx.r3=r.work||rx.r3;render();toast(act==='r3-take'?'Заявка в работе. Студент видит этот шаг.':'Работа передана студенту.');}).catch(function(e){toast(e.message||'Не удалось выполнить действие');}).finally(function(){el.disabled=false;});return;}
+  if (act === "claude-queue"||act === "r3-take"||act === "r3-deliver")return performR3Action(item(id),act);
   if (act === "open-today"){tab='list';openId=id;render();window.scrollTo(0,0);return;}
   if (act === "r3-return-file-download"){el.disabled=true;Oblako.requestApi({action:'r3-return-file-download',id:id,fileId:el.getAttribute('data-file')}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Файл недоступен');}).finally(function(){el.disabled=false;});return;}
   if (act === "r3-result-download"){el.disabled=true;Oblako.requestApi({action:'r3-result-download',id:id}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Файл недоступен');}).finally(function(){el.disabled=false;});return;}
