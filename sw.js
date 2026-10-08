@@ -3,7 +3,7 @@
    Сохранённая копия — только запасной вариант, когда сети нет.
    Поэтому обновление приложения никогда не «застревает». */
 
-const CACHE = "studkab-v132-ux-recovery";
+const CACHE = "studkab-v133-assistant-choice";
 const SHELL = [
   "./app-navigation.js?v=1",
   "./calendar-import.mjs?v=1",

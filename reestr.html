@@ -334,6 +334,7 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .r3-quote{border-left:3px solid #B08347;background:#FBF7F0;border-radius:0 12px 12px 0;padding:10px 14px;margin:10px 0;font-size:14px;line-height:1.45;overflow-wrap:anywhere}.r3-qfiles{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:13px;color:#4A5B6B}.r3-wrap,.workflow-next .hint,.workflow-next .workflow-copy{overflow-wrap:anywhere}.linkbtn{background:none;border:0;padding:0;color:#2F6091;font:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
 .stat.r3row b{font-family:inherit;font-weight:600;text-align:right;overflow-wrap:anywhere}
 .r3links{margin-top:12px;font-size:14px;line-height:1.8}.r3links .linkbtn,.r3own,.r3-own{font-size:14px}.r3-own{display:inline;cursor:pointer}
+ .r3-assistant{margin:16px 0;padding:14px;border-radius:18px;background:var(--chip-bg)} .r3-assistant .chip[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:700} .r3-assistant .chips{align-items:stretch} .r3-assistant .chip{white-space:normal;text-align:left}
 </style>
 <link rel="stylesheet" href="desktop.css?v=8">
 <link rel="stylesheet" href="volume.css?v=1">
@@ -786,7 +787,7 @@ function aiReady(){
   return activeProviders().length > 0;
 }
 function activeProviders(){
-  return PROVIDERS.filter(function(pv){ return (D.settings.providers[pv.id] || {}).on; });
+  return PROVIDERS.filter(function(pv){ return pv.id==="deepseek"&&(D.settings.providers[pv.id] || {}).on; });
 }
 /* meta: { section, stage, attempt } — какой раздел и на каком шаге.
    В журнал попадают только метки и числа: ни текста запроса, ни ответа. */
@@ -1607,7 +1608,7 @@ function r3FromSummary(x){var s=x.r3Summary;if(!s)return x.r3||{};return {takenA
 // Чей ход и что сейчас — короткой строкой.
 function r3Turn(x){
  var w=requestWorkflow(x),r=x.r3Loaded?(x.r3||{}):r3FromSummary(x);
- if(w.key==='r3-received')return {who:'you',now:'Новая заявка — передайте Claude',act:'Открыть'};
+ if(w.key==='r3-received')return {who:'you',now:'Новая заявка — выберите способ подготовки',act:'Открыть'};
  if(w.key==='r3-questions')return {who:'student',now:'Вопрос у студента — ждём ответа'};
  if(w.key==='r3-rework')return {who:'you',now:'Вернули на доработку'+(r.result&&r.returnedAt&&Date.parse(r.result.at)>Date.parse(r.returnedAt)?' — передайте новую версию':' — исправьте работу'),act:'Открыть замечания'};
  if(w.key==='r3-work'&&x.claude&&!x.claude.attachedAt&&!x.claude.error&&!r.result)return {who:'you',now:x.claude.startedAt?'Claude готовит работу':'Ожидается запуск Claude — напишите в чат',act:'Открыть'};
@@ -1640,6 +1641,54 @@ function r3Size(n){return n>=1048576?(n/1048576).toFixed(1).replace('.',',')+' �
 // «Передать Claude» — главный путь (06.10.2026); «Сделаю сама» — взять в работу без Claude.
 function r3Name(n){return String(n||'').replace(/_+/g,' ');}
 function r3Links(x,list){var id=esc(x.id);return '<div class="r3links">'+list.map(function(a){return a[0]==='r3-file'?'<label class="linkbtn r3-own">'+esc(a[1])+'<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>':'<button type="button" class="linkbtn" data-act="'+a[0]+'" data-id="'+id+'">'+esc(a[1])+'</button>';}).join('<span aria-hidden="true"> · </span>')+'</div>';}
+// UX-ASSISTANT-01: account-owned choice never launches or cancels preparation.
+var r3AssistantChecks=new Map();
+function r3Assistant(x){return ['claude','chatgpt','deepseek'].indexOf(x.preparationMethod)>=0?x.preparationMethod:'claude';}
+function r3AssistantChoice(x){
+ var method=r3Assistant(x),id=esc(x.id),check=r3AssistantChecks.get(r3ActionKey(x)),h='<div class="r3-assistant"><p><b>Подготовить работу с помощью</b></p><div class="chips" role="group" aria-label="Способ подготовки">';
+ [['claude','Claude — через чат'],['chatgpt','ChatGPT/Codex — через чат'],['deepseek','DeepSeek — автоматически']].forEach(function(a){h+='<button type="button" class="chip" data-act="r3-assistant-select" data-method="'+a[0]+'" data-id="'+id+'" aria-pressed="'+(method===a[0])+'">'+a[1]+'</button>';});
+ h+='</div><p class="hint">Смена способа сохраняет заявку, материалы и прежние результаты. Уже начатая подготовка продолжается.</p>';
+ if(method==='claude')h+='<p class="hint">Сохраните материалы для Claude, затем напишите в чат проекта «Студенты»: «заявка №'+esc(x.requestNumber)+'». Начало выполнения подтверждается отдельно.</p>';
+ if(method==='chatgpt')h+='<p class="hint">Скачайте задание и проверьте требования, затем откройте чат. Вставьте запрос и приложите файлы самостоятельно. Готовую работу прикрепите здесь для проверки и передачи студенту.</p><button type="button" class="btn" data-act="r3-chatgpt" data-id="'+id+'">Скопировать запрос и открыть ChatGPT</button>';
+ if(method==='deepseek'){
+  h+='<p class="hint">Отдельная платная подготовка. Сначала проверяются подключение и лимит, затем требования и стоимость. Запуск — только после подтверждения суммы.</p><p role="status">'+esc(check?check.message:'Подключение ещё не проверено.')+'</p><button type="button" class="chip" data-act="r3-deepseek-check" data-id="'+id+'"'+(check&&check.busy?' disabled':'')+'>'+(check&&check.busy?'Проверяем…':'Проверить подключение и лимит')+'</button>';
+  if(check&&check.available)h+='<button type="button" class="chip" data-act="r3-assistant-document" data-id="'+id+'">Проверить требования и подготовить документ</button>';
+ }
+ return h+'<p class="hint">Готовый файл нужно проверить и передать студенту. Подписка ChatGPT не оплачивает OpenAI API.</p></div>';
+}
+function selectR3Assistant(x,method){
+ if(!x||['claude','chatgpt','deepseek'].indexOf(method)<0)return;
+ var old=x.preparationMethod;x.preparationMethod=method;
+ if(!save()){if(old===undefined)delete x.preparationMethod;else x.preparationMethod=old;toast('Выбор не сохранён. Повторите.');}
+ render();
+}
+async function checkR3Deepseek(x){
+ if(!x)return;var key=r3ActionKey(x),existing=r3AssistantChecks.get(key);if(existing&&existing.busy)return;
+ var owner=KEY,identity=Oblako.identity(),data=D,entry={busy:true,available:false,message:'Проверяем подключение и серверный лимит…'};
+ function current(){return KEY===owner&&Oblako.identity()===identity&&D===data&&item(x.id)===x;}
+ r3AssistantChecks.set(key,entry);render();
+ try{var r=await Oblako.generationApi({action:'capabilities'});if(!current())return;
+ entry.busy=false;entry.available=r.enabled===true&&r.budgetAvailable===true;
+ entry.message=!r.enabled?'Автоматическая подготовка отключена на сервере.':!r.budgetAvailable?'Серверный лимит исчерпан. Платный запуск недоступен.':'DeepSeek доступен, лимит проверен. Платного запроса не было. Перед запуском проверьте требования и стоимость.';
+ }catch(e){if(!current())return;entry.busy=false;entry.available=false;entry.message='Не удалось подтвердить подключение. Повторите проверку.';}
+ if(current())render();
+}
+function openR3Chatgpt(x){
+ if(!x)return;var blockers=preparationBlockers(x);
+ if(blockers.length){openModal('<button type="button" class="close" data-x="1">✕</button><h3>Перед подготовкой</h3><p role="status">'+esc(blockers.join(' '))+'</p><button type="button" class="chip" data-act="r3-assistant-document" data-id="'+esc(x.id)+'">Проверить требования и материалы</button>');return;}
+ var owner=KEY,identity=Oblako.identity(),data=D,prompt=buildChatgptPrompt(x);
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка с ChatGPT/Codex</h3><p role="status" data-chat-status>Копируем запрос…</p><label>Запрос<textarea readonly style="min-height:220px">'+esc(prompt)+'</textarea></label><p>Вставьте запрос и приложите скачанные материалы вручную. Готовую работу прикрепите в заявке для проверки.</p><a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">Открыть ChatGPT</a>');
+ window.open('https://chatgpt.com/','_blank','noopener,noreferrer');
+ Promise.resolve(copyText(prompt)).then(function(ok){if(KEY!==owner||Oblako.identity()!==identity||D!==data||!wrap.isConnected)return;wrap.querySelector('[data-chat-status]').textContent=ok?'Запрос скопирован. Вставьте его в чат. Если окно не открылось, используйте ссылку ниже.':'Копирование недоступно. Скопируйте запрос из поля ниже и откройте чат по ссылке.';}).catch(function(){if(KEY===owner&&Oblako.identity()===identity&&D===data&&wrap.isConnected)wrap.querySelector('[data-chat-status]').textContent='Не удалось скопировать. Запрос сохранён в поле ниже.';});
+}
+async function openR3AssistantDocument(x){
+ if(!x)return;var owner=KEY,identity=Oblako.identity(),data=D;
+ try{await loadPassports(x);if(KEY!==owner||Oblako.identity()!==identity||D!==data||item(x.id)!==x)return;
+  var p=(x.passports||[])[0];
+  if(!p||p.status!=='approved')openModal('<button type="button" class="close" data-x="1">✕</button><h3>Требования перед подготовкой</h3>'+passportContent(x));
+  else openDocBuilder(x.id);
+ }catch(e){if(KEY===owner&&Oblako.identity()===identity&&D===data)toast(e.message||'Не удалось проверить требования. Повторите.');}
+}
 function r3Card(x,route){
  var w=requestWorkflow(x),r=x.r3||{},id=esc(x.id),c=x.claude||null,num=x.requestNumber?'«заявка №'+x.requestNumber+'»':'номер заявки';
  var card=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'</div>';}:window.card;
@@ -1661,7 +1710,8 @@ function r3Card(x,route){
  if(vers.length&&(w.rework||vers.length>1))h+='<p class="hint r3-wrap">'+vers.map(function(v){return 'Версия '+v.n+' передана '+esc(r3When(v.at))+': '+esc(v.name);}).join('<br>')+'</p>';
  var base=[['r3-bundle','Скачать задание (архив)'],['executor-clarifications','Задать вопрос студенту']];
  if(!x.r3Loaded)return card(h+'<p role="status">Загружаем заявку…</p><div class="skel" aria-hidden="true"><i></i><i></i><i></i></div>','workflow-next');
- if(w.step<3)return card(h+'<button type="button" class="btn r3-main" data-act="claude-queue" data-id="'+id+'">Передать Claude</button>'+r3Links(x,base.concat([['r3-take','Сделаю сама']])),'workflow-next');
+ var chosen=r3Assistant(x);if(w.step<4||w.rework)h+=r3AssistantChoice(x);
+ if(w.step<3)return card(h+(chosen==='claude'?'<button type="button" class="btn r3-main" data-act="claude-queue" data-id="'+id+'">Передать Claude</button>':'')+r3Links(x,base.concat([['r3-take','Сделаю сама']])),'workflow-next');
  var attach='<label class="r3-attach">Прикрепить готовую работу<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>';
  var file=r.result?'<div class="r3-file"><b>'+esc(r3Name(r.result.name))+'</b><small>'+esc(r3Size(r.result.size)+' · прикреплён '+r3When(r.result.at))+'</small><button type="button" class="mini" data-act="r3-result-download" data-id="'+id+'">Скачать</button><label class="mini" title="Загрузить другой файл вместо этого">Заменить файл<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label></div>'
   :claudeBusy?'':attach;
@@ -1669,7 +1719,7 @@ function r3Card(x,route){
  var send=fresh?'<button type="button" class="btn r3-main" data-act="r3-deliver" data-id="'+id+'">'+(r.delivered?'Передать новую версию':'Передать студенту')+'</button>':'';
  if(w.rework&&!fresh)send='<p class="hint">Прикрепите исправленную работу кнопкой «Заменить файл» или нажмите «Попросить Claude переделать».</p>';
  var links=base.slice();if(claudeBusy&&!r.result)links.push(['r3-file','Прикрепить готовый файл']);
- if(!claudeBusy&&!(r.delivered&&!w.rework))links.push(['claude-queue',c?'Попросить Claude переделать':'Передать Claude']);
+ if(chosen==='claude'&&!claudeBusy&&!(r.delivered&&!w.rework))links.push(['claude-queue',c?'Попросить Claude переделать':'Передать Claude']);
  return card(h+file+send+r3Links(x,links),'workflow-next');
 }
 // «Скачать задание (архив)»: материалы студента и сведения для титульного листа одним архивом (собирается в браузере).
@@ -2754,8 +2804,8 @@ function viewMore(){
   var c = counts(), st = D.settings || {};
   var pvs = st.providers || {};
   var configured = aiReady();
-  var nets = '<p class="hint">Здесь настраивается только автоматическая генерация через API. Это отдельная оплата поставщику; подписка ChatGPT Pro не включает OpenAI API. Ручная кнопка ChatGPT/Codex работает без этих настроек. Пароль посредника на устройстве не хранится и не вводится.</p>' +
-      PROVIDERS.map(function(pv){
+  var nets = '<p class="hint">Действующий сервер поддерживает автоматическую подготовку только через DeepSeek. Claude и ChatGPT/Codex выбираются в карточке заявки и работают через чат. Прежние настройки других поставщиков сохранены, но не разрешают запуск через API. Это отдельная оплата поставщику; подписка ChatGPT Pro не включает OpenAI API. Ручная кнопка ChatGPT/Codex работает без этих настроек. Пароль посредника на устройстве не хранится и не вводится.</p>' +
+      PROVIDERS.filter(function(pv){return pv.id==="deepseek";}).map(function(pv){
         var c2 = pvs[pv.id] || {};
         return '<div class="item" style="align-items:flex-start">' +
           '<button type="button" class="tick' + (c2.on ? " on" : "") + '" data-act="pv-toggle" data-id="' + pv.id + '">' + (c2.on ? "✓" : "") + '</button>' +
@@ -2764,7 +2814,7 @@ function viewMore(){
       '<button type="button" class="mini" data-act="pv-test" data-id="' + pv.id + '">проверить лимит</button></div>';
       }).join("") +
       '<div class="fld" style="margin-top:12px"><label>По умолчанию</label><select id="pxDef">' +
-        PROVIDERS.map(function(pv){ return '<option value="' + pv.id + '"' + (st.defaultProvider === pv.id ? " selected" : "") + '>' + pv.name + '</option>' }).join("") +
+        PROVIDERS.filter(function(pv){return pv.id==="deepseek";}).map(function(pv){ return '<option value="' + pv.id + '"' + (st.defaultProvider === pv.id ? " selected" : "") + '>' + pv.name + '</option>' }).join("") +
       '</select></div>' +
       '<div class="chips"><button type="button" class="chip ok" data-act="px-save">Сохранить</button></div>';
 
@@ -3064,6 +3114,10 @@ document.addEventListener("click", function(ev){
     var ok7 = save(); render(); toast(ok7 ? "Справочник обновлён по заявке" : "Не сохранено: браузер не разрешает хранение"); return;
   }
   if (act === "open"){ listScroll=window.scrollY;listReturnId=id;openId = id;var opening=item(id);if(opening&&opening.requestNumber)delete opening.materialRevision;if(opening&&opening.r3LoadError){delete opening.r3LoadError;r3Seen.delete(opening);}render();document.querySelector('[data-act="back"]').focus({preventScroll:true});return; }
+  if(act==='r3-assistant-select')return selectR3Assistant(item(id),el.getAttribute('data-method'));
+  if(act==='r3-deepseek-check')return checkR3Deepseek(item(id));
+  if(act==='r3-chatgpt')return openR3Chatgpt(item(id));
+  if(act==='r3-assistant-document')return openR3AssistantDocument(item(id));
   if(act==='r3-retry-load'){var retryItem=item(id);if(!retryItem||passportLoads.has(retryItem))return;delete retryItem.r3LoadError;retryItem.r3Loaded=false;r3Seen.delete(retryItem);render();return;}
   if(act==='request-tab'){
     var key=el.dataset.key;requestTabs[id]=key;

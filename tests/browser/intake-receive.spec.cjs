@@ -629,3 +629,31 @@ test('UX-R06 prior account history cannot reopen its request',async({page})=>{
  await page.goBack();await expect.poll(()=>page.evaluate(()=>openId)).toBeNull();
  await expect(page.locator('#page')).not.toContainText('Проверка интерфейса');
 });
+
+for(const width of [390,1440])test('UX-ASSISTANT choice preserves old work and checks DeepSeek without starting it at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  window.assistantCalls=[];window.failAssistantCheck=false;
+  Oblako.generationApi=async d=>{assistantCalls.push(d.action);if(failAssistantCheck)throw Error('network');return {enabled:true,budgetAvailable:true};};
+  const x=fromPayload({id:'assistant-choice',route:'r3',k:'Практические задания',d:'Математика',u:'ММУ',n:'Иванова Мария',dl:'2027-01-25'});x.requestNumber=6;x.r3Loaded=true;x.r3={takenAt:'2026-10-07T09:00:00Z',result:{hash:'old',name:'previous.docx',size:2048,at:'2026-10-07T10:00:00Z'},versions:[{n:1,at:'2026-10-06T10:00:00Z',name:'original.docx'}]};x.claude={startedAt:'2026-10-07T09:00:00Z'};x.attachments=[{id:'source',file_name:'original.pdf',size_bytes:10}];
+  D.items=[x];r3Seen.add(x);openId=x.id;window.assistantBefore=JSON.stringify({r3:x.r3,claude:x.claude,attachments:x.attachments});render();
+ });
+ const panel=page.locator('.request-action');
+ await panel.getByRole('button',{name:'ChatGPT/Codex — через чат',exact:true}).click();
+ await expect(panel.getByRole('button',{name:'ChatGPT/Codex — через чат',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(panel).toContainText('приложите файлы самостоятельно');
+ await panel.getByRole('button',{name:'DeepSeek — автоматически',exact:true}).click();
+ await expect(panel).toContainText('Подключение ещё не проверено');
+ expect(await page.evaluate(()=>assistantCalls)).toEqual([]);
+ await panel.getByRole('button',{name:'Проверить подключение и лимит',exact:true}).click();
+ await expect(panel).toContainText('DeepSeek доступен, лимит проверен');
+ await expect(panel.getByRole('button',{name:'Проверить требования и подготовить документ',exact:true})).toBeVisible();
+ await page.evaluate(()=>failAssistantCheck=true);await panel.getByRole('button',{name:'Проверить подключение и лимит',exact:true}).click();
+ await expect(panel).toContainText('Не удалось подтвердить подключение');
+ await expect(panel.getByRole('button',{name:'Проверить требования и подготовить документ',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>assistantCalls)).toEqual(['capabilities','capabilities']);
+ expect(await page.evaluate(()=>JSON.stringify({r3:D.items[0].r3,claude:D.items[0].claude,attachments:D.items[0].attachments})===assistantBefore)).toBe(true);
+ await expect(panel).toContainText('previous.docx');await expect(panel.locator('[data-act="r3-deliver"]')).toBeVisible();
+ await page.evaluate(()=>{D=JSON.parse(localStorage.getItem(KEY));r3Seen.add(D.items[0]);render();});
+ await expect(panel.getByRole('button',{name:'DeepSeek — автоматически',exact:true})).toHaveAttribute('aria-pressed','true');
+});
