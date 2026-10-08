@@ -19,7 +19,7 @@
 <script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=4"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script>
 <script src="push.js?v=3"></script>
 <script src="intake-confirmation-ui.js?v=2"></script>
-<script src="file-prep.js?v=1"></script><script src="intake-ui.js?v=10"></script>
+<script src="file-prep.js?v=1"></script><script src="intake-ui.js?v=12"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -815,16 +815,19 @@ var TABS = [
 ];
 var calMode = "month", calCursor = null, calSel = null, calFrom = null, calTo = null;
 var tab = "today", openWorkId = null, navHistory = [];
+var renderedOwner=null, renderedView=null;
 
 function go(t,id){
-  navHistory.push({ tab:tab, open:openWorkId });
+  if(tab===t&&openWorkId===(id||null))return render(true);
+  navHistory.push({ tab:tab, open:openWorkId, pageScroll:document.getElementById('page').scrollTop, windowScroll:window.scrollY });
   if (navHistory.length > 30) navHistory.shift();
   tab = t; openWorkId = id || null; render();
 }
 function back(){
   var h = navHistory.pop();
-  if (!h) return;
+  if (!h){if(openWorkId){tab='works';openWorkId=null;render();}return;}
   tab = h.tab; openWorkId = h.open; render();
+  document.getElementById('page').scrollTop=h.pageScroll||0;window.scrollTo(0,h.windowScroll||0);
 }
 
 function counts(){
@@ -2656,7 +2659,9 @@ function pickTemplate(workId){
 }
 
 /* ---------- ОТРИСОВКА ---------- */
-function render(){
+function render(resetScroll){
+  var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openWorkId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
+  var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY;
   var c = counts();
   var bar = document.getElementById("tabbar");
   bar.innerHTML = TABS.map(function(x){
@@ -2689,8 +2694,9 @@ function render(){
     fab.hidden = tab === "today" && !!document.querySelector("[data-start-send]"); fab.setAttribute("data-act", "intake-materials"); fab.removeAttribute("data-id");
     fab.innerHTML = '<i aria-hidden="true">＋</i><span>Отправить задание</span>';
   }
-  document.getElementById("page").scrollTop = 0;
-  window.scrollTo(0, 0);
+  renderedOwner=ownerKey;renderedView=viewKey;
+  p.scrollTop=keepScroll?previousPageScroll:0;
+  window.scrollTo(0,keepScroll?previousWindowScroll:0);
   markSaved();
   cloudPaint();
   refreshStudentDialogue();
@@ -3027,17 +3033,17 @@ document.addEventListener("click", function(ev){
 
   if (act && act.indexOf("push-") === 0) { StudPush.action(act.slice(5)); return; }
   if (act === "cloud") return openCloud();
-  if (act === "go-profile"){ tab = "more"; openWorkId = null; return render(); }
-  if (act === "go-works"){ workFilter = el.getAttribute("data-k"); tab = "works"; openWorkId = null; return render(); }
-  if (act === "go-cal"){ tab = "cal"; calMode = "month"; calCursor = null; calSel = null; return render(); }
+  if (act === "go-profile")return go('more');
+  if (act === "go-works"){ workFilter = el.getAttribute("data-k"); return go('works'); }
+  if (act === "go-cal"){ calMode = "month"; calCursor = null; calSel = null; return go('cal'); }
   if (act === "back") return back();
   if (act === 'linked-dialog' && linkedDialogRequest){StudClarifications.show({requestId:linkedDialogRequest,executor:false,api:Oblako.requestApi,esc:esc,openModal:openModal});return;}
   if (act === "open-work") return go("works", id);
-  if (act === "work-filter"){ workFilter = el.getAttribute("data-k"); return render(); }
+  if (act === "work-filter"){ workFilter = el.getAttribute("data-k"); return render(true); }
   if (act === "new-work") return openNewWork();
   if (act === 'intake-materials') {
     if (!window.Oblako || Oblako.mode !== 'cloud') return toast('Для сохранения материалов войдите в аккаунт кабинета');
-    return StudIntake.open({api:Oblako.requestApi,openModal:openModal,esc:esc,owner:function(){return KEY;},identity:Oblako.identity,profile:intakeProfile,remember:rememberIntakeProfile,submitted:function(s){
+    return StudIntake.open({api:Oblako.requestApi,openModal:openModal,esc:esc,owner:function(){return KEY;},identity:Oblako.identity,profile:intakeProfile,remember:rememberIntakeProfile,openReceipt:function(s){var received=D.works.find(function(w){return w.req&&w.req.serverId===s.id;});if(!received)throw Error('Заявка не найдена в кабинете');go('works',received.id);},submitted:function(s){
       if(D.works.some(function(w){return w.req&&w.req.serverId===s.id;}))return;
       var p=s.payload;if(!p)throw Error('Не получены сведения отправленной заявки');
       change(function(){D.works.push({id:p.id,topic:p.t||(p.route==='r3'?r3Title(p):p.route==='received'?'Заявка №'+s.number+' — материалы получены':''),student:p.n,group:p.g,created:today(),deadline:p.dl,requirements:p.rq,status:'draft',

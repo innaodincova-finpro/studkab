@@ -387,6 +387,8 @@ try {
   else if (localStorage.getItem(CLOUD_LOCAL_KEY + ":scoped")) KEY += ":guest";
 } catch(e) {}
 var D = null, tab = "list", openId = null, openRefId = null, filter = "all", query = "", refQuery = "", refNeedsReview = false;
+var renderedOwner=null,renderedView=null,r3Actions=new Map();
+function r3ActionKey(x){return KEY+'|'+Oblako.identity()+'|'+x.id;}
 
 /* ---------- ХРАНЕНИЕ ---------- */
 function load(){
@@ -1610,7 +1612,7 @@ function r3Turn(x){
  if(w.key==='r3-rework')return {who:'you',now:'Вернули на доработку'+(r.result&&r.returnedAt&&Date.parse(r.result.at)>Date.parse(r.returnedAt)?' — передайте новую версию':' — исправьте работу'),act:'Открыть замечания'};
  if(w.key==='r3-work')return {who:'you',now:r.result?'Файл прикреплён — передайте студенту':'Выполните работу и прикрепите файл',act:r.result?'Передать студенту':'Открыть'};
  if(w.key==='r3-delivered')return {who:'student',now:r.downloadedAt?'Студент скачал работу — ждём отметку о сдаче':'Передана — студент ещё не скачал'};
- if(w.key==='r3-handed')return {who:'done',now:'Студент сдал работу'};
+ if(w.key==='r3-handed')return {who:'done',now:'Студент отметил сдачу'};
  return {who:'',now:w.title||''};
 }
 function r3TurnPill(t){return t.who==='you'?'<span class="r3turn you">Вы</span>':t.who==='student'?'<span class="r3turn st">Студент</span>':t.who==='done'?'<span class="r3turn done">Сдана</span>':'';}
@@ -1622,7 +1624,7 @@ function r3Workflow(x){
  // R3-D: после возврата заявка снова в работе, пока не передана новая версия.
  var rework=!!w.returnedAt;
  if(rework)return Object.assign(base,{step:3,key:'r3-rework',rework:w.returns,title:'Работу вернули на доработку',copy:r3When(w.returnedAt)+' студент сообщил: преподаватель вернул работу. Исправьте работу по замечаниям и передайте новую версию.'});
- if(w.delivered&&w.handedAt)return Object.assign(base,{step:5,complete:true,key:'r3-handed',title:'Студент сдал работу',copy:'Студент отметил сдачу '+r3When(w.handedAt)+'. Действий не требуется.'});
+ if(w.delivered&&w.handedAt)return Object.assign(base,{step:5,complete:true,key:'r3-handed',title:'Студент отметил сдачу',copy:'Студент отметил сдачу '+r3When(w.handedAt)+'. Действий не требуется.'});
  if(w.delivered)return Object.assign(base,{step:4,key:'r3-delivered',title:'Работа передана студенту',copy:'Передана '+r3When(w.delivered.at)+'. '+(w.downloadedAt?'Студент скачал работу '+r3When(w.downloadedAt)+'.':'Студент ещё не скачал работу.')+' Ждём, когда студент сдаст работу. От вас ничего не требуется.'});
  if(w.takenAt)return Object.assign(base,{step:3,key:'r3-work',title:'Выполните работу и прикрепите готовый файл',copy:'Вы взяли заявку в работу '+r3When(w.takenAt)+'. Студент видит этап «В работе». Когда работа готова — прикрепите файл и передайте студенту.'});
  if(open)return Object.assign(base,{step:2,key:'r3-questions',title:'Вопрос у студента — ждём ответа',copy:'Вопросов без ответа: '+open+'. Можно взять заявку в работу, не дожидаясь ответа.'});
@@ -1638,20 +1640,25 @@ function r3Name(n){return String(n||'').replace(/_+/g,' ');}
 function r3Links(x,list){var id=esc(x.id);return '<div class="r3links">'+list.map(function(a){return a[0]==='r3-file'?'<label class="linkbtn r3-own">'+esc(a[1])+'<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>':'<button type="button" class="linkbtn" data-act="'+a[0]+'" data-id="'+id+'">'+esc(a[1])+'</button>';}).join('<span aria-hidden="true"> · </span>')+'</div>';}
 function r3Card(x,route){
  var w=requestWorkflow(x),r=x.r3||{},id=esc(x.id),c=x.claude||null,num=x.requestNumber?'«заявка №'+x.requestNumber+'»':'номер заявки';
+ var card=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'</div>';}:window.card;
+ if(x.r3LoadError)return card('<h3>Не удалось загрузить заявку</h3><p role="status">Проверьте соединение и повторите загрузку.</p><button type="button" class="btn" data-act="r3-retry-load" data-id="'+id+'">Повторить загрузку</button>','workflow-next');
  var title=w.title,copy=w.copy;
  var claudeBusy=c&&!c.attachedAt&&!c.error;
- if(w.step===3&&!w.rework&&!r.result&&claudeBusy){title='Claude готовит работу';copy='Напишите Claude в проекте «Студенты»: '+num+'. Готовый файл появится здесь.';}
+ if(w.step===3&&!w.rework&&!r.result&&claudeBusy){title=c.startedAt?'Claude готовит работу':'Ожидается запуск Claude';copy=c.startedAt?'Начало выполнения подтверждено. Готовый файл появится здесь.':'Материалы переданы Claude. Начало выполнения ещё не подтверждено.';}
+ if(w.step===3&&!w.rework&&r.result&&!r.delivered){title='Файл подготовлен. Проверьте и передайте студенту';copy='Готовый файл прикреплён. Проверьте его перед передачей студенту. Прикрепление файла не означает передачу студенту или сдачу преподавателю.';}
  if(w.step===3&&r.result&&c&&c.attachedAt&&!r.delivered){title='Проверьте работу и передайте студенту';copy='Работу подготовил Claude. Откройте файл и прочитайте его перед передачей.';}
  if(c&&c.error)copy='Файл Claude не прикрепился: '+c.error+' Нажмите «Попросить Claude переделать» или прикрепите файл сами.';
  var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(R3_STEPS[w.step-1].label)+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'
   :workflowSteps(w)+lab('Шаг '+w.step+' из 5'+(w.rework?' · доработка № '+w.rework:''))+'<p class="workflow-title">'+esc(title)+'</p><p class="workflow-copy">'+esc(copy)+'</p>';
- var card=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'</div>';}:window.card;
+ var actionState=r3Actions.get(r3ActionKey(x));
+ if(actionState&&actionState.busy)return card(h+'<p role="status">'+esc(actionState.message)+'</p><button type="button" class="btn" disabled>'+esc(actionState.message)+'</button>','workflow-next');
+ if(actionState&&actionState.message)h+='<p role="status">'+esc(actionState.message)+'</p>';
  // R3-D: замечания преподавателя при возврате и история переданных версий.
  var rets=r.returnList||[],last=rets[rets.length-1],vers=r.versions||[];
  if(w.rework&&last)h+='<div class="r3-quote"><b>Замечания преподавателя:</b> '+esc(last.comment)+(last.files&&last.files.length?'<div class="r3-qfiles">'+last.files.map(function(f){return '<span>'+esc(f.name)+' · '+esc(r3Size(f.size))+' <button type="button" class="linkbtn" data-act="r3-return-file-download" data-id="'+id+'" data-file="'+esc(f.id)+'">Скачать</button></span>';}).join('')+'</div>':'')+'</div>';
  if(vers.length&&(w.rework||vers.length>1))h+='<p class="hint r3-wrap">'+vers.map(function(v){return 'Версия '+v.n+' передана '+esc(r3When(v.at))+': '+esc(v.name);}).join('<br>')+'</p>';
  var base=[['r3-bundle','Скачать задание (архив)'],['executor-clarifications','Задать вопрос студенту']];
- if(!x.r3Loaded)return card(h+'<div class="skel" role="status" aria-label="Загружаем состояние заявки"><i></i><i></i><i></i></div>','workflow-next');
+ if(!x.r3Loaded)return card(h+'<p role="status">Загружаем заявку…</p><div class="skel" aria-hidden="true"><i></i><i></i><i></i></div>','workflow-next');
  if(w.step<3)return card(h+'<button type="button" class="btn r3-main" data-act="claude-queue" data-id="'+id+'">Передать Claude</button>'+r3Links(x,base.concat([['r3-take','Сделаю сама']])),'workflow-next');
  var attach='<label class="r3-attach">Прикрепить готовую работу<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>';
  var file=r.result?'<div class="r3-file"><b>'+esc(r3Name(r.result.name))+'</b><small>'+esc(r3Size(r.result.size)+' · прикреплён '+r3When(r.result.at))+'</small><button type="button" class="mini" data-act="r3-result-download" data-id="'+id+'">Скачать</button><label class="mini" title="Загрузить другой файл вместо этого">Заменить файл<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label></div>'
@@ -2059,7 +2066,9 @@ function listBucket(x){
 function stageCounts(){var c={all:D.items.length};STAGE_FILTERS.forEach(function(q){c[q[0]]=D.items.filter(function(x){return stageBucket(x)===q[0];}).length;});return c;}
 function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
-function render(){
+function render(resetScroll){
+  var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openId||'')+'|'+(openRefId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
+  var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY;
   var c = counts();
   var bar = document.getElementById("tabbar");
   var mine=r3TodayLists().you.length;
@@ -2099,7 +2108,30 @@ function render(){
   }
   var toolbar=p.querySelector(".registry-toolbar");
   if(toolbar)toolbar.appendChild(fab);else p.after(fab);
-  window.scrollTo(0,0); showStorageWarn();
+  renderedOwner=ownerKey;renderedView=viewKey;p.scrollTop=keepScroll?previousPageScroll:0;
+  window.scrollTo(0,keepScroll?previousWindowScroll:0); showStorageWarn();
+}
+function performR3Action(x,act){
+ if(!x)return;
+ var key=r3ActionKey(x);if((r3Actions.get(key)||{}).busy)return;
+ var owner=KEY,identity=Oblako.identity();
+ function current(){return KEY===owner&&Oblako.identity()===identity&&!!item(x.id);}
+ var message=act==='r3-take'?'Берём в работу…':act==='r3-deliver'?'Передаём студенту…':'Передаём материалы Claude…';
+ var pendingAction={busy:true,message:message};r3Actions.set(key,pendingAction);render();
+ var input=act==='r3-deliver'?{action:act,id:x.id,fileHash:x.r3&&x.r3.result&&x.r3.result.hash}:{action:act,id:x.id};
+ Promise.resolve().then(function(){if(!current())return null;return Oblako.requestApi(input);}).then(async function(result){
+  if(!current())return;
+  var active=item(x.id);
+  if(act==='claude-queue'){active.claude=result.claude||null;await loadR3(active);if(!current())return;}
+  else active.r3=result.work||active.r3;
+  r3Actions.delete(key);render();
+  toast(act==='r3-take'?'Заявка в работе. Студент видит этот шаг.':act==='r3-deliver'?'Работа передана студенту.':'Передано. Напишите Claude в проекте «Студенты»: «заявка №'+(x.requestNumber||'')+'»');
+ }).catch(function(error){
+  if(!current())return;
+  r3Actions.set(key,{busy:false,message:error.message||'Не удалось выполнить действие'});render();
+ }).finally(function(){
+  if(r3Actions.get(key)===pendingAction)r3Actions.delete(key);
+ });
 }
 var dialogueRefreshBusy=false;
 async function refreshExecutorDialogue(){
@@ -2545,8 +2577,8 @@ function viewItem(id){
   if (!x) return '<div class="empty">Заявка не найдена</div>';
   if(x.serverMissing)return '<button type="button" class="mini" data-act="back">← Заявки</button><h1>'+esc(requestLabel(x))+' — '+esc(x.topic||'Тема не указана')+'</h1>'+card('<p role="status">Эта заявка отсутствует на сервере. Локальная карточка сохранена, но обработка и передача недоступны.</p><p class="hint">Если вам нужны местные заметки или текст, сохраните копию реестра в разделе «Ещё». После проверки удалите эту карточку.</p><button type="button" class="del" data-act="delete" data-id="'+esc(x.id)+'">Удалить локальную карточку</button>');
   if(x.receivedBeforeAnalysis&&!x.studySummary)loadStudySummary(x);
-  if(x.requestNumber&&(x.route3?!r3Seen.has(x):(!Array.isArray(x.passports)||!x.materialRevision))&&!passportLoads.has(x)){
-    passportLoads.add(x);if(x.route3)r3Seen.add(x);setTimeout(function(){(x.route3?loadR3(x):loadPassports(x)).catch(function(e){toast(e.message||(x.route3?'Не удалось загрузить материалы':'Не удалось создать паспорт'));}).finally(function(){passportLoads.delete(x);});},0);
+  if(x.requestNumber&&(x.route3?!r3Seen.has(x):(!Array.isArray(x.passports)||!x.materialRevision))&&!passportLoads.has(x)&&!(x.route3&&(r3Actions.get(r3ActionKey(x))||{}).busy)){
+    passportLoads.add(x);if(x.route3)r3Seen.add(x);var loadData=D,loadIdentity=Oblako.identity();setTimeout(function(){(x.route3?loadR3(x):loadPassports(x)).catch(function(e){if(D!==loadData||Oblako.identity()!==loadIdentity)return;if(x.route3){x.r3LoadError=true;x.r3Loaded=false;}else toast(e.message||'Не удалось создать паспорт');}).finally(function(){passportLoads.delete(x);if(x.route3&&D===loadData&&Oblako.identity()===loadIdentity&&tab==='list'&&openId===x.id)render();});},0);
   }
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
   var r = x.refId ? refById(x.refId) : findRef(x);
@@ -2962,7 +2994,7 @@ document.addEventListener("input", function(ev){
 document.addEventListener("change", function(ev){
   var el = ev.target;
   if(el.matches('input[data-r3-result-file]')){var ux=item(el.getAttribute('data-r3-result-file')),uf=el.files&&el.files[0];if(!ux||!uf)return;el.disabled=true;toast('Прикрепляем файл…');r3Upload(ux,uf).then(function(){toast('Файл прикреплён. Проверьте и передайте студенту.');}).catch(function(e){toast(e.message||'Файл не прикреплён');}).finally(function(){el.disabled=false;el.value='';});return;}
-  if(el.matches('select[data-act="page-size"]')){listPageSize=Number(el.value)===50?50:25;listPage=1;render();document.querySelector('[data-act="page-size"]').focus();return;}
+  if(el.matches('select[data-act="page-size"]')){listPageSize=Number(el.value)===50?50:25;listPage=1;render(true);document.querySelector('[data-act="page-size"]').focus();return;}
   if (el.tagName === "SELECT" && el.getAttribute("data-act") === "status"){
     var x = item(el.getAttribute("data-id")); if (!x) return;
     x.status = el.value; var okk = save(); render(); toast(okk ? "Статус: " + STATUS[x.status] : "Не сохранено: браузер не разрешает хранение");
@@ -3027,23 +3059,22 @@ document.addEventListener("click", function(ev){
     if (xx.methodNotes && (rr2.notes||"").indexOf(xx.methodNotes) < 0) rr2.notes = (rr2.notes ? rr2.notes + "\n" : "") + "Из заявки " + (xx.student||"") + ": " + xx.methodNotes;
     var ok7 = save(); render(); toast(ok7 ? "Справочник обновлён по заявке" : "Не сохранено: браузер не разрешает хранение"); return;
   }
-  if (act === "open"){ listScroll=window.scrollY;listReturnId=id;openId = id;var opening=item(id);if(opening&&opening.requestNumber)delete opening.materialRevision;render();document.querySelector('[data-act="back"]').focus({preventScroll:true});return; }
+  if (act === "open"){ listScroll=window.scrollY;listReturnId=id;openId = id;var opening=item(id);if(opening&&opening.requestNumber)delete opening.materialRevision;if(opening&&opening.r3LoadError){delete opening.r3LoadError;r3Seen.delete(opening);}render();document.querySelector('[data-act="back"]').focus({preventScroll:true});return; }
+  if(act==='r3-retry-load'){var retryItem=item(id);if(!retryItem||passportLoads.has(retryItem))return;delete retryItem.r3LoadError;retryItem.r3Loaded=false;r3Seen.delete(retryItem);render();return;}
   if(act==='request-tab'){
     var key=el.dataset.key;requestTabs[id]=key;
     document.querySelectorAll('.request-tabs [role="tab"]').forEach(function(b){var selected=b.dataset.key===key;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});
     document.querySelectorAll('.request-panel').forEach(function(panel){panel.hidden=panel.id!=='request-panel-'+key;});return;
   }
-  if(act==='list-page'){listPage=Number(el.dataset.page)||1;render();document.querySelector('.registry-pagination').setAttribute('tabindex','-1');document.querySelector('.registry-pagination').focus();return;}
+  if(act==='list-page'){listPage=Number(el.dataset.page)||1;render(true);document.querySelector('.registry-pagination').setAttribute('tabindex','-1');document.querySelector('.registry-pagination').focus();return;}
   if(act==='materials-refresh'){var mx=item(id);if(!mx)return;mx._attachmentsLoaded=false;el.disabled=true;(mx.route3?loadR3(mx):loadPassports(mx)).then(function(){render();}).catch(function(err){toast(err.message||'Не удалось обновить материалы');}).finally(function(){el.disabled=false;});return;}
   if(act==='materials-reopen'){openMaterialRevision(item(id));return;}
   if(act==='request-kind-correct'){correctRequestKind(item(id));return;}
 
-  if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(); }
+  if (act === "filter"){ var nf = el.getAttribute("data-k"); filter = nf; listPage=1; return render(true); }
   if (act === "copy-contact"){ var x = item(id); if (x) copyText(x.contact); return; }
   if (act === "r3-copy"){ var rc = item(id); if (rc) copyText(r3TitleText(rc)); return; }
-  if (act === "claude-queue"){var cx=item(id);if(!cx)return;el.disabled=true;toast('Передаём материалы Claude…');
-    Oblako.requestApi({action:'claude-queue',id:id}).then(function(r){cx.claude=r.claude||null;toast('Передано. Напишите Claude в проекте «Студенты»: «заявка №'+(cx.requestNumber||'')+'»');return loadR3(cx);}).catch(function(e){el.disabled=false;toast(e.message||'Не удалось передать Claude');render();});return;}
-  if (act === "r3-take"||act === "r3-deliver"){var rx=item(id);if(!rx)return;el.disabled=true;Oblako.requestApi(act==='r3-take'?{action:'r3-take',id:id}:{action:'r3-deliver',id:id,fileHash:rx.r3&&rx.r3.result&&rx.r3.result.hash}).then(function(r){rx.r3=r.work||rx.r3;render();toast(act==='r3-take'?'Заявка в работе. Студент видит этот шаг.':'Работа передана студенту.');}).catch(function(e){toast(e.message||'Не удалось выполнить действие');}).finally(function(){el.disabled=false;});return;}
+  if (act === "claude-queue"||act === "r3-take"||act === "r3-deliver")return performR3Action(item(id),act);
   if (act === "open-today"){tab='list';openId=id;render();window.scrollTo(0,0);return;}
   if (act === "r3-return-file-download"){el.disabled=true;Oblako.requestApi({action:'r3-return-file-download',id:id,fileId:el.getAttribute('data-file')}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Файл недоступен');}).finally(function(){el.disabled=false;});return;}
   if (act === "r3-result-download"){el.disabled=true;Oblako.requestApi({action:'r3-result-download',id:id}).then(function(r){if(!r.url)throw Error('Файл недоступен');window.open(r.url,'_blank','noopener');}).catch(function(e){toast(e.message||'Файл недоступен');}).finally(function(){el.disabled=false;});return;}
