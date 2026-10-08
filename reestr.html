@@ -1612,7 +1612,7 @@ function r3Turn(x){
  if(w.key==='r3-rework')return {who:'you',now:'Вернули на доработку'+(r.result&&r.returnedAt&&Date.parse(r.result.at)>Date.parse(r.returnedAt)?' — передайте новую версию':' — исправьте работу'),act:'Открыть замечания'};
  if(w.key==='r3-work')return {who:'you',now:r.result?'Файл прикреплён — передайте студенту':'Выполните работу и прикрепите файл',act:r.result?'Передать студенту':'Открыть'};
  if(w.key==='r3-delivered')return {who:'student',now:r.downloadedAt?'Студент скачал работу — ждём отметку о сдаче':'Передана — студент ещё не скачал'};
- if(w.key==='r3-handed')return {who:'done',now:'Студент сдал работу'};
+ if(w.key==='r3-handed')return {who:'done',now:'Студент отметил сдачу'};
  return {who:'',now:w.title||''};
 }
 function r3TurnPill(t){return t.who==='you'?'<span class="r3turn you">Вы</span>':t.who==='student'?'<span class="r3turn st">Студент</span>':t.who==='done'?'<span class="r3turn done">Сдана</span>':'';}
@@ -1624,7 +1624,7 @@ function r3Workflow(x){
  // R3-D: после возврата заявка снова в работе, пока не передана новая версия.
  var rework=!!w.returnedAt;
  if(rework)return Object.assign(base,{step:3,key:'r3-rework',rework:w.returns,title:'Работу вернули на доработку',copy:r3When(w.returnedAt)+' студент сообщил: преподаватель вернул работу. Исправьте работу по замечаниям и передайте новую версию.'});
- if(w.delivered&&w.handedAt)return Object.assign(base,{step:5,complete:true,key:'r3-handed',title:'Студент сдал работу',copy:'Студент отметил сдачу '+r3When(w.handedAt)+'. Действий не требуется.'});
+ if(w.delivered&&w.handedAt)return Object.assign(base,{step:5,complete:true,key:'r3-handed',title:'Студент отметил сдачу',copy:'Студент отметил сдачу '+r3When(w.handedAt)+'. Действий не требуется.'});
  if(w.delivered)return Object.assign(base,{step:4,key:'r3-delivered',title:'Работа передана студенту',copy:'Передана '+r3When(w.delivered.at)+'. '+(w.downloadedAt?'Студент скачал работу '+r3When(w.downloadedAt)+'.':'Студент ещё не скачал работу.')+' Ждём, когда студент сдаст работу. От вас ничего не требуется.'});
  if(w.takenAt)return Object.assign(base,{step:3,key:'r3-work',title:'Выполните работу и прикрепите готовый файл',copy:'Вы взяли заявку в работу '+r3When(w.takenAt)+'. Студент видит этап «В работе». Когда работа готова — прикрепите файл и передайте студенту.'});
  if(open)return Object.assign(base,{step:2,key:'r3-questions',title:'Вопрос у студента — ждём ответа',copy:'Вопросов без ответа: '+open+'. Можно взять заявку в работу, не дожидаясь ответа.'});
@@ -1644,7 +1644,8 @@ function r3Card(x,route){
  if(x.r3LoadError)return card('<h3>Не удалось загрузить заявку</h3><p role="status">Проверьте соединение и повторите загрузку.</p><button type="button" class="btn" data-act="r3-retry-load" data-id="'+id+'">Повторить загрузку</button>','workflow-next');
  var title=w.title,copy=w.copy;
  var claudeBusy=c&&!c.attachedAt&&!c.error;
- if(w.step===3&&!w.rework&&!r.result&&claudeBusy){title='Claude готовит работу';copy='Напишите Claude в проекте «Студенты»: '+num+'. Готовый файл появится здесь.';}
+ if(w.step===3&&!w.rework&&!r.result&&claudeBusy){title=c.startedAt?'Claude готовит работу':'Ожидается запуск Claude';copy=c.startedAt?'Начало выполнения подтверждено. Готовый файл появится здесь.':'Материалы переданы Claude. Начало выполнения ещё не подтверждено.';}
+ if(w.step===3&&!w.rework&&r.result&&!r.delivered){title='Файл подготовлен. Проверьте и передайте студенту';copy='Готовый файл прикреплён. Проверьте его перед передачей студенту. Прикрепление файла не означает передачу студенту или сдачу преподавателю.';}
  if(w.step===3&&r.result&&c&&c.attachedAt&&!r.delivered){title='Проверьте работу и передайте студенту';copy='Работу подготовил Claude. Откройте файл и прочитайте его перед передачей.';}
  if(c&&c.error)copy='Файл Claude не прикрепился: '+c.error+' Нажмите «Попросить Claude переделать» или прикрепите файл сами.';
  var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(R3_STEPS[w.step-1].label)+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'

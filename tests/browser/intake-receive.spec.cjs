@@ -231,7 +231,7 @@ test('R3-D: registry shows hand-in, then the return with remarks; corrected file
   D.items=[x];openId=x.id;render();
  });
  const panel=page.locator('.request-action');
- await expect(panel).toContainText('Студент сдал работу');await expect(panel).toContainText('Шаг 5 из 5');
+ await expect(panel).toContainText('Студент отметил сдачу');await expect(panel).toContainText('Шаг 5 из 5');
  expect(await page.evaluate(()=>stageBucket(D.items[0]))).toBe('delivered');
  // Длинное имя файла не выходит за край карточки.
  expect(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
@@ -418,7 +418,11 @@ test('«Передать Claude»: registry copies the materials for Claude, the
  await expect(panel.locator('[data-act="claude-queue"]')).toHaveText('Передать Claude');
  await expect(panel).toContainText('Студент прислал 1 файл.');
  await panel.locator('[data-act="claude-queue"]').click();
- await expect(panel).toContainText('Claude готовит работу');await expect(panel).toContainText('Напишите Claude в проекте «Студенты»: «заявка №3»');
+ await expect(panel).toContainText('Ожидается запуск Claude');await expect(panel).toContainText('Начало выполнения ещё не подтверждено.');
+ await expect(panel).not.toContainText('Claude готовит работу');
+ await page.evaluate(async()=>{cl.startedAt='2026-10-07T09:05:00Z';await loadR3(D.items[0]);});
+ await expect(panel).toContainText('Claude готовит работу');await expect(panel).toContainText('Начало выполнения подтверждено.');
+ await expect(panel).not.toContainText('Напишите Claude');
  await expect(panel.locator('[data-act="claude-queue"]')).toHaveCount(0);
  // Claude положил файл: при следующем открытии он прикреплён как готовая работа.
  await page.evaluate(async()=>{cl.readyAt='2026-10-07T10:00:00Z';await loadR3(D.items[0]);});
@@ -571,4 +575,26 @@ test('UX-R04 a late executor reply cannot modify another account or open its scr
  await expect(page.locator('.request-head')).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>!!(previousCard.r3||{}).takenAt)).toBe(false);
  expect(await page.evaluate(()=>D===nextAccount&&D.items.length===0&&openId===null)).toBe(true);
+});
+
+// UX-R07: prepared file is not a delivery or a teacher submission.
+for(const width of [390,1440])test('UX-R07 manual file and self-reported handover at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});
+ await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>{
+  const x=fromPayload({id:'ux-status',route:'r3',k:'Практическая работа',d:'Математика',n:'Тестовая студентка',dl:'2027-01-25'});
+  x.r3Loaded=true;x.r3={takenAt:'2026-10-07T09:00:00Z',result:{name:'Работа.docx',size:2048,hash:'a'.repeat(64),at:'2026-10-07T10:00:00Z'}};x.claude=null;
+  D.items=[x];openId=x.id;render();
+ });
+ const panel=page.locator('.request-action');
+ await expect(panel).toContainText('Файл подготовлен. Проверьте и передайте студенту');
+ await expect(panel).toContainText('Прикрепление файла не означает передачу студенту или сдачу преподавателю.');
+ await expect(panel).not.toContainText('Выполните работу и прикрепите готовый файл');
+ await expect(panel.locator('[data-act="r3-deliver"]')).toBeVisible();
+ await page.evaluate(()=>{const x=D.items[0];x.r3.delivered={...x.r3.result,at:'2026-10-07T11:00:00Z'};render();});
+ await expect(panel).toContainText('Работа передана студенту');
+ await expect(panel).not.toContainText('Студент отметил сдачу');
+ await page.evaluate(()=>{D.items[0].r3.handedAt='2026-10-07T12:00:00Z';render();});
+ await expect(panel).toContainText('Студент отметил сдачу');
+ await expect(panel).not.toContainText('Студент сдал работу');
 });
