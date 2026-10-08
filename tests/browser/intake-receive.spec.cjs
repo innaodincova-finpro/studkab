@@ -636,7 +636,7 @@ for(const width of [390,1440])test('UX-ASSISTANT choice preserves old work and c
   window.assistantCalls=[];window.failAssistantCheck=false;
   Oblako.generationApi=async d=>{assistantCalls.push(d.action);if(failAssistantCheck)throw Error('network');return {enabled:true,budgetAvailable:true};};
   const x=fromPayload({id:'assistant-choice',route:'r3',k:'Практические задания',d:'Математика',u:'ММУ',n:'Иванова Мария',dl:'2027-01-25'});x.requestNumber=6;x.r3Loaded=true;x.r3={takenAt:'2026-10-07T09:00:00Z',result:{hash:'old',name:'previous.docx',size:2048,at:'2026-10-07T10:00:00Z'},versions:[{n:1,at:'2026-10-06T10:00:00Z',name:'original.docx'}]};x.claude={startedAt:'2026-10-07T09:00:00Z'};x.attachments=[{id:'source',file_name:'original.pdf',size_bytes:10}];
-  D.items=[x];openId=x.id;window.assistantBefore=JSON.stringify({r3:x.r3,claude:x.claude,attachments:x.attachments});render();
+  D.items=[x];r3Seen.add(x);openId=x.id;window.assistantBefore=JSON.stringify({r3:x.r3,claude:x.claude,attachments:x.attachments});render();
  });
  const panel=page.locator('.request-action');
  await panel.getByRole('button',{name:'ChatGPT/Codex — через чат',exact:true}).click();
