@@ -29,7 +29,11 @@ export function calendarTime(value){
 }
 export function timeRange(value){const parts=clean(value).split(/\s*[–—−-]\s*/);return {start:calendarTime(parts[0]),end:parts.length===2?calendarTime(parts[1]):''};}
 function rowBlank(row){return !row.some(x=>clean(x));}
-function signature(e){return [e.kind,e.date,e.time,lower(e.title)].join('|');}
+function signature(e){
+ // Moodle labels the same lecture as a webinar; this is a delivery mode, not a second class.
+ const title=e.kind==='cls'?lower(e.title).replace(/—\s*лекция\s*\(вебинар\)$/,'— лекция'):lower(e.title);
+ return [e.kind,e.date,e.time,title].join('|');
+}
 function exactSignature(e){const w=e.workMetadata;return [signature(e),e.endTime||'',clean(e.note),JSON.stringify(w?{code:w.code,title:w.title,prepared:w.prepared,submission:w.submission,plannedDate:w.plannedDate,actualDate:w.actualDate}:null)].join('|');}
 function classEvent(subject,type,date,start,end,teacher='',group=''){
  const full=discipline(subject),classType=clean(type);

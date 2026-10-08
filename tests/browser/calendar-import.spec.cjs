@@ -19,6 +19,13 @@ test('preview is read-only, back preserves input, cancel leaves the calendar unc
  await page.locator('[data-back]').click();await expect(page.locator('#calendarText')).toHaveValue(sample);
  await page.locator('.sheet [data-x]').click();expect(await page.evaluate(()=>JSON.stringify(D))).toBe(before);
 });
+test('an existing Moodle webinar lecture is skipped when the source calls it a lecture',async({page})=>{
+ await page.evaluate(()=>{D.events.push({id:'vuz-lecture',kind:'cls',src:'vuz',title:'Предмет проверки — лекция (вебинар)',date:'2026-10-08',time:'14:20',note:'до 15:40 · Преподаватель · группа Т-1'});save();});
+ const before=await page.evaluate(()=>JSON.stringify(D.events));
+ await open(page);await check(page,'Лекция по дисциплине Предмет проверки 08.10.2026 14:20 — 15:40');
+ await expect(page.locator('.sheet')).toContainText('Новых: 0 · Уже есть: 1');
+ await page.locator('.sheet [data-x]').last().click();expect(await page.evaluate(()=>JSON.stringify(D.events))).toBe(before);
+});
 test('selected classes and actions persist, repeat creates zero copies and never changes prepared-work status',async({page})=>{
  await open(page);await check(page,sample+'\nЛабораторная работа по дисциплине Предмет проверки  08.10.2026 16:10 — 17:30');
  await page.locator('[data-add="1"]').uncheck();await page.locator('[data-commit]').click();

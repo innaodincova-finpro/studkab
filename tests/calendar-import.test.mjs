@@ -10,6 +10,14 @@ const works={name:'Работы',rows:[['Код','Дисциплина','Ком�
 let sequence=0;const uid=()=>`synthetic-${++sequence}`;
 const load=()=>parseCalendarSheets(structuredClone([classes,plan,tests,works]));
 const manual={id:'manual',kind:'other',title:'Личное',date:'2026-10-10',time:'09:00',note:'не изменять'};
+test('Moodle webinar lecture and plain lecture are the same class; original notes and id stay untouched',()=>{
+ const old={id:'old-vuz',src:'vuz',kind:'cls',title:'Предмет проверки — лекция (вебинар)',date:'2026-10-08',time:'14:20',note:'до 15:40 · Тестов А.А. · группа Т-1'};
+ const p=parseCalendarText('Лекция по дисциплине Предмет проверки 08.10.2026 14:20 — 15:40');
+ const preview=previewCalendarImport([old],p,'sheet');assert.equal(preview.add.length,0);assert.equal(preview.skip.length,1);
+ assert.deepEqual(applyCalendarImport([old],preview,uid).events,[old]);
+ const distinct=parseCalendarText('Практическое занятие по дисциплине Предмет проверки 08.10.2026 14:20 — 15:40');
+ assert.equal(previewCalendarImport([old],distinct,'sheet').add.length,1);
+});
 test('all layers produce four events, not extra copies from tests or work sheets',()=>{
  const p=load();assert.equal(p.events.length,4);assert.equal(p.issues.length,0);assert.deepEqual(p.summary,{classes:2,actions:2,tests:1});
  assert.equal(p.workMetadata.length,1);assert.equal(p.workMetadata[0].submission,'Не сдана');assert.equal(p.workMetadata[0].actualDate,'');
