@@ -35,13 +35,24 @@ jobs:
           CHANGE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           CHANGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: npm ci
-      - name: Exclude unused Google Chrome apt repository
+      - name: Prepare trusted apt sources for Playwright
         run: |
           # Playwright downloads its own browsers. A broken third-party Chrome
           # package index must not block Ubuntu system dependency installation.
           # Package signature and checksum verification remain enabled.
           sudo python3 - <<'PY'
           from pathlib import Path
+          # CAL-IMPORT-01: Azure mirror downloads delayed the required control
+          # before any tests. Use Ubuntu's primary HTTPS archives; apt still
+          # verifies repository signatures and package checksums.
+          for filename, uri in (
+              ('apt-mirrors.txt', 'https://archive.ubuntu.com/ubuntu/'),
+              ('apt-mirrors-security.txt', 'https://security.ubuntu.com/ubuntu/'),
+          ):
+              mirror = Path('/etc/apt') / filename
+              if mirror.is_file():
+                  mirror.write_text(uri + '\n')
+                  print('Configured official Ubuntu archive in', mirror.name)
           for path in Path('/etc/apt/sources.list.d').iterdir():
               if path.suffix not in ('.list', '.sources'):
                   continue
