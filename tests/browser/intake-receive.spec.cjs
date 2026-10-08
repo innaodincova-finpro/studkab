@@ -583,7 +583,7 @@ for(const width of [390,1440])test('UX-R07 manual file and self-reported handove
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>{
   const x=fromPayload({id:'ux-status',route:'r3',k:'Практическая работа',d:'Математика',n:'Тестовая студентка',dl:'2027-01-25'});
-  x.r3Loaded=true;x.r3={takenAt:'2026-10-07T09:00:00Z',result:{name:'Работа.docx',size:2048,hash:'a'.repeat(64),at:'2026-10-07T10:00:00Z'}};x.claude=null;
+  x.requestNumber=3;r3Seen.add(x);x.r3Loaded=true;x.r3={takenAt:'2026-10-07T09:00:00Z',result:{name:'Работа.docx',size:2048,hash:'a'.repeat(64),at:'2026-10-07T10:00:00Z'}};x.claude=null;
   D.items=[x];openId=x.id;render();
  });
  const panel=page.locator('.request-action');
