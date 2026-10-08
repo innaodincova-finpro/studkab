@@ -535,8 +535,13 @@ for(const width of [390,1440])test('UX-R03/06 background refresh and back retain
 async function stageTwoRegistry(page){
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>{
-  window.takeAttempts=0;Oblako.requestApi=async d=>{
-   if(d.action==='r3-take'){takeAttempts++;return await new Promise((resolve,reject)=>{window.finishTake=resolve;window.failTake=reject;});}
+  window.takeAttempts=0;window.serverWork={};Oblako.requestApi=async d=>{
+   if(d.action==='material-revision-state')return {materials:{state:'initial',requestRevision:1}};
+   if(d.action==='attachment-context')return {attachments:[],materialRevision:1};
+   if(d.action==='clarification-list')return {questions:[]};
+   if(d.action==='claude-state')return {claude:null};
+   if(d.action==='r3-state')return {work:structuredClone(serverWork)};
+   if(d.action==='r3-take'){takeAttempts++;return await new Promise((resolve,reject)=>{window.finishTake=result=>{serverWork=result.work;resolve(result);};window.failTake=reject;});}
    throw Error('Unexpected '+d.action);
   };
   const x=fromPayload({id:'ux-pending-card',route:'r3',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'1 курс',n:'Проверка интерфейса',dl:'2027-01-25'});

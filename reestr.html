@@ -2576,7 +2576,7 @@ function viewItem(id){
   if (!x) return '<div class="empty">Заявка не найдена</div>';
   if(x.serverMissing)return '<button type="button" class="mini" data-act="back">← Заявки</button><h1>'+esc(requestLabel(x))+' — '+esc(x.topic||'Тема не указана')+'</h1>'+card('<p role="status">Эта заявка отсутствует на сервере. Локальная карточка сохранена, но обработка и передача недоступны.</p><p class="hint">Если вам нужны местные заметки или текст, сохраните копию реестра в разделе «Ещё». После проверки удалите эту карточку.</p><button type="button" class="del" data-act="delete" data-id="'+esc(x.id)+'">Удалить локальную карточку</button>');
   if(x.receivedBeforeAnalysis&&!x.studySummary)loadStudySummary(x);
-  if(x.requestNumber&&(x.route3?!r3Seen.has(x):(!Array.isArray(x.passports)||!x.materialRevision))&&!passportLoads.has(x)){
+  if(x.requestNumber&&(x.route3?!r3Seen.has(x):(!Array.isArray(x.passports)||!x.materialRevision))&&!passportLoads.has(x)&&!(x.route3&&(r3Actions.get(r3ActionKey(x))||{}).busy)){
     passportLoads.add(x);if(x.route3)r3Seen.add(x);var loadData=D,loadIdentity=Oblako.identity();setTimeout(function(){(x.route3?loadR3(x):loadPassports(x)).catch(function(e){if(D!==loadData||Oblako.identity()!==loadIdentity)return;if(x.route3){x.r3LoadError=true;x.r3Loaded=false;}else toast(e.message||'Не удалось создать паспорт');}).finally(function(){passportLoads.delete(x);if(x.route3&&D===loadData&&Oblako.identity()===loadIdentity&&tab==='list'&&openId===x.id)render();});},0);
   }
   function row(label, val){ return val ? '<div class="stat"><span>' + label + '</span><b>' + esc(val) + '</b></div>' : ''; }
