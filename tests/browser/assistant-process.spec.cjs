@@ -28,10 +28,11 @@ for(const width of [390,1440])test('rich R3 route keeps context and equal unavai
  await expect(page.locator('.request-head')).toContainText('Демонстрационное задание');
  await expect(page.locator('.r3route .r3mk')).toHaveCount(5);
  const buttons=page.locator('[data-act="r3-assistant-run"]');
- await expect(buttons).toHaveCount(3);expect(await buttons.allTextContents()).toEqual(['Claude','ChatGPT / Codex','DeepSeek']);
+ await expect(buttons).toHaveCount(3);expect(await buttons.allTextContents()).toEqual(['Через API','Через API','Через API']);
  for(let i=0;i<3;i++)await expect(buttons.nth(i)).toBeDisabled();
  await expect(page.locator('.r3h')).not.toContainText('Claude');
- await expect(page.locator('.r3-assistant')).not.toContainText('API');
+ await expect(page.locator('[data-act="r3-assistant-chat"]')).toHaveCount(3);
+ await expect(page.locator('.r3-assistant')).toContainText('отдельной оплатой');
  await expect(page.getByRole('tab',{name:'Материалы',exact:true})).toBeVisible();
  await expect(page.getByRole('tab',{name:'История',exact:true})).toBeVisible();
  await expect(page.locator('[data-act="executor-clarifications"]').first()).toBeVisible();
@@ -107,4 +108,21 @@ for(const file of ['index.html','reestr.html'])test('notification settings confi
  await page.evaluate(()=>telegramBound=true);await channels.getByRole('button',{name:'Проверить подключения',exact:true}).click();
  await expect(channels.getByRole('button',{name:'Отключить Telegram',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>channelCalls.includes('push-test')||channelCalls.includes('notification-test'))).toBe(false);
+});
+
+for(const provider of ['claude','chatgpt','deepseek'])test('manual '+provider+' is available with disconnected API and retains requirement gate',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{window.chatWindows=[];window.open=u=>chatWindows.push(u);});
+ await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
+ await expect(page.locator('[role="dialog"]')).toContainText('Перед подготовкой');
+ expect(await page.evaluate(()=>chatWindows.length)).toBe(0);
+ expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight','claude-queue'].includes(c.action)))).toBe(false);
+});
+
+for(const provider of ['claude','chatgpt','deepseek'])test('approved manual '+provider+' opens correct chat and offers export and return without launching API',async({page})=>{
+ await seed(page);await page.evaluate(()=>{window.chatWindows=[];window.open=u=>chatWindows.push(u);preparationBlockers=()=>[];buildChatgptPrompt=()=> 'Approved requirements and structure';copyText=async()=>true;});
+ await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
+ const dialog=page.locator('[role="dialog"]');await expect(dialog.locator('textarea')).toHaveValue('Approved requirements and structure');await expect(dialog.locator('[data-chat-bundle]')).toBeVisible();await expect(dialog.locator('input[data-r3-result-file]')).toHaveCount(1);
+ expect(await page.evaluate(()=>chatWindows)).toEqual([{claude:'https://claude.ai/',chatgpt:'https://chatgpt.com/',deepseek:'https://chat.deepseek.com/'}[provider]]);
+ expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight','claude-queue'].includes(c.action)))).toBe(false);
 });

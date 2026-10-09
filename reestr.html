@@ -1665,9 +1665,9 @@ function r3AssistantChoice(x){
  var id=esc(x.id),session=r3AutomaticSession(x),state=session&&session.state,h='<div class="r3-assistant"><h4>Подготовить работу</h4><div class="r3-assistant-options" role="group" aria-label="Помощники для подготовки">';
  [['claude','Claude'],['chatgpt','ChatGPT / Codex'],['deepseek','DeepSeek']].forEach(function(a){
   var cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===a[0];}),available=!!(cap&&cap.available),blocked=!available||state.busy||state.unknown||state.stale;
-  h+='<div class="r3-assistant-option"><button type="button" class="chip" data-act="r3-assistant-run" data-method="'+a[0]+'" data-id="'+id+'"'+(blocked?' disabled':'')+'>'+esc(state&&state.busy&&state.provider===a[0]?'Отправляем…':a[1])+'</button><small>'+esc(available?'Доступен':cap?({budget_exhausted:'Лимит подготовки исчерпан',budget_unavailable:'Лимит пока не подтверждён',not_connected:'Подключение не подтверждено',worker_disabled:'Подготовка отключена',worker_unverified:'Подключение не проверено'}[cap.reason]||'Подготовка недоступна'):'Доступность не проверена')+'</small></div>';
+  h+='<div class="r3-assistant-option"><b>'+esc(a[1])+'</b><button type="button" class="chip" data-act="r3-assistant-run" data-method="'+a[0]+'" data-id="'+id+'"'+(blocked?' disabled':'')+'>'+esc(state&&state.busy&&state.provider===a[0]?'Отправляем…':'Через API')+'</button><small>'+esc(available?'Доступен':cap?({budget_exhausted:'Лимит подготовки исчерпан',budget_unavailable:'Лимит пока не подтверждён',not_connected:'Подключение не подтверждено',worker_disabled:'Подготовка отключена',worker_unverified:'Подключение не проверено'}[cap.reason]||'Подготовка недоступна'):'Доступность не проверена')+'</small><button type="button" class="chip" data-act="r3-assistant-chat" data-method="'+a[0]+'" data-id="'+id+'">Через чат</button></div>';
  });
- h+='</div>';
+ h+='</div><p class="hint">Через чат: вы прикрепляете комплект и возвращаете результат в заявку. Через API: автоматическая подготовка с отдельной оплатой и подтверждением стоимости.</p>';
  if(state&&state.message)h+='<p class="r3-assistant-state" role="status" aria-live="polite">'+esc(state.message)+'</p>';
  h+='<button type="button" class="mini r3-state-refresh" data-act="r3-assistant-refresh" data-id="'+id+'"'+(state&&state.busy?' disabled':'')+'>'+(state&&state.busy?'Проверяем…':'Проверить подключения и состояние')+'</button></div>';
  return h;
@@ -1724,13 +1724,19 @@ async function checkR3Deepseek(x){
  }catch(e){if(!current())return;entry.busy=false;entry.available=false;entry.message='Не удалось подтвердить подключение. Повторите проверку.';}
  if(current())render();
 }
-function openR3Chatgpt(x){
- if(!x)return;var blockers=preparationBlockers(x);
+var R3_CHAT_PROVIDERS={claude:{name:'Claude',url:'https://claude.ai/'},chatgpt:{name:'ChatGPT',url:'https://chatgpt.com/'},deepseek:{name:'DeepSeek',url:'https://chat.deepseek.com/'}};
+function openR3Chatgpt(x){return openR3Chat(x,'chatgpt');}
+function openR3Chat(x,provider){
+ var chat=Object.hasOwn(R3_CHAT_PROVIDERS,provider)&&R3_CHAT_PROVIDERS[provider];if(!x||!chat)return;
+ var blockers=preparationBlockers(x);
  if(blockers.length){openModal('<button type="button" class="close" data-x="1">✕</button><h3>Перед подготовкой</h3><p role="status">'+esc(blockers.join(' '))+'</p><button type="button" class="chip" data-act="r3-assistant-document" data-id="'+esc(x.id)+'">Проверить требования и материалы</button>');return;}
  var owner=KEY,identity=Oblako.identity(),data=D,prompt=buildChatgptPrompt(x);
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка с ChatGPT/Codex</h3><p role="status" data-chat-status>Копируем запрос…</p><label>Запрос<textarea readonly style="min-height:220px">'+esc(prompt)+'</textarea></label><p>Вставьте запрос и приложите скачанные материалы вручную. Готовую работу прикрепите в заявке для проверки.</p><a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">Открыть ChatGPT</a>');
- window.open('https://chatgpt.com/','_blank','noopener,noreferrer');
- Promise.resolve(copyText(prompt)).then(function(ok){if(KEY!==owner||Oblako.identity()!==identity||D!==data||!wrap.isConnected)return;wrap.querySelector('[data-chat-status]').textContent=ok?'Запрос скопирован. Вставьте его в чат. Если окно не открылось, используйте ссылку ниже.':'Копирование недоступно. Скопируйте запрос из поля ниже и откройте чат по ссылке.';}).catch(function(){if(KEY===owner&&Oblako.identity()===identity&&D===data&&wrap.isConnected)wrap.querySelector('[data-chat-status]').textContent='Не удалось скопировать. Запрос сохранён в поле ниже.';});
+ function current(){return KEY===owner&&Oblako.identity()===identity&&D===data&&item(x.id)===x&&wrap.isConnected;}
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через чат '+esc(chat.name)+'</h3><p role="status" data-chat-status>Копируем запрос…</p><label>Запрос<textarea readonly style="min-height:220px">'+esc(prompt)+'</textarea></label><button type="button" class="btn" data-chat-bundle>Скачать комплект и запрос</button><p>Распакуйте архив и приложите скачанные материалы вручную вместе с запросом. Приложение не отправляет документы в чат. Доступ и ограничения определяются вашим аккаунтом выбранной нейросети; отдельного API-запроса нет.</p><a href="'+esc(chat.url)+'" target="_blank" rel="noopener noreferrer">Открыть '+esc(chat.name)+'</a><p>После выполнения прикрепите готовую работу в эту заявку для проверки.</p><label class="mini">Прикрепить результат<input type="file" hidden data-r3-result-file="'+esc(x.id)+'" accept=".docx,.pdf,.xlsx"></label>');
+ wrap.addEventListener('change',function(e){if(e.target.matches('input[data-r3-result-file]')&&!current()){e.stopPropagation();e.target.value='';}});
+ window.open(chat.url,'_blank','noopener,noreferrer');
+ Promise.resolve(copyText(prompt)).then(function(ok){if(!current())return;wrap.querySelector('[data-chat-status]').textContent=ok?'Запрос скопирован. Вставьте его в чат. Если окно не открылось, используйте ссылку ниже.':'Копирование недоступно. Скопируйте запрос из поля ниже и откройте чат по ссылке.';}).catch(function(){if(current())wrap.querySelector('[data-chat-status]').textContent='Не удалось скопировать. Запрос сохранён в поле ниже.';});
+ wrap.addEventListener('click',async function(e){var button=e.target.closest('[data-chat-bundle]');if(!button||button.disabled||!current())return;button.disabled=true;button.textContent='Собираем комплект…';try{await r3Bundle(x,provider);if(current())wrap.querySelector('[data-chat-status]').textContent='Комплект скачан. Распакуйте архив и прикрепите файлы в чат.';}catch(error){if(current())wrap.querySelector('[data-chat-status]').textContent=error.message||'Комплект не скачан. Повторите.';}finally{if(current()){button.disabled=false;button.textContent='Скачать комплект и запрос';}}});
 }
 async function openR3AssistantDocument(x){
  if(!x)return;var owner=KEY,identity=Oblako.identity(),data=D;
@@ -1791,17 +1797,26 @@ function r3Zip(entries){
  var csize=central.reduce(function(n,b){return n+b.length;},0);
  return new Blob(parts.concat(central,[new Uint8Array([].concat(u32(0x06054b50),u16(0),u16(0),u16(entries.length),u16(entries.length),u32(csize),u32(offset),u16(0)))]),{type:'application/zip'});
 }
-async function r3Bundle(x){
+async function r3Bundle(x,chatProvider){
+ var owner=KEY,identity=Oblako.identity(),data=D;
+ function current(){return KEY===owner&&Oblako.identity()===identity&&D===data&&item(x.id)===x;}
+ if(chatProvider&&(!Object.hasOwn(R3_CHAT_PROVIDERS,chatProvider)||preparationBlockers(x).length))throw Error('Проверьте требования перед подготовкой.');
+ var prompt=chatProvider?buildChatgptPrompt(x):null;
  if(!Array.isArray(x.attachments))await loadAttachmentContext(x);
+ if(!current())throw Error('Аккаунт или заявка изменились.');
+ var binding=JSON.stringify([x.attachments,x.passports,x.requirements,x.link]),attachments=x.attachments.slice();
  var entries=[],used={},enc=new TextEncoder();
  function unique(n){var base=String(n).replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_'),name=base,i=2;while(used[name]){name=base.replace(/(\.[^.]+)?$/,' ('+(i++)+')$1');}used[name]=1;return name;}
- for(var a of x.attachments){
+ for(var a of attachments){
+  if(!current())throw Error('Аккаунт или заявка изменились.');
   var r=await Oblako.requestApi({action:'attachment-download',id:x.id,attachmentId:a.id});
   var res=await fetch(r.url);if(!res.ok)throw Error('Файл «'+a.file_name+'» не скачался');
   entries.push({name:unique(a.file_name),data:new Uint8Array(await res.arrayBuffer())});
  }
  var info=r3TitleText(x)+(x.deadline?'\nКогда нужна работа: '+ruDate(x.deadline):'')+(x.requirements?'\n\nПожелания студента:\n'+x.requirements:'')+(x.link?'\n\nСсылка на папку в облаке:\n'+x.link:'');
  entries.push({name:unique('Сведения для титульного листа.txt'),data:enc.encode(info+'\n')});
+ if(chatProvider)entries.push({name:unique('Запрос для '+R3_CHAT_PROVIDERS[chatProvider].name+'.txt'),data:enc.encode(prompt)});
+ if(!current()||binding!==JSON.stringify([x.attachments,x.passports,x.requirements,x.link])||(chatProvider&&(preparationBlockers(x).length||prompt!==buildChatgptPrompt(x))))throw Error('Материалы или требования изменились. Соберите комплект заново.');
  var link=document.createElement('a');link.href=URL.createObjectURL(r3Zip(entries));link.download='Заявка_'+(x.requestNumber||'')+'_материалы.zip';link.click();setTimeout(function(){URL.revokeObjectURL(link.href);},60000);
 }
 var R3_ROWS=[['workType','Вид работы'],['discipline','Дисциплина'],['univ','Вуз'],['kafedra','Кафедра'],['program','Направление подготовки'],['form','Форма обучения'],['group','Курс и группа'],['student','Фамилия, имя, отчество'],['supervisor','Преподаватель']];
@@ -2861,7 +2876,7 @@ function viewMore(){
   var c = counts(), st = D.settings || {};
   var pvs = st.providers || {};
   var configured = aiReady();
-  var nets = '<p class="hint">Действующий сервер поддерживает автоматическую подготовку только через DeepSeek. Claude и ChatGPT/Codex выбираются в карточке заявки и работают через чат. Прежние настройки других поставщиков сохранены, но не разрешают запуск через API. Это отдельная оплата поставщику; подписка ChatGPT Pro не включает OpenAI API. Ручная кнопка ChatGPT/Codex работает без этих настроек. Пароль посредника на устройстве не хранится и не вводится.</p>' +
+  var nets = '<p class="hint">Действующий сервер поддерживает автоматическую подготовку только через DeepSeek. Для Claude, ChatGPT и DeepSeek в карточке заявки доступны два маршрута: через чат с ручной передачей комплекта и через API после подтверждения серверного подключения и стоимости. Автоматические подключения Claude и ChatGPT пока не завершены. Прежние настройки других поставщиков сохранены, но не разрешают запуск через API. Это отдельная оплата поставщику; подписка ChatGPT Pro не включает OpenAI API. Ручная кнопка ChatGPT/Codex работает без этих настроек. Пароль посредника на устройстве не хранится и не вводится.</p>' +
       PROVIDERS.filter(function(pv){return pv.id==="deepseek";}).map(function(pv){
         var c2 = pvs[pv.id] || {};
         return '<div class="item" style="align-items:flex-start">' +
@@ -3177,6 +3192,7 @@ document.addEventListener("click", function(ev){
   if(act==='r3-result-review')return r3ReviewManualResult(item(id));
   if(act==='r3-assistant-select')return selectR3Assistant(item(id),el.getAttribute('data-method'));
   if(act==='r3-deepseek-check')return checkR3Deepseek(item(id));
+  if(act==='r3-assistant-chat')return openR3Chat(item(id),el.getAttribute('data-method'));
   if(act==='r3-chatgpt')return openR3Chatgpt(item(id));
   if(act==='r3-assistant-document')return openR3AssistantDocument(item(id));
   if(act==='r3-retry-load'){var retryItem=item(id);if(!retryItem||passportLoads.has(retryItem))return;delete retryItem.r3LoadError;retryItem.r3Loaded=false;r3Seen.delete(retryItem);render();return;}

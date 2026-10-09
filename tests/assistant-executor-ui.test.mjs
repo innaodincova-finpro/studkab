@@ -48,12 +48,12 @@ test('projection keeps file semantics and internally accepted kit never invents 
 const source=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');
 function section(start,end){return source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));}
 const escape=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
-test('actual assistant renderer has equal neutral disabled launch controls and no manual technical paragraphs',()=>{
+test('each provider offers manual chat independently of blocked API launch',()=>{
  const context={esc:escape,r3AutomaticSession:()=>({state:{capabilities:caps.providers,busy:false}})};vm.createContext(context);
  vm.runInContext(section('function r3AssistantChoice(x){','async function refreshR3Automatic'),context);
  const html=vm.runInContext("r3AssistantChoice({id:'request-one'})",context);
  assert.equal((html.match(/data-act="r3-assistant-run"/g)||[]).length,3);assert.equal((html.match(/ disabled/g)||[]).length,3);
- assert.doesNotMatch(html,/aria-pressed|через чат|API|Подписка|скачайте/i);assert.match(html,/Подготовить работу/);
+ assert.equal((html.match(/data-act="r3-assistant-chat"/g)||[]).length,3);assert.match(html,/Через API/);assert.match(html,/Через чат/);assert.match(html,/отдельной оплатой/);assert.doesNotMatch(html,/aria-pressed/);assert.match(html,/Подготовить работу/);
 });
 test('actual prepared-file card offers review before delivery and keeps secondary actions',()=>{
  const x={id:'request-one',r3Loaded:true,r3:{result:{hash:'a'.repeat(64),name:'Работа.docx',size:2000,at:stamp}}};
