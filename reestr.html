@@ -1713,11 +1713,11 @@ function r3FinanceInformation(x,backProvider){
  function checked(v){return v&&v.observedAt?'<p class="small">'+(v.status==='stale'?'Последние данные: ':'Проверено: ')+esc(new Date(v.observedAt).toLocaleString('ru-RU'))+(v.status==='stale'?' · требуют обновления':'')+'</p>':'<p class="small">Не проверялось</p>';}
  function paint(state){
   if(!current())return;
-  var value=state.value,a=value&&value.application,session=x&&r3AutomaticSession(item(x.id)),caps=session?session.state.capabilities:financeCaps;
+  var value=state.value,a=value&&value.application,session=x&&r3AutomaticSession(item(x.id)),caps=financeCaps||(session?session.state.capabilities:null);
   var h='<section class="r3-finance-card"><h4>Лимит приложения</h4><p>Доступно: '+(a&&Number.isSafeInteger(a.availableMicrousd)?'$'+esc((a.availableMicrousd/1000000).toLocaleString('ru-RU',{maximumFractionDigits:6})):'не проверено')+'</p>'+(a&&a.checkedAt?'<p class="small">Проверено: '+esc(new Date(a.checkedAt).toLocaleString('ru-RU'))+'</p>':'')+'</section>';
   [['deepseek','DeepSeek','https://platform.deepseek.com/'],['chatgpt','ChatGPT','https://platform.openai.com/settings/organization/billing/overview'],['claude','Claude','https://platform.claude.com/settings/billing']].forEach(function(row){
    var p=value&&value.providers.find(function(v){return v.provider===row[0];}),b=p&&p.balance,c=p&&p.costs,cap=caps&&caps.find(function(v){return v.provider===row[0];});
-   h+='<section class="r3-finance-card" data-finance-provider="'+row[0]+'"><h4>'+row[1]+'</h4><p>Автоматическая подготовка: '+esc(!cap?'не проверена':cap.available?'доступна':cap.connection==='worker_disabled'?'отключена':cap.connection==='not_connected'?'не подключена':'недоступна')+'</p>';
+   h+='<section class="r3-finance-card" data-finance-provider="'+row[0]+'"><h4>'+row[1]+'</h4><p>Автоматическая подготовка: '+esc(!cap?'не проверена':cap.available===true?'доступна':cap.connection==='worker_disabled'?'отключена':cap.connection==='not_connected'?'не подключена':'недоступна')+'</p>';
    h+='<p>Баланс: '+(b&&b.balances?b.balances.map(function(v){return esc(v.total+' '+v.currency);}).join(' · '):row[0]==='deepseek'?'не проверено':'посмотреть в кабинете')+'</p>'+checked(b);
    h+='<p>Отчёт расходов: '+(c&&c.amount!==undefined?esc(c.amount+' USD'):p&&p.reportReason==='access_denied'?'нет доступа':p&&p.reportReason?'не подключён':'не получен')+'</p>'+checked(c);
    if(c&&c.amount!==undefined)h+='<p class="small">За '+esc(new Date(c.periodStart).toLocaleDateString('ru-RU'))+' — '+esc(new Date(c.periodEnd).toLocaleDateString('ru-RU'))+(c.coverage==='excludes_priority_tier'?' · без Priority Tier':'')+'</p>';
@@ -1727,7 +1727,7 @@ function r3FinanceInformation(x,backProvider){
   wrap.querySelector('[data-finance-body]').innerHTML=h;wrap.querySelector('[data-finance-status]').textContent=state.message;
   var button=wrap.querySelector('[data-finance-refresh]');button.disabled=state.busy;button.textContent=state.busy?'Обновляем…':'Обновить данные';
  }
- var reader=StudAssistantExecutor.createFinanceSession({api:function(input){return Oblako.requestApi(input);},active:current,onChange:paint});paint(reader.state);reader.refresh();if(!x)Oblako.requestApi({action:'assistant-capabilities'}).then(function(value){if(!current())return;financeCaps=Array.isArray(value.providers)?value.providers:null;paint(reader.state);}).catch(function(){});
+ var reader=StudAssistantExecutor.createFinanceSession({api:function(input){return Promise.allSettled([Oblako.requestApi(input),Oblako.requestApi({action:'assistant-capabilities'})]).then(function(results){if(current())financeCaps=results[1].status==='fulfilled'&&Array.isArray(results[1].value.providers)?results[1].value.providers:[];if(results[0].status==='rejected')throw results[0].reason;return results[0].value;});},active:current,onChange:paint});paint(reader.state);reader.refresh();
  wrap.addEventListener('click',function(e){if(!current())return;if(e.target.closest('[data-finance-refresh]'))reader.refresh();if(e.target.closest('[data-finance-back]')){wrap.remove();if(backProvider&&x)r3ApiInformation(item(x.id),backProvider);}});
 }
 async function refreshR3Automatic(x){var session=x&&r3AutomaticSession(x);if(session)await session.refresh();}
