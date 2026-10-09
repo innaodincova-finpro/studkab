@@ -268,6 +268,7 @@ test('R3-D: student hands in, then sends the teacher remarks with a photo; the c
   Oblako.mode='cloud';window.calls=[];window.st={stage:'r3_ready',openQuestions:0,route:'r3',returns:0,result:{name:'Иванова_Математика.docx',size:49152,at:'2026-10-06T15:15:00Z',downloadedAt:'2026-10-07T09:00:00Z',handedAt:null}};window.pending=[];
   Oblako.requestApi=async d=>{calls.push(d);
    if(d.action==='student-progress')return structuredClone(st);
+   if(d.action==='assistant-state')return {job:null};
    if(d.action==='clarification-unread')return {question:0};
    if(d.action==='r3-hand'){st.stage='r3_handed';st.result.handedAt='2026-10-08T08:30:00Z';return {work:{}};}
    if(d.action==='r3-state')return {work:{pendingFiles:pending}};
@@ -294,7 +295,7 @@ test('R3-D: student hands in, then sends the teacher remarks with a photo; the c
  await expect(box.locator('.r3-files li')).toHaveCount(1);
  await box.locator('[data-act="r3-return-send"]').click();
  await expect(box).toContainText('Работа возвращена на доработку');await expect(box).toContainText('доработка № 1');await expect(box).toContainText('Приложено: Замечания.png');
- await expect(page.locator('[data-student-progress]')).toContainText('Работа на доработке');
+ await expect(page.locator('[data-student-progress]')).toHaveText('Работа возвращена на доработку');
  expect(await page.evaluate(()=>calls.find(c=>c.action==='r3-return').comment)).toBe('Задание 3: показать решение подробно.');
 });
 test('R3-E1: the work page shows the five-step route; passed steps fold into one line on a phone',async({page})=>{
