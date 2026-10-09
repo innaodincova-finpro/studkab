@@ -1710,7 +1710,7 @@ function r3FinanceInformation(x,backProvider){
  var owner=KEY,identity=Oblako.identity(),wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подключения и расходы</h3><div data-finance-body></div><p data-finance-status role="status" aria-live="polite"></p><div class="r3-api-actions"><button type="button" class="btn" data-finance-refresh>Обновить данные</button><button type="button" class="btn ghost" data-finance-back>'+(x?'Вернуться к заявке':'Вернуться')+'</button></div>');
  wrap.dataset.assistantOwner=owner+'|'+identity;
  function current(){return wrap.isConnected&&KEY===owner&&Oblako.identity()===identity&&(!x||!!item(x.id));}
- function checked(v){return v&&v.observedAt?'<p class="small">'+(v.status==='stale'?'Последние данные: ':'Проверено: ')+esc(new Date(v.observedAt).toLocaleString('ru-RU'))+(v.status==='stale'?' · требуют обновления':'')+'</p>':'<p class="small">Не проверялось</p>';}
+ function checked(v){return v&&v.observedAt?'<p class="small">'+(v.status==='stale'?'Последние данные: ':'Проверено: ')+esc(new Date(v.observedAt).toLocaleString('ru-RU'))+(v.status==='stale'?' · требуют обновления':'')+'</p>':'<p class="small">Данные не подтверждены</p>';}
  function paint(state){
   if(!current())return;
   var value=state.value,a=value&&value.application,session=x&&r3AutomaticSession(item(x.id)),caps=financeCaps||(session?session.state.capabilities:null);
