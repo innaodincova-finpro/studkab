@@ -188,11 +188,13 @@ test('R3-C: registry card — take, attach result, deliver; new file must be del
 });
 test('R3-C: «Скачать всё» builds one archive with the student files and the title-page details',async({page})=>{
  await page.goto('http://127.0.0.1:4173/reestr.html');
+ await page.evaluate(()=>QA.switchUser('archive-route-synthetic'));
+ await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy)).toBe(true);
  const names=await page.evaluate(async()=>{
   window.fetch=async u=>new Response(String(u).endsWith('a1')?'%PDF-one':'jpeg-two');
   Oblako.requestApi=async d=>{if(d.action==='attachment-download')return {url:'https://storage.example/'+d.attachmentId};throw Error('Unexpected '+d.action);};
   const x=fromPayload({id:'r3-zip',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'26Т101а',n:'Иванова М.П.',dl:'2027-01-25',rq:'Любые 2',lk:'https://disk.yandex.ru/d/x',cn:'s@e'});
-  x.requestNumber=15;x.attachments=[{id:'a1',file_name:'Задание.pdf'},{id:'a2',file_name:'Задание.pdf'}];
+  x.requestNumber=15;x.attachments=[{id:'a1',file_name:'Задание.pdf'},{id:'a2',file_name:'Задание.pdf'}];D.items=[x];
   let blob;const real=URL.createObjectURL;URL.createObjectURL=b=>{blob=b;return 'blob:x';};
   await r3Bundle(x);URL.createObjectURL=real;
   const bytes=new Uint8Array(await blob.arrayBuffer()),dec=new TextDecoder(),out=[];
@@ -664,7 +666,8 @@ for(const width of [390,1440])test('UX-ASSISTANT equal controls retain manual ch
  // to the preparation stage; the existing file's next action remains review.
  await page.evaluate(()=>{D.items[0].r3.result=null;render();});
  const controls=panel.locator('[data-act="r3-assistant-run"]');await expect(controls).toHaveCount(3);
- expect(await controls.allTextContents()).toEqual(['Claude','ChatGPT / Codex','DeepSeek']);
+ expect(await controls.allTextContents()).toEqual(['Через API','Через API','Через API']);
+ await expect(panel.locator('[data-act="r3-assistant-chat"]')).toHaveCount(3);
  await expect(panel.locator('.r3-assistant')).toContainText('Лимит подготовки исчерпан');for(let i=0;i<3;i++)await expect(controls.nth(i)).toBeDisabled();
  await expect(panel.locator('[aria-pressed]')).toHaveCount(0);
  await page.evaluate(()=>failAssistantCheck=true);await panel.locator('[data-act="r3-assistant-refresh"]').first().click();
