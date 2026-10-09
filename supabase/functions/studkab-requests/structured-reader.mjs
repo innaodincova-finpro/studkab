@@ -1,5 +1,6 @@
 import {inflateRawSync} from 'node:zlib';
-export const READER_VERSION='intake-reader-1';
+import {readOfficeMath} from './office-math.mjs';
+export const READER_VERSION='intake-reader-2';
 const DOCX='application/vnd.openxmlformats-officedocument.wordprocessingml.document',XLSX='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_TEXT=500000,MAX_BLOCKS=20000,MAX_JSON=2000000;
 class ReadError extends Error{constructor(code){super(code);this.code=code;}}
@@ -47,16 +48,30 @@ function xml(bytes,DOMParser){
 function word(zip,DOMParser,out,add,warning){
  const part='word/document.xml',root=xml(zip.get(part),DOMParser),body=first(root,'body');if(!body)fail('invalid_docx');
  const parts=[{part,node:body},...zip.names.filter(n=>/^word\/(header\d+|footer\d+|footnotes|endnotes|comments)\.xml$/.test(n)).map(part=>({part,node:xml(zip.get(part),DOMParser)}))];
+ function wordText(n,source){
+  let text='',equations=[];
+  function visit(c){
+   if(c.nodeType!==1)return;
+   if(c.namespaceURI==='http://schemas.openxmlformats.org/officeDocument/2006/math'&&c.localName==='oMath'){
+    const equation=readOfficeMath(c),origin={...source,equation:equations.length+1};equations.push({...equation,source:origin});
+    if(equation.complete)text+='\\('+equation.text+'\\)';else{warning('equation_layout',origin);text+='[Непрочитанная формула '+origin.equation+']';}return;
+   }
+   if(c.localName==='t'||c.localName==='delText')text+=c.textContent;
+   else if(c.localName==='tab')text+='\t';else if(['br','cr'].includes(c.localName))text+='\n';
+   else for(const nested of children(c))visit(nested);
+  }
+  visit(n);return {text,...(equations.length?{equations}:{})};
+ }
  let tables=0;
  for(const {part,node} of parts){let paragraph=0;function walk(n,source={part}){
   for(const c of children(n)){
-   if(c.localName==='p'){const text=textRuns(c);add({kind:'paragraph',text,source:{...source,paragraph:++paragraph}});}
+   if(c.localName==='p'||c.localName==='oMathPara'){const origin={...source,paragraph:++paragraph};add({kind:'paragraph',...wordText(c,origin),source:origin});}
    else if(c.localName==='tbl'){
     const table=++tables;let row=0;
     for(const tr of named(c,'tr')){row++;let column=1+Number(attr(first(first(tr,'trPr')||{},'gridBefore'),'val')||0);if(!Number.isInteger(column)||column<1||column>1001)fail('invalid_docx');for(const tc of named(tr,'tc')){
      const pr=first(tc,'tcPr'),span=Number(attr(first(pr||{},'gridSpan'),'val')||1);
      if(!Number.isInteger(span)||span<1||span>1000)fail('invalid_docx');
-     const merge=first(pr||{},'vMerge');add({kind:'table_cell',text:named(tc,'p').map(textRuns).join('\n'),source:{part,table,row,column},columnSpan:span,verticalMerge:merge?(attr(merge,'val')||'continue'):null});
+     const merge=first(pr||{},'vMerge'),origin={part,table,row,column},paragraphs=named(tc,'p').map((p,index)=>wordText(p,{...origin,paragraph:index+1})),equations=paragraphs.flatMap(p=>p.equations||[]);add({kind:'table_cell',text:paragraphs.map(p=>p.text).join('\n'),...(equations.length?{equations}:{}),source:origin,columnSpan:span,verticalMerge:merge?(attr(merge,'val')||'continue'):null});
      for(const nested of named(tc,'tbl'))walk({childNodes:[nested]},{part,parentTable:table,parentRow:row,parentColumn:column});column+=span;
     }}
    }else if(['sdt','sdtContent','ins','customXml','footnote','endnote','comment'].includes(c.localName))walk(c,source);
@@ -65,7 +80,6 @@ function word(zip,DOMParser,out,add,warning){
   }
  }
  walk(node);
- if(descendants(node,'oMath').length)warning('equation_layout',{part});
  if(descendants(node,'fldChar').length||descendants(node,'fldSimple').length)warning('word_field_cache',{part});
  if(part==='word/comments.xml')warning('document_comments',{part});
  if(descendants(node,'drawing').length||descendants(node,'pict').length)warning('non_text_content',{part});
