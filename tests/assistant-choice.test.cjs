@@ -60,3 +60,31 @@ test('export never releases previous-account materials after delayed file fetch'
 test('changed material binding cannot produce a stale chat bundle',async()=>{
  const f=bundleFixture();f.c.fetch=async()=>{f.x.attachments.push({id:'new',file_name:'new.docx'});return {ok:true,arrayBuffer:async()=>new Uint8Array([1]).buffer};};await assert.rejects(f.c.r3Bundle(f.x,'deepseek'),/изменились/);assert.equal(f.downloads(),0);
 });
+
+function requirementsFixture(){
+ const f=fixture(),windows=[];let opened=0,loads=0,resolve,reject;
+ const body={innerHTML:'',removeAttribute(){}};
+ f.c.openModal=html=>{const wrap={html,isConnected:true,querySelector:s=>s==='[data-x]'?{focus(){}}:body,remove(){this.isConnected=false;}};windows.push(wrap);return wrap;};
+ f.c.loadPassports=()=>{loads++;return new Promise((yes,no)=>{resolve=yes;reject=no;});};
+ f.c.passportContent=()=> 'Draft requirements';f.c.openDocBuilder=()=>opened++;
+ return {...f,windows,body,loads:()=>loads,opened:()=>opened,resolve:()=>resolve(),reject:()=>reject(Error('Originals unread'))};
+}
+test('requirements refusal leaves an inline explanation and routes to materials and retry',async()=>{
+ const f=requirementsFixture(),pending=f.c.openR3AssistantDocument(f.x);
+ assert.match(f.windows[0].html,/Проверяем требования и материалы/);f.reject();await pending;
+ assert.match(f.body.innerHTML,/Originals unread/);assert.match(f.body.innerHTML,/data-key="materials"/);assert.match(f.body.innerHTML,/Повторить проверку/);
+ assert.doesNotMatch(f.body.innerHTML,/passport-approve|assistant-start/);assert.equal(f.opened(),0);
+});
+test('requirements double click makes one request and a closed window cannot open a late editor',async()=>{
+ const f=requirementsFixture(),pending=f.c.openR3AssistantDocument(f.x);
+ await f.c.openR3AssistantDocument(f.x);assert.equal(f.loads(),1);assert.equal(f.windows.length,1);
+ f.windows[0].remove();f.x.passports=[{status:'approved'}];f.resolve();await pending;assert.equal(f.opened(),0);
+});
+test('requirements reply from a departed owner cannot open or populate their window',async()=>{
+ const f=requirementsFixture(),pending=f.c.openR3AssistantDocument(f.x);f.owner();f.resolve();await pending;
+ assert.equal(f.windows[0].isConnected,false);assert.equal(f.body.innerHTML,'');assert.equal(f.opened(),0);
+});
+test('requirements success keeps draft review and only an approved passport opens the editor',async()=>{
+ for(const approved of [false,true]){const f=requirementsFixture(),pending=f.c.openR3AssistantDocument(f.x);f.x.passports=approved?[{status:'approved'}]:[];f.resolve();await pending;
+ assert.equal(f.opened(),approved?1:0);assert.equal(f.body.innerHTML,approved?'':'Draft requirements');}
+});
