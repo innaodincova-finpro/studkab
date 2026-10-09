@@ -117,3 +117,30 @@ test('math namespace spoofing and resource exhaustion fail closed',()=>{
  assert.equal(readOfficeMath(fake).complete,false);
  assert.equal(readOfficeMath(mathNode(mathRun('x').repeat(4001))).complete,false);
 });
+
+const officeFont='<w:rPr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>';
+const formattedMath=text=>'<m:r>'+officeFont+'<m:t>'+text+'</m:t></m:r>';
+test('DOCX Office formatting is read through the complete document path with source binding',async()=>{
+ const r=await readDocument(new Uint8Array(Buffer.from(mathFixtures['math-formatted.docx'],'base64')),DOCX,deps);
+ assert.equal(r.status,'ready');assert.deepEqual(r.warnings,[]);const equations=r.blocks.flatMap(b=>b.equations||[]);assert.equal(equations.length,3);
+ for(const e of equations){assert.equal(e.complete,true);assert.equal(e.text,'\\frac{1}{{x}^{2}}');assert.match(e.omml,/w:rFonts/);assert.ok(e.source.part);}
+ assert.equal(equations[1].source.table,1);assert.equal(equations[2].source.part,'word/header1.xml');
+});
+test('standard Office font metadata preserves fraction and nested scripts',()=>{
+ const body='<m:f><m:num><m:sSup><m:e>'+formattedMath('q')+'</m:e><m:sup>'+formattedMath('5')+'</m:sup></m:sSup></m:num><m:den>'+formattedMath('7')+'</m:den></m:f>';
+ const r=readOfficeMath(mathNode(body));assert.equal(r.complete,true);assert.equal(r.text,'\\frac{{q}^{5}}{7}');assert.match(r.omml,/Cambria Math/);
+});
+for(const property of ['<m:degHide/>','<m:degHide m:val="on"/>','<m:degHide m:val="true"/>','<m:degHide m:val="1"/>'])test('Word square root supports Boolean property '+property,()=>{
+ const r=readOfficeMath(mathNode('<m:rad><m:radPr>'+property+'</m:radPr><m:deg/><m:e>'+formattedMath('q')+'</m:e></m:rad>'));assert.equal(r.complete,true);assert.equal(r.text,'\\sqrt{q}');
+});
+for(const property of ['<m:degHide m:val="off"/>','<m:degHide m:val="false"/>','<m:degHide m:val="0"/>'])test('visible radical degree supports Boolean property '+property,()=>{
+ const r=readOfficeMath(mathNode('<m:rad><m:radPr>'+property+'</m:radPr><m:deg>'+formattedMath('4')+'</m:deg><m:e>'+formattedMath('q')+'</m:e></m:rad>'));assert.equal(r.complete,true);assert.equal(r.text,'\\sqrt[4]{q}');
+});
+for(const body of [
+ '<m:r>'+officeFont.replace('<w:sz w:val="28"/>','<w:vanish/>')+'<m:t>q</m:t></m:r>',
+ '<m:r>'+officeFont.replace(/Cambria Math/g,'Symbol')+'<m:t>q</m:t></m:r>',
+ '<m:r>'+officeFont.replace('w:val="28"','w:val="invalid"')+'<m:t>q</m:t></m:r>',
+ '<m:rad><m:radPr><m:degHide m:val="on"/></m:radPr><m:deg>'+formattedMath('4')+'</m:deg><m:e>'+formattedMath('q')+'</m:e></m:rad>',
+ '<m:rad><m:radPr><m:degHide m:val="unknown"/></m:radPr><m:deg/><m:e>'+formattedMath('q')+'</m:e></m:rad>',
+ '<m:rad><m:radPr><m:degHide m:val="0"/><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>'+formattedMath('q')+'</m:e></m:rad>'
+])test('font substitution, hidden math and ambiguous Boolean properties stay blocked: '+body.slice(0,50),()=>{const r=readOfficeMath(mathNode(body));assert.equal(r.complete,false);assert.equal(r.text,'');});

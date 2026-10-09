@@ -1,5 +1,6 @@
 // Bounded, non-evaluating OMML reading. Preserve the original math tree for provenance.
 const M='http://schemas.openxmlformats.org/officeDocument/2006/math';
+const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const CONSTRUCTS=['r','f','sSup','sSub','sSubSup','sPre','rad','limLow','limUpp','func','nary','d','m','eqArr'];
 const nodes=n=>Array.from(n.childNodes||[]).filter(c=>c.nodeType===1);
 const get=(n,name)=>nodes(n).filter(c=>c.namespaceURI===M&&c.localName===name);
@@ -11,8 +12,12 @@ export function readOfficeMath(root){
  const original=root.toString();
  const one=(n,name)=>{const found=get(n,name);if(found.length!==1)bad();return found[0];};
  const settings=(n,name,allowed)=>{const list=get(n,name);if(list.length>1)bad();const p=list[0];
-  if(p)for(const c of nodes(p)){if(c.namespaceURI!==M||!allowed.includes(c.localName)||nodes(c).length)bad();}
-  return key=>value(p&&get(p,key)[0]);
+  const seen=new Set();if(p)for(const c of nodes(p)){if(c.namespaceURI!==M||!allowed.includes(c.localName)||nodes(c).length||seen.has(c.localName))bad();seen.add(c.localName);}
+  return key=>{const element=p&&get(p,key)[0],raw=value(element);
+   if(!['degHide','subHide','supHide','grow','nor','lit','aln'].includes(key))return raw;
+   if(!element)return '';if(!element.hasAttributeNS(M,'val'))return '1';
+   if(['1','true','on'].includes(raw))return '1';if(['0','false','off'].includes(raw))return '0';bad();
+  };
  };
  const shape=(n,names)=>{for(const c of nodes(n))if(c.namespaceURI!==M||!names.includes(c.localName))bad();};
  function render(n,depth=0){
@@ -21,7 +26,17 @@ export function readOfficeMath(root){
   // Formatting and unknown structures never silently turn into flattened text.
   if(['oMath','e','num','den','sub','sup','deg','lim','fName'].includes(name)){shape(n,CONSTRUCTS);return nodes(n).map(c=>render(c,depth+1)).join('');}
   if(name==='r'){
-   shape(n,['rPr','t']);const strings=get(n,'t');if(strings.length!==1)bad();
+   const wordProperties=nodes(n).filter(c=>c.namespaceURI===W&&c.localName==='rPr');if(wordProperties.length>1)bad();
+   // Known font/size metadata does not change the token tree. Hidden text,
+   // symbol substitutions and every unrecognised property remain blocked.
+   for(const p of wordProperties){const seen=new Set();for(const c of nodes(p)){
+    if(c.namespaceURI!==W||!['rFonts','sz','szCs'].includes(c.localName)||seen.has(c.localName)||nodes(c).length)bad();seen.add(c.localName);
+    if(c.localName==='rFonts'){
+     for(const a of Array.from(c.attributes||[]))if(a.namespaceURI!=='http://www.w3.org/2000/xmlns/'&&(a.namespaceURI!==W||!['ascii','hAnsi','cs','eastAsia'].includes(a.localName)||a.value!=='Cambria Math'))bad();
+    }else if(!/^[1-9][0-9]{0,3}$/.test(c.getAttributeNS(W,'val')))bad();
+   }}
+   for(const c of nodes(n))if(!wordProperties.includes(c)&&(c.namespaceURI!==M||!['rPr','t'].includes(c.localName)))bad();
+   const strings=get(n,'t');if(strings.length!==1)bad();
    const style=settings(n,'rPr',['sty','nor','lit','scr','aln','brk']);
    if(style('scr')&&!['roman'].includes(style('scr')))bad();
    if(style('brk')||style('aln'))bad();
