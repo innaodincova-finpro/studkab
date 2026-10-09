@@ -1,6 +1,7 @@
 // Existing DeepSeek proxy adapter. No browser calls, automatic retries, new
 // credentials, URLs or enablement. Dispatch requires an atomic ledger receipt.
 import {verifyAssistantManifest,snapshotJson,digest} from './assistant-bundle.mjs';
+import {originalsMode,originalInputs,nativePart} from './assistant-originals.mjs';
 import {reserveMicrousd,MAX_OUTPUT_TOKENS} from './deepseek-cost.mjs';
 const ENDPOINT='https://calm-bird-dae8.bf6mhynzgm.workers.dev';
 const uuid=v=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v);
@@ -22,8 +23,16 @@ export async function prepareAssistantText(bundle,expectedSections,{readFile}){
 }
 export async function prepareDeepseekAssistant(bundle,expectedSections,deps){
  if(bundle.provider!=='deepseek')throw Error('PROVIDER_MISMATCH');
- const {system,user}=await prepareAssistantText(bundle,expectedSections,deps);
- return {provider:'deepseek',model:'deepseek-flash',system,user,max_tokens:MAX_OUTPUT_TOKENS,temperature:0.4,estimatedMicrousd:reserveMicrousd(system,user,MAX_OUTPUT_TOKENS)};
+ let system,user;
+ if(originalsMode(bundle)){
+  const original=await originalInputs(bundle,expectedSections);
+  system=original.system;
+  const parts=original.files.map(f=>nativePart(f,'deepseek'));
+  // The existing proxy and budget retain their limits. Never drop a file.
+  user=JSON.stringify([{type:'text',text:original.user},...parts]);
+  if(new TextEncoder().encode(system+user).length>180000)throw Error('CONTEXT_TOO_BIG');
+ }else ({system,user}=await prepareAssistantText(bundle,expectedSections,deps));
+ return {provider:'deepseek',model:'deepseek-flash',system,user,max_tokens:MAX_OUTPUT_TOKENS,temperature:0.4,...(originalsMode(bundle)?{originalsProtocol:'originals-work-commentary-v1'}:{}),estimatedMicrousd:reserveMicrousd(system,user,MAX_OUTPUT_TOKENS)};
 }
 export async function dispatchDeepseekAssistant(bundle,jobId,claim,expectedSections,{readFile,reserveAndDispatch,proxyToken,fetchProxy=globalThis.fetch}){
  if(!uuid(jobId)||!uuid(claim)||typeof proxyToken!=='string'||!proxyToken)throw Error('PROVIDER_NOT_CONNECTED');
@@ -46,6 +55,6 @@ export async function probeDeepseekAssistant(proxyToken,fetchProxy=globalThis.fe
  try{
   const r=await fetchProxy(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Token':proxyToken},body:JSON.stringify({action:'capabilities'}),signal:AbortSignal.timeout(10000)});
   const v=await r.json();
-  return {verified:r.ok&&v?.schema===1&&v.provider==='deepseek'&&v.model==='deepseek-flash'&&v.configured===true&&v.maxOutputTokens===MAX_OUTPUT_TOKENS};
+  return {verified:r.ok&&v?.schema===1&&v.provider==='deepseek'&&v.model==='deepseek-flash'&&v.configured===true&&v.maxOutputTokens===MAX_OUTPUT_TOKENS&&v.originalsProtocol==='originals-work-commentary-v1'};
  }catch{return {verified:false};}
 }

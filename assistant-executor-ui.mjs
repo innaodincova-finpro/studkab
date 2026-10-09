@@ -22,7 +22,9 @@ export function createAssistantSession({api,active,onChange,newOperation}) {
   // must be reconciled before any repeated mutation.
   const rejected=Number.isInteger(error?.status)&&error.status>=400&&error.status<500;
   state.unknown=!rejected;
-  state.message=rejected?'Действие не выполнено. Проверьте требования и состояние заявки.':launch?'Не удалось подтвердить запуск. Проверьте состояние.':'Не удалось подтвердить получение комплекта. Проверьте состояние.';
+  const code=String(error?.code||error?.message||'');
+  const reasons={ORIGINAL_FORMAT_UNSUPPORTED:'Этот API не принимает один из исходных форматов. Передайте весь комплект через чат: документы не пропущены, платного запуска нет.',INPUT_COST_UNCONFIRMED:'Не удалось подтвердить стоимость обработки оригиналов. Платного запуска нет. Можно передать комплект через чат.',CONTEXT_TOO_BIG:'Весь комплект превышает лимит API. Файлы не обрезаны. Передайте оригиналы через чат.',RESERVE_LIMIT:'Стоимость всего комплекта превышает разрешённый лимит. Платного запуска нет. Можно использовать чат.'};
+  state.message=rejected?(reasons[code]||'Действие не выполнено. Проверьте состояние заявки.'):launch?'Не удалось подтвердить запуск. Проверьте состояние.':'Не удалось подтвердить получение комплекта. Проверьте состояние.';
  }
  async function refresh(){
   if(state.busy||!active())return;

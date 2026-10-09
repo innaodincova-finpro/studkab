@@ -1,6 +1,7 @@
 // AUTO-ASSISTANT-01. Build Word on the server, using the existing browser generator.
 // Intentionally unwired until durable claim/commit RPCs and provider connections exist.
 import '../../../result-docx.js';
+import {originalsMode,ORIGINALS_OUTPUTS} from './assistant-originals.mjs';
 import {digest,ASSISTANTS,verifyAssistantManifest} from './assistant-bundle.mjs';
 export const WORD_TYPE='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -9,6 +10,7 @@ function validateEnvelope(bundle,response){
  if(!bundle||!uuid.test(bundle.requestId)||!hash.test(bundle.fingerprint)||!ASSISTANTS.includes(bundle.provider)||!Number.isSafeInteger(bundle.revision)||bundle.revision<1||!bundle.details)throw Error('INVALID_BUNDLE');
  if(!response||response.status!=='completed'||response.requestId!==bundle.requestId||response.revision!==bundle.revision||response.provider!==bundle.provider||response.fingerprint!==bundle.fingerprint||!uuid.test(response.jobId))throw Error('UNCONFIRMED_RESULT');
  const sections=response.sections;
+ if(originalsMode(bundle)&&JSON.stringify(sections?.map(s=>s?.id))!==JSON.stringify(ORIGINALS_OUTPUTS))throw Error('INCOMPLETE_DOCUMENT');
  if(!Array.isArray(sections)||sections.length<1||sections.length>96)throw Error('INCOMPLETE_DOCUMENT');
  const ids=new Set();let length=0;
  for(const s of sections){

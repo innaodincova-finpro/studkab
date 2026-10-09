@@ -710,14 +710,14 @@ function preparationBlockers(x){
       requirementText=[x.requirements,x.methodNotes,packet.requirements]
         .concat(((passport||{}).items||[]).map(function(q){return q.text||"";})).join("\n");
   var blockers=[];
-  if(x.requestNumber&&(!x.materialRevision||x.materialRevision.state==='open'))blockers.push(x.materialRevision?'Студент дополняет материалы. Дождитесь завершения и утвердите новый паспорт.':'Сначала обновите состояние материалов заявки.');
+  if(x.requestNumber&&(!x.materialRevision||x.materialRevision.state==='open'))blockers.push(x.materialRevision?'Студент дополняет материалы. Дождитесь завершения загрузки.':'Сначала обновите состояние материалов заявки.');
   if(x.externalResult)blockers.push("К заявке уже прикреплён Word: сначала проверьте его, а не создавайте новый черновик.");
   if(/(?:\bAI\b|\bИИ\b|нейросет\w*)[^.\n]{0,35}(?:не\s+(?:запускать|использовать|применять)|запрещ)/i.test(requirementText)||
      /(?:не\s+(?:запускать|использовать|применять)|запрещ)[^.\n]{0,35}(?:\bAI\b|\bИИ\b|нейросет\w*)/i.test(requirementText))
     blockers.push("В утверждённых требованиях запрещено использовать ИИ.");
-  if(!passport||passport.status!=="approved")blockers.push("Сначала утвердите паспорт требований.");
-  else if(!approvedStructure(x))blockers.push("В утверждённом паспорте нет проверенной структуры работы.");
-  if(passport)blockers=blockers.concat(materialManifestIssues(x,passport));
+  if(!x.route3&&(!passport||passport.status!=="approved"))blockers.push("Сначала утвердите паспорт требований.");
+  else if(!x.route3&&!approvedStructure(x))blockers.push("В утверждённом паспорте нет проверенной структуры работы.");
+  if(!x.route3&&passport)blockers=blockers.concat(materialManifestIssues(x,passport));
   if(!(Array.isArray(x.attachments)&&x.attachments.length)&&!String(packet.materials||"").trim()&&!String(packet.sources||"").trim())
     blockers.push("Добавьте материалы или проверенные источники для подготовки.");
   return Array.from(new Set(blockers));
@@ -761,6 +761,12 @@ function buildPrompt(x){
 }
 function buildChatgptPrompt(x){
   var number=x.requestNumber||x.num||x.number||x.id||"не указан";
+  if(x.route3)return "ЗАЯВКА: "+number+"\n\n"+r3TitleText(x)+
+    "\nПожелания студента: "+(x.requirements||"не указаны")+
+    "\nСсылка на дополнительные материалы: "+(x.link||"не указана")+
+    "\n\nИзучи все прикреплённые оригиналы. Определи задания и требования по документам и выполни работу. Приложение не распознаёт документы заранее и не задаёт структуру решения. Не выдумывай недостающие данные. Если файл не читается или материала недостаточно, сообщи об этом и перечисли вопросы.\n\nВерни выполненную работу и комментарий по полученному комплекту и выполненным заданиям. В комментарии перечисли каждый полученный файл, выполненные задания, недостающие или нечитаемые материалы, вопросы и ограничения. Сохрани работу вместе с комментарием в готовый файл для возврата в заявку.\n\nПЕРЕЧЕНЬ ОРИГИНАЛОВ:\n"+
+    (x.attachments||[]).map(function(a){return a.file_name+" · "+a.size_bytes+" байт · SHA256 "+a.file_hash;}).join("\n")+
+    "\n\nРаспакуй архив и проверь наличие каждого оригинала из перечня. Приложение не отправляет файлы в чат автоматически. Ссылка на облако не подтверждает получение файлов из неё.";
   return "ЗАЯВКА: "+number+"\n\n"+buildPrompt(x)+
     "\n\nВАЖНО: сначала проверь приложенные мной в этом чате материалы. "+
     "Не считай, что приложение STUDKAB передало их автоматически.";
@@ -1689,7 +1695,7 @@ function r3AssistantPrepare(x){
 function r3ReviewManualResult(x){
  if(!x||!x.r3||!x.r3.result)return;
  var owner=KEY,identity=Oblako.identity(),hash=x.r3.result.hash,session=r3AutomaticSession(x),durable=session&&session.state.job,needsReceipt=!!(durable&&durable.resultHash===hash),reviewBusy=false,reviewed=!!(needsReceipt&&r3Projection(x).state==='reviewed'&&!session.state.stale);
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Проверка готового файла</h3><div class="r3-file"><b>'+esc(x.r3.result.name)+'</b><small>'+esc(r3Size(x.r3.result.size))+'</small><button type="button" class="mini" data-review-download>Открыть файл</button></div><p>Проверьте ответы, расчёты и оформление по заданию.</p><label class="r3-confirm-review"><input type="checkbox" data-review-confirm>Я проверил эту версию работы</label><p role="status" data-review-status></p><button type="button" class="btn r3-main" data-review-deliver disabled>Передать студенту</button>');
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Проверка готового файла</h3><div class="r3-file"><b>'+esc(x.r3.result.name)+'</b><small>'+esc(r3Size(x.r3.result.size))+'</small><button type="button" class="mini" data-review-download>Открыть файл</button></div><p>Проверьте ответы, расчёты и оформление по заданию, а также комментарий нейросети о полученных файлах и выполненных заданиях.</p><label class="r3-confirm-review"><input type="checkbox" data-review-confirm>Я проверил эту версию работы</label><p role="status" data-review-status></p><button type="button" class="btn r3-main" data-review-deliver disabled>Передать студенту</button>');
  function current(){var active=item(x.id);return KEY===owner&&Oblako.identity()===identity&&active&&active.r3&&active.r3.result&&active.r3.result.hash===hash;}
  wrap.addEventListener('change',function(e){if(e.target.matches('[data-review-confirm]'))wrap.querySelector('[data-review-deliver]').disabled=reviewBusy||!e.target.checked||!current();});
  wrap.addEventListener('click',async function(e){
@@ -1732,7 +1738,7 @@ function openR3Chat(x,provider){
  if(blockers.length){openModal('<button type="button" class="close" data-x="1">✕</button><h3>Перед подготовкой</h3><p role="status">'+esc(blockers.join(' '))+'</p><button type="button" class="chip" data-act="r3-assistant-document" data-id="'+esc(x.id)+'">Проверить требования и материалы</button>');return;}
  var owner=KEY,identity=Oblako.identity(),data=D,prompt=buildChatgptPrompt(x);
  function current(){return KEY===owner&&Oblako.identity()===identity&&D===data&&item(x.id)===x&&wrap.isConnected;}
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через чат '+esc(chat.name)+'</h3><p role="status" data-chat-status>Копируем запрос…</p><label>Запрос<textarea readonly style="min-height:220px">'+esc(prompt)+'</textarea></label><button type="button" class="btn" data-chat-bundle>Скачать комплект и запрос</button><p>Распакуйте архив и приложите скачанные материалы вручную вместе с запросом. Приложение не отправляет документы в чат. Доступ и ограничения определяются вашим аккаунтом выбранной нейросети; отдельного API-запроса нет.</p><a href="'+esc(chat.url)+'" target="_blank" rel="noopener noreferrer">Открыть '+esc(chat.name)+'</a><p>После выполнения прикрепите готовую работу в эту заявку для проверки.</p><label class="mini">Прикрепить результат<input type="file" hidden data-r3-result-file="'+esc(x.id)+'" accept=".docx,.pdf,.xlsx"></label>');
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через чат '+esc(chat.name)+'</h3><p role="status" data-chat-status>Копируем запрос…</p><label>Запрос<textarea readonly style="min-height:220px">'+esc(prompt)+'</textarea></label><button type="button" class="btn" data-chat-bundle>Скачать комплект и запрос</button><p>Распакуйте архив и приложите скачанные материалы вручную вместе с запросом. Приложение не отправляет документы в чат. Доступ и ограничения определяются вашим аккаунтом выбранной нейросети; отдельного API-запроса нет.</p><a href="'+esc(chat.url)+'" target="_blank" rel="noopener noreferrer">Открыть '+esc(chat.name)+'</a><p>После выполнения прикрепите готовую работу вместе с комментарием нейросети в одном файле. Комментарий должен описывать полученный комплект, выполненные задания и ограничения.</p><label class="mini">Прикрепить работу и комментарий<input type="file" hidden data-r3-result-file="'+esc(x.id)+'" accept=".docx,.pdf,.xlsx"></label>');
  wrap.addEventListener('change',function(e){if(e.target.matches('input[data-r3-result-file]')&&!current()){e.stopPropagation();e.target.value='';}});
  window.open(chat.url,'_blank','noopener,noreferrer');
  Promise.resolve(copyText(prompt)).then(function(ok){if(!current())return;wrap.querySelector('[data-chat-status]').textContent=ok?'Запрос скопирован. Вставьте его в чат. Если окно не открылось, используйте ссылку ниже.':'Копирование недоступно. Скопируйте запрос из поля ниже и откройте чат по ссылке.';}).catch(function(){if(current())wrap.querySelector('[data-chat-status]').textContent='Не удалось скопировать. Запрос сохранён в поле ниже.';});
@@ -1753,7 +1759,7 @@ async function openR3AssistantDocument(x){
  }catch(e){
   if(!current()){wrap.remove();return;}
   var body=wrap.querySelector('[data-requirements-body]');body.removeAttribute('aria-busy');
-  body.innerHTML='<p role="status">'+esc(e.message||'Не удалось проверить требования. Повторите.')+'</p><p class="hint">Подготовка доступна после изучения оригиналов и утверждения требований. Полученные файлы можно проверить в разделе «Материалы».</p><div class="chips"><button type="button" class="chip" data-x="1" data-act="request-tab" data-key="materials" data-id="'+esc(x.id)+'">Открыть материалы</button><button type="button" class="chip" data-x="1" data-act="r3-assistant-document" data-id="'+esc(x.id)+'">Повторить проверку</button></div>';
+  body.innerHTML='<p role="status">'+esc(e.message||'Не удалось проверить требования. Повторите.')+'</p><p class="hint">Оригиналы можно передать нейросети через чат без этой проверки. Полученные файлы доступны в разделе «Материалы».</p><div class="chips"><button type="button" class="chip" data-x="1" data-act="request-tab" data-key="materials" data-id="'+esc(x.id)+'">Открыть материалы</button><button type="button" class="chip" data-x="1" data-act="r3-assistant-document" data-id="'+esc(x.id)+'">Повторить проверку</button></div>';
  }finally{if(r3RequirementsWindows.get(x)===wrap)r3RequirementsWindows.delete(x);}
 }
 
@@ -1811,21 +1817,27 @@ function r3Zip(entries){
 async function r3Bundle(x,chatProvider){
  var owner=KEY,identity=Oblako.identity(),data=D;
  function current(){return KEY===owner&&Oblako.identity()===identity&&D===data&&item(x.id)===x;}
- if(chatProvider&&(!Object.hasOwn(R3_CHAT_PROVIDERS,chatProvider)||preparationBlockers(x).length))throw Error('Проверьте требования перед подготовкой.');
- var prompt=chatProvider?buildChatgptPrompt(x):null;
+ if(chatProvider&&!Object.hasOwn(R3_CHAT_PROVIDERS,chatProvider))throw Error('Неизвестный помощник.');
  if(!Array.isArray(x.attachments))await loadAttachmentContext(x);
  if(!current())throw Error('Аккаунт или заявка изменились.');
+ if(chatProvider&&preparationBlockers(x).length)throw Error(preparationBlockers(x).join(' '));
+ var prompt=chatProvider?buildChatgptPrompt(x):null;
  var binding=JSON.stringify([x.attachments,x.passports,x.requirements,x.link]),attachments=x.attachments.slice();
- var entries=[],used={},enc=new TextEncoder();
+ var entries=[],used={},manifest=[],enc=new TextEncoder();
  function unique(n){var base=String(n).replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_'),name=base,i=2;while(used[name]){name=base.replace(/(\.[^.]+)?$/,' ('+(i++)+')$1');}used[name]=1;return name;}
  for(var a of attachments){
   if(!current())throw Error('Аккаунт или заявка изменились.');
   var r=await Oblako.requestApi({action:'attachment-download',id:x.id,attachmentId:a.id});
   var res=await fetch(r.url);if(!res.ok)throw Error('Файл «'+a.file_name+'» не скачался');
-  entries.push({name:unique(a.file_name),data:new Uint8Array(await res.arrayBuffer())});
+  var bytes=new Uint8Array(await res.arrayBuffer());
+  if(!current()||binding!==JSON.stringify([x.attachments,x.passports,x.requirements,x.link]))throw Error('Материалы или аккаунт изменились. Соберите комплект заново.');
+  var hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(function(v){return v.toString(16).padStart(2,'0');}).join('');
+  if(bytes.length!==a.size_bytes||hash!==a.file_hash)throw Error('Файл «'+a.file_name+'» передан не полностью или изменился. Соберите комплект заново.');
+  var name=unique(a.file_name);entries.push({name:name,data:bytes});manifest.push({id:a.id,name:a.file_name,archiveName:name,size:bytes.length,sha256:hash});
  }
  var info=r3TitleText(x)+(x.deadline?'\nКогда нужна работа: '+ruDate(x.deadline):'')+(x.requirements?'\n\nПожелания студента:\n'+x.requirements:'')+(x.link?'\n\nСсылка на папку в облаке:\n'+x.link:'');
  entries.push({name:unique('Сведения для титульного листа.txt'),data:enc.encode(info+'\n')});
+ entries.push({name:unique('Перечень оригиналов.json'),data:enc.encode(JSON.stringify({requestNumber:x.requestNumber,files:manifest},null,2))});
  if(chatProvider)entries.push({name:unique('Запрос для '+R3_CHAT_PROVIDERS[chatProvider].name+'.txt'),data:enc.encode(prompt)});
  if(!current()||binding!==JSON.stringify([x.attachments,x.passports,x.requirements,x.link])||(chatProvider&&(preparationBlockers(x).length||prompt!==buildChatgptPrompt(x))))throw Error('Материалы или требования изменились. Соберите комплект заново.');
  var link=document.createElement('a');link.href=URL.createObjectURL(r3Zip(entries));link.download='Заявка_'+(x.requestNumber||'')+'_материалы.zip';link.click();setTimeout(function(){URL.revokeObjectURL(link.href);},60000);

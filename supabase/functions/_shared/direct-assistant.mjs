@@ -1,5 +1,6 @@
 // Server-only direct adapters. No default model, price, enablement or retries.
 import {prepareAssistantText} from './deepseek-assistant.mjs';
+import {originalsMode,originalInputs,nativePart} from './assistant-originals.mjs';
 import {digest,snapshotJson} from './assistant-bundle.mjs';
 const HOSTS={chatgpt:'https://api.openai.com/v1',claude:'https://api.anthropic.com/v1'};
 const uuid=v=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v);
@@ -27,23 +28,36 @@ export async function probeDirectAssistant(config,fetchProvider=globalThis.fetch
  if(!config||Date.parse(config.validUntil)<=Date.now())return {verified:false};
  try{const r=await fetchProvider(HOSTS[config.provider]+'/models/'+encodeURIComponent(config.model),{method:'GET',headers:headers(config),redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok){await r.body?.cancel();return {verified:false};}const v=await limitedJson(r);return {verified:v.id===config.model};}catch{return {verified:false};}
 }
-export async function prepareDirectAssistant(bundle,expectedSections,{readFile,config}){
+export async function prepareDirectAssistant(bundle,expectedSections,{readFile,config,fetchProvider=globalThis.fetch}){
  if(!config||bundle.provider!==config.provider||!Object.hasOwn(HOSTS,config.provider)||Date.parse(config.validUntil)<=Date.now())throw Error('PROVIDER_NOT_CONNECTED');
- const {system,user}=await prepareAssistantText(bundle,expectedSections,{readFile});
+ const native=originalsMode(bundle);
+ const {system,user,files}=native?await originalInputs(bundle,expectedSections):await prepareAssistantText(bundle,expectedSections,{readFile});
+ const parts=native?files.map(f=>nativePart(f,config.provider)):null;
  const schema={type:'object',additionalProperties:false,required:['sections'],properties:{sections:{type:'array',items:{type:'object',additionalProperties:false,required:['id','name','text'],properties:{id:{type:'string',enum:expectedSections},name:{type:'string'},text:{type:'string'}}}}}};
- const body=config.provider==='chatgpt'?{model:config.model,instructions:system,input:user,max_output_tokens:config.maxOutputTokens,service_tier:'default',store:false,text:{format:{type:'json_schema',name:'studkab_work',strict:true,schema}}}:{model:config.model,system,messages:[{role:'user',content:user}],max_tokens:config.maxOutputTokens,service_tier:'standard_only',stream:false,output_config:{format:{type:'json_schema',schema}}};
+ const body=config.provider==='chatgpt'?{model:config.model,instructions:system,input:native?[{role:'user',content:[{type:'input_text',text:user},...parts]}]:user,max_output_tokens:config.maxOutputTokens,service_tier:'default',store:false,text:{format:{type:'json_schema',name:'studkab_work',strict:true,schema}}}:{model:config.model,system,messages:[{role:'user',content:native?[{type:'text',text:user},...parts]:user}],max_tokens:config.maxOutputTokens,service_tier:'standard_only',stream:false,output_config:{format:{type:'json_schema',schema}}};
  const inputBytes=new TextEncoder().encode(JSON.stringify(body)).length+4096;
- if(inputBytes>config.maxInputBytes)throw Error('CONTEXT_TOO_BIG');
- const numerator=BigInt(inputBytes)*BigInt(config.inputMicrousdPerMillion)+BigInt(config.maxOutputTokens)*BigInt(config.outputMicrousdPerMillion);
+ if((native?new TextEncoder().encode(system+user).length:inputBytes)>config.maxInputBytes)throw Error('CONTEXT_TOO_BIG');
+ let inputTokens=inputBytes;
+ if(native){
+  // File/image token usage cannot be inferred from ZIP size or base64 length.
+  // Count the exact native payload before quoting; this never runs inference.
+  const countBody=config.provider==='chatgpt'?{model:body.model,instructions:body.instructions,input:body.input,text:body.text}:{model:body.model,system:body.system,messages:body.messages};
+  const count=await fetchProvider(HOSTS[config.provider]+(config.provider==='chatgpt'?'/responses/input_tokens':'/messages/count_tokens'),{method:'POST',headers:headers(config),body:JSON.stringify(countBody),redirect:'error',signal:AbortSignal.timeout(30000)});
+  if(!count.ok){await count.body?.cancel();throw Error('INPUT_COST_UNCONFIRMED');}
+  const value=await limitedJson(count);
+  if(!Number.isSafeInteger(value.input_tokens)||value.input_tokens<1)throw Error('INPUT_COST_UNCONFIRMED');
+  inputTokens=value.input_tokens+4096;
+ }
+ const numerator=BigInt(inputTokens)*BigInt(config.inputMicrousdPerMillion)+BigInt(config.maxOutputTokens)*BigInt(config.outputMicrousdPerMillion);
  const estimatedMicrousd=Number((numerator*125n+99999999n)/100000000n);
  if(!Number.isSafeInteger(estimatedMicrousd)||estimatedMicrousd<1||estimatedMicrousd>MAX_ASSISTANT_RESERVE)throw Error('RESERVE_LIMIT');
  const {key,...policy}=config;
- const pricingFingerprint=await digest(new TextEncoder().encode(JSON.stringify(snapshotJson({...policy,adapterVersion:'direct-v1-standard-json'}))));
+ const pricingFingerprint=await digest(new TextEncoder().encode(JSON.stringify(snapshotJson({...policy,adapterVersion:native?'direct-v2-originals-commentary':'direct-v1-standard-json'}))));
  return {body,model:config.model,estimatedMicrousd,pricingFingerprint};
 }
 export async function dispatchDirectAssistant(bundle,jobId,claim,expectedSections,{readFile,config,reserveAndDispatch,fetchProvider=globalThis.fetch}){
  if(!uuid(jobId)||!uuid(claim)||typeof reserveAndDispatch!=='function')throw Error('BUDGET_BINDING_REQUIRED');
- const prepared=await prepareDirectAssistant(bundle,expectedSections,{readFile,config});
+ const prepared=await prepareDirectAssistant(bundle,expectedSections,{readFile,config,fetchProvider});
  const permit=await reserveAndDispatch({jobId,claim,provider:config.provider,model:prepared.model,estimatedMicrousd:prepared.estimatedMicrousd,pricingFingerprint:prepared.pricingFingerprint});
  if(permit?.ok!==true||!uuid(permit.dispatchId)||!Number.isSafeInteger(permit.reservedMicrousd)||permit.reservedMicrousd<prepared.estimatedMicrousd)throw Error('BUDGET_NOT_CONFIRMED');
  // Exactly one attempt. Any uncertain reply remains terminal and retains reserve.
