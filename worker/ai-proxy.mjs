@@ -96,6 +96,28 @@ function errorBody(e, provider) {
   if (detail) body.detail = detail;
   return body;
 }
+async function supplierBalance(env){
+ const observedAt=new Date().toISOString();
+ const unknown=reason=>({schema:1,provider:'deepseek',balance:{status:'unknown',reason,observedAt}});
+ if(typeof env.DEEPSEEK_KEY!=='string'||!env.DEEPSEEK_KEY||/[\r\n]/.test(env.DEEPSEEK_KEY))return unknown('not_configured');
+ try{
+  const response=await fetch('https://api.deepseek.com/user/balance',{method:'GET',headers:{Authorization:'Bearer '+env.DEEPSEEK_KEY},redirect:'error',signal:AbortSignal.timeout(8000)});
+  if(!response.ok){await response.body?.cancel();return unknown(response.status===401||response.status===403?'access_denied':response.status===429?'rate_limited':'supplier_unavailable');}
+  if(!response.body)return unknown('invalid_response');
+  const reader=response.body.getReader(),chunks=[];let size=0;
+  try{for(;;){const x=await reader.read();if(x.done)break;size+=x.value.length;if(size>16384)throw Error();chunks.push(x.value);}}
+  finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+  const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length;}
+  const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  if(typeof value.is_available!=='boolean'||!Array.isArray(value.balance_infos)||!value.balance_infos.length||value.balance_infos.length>2)return unknown('invalid_response');
+  const seen=new Set();
+  const balances=value.balance_infos.map(row=>{
+   if(!['CNY','USD'].includes(row?.currency)||seen.has(row.currency)||!['total_balance','granted_balance','topped_up_balance'].every(k=>typeof row[k]==='string'&&/^-?\d{1,12}(?:\.\d{1,12})?$/.test(row[k])))throw Error();
+   seen.add(row.currency);return {currency:row.currency,total:row.total_balance,granted:row.granted_balance,toppedUp:row.topped_up_balance};
+  });
+  return {schema:1,provider:'deepseek',balance:{status:'verified',isAvailable:value.is_available,balances,observedAt}};
+ }catch{return unknown('supplier_unavailable');}
+}
 export default {
   async fetch(request, env) {
     // C-051: запись секрета через API Cloudflare удалила текстовую переменную
@@ -119,6 +141,7 @@ export default {
     try { raw = await readBody(request); }
     catch (e) { return json({error: e.message === 'TOO_BIG' ? 'TOO_BIG' : 'BAD_REQUEST'}, 413, cors); }
     try { body = JSON.parse(raw); } catch { return json({error: 'BAD_JSON'}, 400, cors); }
+    if(body?.action==='finances')return json(await supplierBalance(env),200,cors);
     // Authenticated, unpaid readiness proof. Never test supplier credentials by
     // sending a model prompt, and never expose the credentials themselves.
     if (body?.action === 'capabilities') {

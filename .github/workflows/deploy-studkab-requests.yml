@@ -11,6 +11,7 @@ on:
       - supabase/functions/_shared/deepseek-assistant.mjs
       - supabase/functions/_shared/direct-assistant.mjs
       - supabase/functions/_shared/assistant-providers.mjs
+      - supabase/functions/_shared/assistant-finances.mjs
       - supabase/functions/_shared/current-attachments.mjs
       - supabase/functions/_shared/external-word.mjs
       - supabase/functions/_shared/internal-borrowing.mjs
@@ -39,7 +40,7 @@ jobs:
           version: 2.117.0
       - run: npm ci
       - name: Check request and result delivery
-        run: node --test tests/request-email.test.mjs tests/external-word.test.mjs tests/requests.test.mjs tests/request-attachments.test.mjs tests/test-delivery-api.test.mjs tests/assistant-service.test.mjs tests/assistant-source-plan.test.mjs tests/deepseek-assistant.test.mjs tests/direct-assistant.test.mjs tests/assistant-originals.test.mjs tests/assistant-providers.test.mjs tests/notification-service.test.mjs
+        run: node --test tests/request-email.test.mjs tests/external-word.test.mjs tests/requests.test.mjs tests/request-attachments.test.mjs tests/test-delivery-api.test.mjs tests/assistant-service.test.mjs tests/assistant-source-plan.test.mjs tests/deepseek-assistant.test.mjs tests/direct-assistant.test.mjs tests/assistant-originals.test.mjs tests/assistant-providers.test.mjs tests/assistant-finances.test.mjs tests/notification-service.test.mjs
       - name: Deploy existing function
         run: supabase functions deploy studkab-requests --project-ref dcpthwmuiodrjepifzsd --use-api --no-verify-jwt
         env:

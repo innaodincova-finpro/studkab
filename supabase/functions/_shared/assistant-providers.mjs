@@ -1,6 +1,7 @@
 import {deepseekCapability} from '../studkab-requests/assistant-service.mjs';
 import {probeDeepseekAssistant} from './deepseek-assistant.mjs';
 import {directAssistantConfig,probeDirectAssistant} from './direct-assistant.mjs';
+import {createAssistantFinances} from './assistant-finances.mjs';
 export function createAssistantProviders({get,rpc,fetchProvider=globalThis.fetch}){
  const config=provider=>directAssistantConfig(provider,get);
  const capability=(actor,provider='deepseek',{diagnostics=false}={})=>{
@@ -15,5 +16,6 @@ export function createAssistantProviders({get,rpc,fetchProvider=globalThis.fetch
   for(const p of providers)if(p!=='deepseek')providerConfigs[p]=config(p);
   return {providers,providerConfigs};
  }
- return {config,capability,ready};
+ const finances=createAssistantFinances({get,rpc,fetchProvider});
+ return {config,capability,ready,finances};
 }
