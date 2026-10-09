@@ -1,5 +1,31 @@
 const {test,expect}=require('@playwright/test');
 const stamp='2026-10-09T09:00:00Z';
+for(const width of [390,1440])test('unread originals open all three chats and export a verified complete kit at '+width,async({page})=>{
+ await page.setViewportSize({width,height:1000});await seed(page);
+ await page.evaluate(async()=>{
+  window.open=()=>null;copyText=async()=>true;
+  const x=item('assistant-process');x.materialRevision={state:'locked'};
+  const bytes=new Uint8Array([80,75,3,4]);
+  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(n=>n.toString(16).padStart(2,'0')).join('');
+  x.attachments=[{id:'synthetic-original',file_name:'Original.docx',size_bytes:4,file_hash:hash,category:'unclassified'}];
+  const api=Oblako.requestApi;Oblako.requestApi=async input=>input.action==='attachment-download'?{url:'https://original.test/file'}:api(input);
+  const oldFetch=window.fetch;window.fetch=async(url,opts)=>url==='https://original.test/file'?new Response(bytes):oldFetch(url,opts);
+  render();
+ });
+ for(const provider of ['claude','chatgpt','deepseek']){
+  await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
+  const dialog=page.getByRole('dialog');await expect(dialog).toContainText('комментарием');
+  await expect(dialog.locator('textarea')).toContainText('Original.docx');
+  const downloaded=page.waitForEvent('download');await dialog.getByRole('button',{name:'Скачать комплект и запрос',exact:true}).click();
+  const download=await downloaded;expect(await download.failure()).toBeNull();
+  const archive=require('node:fs').readFileSync(await download.path());
+  expect(archive.includes(Buffer.from('Original.docx'))).toBe(true);
+  expect(archive.includes(Buffer.from('Перечень оригиналов.json'))).toBe(true);
+  expect(archive.includes(Buffer.from([80,75,3,4]))).toBe(true);
+  await dialog.getByRole('button',{name:'Закрыть',exact:true}).click();
+ }
+ expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','passport-approve','reading-start'].includes(c.action)))).toBe(false);
+});
 async function seed(page){
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>QA.switchUser('assistant-process-synthetic'));

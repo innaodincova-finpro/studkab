@@ -124,7 +124,7 @@ export default {
     if (body?.action === 'capabilities') {
       const configuredLimit = Number(env.MAX_TOKENS);
       const maxOutputTokens = Number.isFinite(configuredLimit) && configuredLimit >= 100 ? Math.min(Math.floor(configuredLimit), MAX_OUTPUT) : MAX_OUTPUT;
-      return json({schema:1,provider:'deepseek',model:'deepseek-flash',configured:!!env.DEEPSEEK_KEY,maxOutputTokens},200,cors);
+      return json({schema:1,provider:'deepseek',model:'deepseek-flash',configured:!!env.DEEPSEEK_KEY,maxOutputTokens,originalsProtocol:'originals-work-commentary-v1'},200,cors);
     }
     if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.system !== 'string' || typeof body.user !== 'string') return json({error: 'BAD_REQUEST'}, 400, cors);
     if (body.system.length + body.user.length > MAX_CONTEXT) return json({error: 'CONTEXT_TOO_BIG', max_characters: MAX_CONTEXT}, 413, cors);
@@ -140,6 +140,12 @@ export default {
       max_tokens: Number.isFinite(requestedTokens) && requestedTokens > 0 ? Math.min(Math.max(Math.floor(requestedTokens), 100), tokenLimit) : tokenLimit,
       temperature: typeof body.temperature === 'number' && Number.isFinite(body.temperature) ? Math.min(Math.max(body.temperature, 0), 1.5) : 0.7,
     };
+    if(body.originalsProtocol!=null){
+      if(body.originalsProtocol!=='originals-work-commentary-v1')return json({error:'BAD_REQUEST'},400,cors);
+      let parts;try{parts=JSON.parse(body.user);}catch{return json({error:'BAD_REQUEST'},400,cors);}
+      if(!Array.isArray(parts)||!parts.length||parts.length>201||parts.some(p=>!p||!(p.type==='text'&&typeof p.text==='string'||p.type==='image_url'&&typeof p.image_url?.url==='string'&&/^data:image\/(jpeg|png|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(p.image_url.url))))return json({error:'BAD_REQUEST'},400,cors);
+      q.user=parts;
+    }
     const clientId = typeof body.client_request_id === 'string' && /^[a-f0-9-]{36}$/i.test(body.client_request_id) ? body.client_request_id : null;
     const correlated = value => clientId ? {...value, client_request_id: clientId} : value;
     if (body.keepalive === true) return heartbeatReply(async signal => {

@@ -194,14 +194,19 @@ test('R3-C: «Скачать всё» builds one archive with the student files 
   window.fetch=async u=>new Response(String(u).endsWith('a1')?'%PDF-one':'jpeg-two');
   Oblako.requestApi=async d=>{if(d.action==='attachment-download')return {url:'https://storage.example/'+d.attachmentId};throw Error('Unexpected '+d.action);};
   const x=fromPayload({id:'r3-zip',route:'r3',t:'',k:'Практические задания',d:'Математика',u:'ММУ',fo:'Очно-заочная',g:'26Т101а',n:'Иванова М.П.',dl:'2027-01-25',rq:'Любые 2',lk:'https://disk.yandex.ru/d/x',cn:'s@e'});
-  x.requestNumber=15;x.attachments=[{id:'a1',file_name:'Задание.pdf'},{id:'a2',file_name:'Задание.pdf'}];D.items=[x];
+  x.requestNumber=15;x.attachments=[];
+  for(const [id,text] of [['a1','%PDF-one'],['a2','jpeg-two']]){
+   const bytes=new TextEncoder().encode(text),file_hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(n=>n.toString(16).padStart(2,'0')).join('');
+   x.attachments.push({id,file_name:'Задание.pdf',size_bytes:bytes.length,file_hash});
+  }
+  D.items=[x];
   let blob;const real=URL.createObjectURL;URL.createObjectURL=b=>{blob=b;return 'blob:x';};
   await r3Bundle(x);URL.createObjectURL=real;
   const bytes=new Uint8Array(await blob.arrayBuffer()),dec=new TextDecoder(),out=[];
   for(let i=0;i<bytes.length-4;i++)if(bytes[i]===0x50&&bytes[i+1]===0x4b&&bytes[i+2]===1&&bytes[i+3]===2){const n=bytes[i+28]|(bytes[i+29]<<8);out.push(dec.decode(bytes.slice(i+46,i+46+n)));}
   const text=dec.decode(bytes);return {out,hasInfo:text.includes('Дисциплина: Математика')&&text.includes('https://disk.yandex.ru/d/x')};
  });
- expect(names.out).toEqual(['Задание.pdf','Задание (2).pdf','Сведения для титульного листа.txt']);expect(names.hasInfo).toBe(true);
+ expect(names.out).toEqual(['Задание.pdf','Задание (2).pdf','Сведения для титульного листа.txt','Перечень оригиналов.json']);expect(names.hasInfo).toBe(true);
 });
 test('R3-C: student sees «Работа готова» with one download button; the old result block is hidden',async({page})=>{
  await page.goto('http://127.0.0.1:4173/index.html');
@@ -660,7 +665,7 @@ for(const width of [390,1440])test('UX-ASSISTANT equal controls retain manual ch
  await expect(panel).toContainText('previous.docx');await expect(panel.locator('[data-act="r3-result-review"]')).toHaveText('Проверить работу');
  await expect(panel.locator('[data-act="r3-deliver"]')).toHaveCount(0);
  await openSecondary(panel);await panel.locator('[data-act="r3-chatgpt"]').click();
- const blocked=page.getByRole('dialog',{name:'Перед подготовкой'});await expect(blocked).toContainText('Сначала утвердите паспорт требований.');await blocked.getByRole('button',{name:'Закрыть',exact:true}).click();
+ const blocked=page.getByRole('dialog',{name:'Перед подготовкой'});await expect(blocked).toContainText('Сначала обновите состояние материалов заявки.');await blocked.getByRole('button',{name:'Закрыть',exact:true}).click();
  expect(await page.evaluate(()=>JSON.stringify({r3:D.items[0].r3,claude:D.items[0].claude,attachments:D.items[0].attachments})===assistantBefore)).toBe(true);
  // No working file is discarded by choosing a helper. Equal helper controls belong
  // to the preparation stage; the existing file's next action remains review.

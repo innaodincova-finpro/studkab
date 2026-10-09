@@ -47,12 +47,12 @@ test('every manual provider obeys the same preparation blockers and unknown prov
 });
 
 function bundleFixture(){
- const f=fixture();let entries=null,downloads=0;Object.assign(f.c,{TextEncoder,Uint8Array,Blob,setTimeout:()=>{},URL:{createObjectURL:()=> 'blob:local',revokeObjectURL:()=>{}},document:{createElement:()=>({click:()=>downloads++})},preparationBlockers:()=>[],buildChatgptPrompt:()=> 'Verified structure and request',r3TitleText:()=> 'Student title',ruDate:String,fetch:async()=>({ok:true,arrayBuffer:async()=>new Uint8Array([1,2,3]).buffer})});
- f.x.attachments=[{id:'original',file_name:'Методичка.docx'}];f.c.Oblako.requestApi=async d=>{f.calls.push(d);return {url:'https://example.invalid/file'};};
+ const f=fixture();let entries=null,downloads=0;Object.assign(f.c,{TextEncoder,Uint8Array,Blob,crypto:require('node:crypto').webcrypto,setTimeout:()=>{},URL:{createObjectURL:()=> 'blob:local',revokeObjectURL:()=>{}},document:{createElement:()=>({click:()=>downloads++})},preparationBlockers:()=>[],buildChatgptPrompt:()=> 'Verified structure and request',r3TitleText:()=> 'Student title',ruDate:String,fetch:async()=>({ok:true,arrayBuffer:async()=>new Uint8Array([1,2,3]).buffer})});
+ f.x.attachments=[{id:'original',file_name:'Методичка.docx',size_bytes:3,file_hash:require('node:crypto').createHash('sha256').update(Buffer.from([1,2,3])).digest('hex')}];f.c.Oblako.requestApi=async d=>{f.calls.push(d);return {url:'https://example.invalid/file'};};
  vm.runInContext(html.slice(html.indexOf('var R3_CRC='),html.indexOf('var R3_ROWS=')),f.c);f.c.r3Zip=e=>{entries=e;return new Blob([]);};return {...f,entries:()=>entries,downloads:()=>downloads};
 }
 for(const p of ['claude','chatgpt','deepseek'])test(p+' export contains original materials and verified prompt without inference',async()=>{
- const f=bundleFixture();await f.c.r3Bundle(f.x,p);assert.equal(f.downloads(),1);assert.equal(f.entries().length,3);assert.equal(f.entries()[0].name,'Методичка.docx');assert.match(f.entries()[2].name,/Запрос для/);assert.equal(new TextDecoder().decode(f.entries()[2].data),'Verified structure and request');assert.deepEqual(f.calls.map(c=>c.action),['attachment-download']);
+ const f=bundleFixture();await f.c.r3Bundle(f.x,p);assert.equal(f.downloads(),1);assert.equal(f.entries().length,4);assert.equal(f.entries()[0].name,'Методичка.docx');assert.match(f.entries()[3].name,/Запрос для/);assert.equal(new TextDecoder().decode(f.entries()[3].data),'Verified structure and request');assert.deepEqual(f.calls.map(c=>c.action),['attachment-download']);
 });
 test('export never releases previous-account materials after delayed file fetch',async()=>{
  const f=bundleFixture();let resolve,started;const fetching=new Promise(r=>started=r);f.c.fetch=()=>new Promise(r=>{resolve=r;started();});const pending=f.c.r3Bundle(f.x,'claude');await fetching;f.owner();resolve({ok:true,arrayBuffer:async()=>new Uint8Array([1]).buffer});await assert.rejects(pending,/изменились/);assert.equal(f.downloads(),0);

@@ -1,0 +1,11 @@
+# ORIGINALS-AI-COMMENT-01
+
+Owner-approved ROUTE-03 correction: the application transfers the current original kit, without internal recognition, study or passport approval as dispatch prerequisites. The assistant determines tasks from originals and returns work with a commentary covering every received file, completed tasks, missing/unreadable material and limitations. `work` and `commentary` are response fields, not an invented assignment plan.
+
+Chat: a complete archive with original bytes, SHA-256 inventory, request information and assistant prompt. Users attach unpacked files and return the work with commentary in one file. Download failure, byte/hash mismatch or changed request cancels the whole archive. Cloud links are identified as links, not claimed as downloaded documents.
+
+API: versioned frozen original manifest, native provider file/image parts, mandatory work and commentary. Unsupported formats fail the entire kit before job acceptance/quote/reserve. No silent extraction, conversion or missing-file fallback. OpenAI native file input may process non-PDF documents as text only; the commentary must disclose processing limitations. Claude document blocks accept PDF/text and image blocks accept images; Word/Excel need a separately configured tool route, which is not activated here. DeepSeek supports images and text through the existing proxy, not PDF/Word files. Its readiness probe must prove the new native-input protocol before enabling it.
+
+Direct-provider native token counts precede price confirmation; no binary-size token guess. Existing keys, explicit approved models/prices, generation flags, numerical reserve ceiling, ownership, immutable versions, single-dispatch ledger, uncertain-result handling and executor review before delivery remain. Legacy frozen jobs retain their original adapters/plan. No new paid services, budgets or live paid tests.
+
+Tests use synthetic files and mocked suppliers: original-byte fidelity, no reader calls, pre-payment whole-kit refusal, missing commentary, damaged bytes, complete chat ZIP at phone/desktop widths, SQL queue/return/recovery/review and prior compatibility. Full Safety must pass before merge. Rollback reverts UI/adapters; never deletes originals/jobs. Production acceptance and supplier connection are distinct from these tests.
