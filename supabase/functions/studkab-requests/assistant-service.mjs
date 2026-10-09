@@ -7,7 +7,15 @@ import {ORIGINALS_PROTOCOL,ORIGINALS_OUTPUTS} from '../_shared/assistant-origina
 const uuid=v=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v);
 export const ASSISTANT_ACTIONS=['assistant-capabilities','assistant-prepare','assistant-preflight','assistant-start','assistant-state','assistant-review'];
 export function assistantCapabilities(capabilities){return {providers:ASSISTANTS.map(provider=>({provider,...(capabilities?.[provider]||(provider==='deepseek'&&capabilities?.available!==undefined?capabilities:{available:false,reason:'not_connected'}))}))};}
-export async function deepseekCapability(actor,{rpc,enabled=false,configured=false,probe}){
+export async function deepseekCapability(actor,{rpc,enabled=false,configured=false,probe,diagnostics=false}){
+ if(diagnostics){
+  let budget,status;try{budget=await rpc('studkab_assistant_budget',{p_actor:actor});status=budget?.budgetAvailable===true?'available':budget?.budgetAvailable===false?'blocked':'unavailable';}catch{status='unavailable';}
+  let connection=!configured?'not_connected':!enabled?'worker_disabled':'worker_unverified';
+  if(configured&&enabled&&typeof probe==='function'){try{if((await probe())?.verified===true)connection='ready';}catch{}}
+  const remaining=budget?.remainingMicrousd;
+  return {available:status==='available'&&connection==='ready',reason:status==='unavailable'?'budget_unavailable':status==='blocked'?'budget_exhausted':connection,
+   budget:{status,...(Number.isSafeInteger(remaining)&&remaining>=0?{remainingMicrousd:remaining}:{})},connection};
+ }
  let budget;try{budget=await rpc('studkab_assistant_budget',{p_actor:actor});}catch{return {available:false,reason:'budget_unavailable'};}
  if(budget?.budgetAvailable!==true)return {available:false,reason:'budget_exhausted'};
  if(!configured)return {available:false,reason:'not_connected'};
@@ -75,7 +83,7 @@ export async function assistantAction(input,user,{config,rpc,loadRequestFile,sav
  }
  const cfg=await config();
  if(!cfg?.executor_email||String(user?.email||'').toLowerCase()!==cfg.executor_email.toLowerCase())return {status:403,data:{error:'FORBIDDEN'}};
- if(input.action==='assistant-capabilities')return {data:assistantCapabilities(capability?Object.fromEntries(await Promise.all(ASSISTANTS.map(async p=>[p,await capability(user.id,p)]))):null)};
+ if(input.action==='assistant-capabilities')return {data:{...assistantCapabilities(capability?Object.fromEntries(await Promise.all(ASSISTANTS.map(async p=>[p,await capability(user.id,p,{diagnostics:true})]))):null),checkedAt:new Date().toISOString()}};
  if(input.action==='assistant-preflight'||input.action==='assistant-start'){
   if(!ASSISTANTS.includes(input.provider)||!capability||(await capability(user.id,input.provider)).available!==true)return {status:409,data:{error:'PROVIDER_NOT_CONNECTED'}};
   try{

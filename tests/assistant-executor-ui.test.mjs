@@ -108,8 +108,14 @@ test('API reasons distinguish configuration, budget and unresolved dispatch with
  vm.runInContext(section('function r3AssistantChoice(x){','async function refreshR3Automatic'),context);
  const check=()=>vm.runInContext("r3ApiAvailability({id:'one'},'deepseek')",context);
  assert.equal(check().label,'API не подключён');assert.equal(check().launchable,false);
- state.capabilities[0].reason='budget_exhausted';assert.equal(check().label,'Лимит подготовки исчерпан');
+ state.capabilities[0].reason='budget_exhausted';assert.equal(check().label,'Расходы через API заблокированы');
  state.capabilities[0].available=true;assert.equal(check().label,'Прежняя передача требует проверки');assert.equal(check().launchable,false);
  state.unknown=true;assert.equal(check().label,'Состояние запуска не подтверждено');assert.equal(check().launchable,false);
  state.unknown=false;context.r3Projection=()=>({});assert.equal(check().launchable,true);
+});
+
+test('diagnostic evidence retains server time and allowlisted fields; failed refresh does not fake success',async()=>{
+ let fail=false;const session=make(async input=>{if(input.action==='assistant-state')return {job:null};if(fail)throw Error('network');return {checkedAt:stamp,providers:[{provider:'deepseek',available:false,reason:'budget_exhausted',connection:'worker_disabled',budget:{status:'blocked',remainingMicrousd:0,private:'discard'},key:'discard'}]};});
+ await session.refresh();assert.equal(session.state.checkedAt,stamp);assert.deepEqual(session.state.capabilities[0].budget,{status:'blocked',remainingMicrousd:0});assert.equal(session.state.capabilities[0].connection,'worker_disabled');assert.equal(session.state.capabilities[0].key,undefined);
+ fail=true;await session.refresh();assert.equal(session.state.capabilities,null);assert.equal(session.state.checkedAt,stamp);assert.match(session.state.message,/Не удалось проверить подключения/);
 });

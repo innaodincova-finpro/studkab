@@ -673,8 +673,8 @@ for(const width of [390,1440])test('UX-ASSISTANT equal controls retain manual ch
  const controls=panel.locator('[data-act="r3-assistant-run"]');await expect(controls).toHaveCount(3);
  expect(await controls.allTextContents()).toEqual(['Через API','Через API','Через API']);
  await expect(panel.locator('[data-act="r3-assistant-chat"]')).toHaveCount(3);
- await expect(panel.locator('.r3-assistant')).toContainText('Лимит подготовки исчерпан');for(let i=0;i<3;i++)await expect(controls.nth(i)).toBeEnabled();
- await controls.nth(2).click();const apiInfo=page.getByRole('dialog',{name:'Подготовка через API DeepSeek',exact:true});await expect(apiInfo.getByRole('status')).toHaveText('Лимит подготовки исчерпан');await expect(apiInfo).toContainText('Платный запуск не выполнен');await apiInfo.getByRole('button',{name:'Закрыть',exact:true}).click();
+ await expect(panel.locator('.r3-assistant')).toContainText('Расходы через API заблокированы');for(let i=0;i<3;i++)await expect(controls.nth(i)).toBeEnabled();
+ await controls.nth(2).click();const apiInfo=page.getByRole('dialog',{name:'Подготовка через API DeepSeek',exact:true});await expect(apiInfo.getByRole('status')).toHaveText('Расходы через API заблокированы');await expect(apiInfo).toContainText('Платный запуск не выполнен');await apiInfo.getByRole('button',{name:'Закрыть',exact:true}).click();
  await expect(panel.locator('[aria-pressed]')).toHaveCount(0);
  await page.evaluate(()=>failAssistantCheck=true);await panel.locator('[data-act="r3-assistant-refresh"]').first().click();
  await expect(panel.locator('.r3-assistant-state')).toContainText('Не удалось проверить подключения');
