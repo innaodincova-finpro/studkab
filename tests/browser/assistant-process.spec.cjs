@@ -229,9 +229,26 @@ for(const width of [390,1440])test('unavailable API explains each provider and r
   await expect(dialog).toContainText('Для автоматической передачи нужно подключить API');
   await dialog.getByRole('button',{name:'Проверить подключение и состояние',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Подготовка через API '+name,exact:true}).getByRole('status')).toHaveText('API не подключён');
+  await expect(page.getByRole('dialog').locator('[data-api-check-result]')).toContainText('Проверка завершена');
+  await expect(page.getByRole('dialog').locator('[data-api-checked]')).toContainText('Проверено:');
+  const bounds=await page.getByRole('dialog').locator('.r3-api-actions button').evaluateAll(buttons=>buttons.map(b=>{const r=b.getBoundingClientRect();return {height:r.height,top:r.top,bottom:r.bottom,width:r.width};}));
+  expect(bounds[0].height).toBeGreaterThanOrEqual(44);expect(bounds[1].top-bounds[0].bottom).toBeGreaterThanOrEqual(12);expect(bounds[0].width).toBe(bounds[1].width);
   await page.getByRole('button',{name:'Закрыть',exact:true}).click();
  }
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-prepare','assistant-preflight','assistant-start','claude-queue'].includes(c.action)))).toBe(false);
  expect(await page.evaluate(()=>item('assistant-process').claude.queuedAt)).toBe(stamp);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+for(const width of [390,1440])test('API diagnostic refresh shows progress and network failure without a false current result at '+width,async({page})=>{
+ await page.setViewportSize({width,height:1000});await seed(page);
+ await page.locator('[data-act="r3-assistant-run"][data-method="deepseek"]').click();
+ await page.evaluate(()=>{const api=Oblako.requestApi;Oblako.requestApi=input=>input.action==='assistant-capabilities'?new Promise((resolve,reject)=>{window.rejectDiagnostic=reject;}):api(input);});
+ const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'Проверить подключение и состояние',exact:true}).click();
+ await expect(dialog.getByRole('button',{name:'Проверяем…',exact:true})).toBeDisabled();await expect(dialog.locator('[data-api-check-result]')).toContainText('Проверяем бюджет и подключение');
+ await page.evaluate(()=>rejectDiagnostic(Error('network')));
+ await expect(page.getByRole('dialog').locator('[data-api-check-result]')).toContainText('Не удалось получить свежие данные');
+ await expect(page.getByRole('dialog').locator('[data-api-checked]')).toContainText('Последняя успешная проверка');
+ await expect(page.getByRole('dialog').getByRole('button',{name:'Проверить подключение и состояние',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-preflight','assistant-start','assistant-prepare'].includes(c.action)))).toBe(false);
 });

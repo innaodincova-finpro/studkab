@@ -8,3 +8,14 @@ test('missing config, disabled flags and exhausted budget never probe or expose 
  const exhausted=createAssistantProviders({get:k=>env[k],rpc:async()=>({budgetAvailable:false}),fetchProvider:async()=>calls++});assert.equal((await exhausted.capability('actor','chatgpt')).available,false);assert.equal(calls,0);
  const configured=createAssistantProviders({get:k=>env[k],rpc:async()=>({budgetAvailable:true}),fetchProvider:async()=>Response.json({id:'offline-model'})});assert.deepEqual(await configured.capability('actor','chatgpt'),{available:true,reason:'ready'});assert.equal(JSON.stringify(await configured.capability('actor','chatgpt')).includes('synthetic'),false);assert.equal((await configured.capability('actor','claude')).available,false);
 });
+
+test('read-only diagnostics checks connection despite blocked budget without inference or key exposure',async()=>{
+ const env={STUDKAB_GENERATION_ENABLED:'true',STUDKAB_ASSISTANT_OPENAI_ENABLED:'true',STUDKAB_ASSISTANT_OPENAI_CONFIG:JSON.stringify(policy),OPENAI_API_KEY:'synthetic'};
+ const calls=[];const providers=createAssistantProviders({get:k=>env[k],rpc:async()=>({budgetAvailable:false,remainingMicrousd:0}),fetchProvider:async(url,opts)=>{calls.push({url,method:opts.method});return Response.json({id:'offline-model'});}});
+ const result=await providers.capability('actor','chatgpt',{diagnostics:true});
+ assert.deepEqual(result,{available:false,reason:'budget_exhausted',budget:{status:'blocked',remainingMicrousd:0},connection:'ready'});
+ assert.equal(calls.length,1);assert.equal(calls[0].method,'GET');assert.match(calls[0].url,/\/models\/offline-model$/);assert.equal(JSON.stringify(result).includes('synthetic'),false);
+ const missing=await providers.capability('actor','claude',{diagnostics:true});assert.equal(missing.connection,'not_connected');assert.equal(calls.length,1);
+ const broken=createAssistantProviders({get:k=>env[k],rpc:async()=>{throw Error('database');},fetchProvider:async()=>{throw Error('network');}});
+ assert.deepEqual(await broken.capability('actor','chatgpt',{diagnostics:true}),{available:false,reason:'budget_unavailable',budget:{status:'unavailable'},connection:'worker_unverified'});
+});

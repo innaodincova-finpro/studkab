@@ -2,7 +2,7 @@ import {projectAssistantState} from './assistant-state.mjs';
 
 const providers=['claude','chatgpt','deepseek'];
 export function createAssistantSession({api,active,onChange,newOperation}) {
- const state={busy:false,message:'',unknown:false,capabilities:null,job:null,receipt:null,operation:null,provider:null,stale:false,quote:null};
+ const state={busy:false,message:'',unknown:false,capabilities:null,checkedAt:null,job:null,receipt:null,operation:null,provider:null,stale:false,quote:null};
  const publish=()=>{if(active())onChange(state);};
  function absorb(result){
   if(Object.hasOwn(result||{},'job'))state.job=result.job;
@@ -34,7 +34,13 @@ export function createAssistantSession({api,active,onChange,newOperation}) {
   const caps=results[0],observed=results[1];
   const validCaps=caps.status==='fulfilled'&&Array.isArray(caps.value?.providers);
   if(!validCaps)state.capabilities=null;
-  if(validCaps)state.capabilities=caps.value.providers.filter(p=>providers.includes(p.provider)).map(p=>({provider:p.provider,available:p.available===true,reason:typeof p.reason==='string'?p.reason:'not_connected',...(Number.isSafeInteger(p.priceMicrousd)&&p.priceMicrousd>=0&&typeof p.quoteId==='string'&&p.quoteId?{priceMicrousd:p.priceMicrousd,quoteId:p.quoteId}:{})}));
+  if(validCaps){
+   state.checkedAt=typeof caps.value.checkedAt==='string'&&Number.isFinite(Date.parse(caps.value.checkedAt))?caps.value.checkedAt:new Date().toISOString();
+   state.capabilities=caps.value.providers.filter(p=>providers.includes(p.provider)).map(p=>({provider:p.provider,available:p.available===true,reason:typeof p.reason==='string'?p.reason:'not_connected',
+    ...(['ready','not_connected','worker_disabled','worker_unverified'].includes(p.connection)?{connection:p.connection}:{}),
+    ...(['available','blocked','unavailable'].includes(p.budget?.status)?{budget:{status:p.budget.status,...(Number.isSafeInteger(p.budget.remainingMicrousd)&&p.budget.remainingMicrousd>=0?{remainingMicrousd:p.budget.remainingMicrousd}:{})}}:{}),
+    ...(Number.isSafeInteger(p.priceMicrousd)&&p.priceMicrousd>=0&&typeof p.quoteId==='string'&&p.quoteId?{priceMicrousd:p.priceMicrousd,quoteId:p.quoteId}:{})}));
+  }
   state.stale=observed.status!=='fulfilled'||!Object.hasOwn(observed.value||{},'job');
   if(observed.status==='fulfilled'&&Object.hasOwn(observed.value||{},'job')){
    absorb(observed.value);

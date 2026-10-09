@@ -292,6 +292,9 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
 .sheet h2,.sheet h3{font-family:'Spectral',serif;font-size:17px;margin:0 0 4px;font-weight:600}
 .sheet .close{float:right;background:none;border:0;font-size:18px;color:var(--mut);cursor:pointer;padding:0 4px;margin-top:-4px}
 .sheet .small,.sheet .mut{font-size:12px}
+.r3-api-actions{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+.r3-api-actions .btn{min-height:44px;white-space:normal;line-height:1.4;padding:12px 16px}
+.r3-api-check-result{margin:14px 0;color:var(--mut);font-size:14px;line-height:1.5}
 
 .fold{border:1px solid var(--card-border);border-radius:16px;background:var(--card);margin-bottom:12px;padding:0 14px}
 .fold summary{list-style:none;cursor:pointer;padding:13px 0;font-size:13px;font-weight:600;color:var(--ink);display:flex;justify-content:space-between;align-items:center}
@@ -1680,21 +1683,31 @@ function r3AssistantChoice(x){
 }
 function r3ApiAvailability(x,provider){
  var session=r3AutomaticSession(x),state=session&&session.state,cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===provider;});
- var reasons={not_connected:['API не подключён','Для автоматической передачи нужно подключить API выбранной нейросети на сервере. Подписка на чат сама по себе это подключение не создаёт. Сейчас можно передать полный комплект через чат.'],worker_disabled:['Подготовка через API отключена','Автоматическая подготовка отключена в настройках сервера. Через чат можно передать полный комплект без API-запуска.'],worker_unverified:['Подключение API не подтверждено','Сервер не подтвердил доступность обработчика. Платный запуск не выполнен. Повторите проверку или используйте чат.'],budget_exhausted:['Лимит подготовки исчерпан','Серверный лимит расходов не позволяет начать подготовку. Платный запуск не выполнен. Можно использовать чат.'],budget_unavailable:['Лимит расходов не подтверждён','Сервер не подтвердил лимит расходов. Платный запуск не выполнен. Повторите проверку или используйте чат.']};
+ var reasons={not_connected:['API не подключён','Для автоматической передачи нужно подключить API выбранной нейросети на сервере. Подписка на чат сама по себе это подключение не создаёт. Сейчас можно передать полный комплект через чат.'],worker_disabled:['Подготовка через API отключена','Автоматическая подготовка отключена в настройках сервера. Через чат можно передать полный комплект без API-запуска.'],worker_unverified:['Подключение API не подтверждено','Сервер не подтвердил доступность обработчика. Платный запуск не выполнен. Повторите проверку или используйте чат.'],budget_exhausted:['Расходы через API заблокированы','Доступного бюджета приложения нет. Это не баланс вашего аккаунта нейросети и не подтверждение списания денег. Платный запуск не выполнен. Можно использовать чат.'],budget_unavailable:['Лимит расходов не подтверждён','Сервер не подтвердил лимит расходов. Платный запуск не выполнен. Повторите проверку или используйте чат.']};
  if(!state||!cap)return {launchable:false,label:'API ещё не проверен',message:'Сначала проверьте подключение. Проверка не запускает работу и не списывает оплату.'};
  if(!cap.available){var reason=reasons[cap.reason]||['API недоступен','Сервер не подтвердил возможность автоматической подготовки. Можно передать комплект через чат.'];return {launchable:false,label:reason[0],message:reason[1]};}
  if(state.stale||state.unknown)return {launchable:false,label:'Состояние запуска не подтверждено',message:'Не удалось подтвердить состояние предыдущего запроса. Повторный платный запуск запрещён до проверки. Через чат можно скачать комплект.'};
  if(r3Projection(x).legacyChatAvailable)return {launchable:false,label:'Прежняя передача требует проверки',message:'Сохранена прежняя запись передачи материалов. Подтверждённого запуска нейросети нет; повторный автоматический запуск заблокирован для защиты от дубля. Запись не выбирает нейросеть за вас. Комплект доступен через любой из трёх чатов.'};
  return {launchable:true,label:'API доступен',message:'Подключение подтверждено. Закройте это окно и выберите «Через API», чтобы проверить комплект и стоимость. Запуск возможен только после отдельного подтверждения стоимости.'};
 }
-function r3ApiInformation(x,provider){
+function r3ApiDiagnostics(x,provider,rechecked){
+ var session=r3AutomaticSession(x),state=session&&session.state,cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===provider;}),h='';
+ if(rechecked)h+='<p class="r3-api-check-result" data-api-check-result aria-live="polite">'+(cap?'Проверка завершена. Получено состояние с сервера.':'Не удалось получить свежие данные. Повторите проверку.')+'</p>';
+ else h+='<p class="r3-api-check-result" data-api-check-result aria-live="polite"></p>';
+ if(state&&state.checkedAt)h+='<p class="small" data-api-checked>'+esc((cap?'Проверено: ':'Последняя успешная проверка: ')+new Date(state.checkedAt).toLocaleString('ru-RU'))+'</p>';
+ if(cap&&cap.budget){h+='<p>Бюджет приложения: '+esc(cap.budget.status==='unavailable'?'не удалось проверить':Number.isSafeInteger(cap.budget.remainingMicrousd)?'доступно $'+(cap.budget.remainingMicrousd/1000000).toLocaleString('ru-RU',{maximumFractionDigits:6}):cap.budget.status==='blocked'?'расходы заблокированы':'доступен')+'.</p>';}
+ var connections={not_connected:'API не настроен или отключён. Возможность запуска не подтверждена.',worker_disabled:'Автоматическая подготовка отключена.',worker_unverified:'Не удалось подтвердить доступность обработчика.',ready:provider==='deepseek'?'Обработчик доступен. Платное выполнение нейросетью не проверялось.':'Доступ к настроенной модели подтверждён. Платное выполнение не проверялось.'};
+ if(cap&&connections[cap.connection])h+='<p data-api-connection>Подключение: '+esc(connections[cap.connection])+'</p>';
+ return h;
+}
+function r3ApiInformation(x,provider,rechecked=false){
  var status=r3ApiAvailability(x,provider),names={claude:'Claude',chatgpt:'ChatGPT',deepseek:'DeepSeek'},owner=KEY,identity=Oblako.identity();
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через API '+esc(names[provider])+'</h3><p role="status">'+esc(status.label)+'</p><p>'+esc(status.message)+'</p><button type="button" class="mini" data-api-recheck>Проверить подключение и состояние</button> <button type="button" class="btn" data-api-chat>Подготовить через чат</button>');
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через API '+esc(names[provider])+'</h3><p role="status">'+esc(status.label)+'</p><p>'+esc(status.message)+'</p>'+r3ApiDiagnostics(x,provider,rechecked)+'<div class="r3-api-actions"><button type="button" class="btn ghost" data-api-recheck>Проверить подключение и состояние</button><button type="button" class="btn" data-api-chat>Подготовить через чат</button></div>');
  function current(){return wrap.isConnected&&KEY===owner&&Oblako.identity()===identity&&!!item(x.id);}
  wrap.addEventListener('click',async function(e){
   if(!current())return;
   if(e.target.closest('[data-api-chat]')){wrap.remove();openR3Chat(item(x.id),provider);}
-  if(e.target.closest('[data-api-recheck]')){var button=wrap.querySelector('[data-api-recheck]');if(button.disabled)return;button.disabled=true;await refreshR3Automatic(item(x.id));if(!current())return;wrap.remove();r3ApiInformation(item(x.id),provider);}
+  if(e.target.closest('[data-api-recheck]')){var button=wrap.querySelector('[data-api-recheck]');if(button.disabled)return;button.disabled=true;button.textContent='Проверяем…';wrap.querySelector('[data-api-check-result]').textContent='Проверяем бюджет и подключение…';await refreshR3Automatic(item(x.id));if(!current())return;wrap.remove();r3ApiInformation(item(x.id),provider,true);}
  });
 }
 async function refreshR3Automatic(x){var session=x&&r3AutomaticSession(x);if(session)await session.refresh();}

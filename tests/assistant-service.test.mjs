@@ -20,3 +20,9 @@ calls.length=0;await assert.rejects(returnAssistantResult(J,A,response,{rpc,save
 });
 test('review records hash with server ownership and does not transmit/deliver',async()=>{const calls=[];const f=await fixture({rpc:async(n,a)=>{calls.push([n,a]);return {ok:true,reviewedAt:'now'}}});const r=await assistantAction({action:'assistant-review',jobId:J,hash:'a'.repeat(64)},user,f.deps);assert.equal(r.data.ok,true);assert.deepEqual(calls,[['studkab_assistant_review',{p_job:J,p_actor:A,p_hash:'a'.repeat(64)}]]);});
 test('authoritative plan preserves explicit approved structure; ambiguous prose/defaults/duplicates fail closed',()=>{const passport={status:'approved',items:[{id:'STRUCTURE',verified:true,text:'Структура:\n1. Введение\n2. Основная часть\n2.1. Расчёты\n3. Источники'}]};assert.deepEqual(approvedAssistantPlan({},passport),['section_1','section_2','section_2_1','section_3']);for(const text of ['Введение, расчёты, источники','1. Ответ\n1. Другой ответ',''])assert.throws(()=>approvedAssistantPlan({},{...passport,items:[{...passport.items[0],text}]}),/PLAN_REQUIRED/);assert.throws(()=>approvedAssistantPlan({},{...passport,status:'draft'}),/PLAN_REQUIRED/);});
+
+test('executor diagnostics adds server time, requests independent checks and performs no writes',async()=>{
+ const calls=[];const f=await fixture({capability:async(actor,provider,options)=>{calls.push({actor,provider,options});return {available:false,reason:'budget_exhausted',budget:{status:'blocked',remainingMicrousd:0},connection:'not_connected'};}});
+ const r=await assistantAction({action:'assistant-capabilities'},user,f.deps);
+ assert.ok(Number.isFinite(Date.parse(r.data.checkedAt)));assert.equal(r.data.providers.length,3);assert.ok(calls.every(c=>c.actor===A&&c.options.diagnostics===true));assert.deepEqual(f.calls,[]);
+});
