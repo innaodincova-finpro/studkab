@@ -351,6 +351,42 @@
       "sha256": "1f2cc06eecedba9d0b22ef028e4392a0766c731f260ca4cd367b4f0607c49d87",
       "status": "pending",
       "note": "ROUTE-02-C1: unpaid server reading after receipt; not installed."
+    },
+    {
+      "file": "20261009015337_assistant_durable_process.sql",
+      "version": "20261009015337",
+      "name": "assistant_durable_process",
+      "status": "installed",
+      "note": "Installed schema verified against stored SQL; live workflow acceptance remains open. Provider enablement and budgets unchanged.",
+      "sha256": "75ff4e77edff7c6989d01cd9e6d85b5fcdb26831938e2e982d6229c56a1bf98b",
+      "production_version": "20261009070140",
+      "production_sha256": "75ff4e77edff7c6989d01cd9e6d85b5fcdb26831938e2e982d6229c56a1bf98b",
+      "production_verified_at": "2026-10-09",
+      "comparison": "exact"
+    },
+    {
+      "file": "20261009021100_assistant_shared_budget.sql",
+      "version": "20261009021100",
+      "name": "assistant_shared_budget",
+      "status": "installed",
+      "note": "Installed schema verified against stored SQL; live workflow acceptance remains open. Provider enablement and budgets unchanged.",
+      "sha256": "2ef0f43824522a13552bef0dbedd7b2314c8c41fd9d3a7f547aad82fa45a5f6e",
+      "production_version": "20261009070156",
+      "production_sha256": "2ef0f43824522a13552bef0dbedd7b2314c8c41fd9d3a7f547aad82fa45a5f6e",
+      "production_verified_at": "2026-10-09",
+      "comparison": "exact"
+    },
+    {
+      "file": "20261009021521_assistant_notifications.sql",
+      "version": "20261009021521",
+      "name": "assistant_notifications",
+      "status": "installed",
+      "note": "Installed schema verified against stored SQL; live workflow acceptance remains open. Provider enablement and budgets unchanged.",
+      "sha256": "a1baf185e4e9faa4fd124515ce1369612fc2bffeabdc1aed254efc19cab713a5",
+      "production_version": "20261009071145",
+      "production_sha256": "a1baf185e4e9faa4fd124515ce1369612fc2bffeabdc1aed254efc19cab713a5",
+      "production_verified_at": "2026-10-09",
+      "comparison": "exact"
     }
   ],
   "pending_migrations": [
@@ -657,30 +693,6 @@
       "status": "pending",
       "note": "«Передать Claude»: копия материалов заявки для Claude и готовый файл Claude, прикрепляемый как готовая работа",
       "sha256": "e886a93204b8447b5d793fa0f6aca50a0260e9c0b5a86be29b85d12623bc7223"
-    },
-    {
-      "file": "20261009015337_assistant_durable_process.sql",
-      "version": "20261009015337",
-      "name": "assistant_durable_process",
-      "status": "pending",
-      "note": "Unified assistant implementation; local tests only, not installed in production",
-      "sha256": "75ff4e77edff7c6989d01cd9e6d85b5fcdb26831938e2e982d6229c56a1bf98b"
-    },
-    {
-      "file": "20261009021100_assistant_shared_budget.sql",
-      "version": "20261009021100",
-      "name": "assistant_shared_budget",
-      "status": "pending",
-      "note": "Unified assistant implementation; local tests only, not installed in production",
-      "sha256": "2ef0f43824522a13552bef0dbedd7b2314c8c41fd9d3a7f547aad82fa45a5f6e"
-    },
-    {
-      "file": "20261009021521_assistant_notifications.sql",
-      "version": "20261009021521",
-      "name": "assistant_notifications",
-      "status": "pending",
-      "note": "Unified assistant implementation; local tests only, not installed in production",
-      "sha256": "a1baf185e4e9faa4fd124515ce1369612fc2bffeabdc1aed254efc19cab713a5"
     }
   ],
   "production_reconciled_at": "2026-09-23"
