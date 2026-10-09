@@ -9,7 +9,7 @@ test('both entry pages and offline shell use the AI criterion assistance scripts
  const shell=fs.readFileSync('sw.js','utf8');
  assert.match(shell,/app-navigation\.js\?v=1/);
  for(const page of ['index.html','reestr.html'])assert.match(fs.readFileSync(page,'utf8'),/app-navigation\.js\?v=1/);
- assert.match(shell,/studkab-v138-originals-ai-commentary/);
+ assert.match(shell,/studkab-v139-neutral-assistant-status/);
  assert.match(shell,/calendar-import\.mjs\?v=1/);
  assert.match(shell,/calendar-import-ui\.mjs\?v=1/);
  assert.match(shell,/intake-ui\.js\?v=12/);

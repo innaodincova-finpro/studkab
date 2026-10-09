@@ -47,7 +47,7 @@ async function seed(page){
   const x={id:'assistant-process',requestNumber:101,route3:true,r3Loaded:true,r3ConfirmedAt:stamp,r3:{takenAt:stamp},student:'Учебный студент',topic:'Демонстрационное задание',univ:'Учебный университет',status:'work',format:{},attachments:[],passports:[],note:'Исходная заметка'};
   D.items=[x];r3Seen.add(x);tab='list';openId=x.id;render();
  },stamp);
- await expect(page.locator('.r3-assistant-option small').first()).toHaveText('Подключение не подтверждено');
+ await expect(page.locator('.r3-assistant-option small').first()).toHaveText('API не подключён');
 }
 for(const width of [390,1440])test('rich R3 route keeps context and equal unavailable providers at '+width,async({page})=>{
  await page.setViewportSize({width,height:1000});await seed(page);
@@ -55,7 +55,7 @@ for(const width of [390,1440])test('rich R3 route keeps context and equal unavai
  await expect(page.locator('.r3route .r3mk')).toHaveCount(5);
  const buttons=page.locator('[data-act="r3-assistant-run"]');
  await expect(buttons).toHaveCount(3);expect(await buttons.allTextContents()).toEqual(['Через API','Через API','Через API']);
- for(let i=0;i<3;i++)await expect(buttons.nth(i)).toBeDisabled();
+ for(let i=0;i<3;i++)await expect(buttons.nth(i)).toBeEnabled();
  await expect(page.locator('.r3h')).not.toContainText('Claude');
  await expect(page.locator('[data-act="r3-assistant-chat"]')).toHaveCount(3);
  await expect(page.locator('.r3-assistant')).toContainText('отдельной оплатой');
@@ -156,10 +156,10 @@ for(const provider of ['claude','chatgpt','deepseek'])test('approved manual '+pr
 for(const width of [390,1440])test('legacy saved copy restores chat choice without enabling duplicate API at '+width,async({page})=>{
  await page.setViewportSize({width,height:1000});await seed(page);
  await page.evaluate(stamp=>{item('assistant-process').claude={queuedAt:stamp,startedAt:null,readyAt:null,attachedAt:null,error:null};const s=r3AutomaticSession(item('assistant-process'));s.state.capabilities.forEach(p=>p.available=true);render();},stamp);
- await expect(page.locator('.r3h')).toHaveText('Материалы сохранены для Claude');
+ await expect(page.locator('.r3h')).toHaveText('Материалы получены');
  const chats=page.locator('[data-act="r3-assistant-chat"]');await expect(chats).toHaveCount(3);for(let i=0;i<3;i++)await expect(chats.nth(i)).toBeEnabled();
- const api=page.locator('[data-act="r3-assistant-run"]');await expect(api).toHaveCount(3);for(let i=0;i<3;i++)await expect(api.nth(i)).toBeDisabled();
- await page.evaluate(()=>r3StartAssistant(item('assistant-process'),'deepseek'));
+ const api=page.locator('[data-act="r3-assistant-run"]');await expect(api).toHaveCount(3);for(let i=0;i<3;i++)await expect(api.nth(i)).toBeEnabled();
+ await api.nth(2).click();await expect(page.getByRole('dialog')).toContainText('Прежняя передача требует проверки');await page.getByRole('button',{name:'Закрыть',exact:true}).click();
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight'].includes(c.action)))).toBe(false);
  await page.evaluate(stamp=>{observedJob={id:'active-job',provider:'claude',state:'queued',acceptedAt:stamp,queuedAt:stamp};return r3AutomaticSession(item('assistant-process')).refresh();},stamp);
  await expect(chats).toHaveCount(0);await expect(page.locator('.r3h')).toHaveText('Ожидается запуск');
@@ -215,4 +215,23 @@ for(const approved of [false,true])test('requirements success preserves '+(appro
  },approved);
  if(approved){await expect.poll(()=>page.evaluate(()=>documentOpened)).toBe(1);await expect(page.getByRole('dialog')).toHaveCount(0);}
  else{await expect(page.getByRole('dialog')).toContainText('Паспорт требований');await expect(page.locator('[data-requirements-body]')).not.toHaveAttribute('aria-busy','true');}
+});
+
+for(const width of [390,1440])test('unavailable API explains each provider and recheck never launches work at '+width,async({page})=>{
+ await page.setViewportSize({width,height:1000});await seed(page);
+ await page.evaluate(stamp=>{item('assistant-process').claude={queuedAt:stamp,startedAt:null,readyAt:null,attachedAt:null,error:null};render();},stamp);
+ await expect(page.locator('.r3h')).toHaveText('Материалы получены');
+ await expect(page.locator('.workflow-next')).toContainText('Выберите нейросеть и способ подготовки');
+ for(const [provider,name] of [['claude','Claude'],['chatgpt','ChatGPT'],['deepseek','DeepSeek']]){
+  await page.locator('[data-act="r3-assistant-run"][data-method="'+provider+'"]').click();
+  const dialog=page.getByRole('dialog',{name:'Подготовка через API '+name,exact:true});
+  await expect(dialog.getByRole('status')).toHaveText('API не подключён');
+  await expect(dialog).toContainText('Для автоматической передачи нужно подключить API');
+  await dialog.getByRole('button',{name:'Проверить подключение и состояние',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'Подготовка через API '+name,exact:true}).getByRole('status')).toHaveText('API не подключён');
+  await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+ }
+ expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-prepare','assistant-preflight','assistant-start','claude-queue'].includes(c.action)))).toBe(false);
+ expect(await page.evaluate(()=>item('assistant-process').claude.queuedAt)).toBe(stamp);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
