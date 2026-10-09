@@ -1738,14 +1738,25 @@ function openR3Chat(x,provider){
  Promise.resolve(copyText(prompt)).then(function(ok){if(!current())return;wrap.querySelector('[data-chat-status]').textContent=ok?'Запрос скопирован. Вставьте его в чат. Если окно не открылось, используйте ссылку ниже.':'Копирование недоступно. Скопируйте запрос из поля ниже и откройте чат по ссылке.';}).catch(function(){if(current())wrap.querySelector('[data-chat-status]').textContent='Не удалось скопировать. Запрос сохранён в поле ниже.';});
  wrap.addEventListener('click',async function(e){var button=e.target.closest('[data-chat-bundle]');if(!button||button.disabled||!current())return;button.disabled=true;button.textContent='Собираем комплект…';try{await r3Bundle(x,provider);if(current())wrap.querySelector('[data-chat-status]').textContent='Комплект скачан. Распакуйте архив и прикрепите файлы в чат.';}catch(error){if(current())wrap.querySelector('[data-chat-status]').textContent=error.message||'Комплект не скачан. Повторите.';}finally{if(current()){button.disabled=false;button.textContent='Скачать комплект и запрос';}}});
 }
+var r3RequirementsWindows=new WeakMap();
 async function openR3AssistantDocument(x){
- if(!x)return;var owner=KEY,identity=Oblako.identity(),data=D;
- try{await loadPassports(x);if(KEY!==owner||Oblako.identity()!==identity||D!==data||item(x.id)!==x)return;
+ if(!x)return;
+ var previous=r3RequirementsWindows.get(x);if(previous&&previous.isConnected){previous.querySelector('[data-x]').focus();return;}
+ var owner=KEY,identity=Oblako.identity(),data=D;
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Требования перед подготовкой</h3><div data-requirements-body aria-busy="true"><p role="status">Проверяем требования и материалы…</p></div>');
+ r3RequirementsWindows.set(x,wrap);
+ function current(){return wrap.isConnected&&KEY===owner&&Oblako.identity()===identity&&D===data&&item(x.id)===x;}
+ try{await loadPassports(x);if(!current()){wrap.remove();return;}
   var p=(x.passports||[])[0];
-  if(!p||p.status!=='approved')openModal('<button type="button" class="close" data-x="1">✕</button><h3>Требования перед подготовкой</h3>'+passportContent(x));
-  else openDocBuilder(x.id);
- }catch(e){if(KEY===owner&&Oblako.identity()===identity&&D===data)toast(e.message||'Не удалось проверить требования. Повторите.');}
+  if(!p||p.status!=='approved'){var body=wrap.querySelector('[data-requirements-body]');body.removeAttribute('aria-busy');body.innerHTML=passportContent(x);}
+  else{wrap.remove();openDocBuilder(x.id);}
+ }catch(e){
+  if(!current()){wrap.remove();return;}
+  var body=wrap.querySelector('[data-requirements-body]');body.removeAttribute('aria-busy');
+  body.innerHTML='<p role="status">'+esc(e.message||'Не удалось проверить требования. Повторите.')+'</p><p class="hint">Подготовка доступна после изучения оригиналов и утверждения требований. Полученные файлы можно проверить в разделе «Материалы».</p><div class="chips"><button type="button" class="chip" data-x="1" data-act="request-tab" data-key="materials" data-id="'+esc(x.id)+'">Открыть материалы</button><button type="button" class="chip" data-x="1" data-act="r3-assistant-document" data-id="'+esc(x.id)+'">Повторить проверку</button></div>';
+ }finally{if(r3RequirementsWindows.get(x)===wrap)r3RequirementsWindows.delete(x);}
 }
+
 function r3Card(x,route){
  var w=requestWorkflow(x),r=x.r3||{},id=esc(x.id),c=x.claude||null,num=x.requestNumber?'«заявка №'+x.requestNumber+'»':'номер заявки';
  var baseCard=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'</div>';}:window.card;
@@ -3194,7 +3205,7 @@ document.addEventListener("click", function(ev){
   if(act==='r3-deepseek-check')return checkR3Deepseek(item(id));
   if(act==='r3-assistant-chat')return openR3Chat(item(id),el.getAttribute('data-method'));
   if(act==='r3-chatgpt')return openR3Chatgpt(item(id));
-  if(act==='r3-assistant-document')return openR3AssistantDocument(item(id));
+  if(act==='r3-assistant-document'){var requirementsSheet=el.closest('.sheet');if(requirementsSheet)requirementsSheet.remove();return openR3AssistantDocument(item(id));}
   if(act==='r3-retry-load'){var retryItem=item(id);if(!retryItem||passportLoads.has(retryItem))return;delete retryItem.r3LoadError;retryItem.r3Loaded=false;r3Seen.delete(retryItem);render();return;}
   if(act==='request-tab'){
     var key=el.dataset.key;requestTabs[id]=key;
