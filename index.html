@@ -2712,6 +2712,9 @@ function render(resetScroll){
   else if (tab === "cal") p.innerHTML = viewCal();
   else if (tab === "works") p.innerHTML = openWorkId ? viewWork(openWorkId) : viewWorks();
   else p.innerHTML = viewMore();
+  // A fresh DOM must receive the last confirmed route even when the next
+  // server reply is unchanged. Polling may skip identical data, not mounting.
+  if(tab==='works'&&openWorkId&&work(openWorkId))r3Rerender(work(openWorkId));
   var __sig=tab+'|'+(openWorkId||'');if(__sig!==window.__vsig){window.__vsig=__sig;p.classList.add('enter');clearTimeout(window.__vt);window.__vt=setTimeout(function(){p.classList.remove('enter');},700);}
   if(tab==="works"&&openWorkId&&work(openWorkId))StudResults.mountTestDelivery(work(openWorkId),p.querySelector('[data-test-delivery-host]'),true);
   var fab = document.getElementById("fab");

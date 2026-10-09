@@ -215,6 +215,12 @@ test('R3-C: student sees «Работа готова» with one download button;
  });
  await expect(page.locator('[data-student-progress]')).toHaveText('Работа готова.');
  await expect(page.locator('[data-r3-ready]')).toContainText('Иванова Математика.docx · 48 КБ');
+ // Replacing the view must mount the same confirmed file while a new read
+ // is still pending; equal responses must not leave the route empty.
+ await page.evaluate(()=>{
+  const api=Oblako.requestApi;Oblako.requestApi=d=>d.action==='student-progress'?new Promise(()=>{}):api(d);render();
+ });
+ await expect(page.locator('[data-r3-ready]')).toContainText('Иванова Математика.docx · 48 КБ');
  await expect(page.locator('[data-legacy-result]')).toBeHidden();
  await page.locator('[data-act="r3-download"]').click();
  await expect.poll(()=>page.evaluate(()=>opened)).toEqual(['Иванова_Математика.docx']);expect(await page.evaluate(()=>dl)).toEqual(['11111111-1111-4111-8111-111111111111']);
