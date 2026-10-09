@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {DOMParser} from '@xmldom/xmldom';import {getDocumentProxy,getResolvedPDFJS} from 'unpdf';
 import {PGlite} from '@electric-sql/pglite';
+import {readOfficeMath} from '../supabase/functions/studkab-requests/office-math.mjs';
 import {readDocument,READER_VERSION} from '../supabase/functions/studkab-requests/structured-reader.mjs';
 import {loadOriginal} from '../supabase/functions/studkab-requests/intake-reading.mjs';
 import {handler} from '../supabase/functions/studkab-requests/handler.mjs';
@@ -72,4 +73,47 @@ test('database rejects mismatched source hashes and browser access to reading RP
  await f.db.exec('reset role;set role authenticated');await assert.rejects(()=>f.db.query('select studkab_intake_read_begin($1,$2,$3,$4)',[student,f.body.id,f.body.fileId,READER_VERSION]),/permission denied/);
  await assert.rejects(()=>f.db.query('select read_result from studkab_intake_files'),/permission denied/);
  }finally{await f.db.close();}
+});
+
+// R12: structural equations retain operators and source locations; never flatten m:t.
+const mathFixtures=JSON.parse(fs.readFileSync(new URL('fixtures/office-math-reading.json',import.meta.url)));
+test('actual DOCX math keeps nested fraction and exponent in paragraph, table and header with original OMML',async()=>{
+ const r=await readDocument(new Uint8Array(Buffer.from(mathFixtures['math.docx'],'base64')),DOCX,deps);
+ assert.equal(r.status,'ready');assert.doesNotMatch(r.extracted_text,/12x|1x2/);
+ assert.match(r.blocks[0].text,/Вычислить \\\(\\frac\{1\}\{\{x\}\^\{2\}\}\\\) при x=2\./);
+ const equations=r.blocks.flatMap(b=>b.equations||[]);assert.equal(equations.length,3);
+ assert.equal(equations[0].source.paragraph,1);assert.equal(equations[1].source.table,1);assert.equal(equations[1].source.column,1);assert.equal(equations[2].source.part,'word/header1.xml');
+ for(const e of equations){assert.equal(e.complete,true);assert.equal(e.text,'\\frac{1}{{x}^{2}}');assert.match(e.omml,/<m:f>/);assert.match(e.omml,/<m:sSup>/);}
+});
+test('unsupported Word math preserves original structure and stays blocked instead of accepting a partial formula',async()=>{
+ const r=await readDocument(new Uint8Array(Buffer.from(mathFixtures['math-unsupported.docx'],'base64')),DOCX,deps);
+ assert.equal(r.status,'blocked');assert.equal(r.warnings[0].code,'equation_layout');assert.equal(r.warnings[0].source.equation,1);
+ const e=r.blocks[0].equations[0];assert.equal(e.complete,false);assert.match(e.omml,/<m:phant>/);assert.equal(e.text,'');
+});
+
+const mathRun=text=>'<m:r><m:t>'+text+'</m:t></m:r>';
+const mathNode=body=>new DOMParser().parseFromString('<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'+body+'</m:oMath>','application/xml').documentElement;
+for(const [name,body,expected] of [
+ ['subscript','<m:sSub><m:e>'+mathRun('x')+'</m:e><m:sub>'+mathRun('i')+'</m:sub></m:sSub>','{x}_{i}'],
+ ['both scripts','<m:sSubSup><m:e>'+mathRun('x')+'</m:e><m:sub>'+mathRun('i')+'</m:sub><m:sup>'+mathRun('2')+'</m:sup></m:sSubSup>','{x}_{i}^{2}'],
+ ['root','<m:rad><m:deg>'+mathRun('3')+'</m:deg><m:e>'+mathRun('x')+'</m:e></m:rad>','\\sqrt[3]{x}'],
+ ['lower limit','<m:limLow><m:e>'+mathRun('lim')+'</m:e><m:lim>'+mathRun('x→0')+'</m:lim></m:limLow>','\\underset{x→0}{lim}'],
+ ['sum','<m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub>'+mathRun('i=1')+'</m:sub><m:sup>'+mathRun('n')+'</m:sup><m:e>'+mathRun('i')+'</m:e></m:nary>','\\sum_{i=1}^{n}{i}'],
+ ['matrix','<m:m><m:mr><m:e>'+mathRun('1')+'</m:e><m:e>'+mathRun('2')+'</m:e></m:mr><m:mr><m:e>'+mathRun('3')+'</m:e><m:e>'+mathRun('4')+'</m:e></m:mr></m:m>','\\begin{matrix}1 & 2 \\\\ 3 & 4\\end{matrix}'],
+ ['delimiters','<m:d><m:dPr><m:begChr m:val="["/><m:endChr m:val="]"/><m:sepChr m:val=","/></m:dPr><m:e>'+mathRun('a')+'</m:e><m:e>'+mathRun('b')+'</m:e></m:d>','[a,b]'],
+ ['fraction without bar','<m:f><m:fPr><m:type m:val="noBar"/></m:fPr><m:num>'+mathRun('n')+'</m:num><m:den>'+mathRun('k')+'</m:den></m:f>','\\genfrac{}{}{0pt}{}{n}{k}']
+])test('OMML '+name+' preserves its mathematical structure',()=>{const r=readOfficeMath(mathNode(body));assert.equal(r.complete,true);assert.equal(r.text,expected);assert.ok(r.omml);});
+for(const body of [
+ '<m:f><m:num>'+mathRun('1')+'</m:num><m:den>'+mathRun('2')+'</m:den><m:den>'+mathRun('3')+'</m:den></m:f>',
+ '<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg>'+mathRun('3')+'</m:deg><m:e>'+mathRun('x')+'</m:e></m:rad>',
+ '<m:unknown>'+mathRun('x')+'</m:unknown>',
+ '<m:num>'+mathRun('x')+'</m:num>',
+ mathRun('\\input'),
+ '<m:r><m:t>{x}</m:t></m:r>',
+ '<m:r><m:rPr><m:scr m:val="double-struck"/></m:rPr><m:t>R</m:t></m:r>'
+])test('ambiguous, hidden or unsupported OMML cannot be accepted as completely read: '+body.slice(0,30),()=>{const r=readOfficeMath(mathNode(body));assert.equal(r.complete,false);assert.equal(r.text,'');assert.ok(r.omml);});
+test('math namespace spoofing and resource exhaustion fail closed',()=>{
+ const fake=new DOMParser().parseFromString('<m:oMath xmlns:m="urn:not-office-math"><m:r><m:t>x</m:t></m:r></m:oMath>','application/xml').documentElement;
+ assert.equal(readOfficeMath(fake).complete,false);
+ assert.equal(readOfficeMath(mathNode(mathRun('x').repeat(4001))).complete,false);
 });
