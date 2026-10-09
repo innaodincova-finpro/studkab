@@ -5,7 +5,7 @@ import {prepareDirectAssistant} from '../_shared/direct-assistant.mjs';
 import {prepareDeepseekAssistant} from '../_shared/deepseek-assistant.mjs';
 import {ORIGINALS_PROTOCOL,ORIGINALS_OUTPUTS} from '../_shared/assistant-originals.mjs';
 const uuid=v=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v);
-export const ASSISTANT_ACTIONS=['assistant-capabilities','assistant-prepare','assistant-preflight','assistant-start','assistant-state','assistant-review'];
+export const ASSISTANT_ACTIONS=['assistant-capabilities','assistant-finances','assistant-prepare','assistant-preflight','assistant-start','assistant-state','assistant-review'];
 export function assistantCapabilities(capabilities){return {providers:ASSISTANTS.map(provider=>({provider,...(capabilities?.[provider]||(provider==='deepseek'&&capabilities?.available!==undefined?capabilities:{available:false,reason:'not_connected'}))}))};}
 export async function deepseekCapability(actor,{rpc,enabled=false,configured=false,probe,diagnostics=false}){
  if(diagnostics){
@@ -75,7 +75,7 @@ export async function returnAssistantResult(jobId,actor,response,{rpc,saveResult
   failReturn:({claim})=>rpc('studkab_assistant_fail_return',{p_job:jobId,p_actor:actor,p_claim:claim})
  });
 }
-export async function assistantAction(input,user,{config,rpc,loadRequestFile,saveResult,planSections,sourcePlan,readFile,capability,providerConfig,fetchProvider}){
+export async function assistantAction(input,user,{config,rpc,loadRequestFile,saveResult,planSections,sourcePlan,readFile,capability,providerConfig,fetchProvider,finances}){
  if(input.action==='assistant-state'){
   if(!uuid(input.id)||!uuid(user?.id)||(input.operation!=null&&!uuid(input.operation)))return {status:400,data:{error:'INVALID_INPUT'}};
   const state=checked(await rpc('studkab_assistant_state',{p_request:input.id,p_actor:user.id,...(input.operation?{p_operation:input.operation}:{})}));
@@ -83,6 +83,11 @@ export async function assistantAction(input,user,{config,rpc,loadRequestFile,sav
  }
  const cfg=await config();
  if(!cfg?.executor_email||String(user?.email||'').toLowerCase()!==cfg.executor_email.toLowerCase())return {status:403,data:{error:'FORBIDDEN'}};
+ if(input.action==='assistant-finances'){
+  if(!uuid(user?.id))return {status:400,data:{error:'INVALID_INPUT'}};
+  if(typeof finances!=='function')return {status:503,data:{error:'FINANCES_UNAVAILABLE'}};
+  return {data:await finances(user.id)};
+ }
  if(input.action==='assistant-capabilities')return {data:{...assistantCapabilities(capability?Object.fromEntries(await Promise.all(ASSISTANTS.map(async p=>[p,await capability(user.id,p,{diagnostics:true})]))):null),checkedAt:new Date().toISOString()}};
  if(input.action==='assistant-preflight'||input.action==='assistant-start'){
   if(!ASSISTANTS.includes(input.provider)||!capability||(await capability(user.id,input.provider)).available!==true)return {status:409,data:{error:'PROVIDER_NOT_CONNECTED'}};

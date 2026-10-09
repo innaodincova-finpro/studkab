@@ -159,3 +159,30 @@ usage/стоимость/сверка → проверка исполнител�
 - https://developers.openai.com/api/docs/guides/file-inputs
 - https://platform.claude.com/docs/en/manage-claude/usage-cost-api
 - https://platform.claude.com/docs/en/build-with-claude/files
+
+
+## Реализация этапа A от 09.10.2026
+
+Новый assistant-finances доступен только подтверждённому исполнителю через
+существующий authenticated requests handler. Возвращает текущий доступный бюджет
+приложения отдельно от balance/costs поставщиков. Значения резервов и фактические
+списания отдельных заявок этот endpoint пока не выдаёт. Не называть этап полным
+финансовым учётом. В рабочий интерфейс новый endpoint ещё не подключён.
+
+DeepSeek баланс проверяется через существующий Worker с действующим DEEPSEEK_KEY;
+флаги генерации не включаются, prompt не отправляется. OpenAI использует
+OPENAI_ADMIN_API_KEY и STUDKAB_ASSISTANT_OPENAI_PROJECT_ID; Claude —
+ANTHROPIC_ADMIN_API_KEY и STUDKAB_ASSISTANT_CLAUDE_WORKSPACE_ID. Эти значения
+только читаются на сервере при наличии; отсутствующие ключи не создаются.
+Обычные runtime keys не подставляются как admin keys. Claude отчёт сначала
+группируется по workspace и на сервере остаётся только заданный workspace;
+работа с default workspace требует отдельного явного выбора и пока не включена.
+
+Период — текущий календарный месяц в UTC, отчёты суточные; это показания
+поставщика в доступных buckets, не моментальный баланс. Claude Priority Tier
+не включён. Пагинация до четырёх страниц; неполный отчёт остаётся unknown.
+Резерв и разрешённый лимит отчётами не меняются. Проверки объединяются на
+одном Edge instance, кэш60с; сбой сохраняет последний успех как stale максимум
+10мин, затем unknown. Это не глобальный scheduler и не долговременный журнал.
+Ответы имеют source, checkedAt, observedAt и период; произвольные ответы/ошибки
+и ключи не выдаются. Оплата, пополнение, изменение лимитов и inference не вызываются.

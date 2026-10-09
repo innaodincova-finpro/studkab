@@ -72,7 +72,7 @@ const assistantProviders=createAssistantProviders({get:(name:string)=>Deno.env.g
 Deno.serve(handler({auth,db,send,
  assistant:{
   sourcePlan:(input:any)=>sourceAssistantPlan(input,{readFile:readIntake}),
-  capability:assistantProviders.capability,providerConfig:assistantProviders.config
+  capability:assistantProviders.capability,providerConfig:assistantProviders.config,finances:assistantProviders.finances
  },
  notification:{telegramConfigured:!!Deno.env.get('STUDKAB_TELEGRAM_BOT_TOKEN')},
  // NOTIFY-03: configured existing SMTP only. Missing fields keep the channel

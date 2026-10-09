@@ -4,6 +4,30 @@ import worker from '../worker/ai-proxy.mjs';
 const env={PROXY_TOKEN:'test-only',DEEPSEEK_KEY:'test-key',RATE_MAX:1000,ALLOWED_ORIGIN:'https://innaodincova-finpro.github.io'};
 function request(body,headers={}) {return new Request('https://example.test/',{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Token':'test-only',...headers},body:JSON.stringify(body)});}
 const basic={provider:'deepseek',model:'deepseek-flash',system:'Инструкция',user:'Материалы',max_tokens:8000};
+test('financial action reads actual supplier balance only after proxy authorization',async t=>{
+ const calls=[];t.mock.method(globalThis,'fetch',async(url,options)=>{
+  calls.push({url,options});return Response.json({is_available:true,balance_infos:[{currency:'USD',total_balance:'12.34',granted_balance:'0',topped_up_balance:'12.34'}],secret:'private response'});
+ });
+ const denied=await worker.fetch(request({action:'finances'},{'X-Proxy-Token':'wrong'}),env);assert.equal(denied.status,401);assert.equal(calls.length,0);
+ const r=await worker.fetch(request({action:'finances',provider:'chatgpt',topUp:true}),env);const data=await r.json();
+ assert.equal(data.balance.status,'verified');assert.equal(data.balance.balances[0].total,'12.34');assert.equal(calls.length,1);
+ assert.equal(calls[0].url,'https://api.deepseek.com/user/balance');assert.equal(calls[0].options.method,'GET');assert.equal(calls[0].options.body,undefined);
+ assert.equal(calls[0].options.redirect,'error');assert.equal(JSON.stringify(data).includes('test-key'),false);assert.equal(JSON.stringify(data).includes('private response'),false);
+});
+test('unconfigured balance never probes supplier and never invents zero',async t=>{
+ const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});
+ const r=await worker.fetch(request({action:'finances'}),{...env,DEEPSEEK_KEY:undefined});const data=await r.json();
+ assert.equal(data.balance.status,'unknown');assert.equal(data.balance.reason,'not_configured');assert.equal(data.balance.balances,undefined);assert.equal(f.mock.callCount(),0);
+});
+test('balance errors and invalid supplier values remain unknown and sanitized',async t=>{
+ const f=t.mock.method(globalThis,'fetch',async()=>new Response('test-key private response',{status:401}));
+ let r=await worker.fetch(request({action:'finances'}),env);assert.equal((await r.json()).balance.reason,'access_denied');
+ for(const body of [{is_available:true,balance_infos:[{currency:'USD',total_balance:0,granted_balance:'0',topped_up_balance:'0'}]},{is_available:true,balance_infos:[{currency:'OTHER',total_balance:'0',granted_balance:'0',topped_up_balance:'0'}]}]){
+  f.mock.mockImplementation(async()=>Response.json(body));r=await worker.fetch(request({action:'finances'}),env);const data=await r.json();assert.equal(data.balance.status,'unknown');assert.equal(data.balance.balances,undefined);
+ }
+ f.mock.mockImplementation(async()=>{throw Error('test-key private response');});r=await worker.fetch(request({action:'finances'}),env);assert.equal(JSON.stringify(await r.json()).includes('private response'),false);
+ f.mock.mockImplementation(async()=>new Response('x'.repeat(17000)));r=await worker.fetch(request({action:'finances'}),env);assert.equal((await r.json()).balance.status,'unknown');
+});
 function reply(reason='stop',text='Полный ответ'){return Response.json({choices:[{finish_reason:reason,message:{content:text}}],usage:{prompt_tokens:5,completion_tokens:7}});}
 test('preserves both fields beyond the former 40000-character cut',async t=>{
   let sent;
