@@ -80,6 +80,10 @@ export function createAssistantSession({api,active,onChange,newOperation}) {
 
 export function executorProjection(request,observation={}){
  const result=projectAssistantState({role:'executor',...(request.r3Loaded?{work:request.r3||{}}:{}),claude:request.claude||null,...(observation.job?{durable:{job:observation.job}}:{}),observation:{connected:!request.r3LoadError&&!observation.stale,lastConfirmedAt:request.r3ConfirmedAt||null}});
+ // Legacy Claude queuedAt confirms a saved copy, not dispatch. Keep its queue
+ // intact; allow manual export only, never infer permission for another API job.
+ if(result.state==='queued'&&result.provider==='claude'&&!result.stale&&!observation.unknown&&!observation.job&&!request.claude?.startedAt&&!request.claude?.readyAt&&!request.claude?.attachedAt&&!request.claude?.error)
+  return {...result,label:'Материалы сохранены для Claude',legacyChatAvailable:true};
  if(result.state==='kit_prepared')return {...result,label:'Комплект принят системой'};
  return result;
 }
