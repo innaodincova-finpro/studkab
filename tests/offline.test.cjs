@@ -10,6 +10,8 @@ test('both entry pages and offline shell use the AI criterion assistance scripts
  assert.match(shell,/app-navigation\.js\?v=1/);
  for(const page of ['index.html','reestr.html'])assert.match(fs.readFileSync(page,'utf8'),/app-navigation\.js\?v=1/);
  assert.match(shell,/studkab-v141-api-finance-route/);
+ for(const asset of ['assistant-executor-ui.mjs?v=2','assistant-executor-ui.css?v=2']){assert.ok(shell.includes(asset));assert.ok(fs.readFileSync('reestr.html','utf8').includes(asset));}
+ assert.ok(shell.includes('assistant-finance-ui.mjs'));
  assert.match(shell,/calendar-import\.mjs\?v=1/);
  assert.match(shell,/calendar-import-ui\.mjs\?v=1/);
  assert.match(shell,/intake-ui\.js\?v=12/);
