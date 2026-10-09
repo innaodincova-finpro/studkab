@@ -11,6 +11,10 @@ async function seed(page){
    if(body.action==='assistant-capabilities')return {providers:['claude','chatgpt','deepseek'].map(provider=>({provider,available:false,reason:'not_connected'}))};
    if(body.action==='assistant-state')return {job:observedJob,accepted:operationAccepted};
    if(body.action==='assistant-prepare')return new Promise((resolve,reject)=>{window.pendingPrepare={resolve,reject,operation:body.operation,provider:body.provider};});
+   if(body.action==='material-revision-state')return {materials:{state:'locked',requestRevision:1}};
+   if(body.action==='attachment-context')return {attachments:[],materialRevision:1};
+   if(body.action==='clarification-list')return {questions:[]};
+   if(body.action==='claude-state')return {claude:null};
    if(body.action==='r3-state')return {work:{takenAt:stamp}};
    return {question:0,questions:[],files:[]};
   };

@@ -1754,7 +1754,7 @@ function r3Card(x,route){
   :workflowSteps(w)+lab('Шаг '+w.step+' из 5'+(w.rework?' · доработка № '+w.rework:''))+'<p class="workflow-title">'+esc(title)+'</p><p class="workflow-copy">'+esc(copy)+'</p>';
  var actionState=r3Actions.get(r3ActionKey(x));
  if(actionState&&actionState.busy)h+='<button type="button" class="btn" disabled>'+esc(actionState.message)+'</button>';
- if(actionState&&actionState.message)h+='<p role="status">'+esc(actionState.message)+'</p>';
+ if(actionState&&actionState.message)h+='<p role="status" data-r3-action-status>'+esc(actionState.message)+'</p>';
  // R3-D: замечания преподавателя при возврате и история переданных версий.
  var rets=r.returnList||[],last=rets[rets.length-1],vers=r.versions||[];
  if(w.rework&&last)h+='<div class="r3-quote"><b>Замечания преподавателя:</b> '+esc(last.comment)+(last.files&&last.files.length?'<div class="r3-qfiles">'+last.files.map(function(f){return '<span>'+esc(f.name)+' · '+esc(r3Size(f.size))+' <button type="button" class="linkbtn" data-act="r3-return-file-download" data-id="'+id+'" data-file="'+esc(f.id)+'">Скачать</button></span>';}).join('')+'</div>':'')+'</div>';

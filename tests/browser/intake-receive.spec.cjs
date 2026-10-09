@@ -287,7 +287,7 @@ test('R3-D: student hands in, then sends the teacher remarks with a photo; the c
  await box.locator('[data-act="r3-return-file-remove"]').nth(1).click();
  await expect(box.locator('.r3-files li')).toHaveCount(1);
  await box.locator('[data-act="r3-return-send"]').click();
- await expect(box).toContainText('Работу исправляют');await expect(box).toContainText('доработка № 1');await expect(box).toContainText('Приложено: Замечания.png');
+ await expect(box).toContainText('Работа возвращена на доработку');await expect(box).toContainText('доработка № 1');await expect(box).toContainText('Приложено: Замечания.png');
  await expect(page.locator('[data-student-progress]')).toContainText('Работа на доработке');
  expect(await page.evaluate(()=>calls.find(c=>c.action==='r3-return').comment)).toBe('Задание 3: показать решение подробно.');
 });
@@ -571,8 +571,8 @@ for(const width of [390,1440])test('UX-R04 registry shows pending action once an
  await page.evaluate(()=>{D=structuredClone(D);render();});
  await expect(page.getByRole('button',{name:'Берём в работу…',exact:true})).toBeDisabled();
  await page.evaluate(()=>failTake(Error('Нет сети')));
- await expect(page.locator('.request-action [role="status"]')).toContainText('Нет сети');
- await page.evaluate(()=>render());await expect(page.locator('.request-action [role="status"]')).toContainText('Нет сети');
+ await expect(page.locator('.request-action [data-r3-action-status]')).toContainText('Нет сети');
+ await page.evaluate(()=>render());await expect(page.locator('.request-action [data-r3-action-status]')).toContainText('Нет сети');
  await page.locator('[data-act="r3-take"]').click();await expect.poll(()=>page.evaluate(()=>takeAttempts)).toBe(2);
  await page.evaluate(()=>finishTake({work:{takenAt:'2026-10-08T01:00:00Z'}}));
  await expect(page.locator('.request-action')).toContainText('Выберите способ подготовки или выполните работу самостоятельно.');
@@ -643,7 +643,7 @@ for(const width of [390,1440])test('UX-ASSISTANT equal controls retain manual ch
  await page.setViewportSize({width,height:900});await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>{
   window.assistantCalls=[];window.failAssistantCheck=false;
-  Oblako.requestApi=async d=>{assistantCalls.push(d.action);if(d.action==='assistant-capabilities'){if(failAssistantCheck)throw Error('network');return {providers:['claude','chatgpt','deepseek'].map(provider=>({provider,available:false,reason:provider==='deepseek'?'budget_exhausted':'not_connected'}))};}if(d.action==='assistant-state')return {job:null};throw Error('Unexpected '+d.action);};
+  Oblako.requestApi=async d=>{assistantCalls.push(d.action);if(d.action==='assistant-capabilities'){if(failAssistantCheck)throw Error('network');return {providers:['claude','chatgpt','deepseek'].map(provider=>({provider,available:false,reason:provider==='deepseek'?'budget_exhausted':'not_connected'}))};}if(d.action==='assistant-state')return {job:null};if(d.action==='material-revision-state')return {materials:{state:'locked',requestRevision:1}};if(d.action==='attachment-context')return {attachments:[{id:'source',file_name:'original.pdf',category:'unclassified',content_type:'application/pdf',size_bytes:10,file_hash:'b'.repeat(64)}],materialRevision:1};if(d.action==='clarification-list')return {questions:[]};if(d.action==='claude-state')return {claude:null};if(d.action==='r3-state')return {work:structuredClone(D.items[0].r3)};throw Error('Unexpected '+d.action);};
   const x=fromPayload({id:'assistant-choice',route:'r3',k:'Практические задания',d:'Математика',u:'ММУ',n:'Иванова Мария',dl:'2027-01-25'});x.requestNumber=6;x.r3Loaded=true;x.r3={takenAt:'2026-10-07T09:00:00Z',result:{hash:'a'.repeat(64),name:'previous.docx',size:2048,at:'2026-10-07T10:00:00Z'},versions:[{n:1,at:'2026-10-06T10:00:00Z',name:'original.docx'}]};x.claude=null;x.attachments=[{id:'source',file_name:'original.pdf',size_bytes:10}];
   D.items=[x];r3Seen.add(x);openId=x.id;window.assistantBefore=JSON.stringify({r3:x.r3,claude:x.claude,attachments:x.attachments});render();
  });

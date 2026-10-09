@@ -2693,6 +2693,9 @@ function render(resetScroll){
   appNavigation.sync();
   var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openWorkId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
   var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY,pageSnapshot=keepScroll&&window.StudViewState?StudViewState.captureViewState(existingPage):null;
+  if(r3CacheOwner!==ownerKey){
+    r3CacheOwner=ownerKey;r3Last={};r3Observations={};r3Fetched={};r3Forms={};r3Pending={};r3Drafts={};
+  }
   var c = counts();
   var bar = document.getElementById("tabbar");
   bar.innerHTML = TABS.map(function(x){
@@ -2735,7 +2738,7 @@ function render(resetScroll){
   refreshStudentProgress();
 }
 // R3-C/R3-D: заявка по форме — готовая работа, «Я сдал работу», «Вернули на доработку». Прежний блок «Результат заявки» скрыт.
-var r3Forms={},r3Pending={},r3Drafts={},r3Last={},r3Observations={},r3Reading={};
+var r3Forms={},r3Pending={},r3Drafts={},r3Last={},r3Observations={},r3Reading={},r3CacheOwner=null;
 async function r3ObserveAssistant(w,progress,identity){
  var key=identity+'|'+w.req.serverId,proof={connected:true,lastConfirmedAt:new Date().toISOString()},durable=null;
  try{durable=await Oblako.requestApi({action:'assistant-state',id:w.req.serverId});}
@@ -2769,7 +2772,7 @@ function r3ReadyBlock(w,result){
  var id=esc(w.id),returns=result.returns?'<p class="small">Возвратов на доработку: '+esc(result.returns)+'</p>':'';
  if(result.lastReturn){
   var lr=result.lastReturn;
-  box.innerHTML='<p><b>Работу исправляют</b> · доработка № '+esc(lr.n)+'</p><div class="r3-quote">'+esc(lr.comment)+(lr.files&&lr.files.length?'<br><span class="small">Приложено: '+esc(lr.files.join(', '))+'</span>':'')+'</div><p class="hint">Вы вернули работу '+esc(r3When(lr.at))+'. Придёт уведомление, когда исправленная работа будет готова. Затем снова скачайте её и сдайте.</p>'+returns;
+  box.innerHTML='<p><b>Работа возвращена на доработку</b> · доработка № '+esc(lr.n)+'</p><div class="r3-quote">'+esc(lr.comment)+(lr.files&&lr.files.length?'<br><span class="small">Приложено: '+esc(lr.files.join(', '))+'</span>':'')+'</div><p class="hint">Вы вернули работу '+esc(r3When(lr.at))+'. Придёт уведомление, когда исправленная работа будет готова. Затем снова скачайте её и сдайте.</p>'+returns;
   box.hidden=false;return;
  }
  if(!result.result){box.hidden=true;box.innerHTML='';return;}
@@ -2812,7 +2815,7 @@ function refreshStudentProgress(){
   return r3ObserveAssistant(w,result,identity);
  }).then(function(result){
   if(!host.isConnected||Oblako.identity()!==identity||tab!=='works'||openWorkId!==w.id)return;
-  if(result.route==='r3'&&w.req.route!=='r3'){change(function(){w.req.route='r3';});render();return;}
+  if(result.route==='r3'&&w.req.route!=='r3'){r3Last[w.id]=result;change(function(){w.req.route='r3';});render();return;}
   var display=result.assistantDisplay;
   host.textContent=(display?display.label:result.lastReturn&&result.stage==='r3_in_work'?'Работа возвращена на доработку.':labels[result.stage]||'Этап не подтверждён. Повторите проверку.')+(result.openQuestions?' Вопросов без ответа: '+result.openQuestions+'.':'')+(display&&display.stale?' · Не удалось обновить состояние.':'');
   var old=r3Last[w.id];
@@ -2823,7 +2826,12 @@ function refreshStudentProgress(){
  },function(err){
   if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)
    host.textContent='Не удалось обновить состояние. '+(r3Last[w.id]?'Показаны последние подтверждённые сведения.':'Повторите после подключения к сети.');
- }).finally(function(){delete r3Reading[readKey];});
+ }).finally(function(){
+  delete r3Reading[readKey];
+  // A first route response can replace the host while this read is pending.
+  // Refresh the replacement after releasing the lock, not on the next timer.
+  if(!host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)refreshStudentProgress();
+ });
 }
 async function refreshStudentDialogue(){
  var w=tab==='works'&&openWorkId&&work(openWorkId),host=document.querySelector('[data-dialog-unread]');

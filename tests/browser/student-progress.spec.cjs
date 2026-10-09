@@ -108,3 +108,24 @@ test('UI-04 same-view refresh keeps profile drafts and folds without saving them
  expect(await page.evaluate(()=>D.settings.name)).toBe(original);
  expect(await page.locator('.profile-fold').nth(1).evaluate(el=>el.open)).toBe(true);
 });
+
+test('STATE-01 account switch clears already observed file metadata and feedback drafts',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  window.cacheOwner='previous-account';Oblako.identity=()=>cacheOwner;
+  const w={id:'same-local-work',topic:'Проверка владельца',deadline:'2026-11-15',format:{workType:'Практическая работа'},structure:emptyStructure(),req:{serverId:'11111111-1111-4111-8111-111111111111',number:1,route:'r3'}};
+  D.works=[w];Oblako.requestApi=async body=>{
+   if(cacheOwner==='next-account')return new Promise(()=>{});
+   if(body.action==='student-progress')return {route:'r3',stage:'r3_ready',result:{name:'Файл_предыдущего_аккаунта.docx',size:1024,at:'2026-10-09T09:00:00Z'}};
+   if(body.action==='assistant-state')return {job:null};return {question:0};
+  };go('works',w.id);
+ });
+ await expect(page.locator('[data-r3-ready]')).toContainText('Файл предыдущего аккаунта');
+ await page.evaluate(()=>{
+  r3Drafts['same-local-work']='Приватный черновик';cacheOwner='next-account';
+  D.works[0].req.serverId='22222222-2222-4222-8222-222222222222';render();
+ });
+ await expect(page.locator('#page')).not.toContainText('Файл предыдущего аккаунта');
+ expect(await page.evaluate(()=>r3Last['same-local-work'])).toBeUndefined();
+ expect(await page.evaluate(()=>r3Drafts['same-local-work'])).toBeUndefined();
+});
