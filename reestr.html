@@ -1723,7 +1723,7 @@ function r3FinanceInformation(x,backProvider){
    if(c&&c.amount!==undefined)h+='<p class="small">За '+esc(new Date(c.periodStart).toLocaleDateString('ru-RU'))+' — '+esc(new Date(c.periodEnd).toLocaleDateString('ru-RU'))+(c.coverage==='excludes_priority_tier'?' · без Priority Tier':'')+'</p>';
    h+='<a class="btn ghost" href="'+row[2]+'" target="_blank" rel="noopener noreferrer">Открыть кабинет '+row[1]+'</a></section>';
   });
-  h+='<p class="small">Расход по этой заявке: пока не подтверждён.</p>';
+  if(x)h+='<p class="small">Расход по этой заявке: пока не подтверждён.</p>';
   wrap.querySelector('[data-finance-body]').innerHTML=h;wrap.querySelector('[data-finance-status]').textContent=state.message;
   var button=wrap.querySelector('[data-finance-refresh]');button.disabled=state.busy;button.textContent=state.busy?'Обновляем…':'Обновить данные';
  }

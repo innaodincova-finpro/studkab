@@ -277,7 +277,7 @@ test('finance loading and failure stay explicit; a closed screen cannot reopen f
 test('finance entry in More works without a request and account change discards a late answer',async({page})=>{
  await seed(page);await page.evaluate(()=>{const api=Oblako.requestApi;Oblako.requestApi=input=>input.action==='assistant-finances'?new Promise(resolve=>window.resolveFinance=resolve):api(input);});
  await page.locator('[data-tab="more"]').click();await page.locator('summary').filter({hasText:/^Подключения и расходы$/}).click();await page.getByRole('button',{name:'Открыть подключения и расходы',exact:true}).click();
- await expect(page.getByRole('dialog',{name:'Подключения и расходы',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Обновляем…',exact:true})).toBeDisabled();
+ await expect(page.getByRole('dialog',{name:'Подключения и расходы',exact:true})).toBeVisible();await expect(page.getByRole('dialog')).not.toContainText('Расход по этой заявке');await expect(page.getByRole('button',{name:'Обновляем…',exact:true})).toBeDisabled();
  await page.evaluate(()=>QA.switchUser('other-finance-synthetic'));await expect(page.getByRole('dialog')).toHaveCount(0);
  await page.evaluate(()=>resolveFinance({schema:1,checkedAt:new Date().toISOString(),application:{status:'unknown'},providers:[]}));await expect(page.getByRole('dialog')).toHaveCount(0);
 });
