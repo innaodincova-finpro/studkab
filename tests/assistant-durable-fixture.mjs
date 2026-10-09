@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
 const read=n=>readFileSync(new URL('../supabase/migrations/'+n,import.meta.url),'utf8');
 export async function setupAssistantFixture(db,{actor,student,other}) {
  await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;
@@ -23,10 +24,10 @@ export async function setupAssistantFixture(db,{actor,student,other}) {
  await db.exec('set role service_role');
 }
 // Native PostgreSQL harness uses the exact same disposable schema and migration.
-if (process.argv.includes('--print-sql')) {
+if (process.argv.includes('--print-sql') && import.meta.url===pathToFileURL(process.argv[1]).href) {
  const statements=[];
  const literal=v=>v==null?'null':"'"+String(typeof v==='object'?JSON.stringify(v):v).replaceAll("'","''")+"'";
- const fake={exec:async sql=>statements.push(sql),query:async(sql,args)=>statements.push(sql.replace(/\$(\d+)/g,(_,n)=>literal(args[Number(n)-1]))+';')};
+ const fake={exec:async sql=>statements.push(sql+'\n;'),query:async(sql,args)=>statements.push(sql.replace(/\$(\d+)/g,(_,n)=>literal(args[Number(n)-1]))+';')};
  await setupAssistantFixture(fake,{actor:'22222222-2222-4222-8222-222222222222',student:'11111111-1111-4111-8111-111111111111',other:'33333333-3333-4333-8333-333333333333'});
  let sql=statements.join('\n');
  sql=sql.replace(/create role (anon|authenticated|service_role)( bypassrls)?;/g,(_,name,bypass)=>`do $$ begin if not exists(select 1 from pg_roles where rolname='${name}') then create role ${name}${bypass||''};end if;end $$;`);

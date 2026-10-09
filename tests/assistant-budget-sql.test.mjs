@@ -2,6 +2,8 @@ import test,{before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
 import {randomUUID} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {setupAssistantBudgetFixture} from './assistant-budget-fixture.mjs';
 const actor=randomUUID(),student=randomUUID(),other=randomUUID(),fingerprint='a'.repeat(64);let db;
 before(async()=>{db=new PGlite();await setupAssistantBudgetFixture(db,{actor,student,other});});after(async()=>db?.close());
@@ -11,6 +13,14 @@ async function claim(k){const q=await rpc('studkab_assistant_quote',[k.job,actor
 // Disposable database fixture only; never run against production or its settings.
 async function budget(reserved=0,cap=1070000){await db.exec('reset role');await db.query('update studkab_gen_budget set limit_microusd=10000000,reserved_microusd=$1',[reserved]);await db.query('update studkab_gen_policy set temporary_total_microusd=$1',[cap]);await db.exec('set role service_role');}
 const dispatch=(k,c,cost=10000)=>rpc('studkab_assistant_reserve_dispatch',[k.job,actor,c.claim,cost,'deepseek-flash']);
+test('native harness CLI emits one executable schema with complete statement boundaries',async()=>{
+ for(const file of ['assistant-durable-fixture.mjs','assistant-budget-fixture.mjs']){
+  const schema=execFileSync(process.execPath,[fileURLToPath(new URL(file,import.meta.url)),'--print-sql'],{encoding:'utf8'});
+  const isolated=new PGlite();
+  try{await isolated.exec(schema);assert.equal((await isolated.query('select count(*) n from public.studkab_request_config')).rows[0].n,1);}
+  finally{await isolated.close();}
+ }
+});
 const response=(k,p)=>({status:'completed',jobId:k.job,requestId:k.id,provider:'deepseek',revision:1,fingerprint,dispatchId:p.dispatchId,sections:[{id:'answer',name:'Answer',text:'Full offline text'}]});
 test('production-shaped exhausted policy reports zero; no attempt, start or budget mutation',async()=>{await budget();const k=await kit(),c=await claim(k);await budget(1157290);assert.equal((await rpc('studkab_assistant_budget',[actor])).remainingMicrousd,0);assert.deepEqual(await dispatch(k,c),{ok:false,reason:'budget',remainingMicrousd:0});assert.equal((await rpc('studkab_assistant_state',[k.id,actor])).job.startedAt,null);assert.equal((await db.query('select count(*) n from studkab_assistant_attempts')).rows[0].n,0);assert.equal((await db.query('select reserved_microusd from studkab_gen_budget')).rows[0].reserved_microusd,1157290);});
 test('ledger mismatch, wrong model and old nonfinancial dispatch fail before payment',async()=>{await budget(100);const k=await kit(),c=await claim(k);await assert.rejects(()=>dispatch(k,c),/LEDGER_MISMATCH/);await assert.rejects(()=>rpc('studkab_assistant_reserve_dispatch',[k.job,actor,c.claim,10000,'claude']),/INVALID_RESERVE/);await assert.rejects(()=>rpc('studkab_assistant_dispatch',[k.job,actor,c.claim]),/FINANCIAL_DISPATCH_REQUIRED/);});
