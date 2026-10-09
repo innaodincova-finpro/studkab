@@ -1670,18 +1670,37 @@ function r3Projection(x){
 function r3AssistantChoice(x){
  var id=esc(x.id),session=r3AutomaticSession(x),state=session&&session.state,legacy=r3Projection(x).legacyChatAvailable,h='<div class="r3-assistant"><h4>Подготовить работу</h4><div class="r3-assistant-options" role="group" aria-label="Помощники для подготовки">';
  [['claude','Claude'],['chatgpt','ChatGPT / Codex'],['deepseek','DeepSeek']].forEach(function(a){
-  var cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===a[0];}),available=!!(cap&&cap.available),blocked=legacy||!available||state.busy||state.unknown||state.stale;
-  h+='<div class="r3-assistant-option"><b>'+esc(a[1])+'</b><button type="button" class="chip" data-act="r3-assistant-run" data-method="'+a[0]+'" data-id="'+id+'"'+(blocked?' disabled':'')+'>'+esc(state&&state.busy&&state.provider===a[0]?'Отправляем…':'Через API')+'</button><small>'+esc(legacy?'Сначала нужно подтвердить состояние прежней подготовки':available?'Доступен':cap?({budget_exhausted:'Лимит подготовки исчерпан',budget_unavailable:'Лимит пока не подтверждён',not_connected:'Подключение не подтверждено',worker_disabled:'Подготовка отключена',worker_unverified:'Подключение не проверено'}[cap.reason]||'Подготовка недоступна'):'Доступность не проверена')+'</small><button type="button" class="chip" data-act="r3-assistant-chat" data-method="'+a[0]+'" data-id="'+id+'">Через чат</button></div>';
+  var status=r3ApiAvailability(x,a[0]);
+  h+='<div class="r3-assistant-option"><b>'+esc(a[1])+'</b><button type="button" class="chip" data-act="r3-assistant-run" data-method="'+a[0]+'" data-id="'+id+'"'+(state&&state.busy?' disabled':'')+'>'+esc(state&&state.busy&&state.provider===a[0]?'Отправляем…':'Через API')+'</button><small>'+esc(status.label)+'</small><button type="button" class="chip" data-act="r3-assistant-chat" data-method="'+a[0]+'" data-id="'+id+'">Через чат</button></div>';
  });
  h+='</div><p class="hint">Через чат: вы прикрепляете комплект и возвращаете результат в заявку. Через API: автоматическая подготовка с отдельной оплатой и подтверждением стоимости.</p>';
  if(state&&state.message)h+='<p class="r3-assistant-state" role="status" aria-live="polite">'+esc(state.message)+'</p>';
  h+='<button type="button" class="mini r3-state-refresh" data-act="r3-assistant-refresh" data-id="'+id+'"'+(state&&state.busy?' disabled':'')+'>'+(state&&state.busy?'Проверяем…':'Проверить подключения и состояние')+'</button></div>';
  return h;
 }
+function r3ApiAvailability(x,provider){
+ var session=r3AutomaticSession(x),state=session&&session.state,cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===provider;});
+ var reasons={not_connected:['API не подключён','Для автоматической передачи нужно подключить API выбранной нейросети на сервере. Подписка на чат сама по себе это подключение не создаёт. Сейчас можно передать полный комплект через чат.'],worker_disabled:['Подготовка через API отключена','Автоматическая подготовка отключена в настройках сервера. Через чат можно передать полный комплект без API-запуска.'],worker_unverified:['Подключение API не подтверждено','Сервер не подтвердил доступность обработчика. Платный запуск не выполнен. Повторите проверку или используйте чат.'],budget_exhausted:['Лимит подготовки исчерпан','Серверный лимит расходов не позволяет начать подготовку. Платный запуск не выполнен. Можно использовать чат.'],budget_unavailable:['Лимит расходов не подтверждён','Сервер не подтвердил лимит расходов. Платный запуск не выполнен. Повторите проверку или используйте чат.']};
+ if(!state||!cap)return {launchable:false,label:'API ещё не проверен',message:'Сначала проверьте подключение. Проверка не запускает работу и не списывает оплату.'};
+ if(!cap.available){var reason=reasons[cap.reason]||['API недоступен','Сервер не подтвердил возможность автоматической подготовки. Можно передать комплект через чат.'];return {launchable:false,label:reason[0],message:reason[1]};}
+ if(state.stale||state.unknown)return {launchable:false,label:'Состояние запуска не подтверждено',message:'Не удалось подтвердить состояние предыдущего запроса. Повторный платный запуск запрещён до проверки. Через чат можно скачать комплект.'};
+ if(r3Projection(x).legacyChatAvailable)return {launchable:false,label:'Прежняя передача требует проверки',message:'Сохранена прежняя запись передачи материалов. Подтверждённого запуска нейросети нет; повторный автоматический запуск заблокирован для защиты от дубля. Запись не выбирает нейросеть за вас. Комплект доступен через любой из трёх чатов.'};
+ return {launchable:true,label:'API доступен',message:'Подключение подтверждено. Закройте это окно и выберите «Через API», чтобы проверить комплект и стоимость. Запуск возможен только после отдельного подтверждения стоимости.'};
+}
+function r3ApiInformation(x,provider){
+ var status=r3ApiAvailability(x,provider),names={claude:'Claude',chatgpt:'ChatGPT',deepseek:'DeepSeek'},owner=KEY,identity=Oblako.identity();
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через API '+esc(names[provider])+'</h3><p role="status">'+esc(status.label)+'</p><p>'+esc(status.message)+'</p><button type="button" class="mini" data-api-recheck>Проверить подключение и состояние</button> <button type="button" class="btn" data-api-chat>Подготовить через чат</button>');
+ function current(){return wrap.isConnected&&KEY===owner&&Oblako.identity()===identity&&!!item(x.id);}
+ wrap.addEventListener('click',async function(e){
+  if(!current())return;
+  if(e.target.closest('[data-api-chat]')){wrap.remove();openR3Chat(item(x.id),provider);}
+  if(e.target.closest('[data-api-recheck]')){var button=wrap.querySelector('[data-api-recheck]');if(button.disabled)return;button.disabled=true;await refreshR3Automatic(item(x.id));if(!current())return;wrap.remove();r3ApiInformation(item(x.id),provider);}
+ });
+}
 async function refreshR3Automatic(x){var session=x&&r3AutomaticSession(x);if(session)await session.refresh();}
 async function r3StartAssistant(x,provider){
- var session=x&&r3AutomaticSession(x);if(!session||session.state.busy||session.state.unknown||r3Projection(x).legacyChatAvailable)return;
- var cap=(session.state.capabilities||[]).find(function(c){return c.provider===provider;});if(!cap||!cap.available)return;
+ var session=x&&r3AutomaticSession(x);if(!session||session.state.busy)return;
+ if(!r3ApiAvailability(x,provider).launchable){r3ApiInformation(x,provider);return;}
  var owner=KEY,identity=Oblako.identity(),quote=await session.preflight(provider);
  if(!quote||KEY!==owner||Oblako.identity()!==identity||!item(x.id))return;
  var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовить работу</h3><p>Стоимость: '+esc((quote.priceMicrousd/1000000).toLocaleString('ru-RU',{maximumFractionDigits:6}))+' USD.</p><button type="button" class="btn r3-main" data-assistant-start-confirm>Подтвердить и запустить</button>');
@@ -1770,7 +1789,7 @@ function r3Card(x,route){
  if(x.r3LoadError)return card('<h3>Не удалось загрузить заявку</h3><p role="status">Проверьте соединение и повторите загрузку.</p><button type="button" class="btn" data-act="r3-retry-load" data-id="'+id+'">Повторить загрузку</button>','workflow-next');
  var title=w.title,copy=w.copy,projection=r3Projection(x);
  var claudeBusy=c&&!c.attachedAt&&!c.error;
- if(w.step===3&&!w.rework&&!r.result){title=projection.label;copy=projection.legacyChatAvailable?'Начало подготовки ещё не подтверждено. Можно подготовить работу через чат и прикрепить готовый файл.':projection.state==='kit_prepared'?'Начало подготовки ещё не подтверждено.':projection.state==='queued'?'Начало подготовки ещё не подтверждено.':projection.state==='dispatched'?'Готовый файл появится здесь.':projection.state==='manual_work'?'Выберите способ подготовки или выполните работу самостоятельно.':'Проверьте состояние заявки.';}
+ if(w.step===3&&!w.rework&&!r.result){title=projection.label;copy=projection.legacyChatAvailable?'Выберите нейросеть и способ подготовки. Начало работы нейросети не подтверждено.':projection.state==='kit_prepared'?'Начало подготовки ещё не подтверждено.':projection.state==='queued'?'Начало подготовки ещё не подтверждено.':projection.state==='dispatched'?'Готовый файл появится здесь.':projection.state==='manual_work'?'Выберите способ подготовки или выполните работу самостоятельно.':'Проверьте состояние заявки.';}
  if(w.step===3&&r.result&&!r.delivered){title='Файл подготовлен';copy='Проверьте работу перед передачей студенту.';}
  if(c&&c.error)copy='Не удалось подтвердить результат подготовки. Проверьте состояние.';
  var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(r3CurrentLabel(x))+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'

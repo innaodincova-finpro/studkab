@@ -85,7 +85,7 @@ export function executorProjection(request,observation={}){
  // Legacy Claude queuedAt confirms a saved copy, not dispatch. Keep its queue
  // intact; allow manual export only, never infer permission for another API job.
  if(result.state==='queued'&&result.provider==='claude'&&!result.stale&&!observation.unknown&&!observation.job&&!request.claude?.startedAt&&!request.claude?.readyAt&&!request.claude?.attachedAt&&!request.claude?.error)
-  return {...result,label:'Материалы сохранены для Claude',legacyChatAvailable:true};
+  return {...result,label:'Материалы получены',provider:null,legacyChatAvailable:true};
  if(result.state==='kit_prepared')return {...result,label:'Комплект принят системой'};
  return result;
 }
