@@ -139,3 +139,54 @@ for(const width of [390,1440])test('legacy saved copy restores chat choice witho
  await expect(chats).toHaveCount(0);await expect(page.locator('.r3h')).toHaveText('Ожидается запуск');
  expect(await page.evaluate(()=>item('assistant-process').claude.queuedAt)).toBe(stamp);
 });
+
+// UI-03/UI-04: a refused passport must leave a usable route to the originals.
+for(const width of [390,1440])test('requirements refusal keeps materials and retry accessible at '+width,async({page})=>{
+ await page.setViewportSize({width,height:1000});await seed(page);
+ await page.evaluate(()=>{
+  const original=Oblako.requestApi;
+  Oblako.requestApi=async body=>{
+   if(body.action==='passport-ensure'){assistantCalls.push(body);throw Error('Заявка получена, но изучение оригиналов ещё не завершено. Подготовка не разрешена');}
+   return original(body);
+  };
+ });
+ if(width===390){await page.locator('[data-act="r3-assistant-chat"][data-method="claude"]').click();await page.getByRole('button',{name:'Проверить требования и материалы'}).click();}
+ else{await page.locator('.r3-secondary summary').click();await page.getByText('Требования и редактор',{exact:true}).click();}
+ await expect(page.getByRole('dialog')).toHaveCount(1);
+ const dialog=page.getByRole('dialog',{name:'Требования перед подготовкой'});
+ await expect(dialog.getByRole('status')).toContainText('изучение оригиналов ещё не завершено');
+ await dialog.getByRole('button',{name:'Повторить проверку'}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(1);
+ await expect(dialog.getByRole('status')).toContainText('Подготовка не разрешена');
+ await dialog.getByRole('button',{name:'Открыть материалы'}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.getByRole('tab',{name:'Материалы',exact:true})).toHaveAttribute('aria-selected','true');
+ expect(await page.evaluate(()=>assistantCalls.filter(c=>c.action==='passport-ensure').length)).toBe(2);
+ expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-prepare','passport-approve'].includes(c.action)))).toBe(false);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+test('requirements loading prevents duplicate requests and closing prevents a late editor',async({page})=>{
+ await seed(page);
+ await page.evaluate(()=>{
+  window.documentOpened=0;openDocBuilder=()=>documentOpened++;
+  loadPassports=()=>new Promise(resolve=>window.finishRequirements=resolve);
+  openR3AssistantDocument(item('assistant-process'));openR3AssistantDocument(item('assistant-process'));
+ });
+ const dialog=page.getByRole('dialog',{name:'Требования перед подготовкой'});
+ await expect(page.getByRole('dialog')).toHaveCount(1);
+ await expect(dialog.getByRole('status')).toHaveText('Проверяем требования и материалы…');
+ await dialog.getByRole('button',{name:'Закрыть',exact:true}).click();
+ await page.evaluate(()=>{item('assistant-process').passports=[{status:'approved'}];finishRequirements();});
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(await page.evaluate(()=>documentOpened)).toBe(0);
+});
+for(const approved of [false,true])test('requirements success preserves '+(approved?'approved editor':'draft passport'),async({page})=>{
+ await seed(page);
+ await page.evaluate(approved=>{
+  window.documentOpened=0;openDocBuilder=()=>documentOpened++;
+  loadPassports=async x=>{x.passports=approved?[{status:'approved'}]:[];};
+  openR3AssistantDocument(item('assistant-process'));
+ },approved);
+ if(approved){await expect.poll(()=>page.evaluate(()=>documentOpened)).toBe(1);await expect(page.getByRole('dialog')).toHaveCount(0);}
+ else{await expect(page.getByRole('dialog')).toContainText('Паспорт требований');await expect(page.locator('[data-requirements-body]')).not.toHaveAttribute('aria-busy','true');}
+});
