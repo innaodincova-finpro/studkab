@@ -9,13 +9,26 @@ export function emailConfigured({host,port,username,password,from,to}){
 }
 const b64=value=>btoa(Array.from(enc.encode(value),b=>String.fromCharCode(b)).join(''));
 const fold=value=>value.match(/.{1,76}/g)?.join('\r\n')||'';
-export async function sendRequestEmail(row,{host,port,username,password,from,to,connect=()=>Deno.connectTls({hostname:host,port})}){
- if(!emailConfigured({host,port,username,password,from,to}))throw Error('Email not configured');
+export async function sendRequestEmail(row,settings){
  const id=String(row.request_id||'');
  if(!/^[a-f0-9-]{36}$/i.test(id)||!Number.isSafeInteger(Number(row.number)))throw Error('Invalid request');
  const url='https://innaodincova-finpro.github.io/studkab/reestr.html#request='+encodeURIComponent(id);
- const subject='Новая заявка №'+row.number+' в STUDKAB';
- const body='Опубликована заявка №'+row.number+'. Откройте её в реестре после входа: '+url;
+ return sendSmtpMessage({subject:'Новая заявка №'+row.number+' в STUDKAB',body:'Опубликована заявка №'+row.number+'. Откройте её в реестре после входа: '+url},settings);
+}
+export function processNotificationMessage(event){
+ const id=String(event.requestId||'');
+ if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)||!Number.isSafeInteger(Number(event.number)))throw Error('Invalid event');
+ const descriptions={file_prepared:'Файл подготовлен. Проверьте работу.',problem:'Подготовка работы требует внимания.',question:'В заявке есть новый вопрос.',answer:'Студент ответил на вопрос.',delivered:'Работа готова. Скачайте файл в кабинете.',handed:'Студент отметил работу как сданную.',rework:'Студент вернул работу на доработку.'};
+ const body=descriptions[event.kind];if(!body)throw Error('Invalid event kind');
+ const page=['question','delivered'].includes(event.kind)?'index.html':'reestr.html';
+ return {title:'Заявка №'+event.number,subject:'Заявка №'+event.number+' — STUDKAB',body,url:'https://innaodincova-finpro.github.io/studkab/'+page+'#request='+encodeURIComponent(id)};
+}
+export async function sendProcessEmail(event,settings){
+ const message=processNotificationMessage(event);
+ return sendSmtpMessage({subject:message.subject,body:message.body+' Откройте заявку после входа: '+message.url},settings);
+}
+async function sendSmtpMessage({subject,body},{host,port,username,password,from,to,connect=()=>Deno.connectTls({hostname:host,port})}){
+ if(!emailConfigured({host,port,username,password,from,to}))throw Error('Email not configured');
  const message='From: STUDKAB <'+from+'>\r\nTo: <'+to+'>\r\nSubject: =?UTF-8?B?'+b64(subject)+'?=\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'+fold(b64(body))+'\r\n.\r\n';
  let conn,deadlineTimer,dataStarted=false;
  try{

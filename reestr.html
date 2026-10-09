@@ -337,6 +337,10 @@ input:focus,select:focus,textarea:focus{outline:3px solid var(--days-bg);border-
  .r3-assistant{margin:16px 0;padding:14px;border-radius:18px;background:var(--chip-bg)} .r3-assistant .chip[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:700} .r3-assistant .chips{align-items:stretch} .r3-assistant .chip{white-space:normal;text-align:left}
 </style>
 <link rel="stylesheet" href="desktop.css?v=8">
+<link rel="stylesheet" href="assistant-executor-ui.css?v=1">
+<script type="module" src="view-state.mjs?v=1"></script>
+<script type="module" src="notification-channels-ui.mjs?v=1"></script>
+<script type="module" src="assistant-executor-ui.mjs?v=1"></script>
 <link rel="stylesheet" href="volume.css?v=1">
 </head>
 <body data-theme="blue">
@@ -1610,14 +1614,13 @@ function r3Turn(x){
  var w=requestWorkflow(x),r=x.r3Loaded?(x.r3||{}):r3FromSummary(x);
  if(w.key==='r3-received')return {who:'you',now:'Новая заявка — выберите способ подготовки',act:'Открыть'};
  if(w.key==='r3-questions')return {who:'student',now:'Вопрос у студента — ждём ответа'};
- if(w.key==='r3-rework')return {who:'you',now:'Вернули на доработку'+(r.result&&r.returnedAt&&Date.parse(r.result.at)>Date.parse(r.returnedAt)?' — передайте новую версию':' — исправьте работу'),act:'Открыть замечания'};
- if(w.key==='r3-work'&&x.claude&&!x.claude.attachedAt&&!x.claude.error&&!r.result)return {who:'you',now:x.claude.startedAt?'Claude готовит работу':'Ожидается запуск Claude — напишите в чат',act:'Открыть'};
- if(w.key==='r3-work')return {who:'you',now:r.result?'Файл прикреплён — передайте студенту':'Выполните работу и прикрепите файл',act:r.result?'Передать студенту':'Открыть'};
+ if(w.key==='r3-rework')return {who:'you',now:'Вернули на доработку'+(r.result&&r.returnedAt&&Date.parse(r.result.at)>Date.parse(r.returnedAt)?' — проверьте новую версию':' — исправьте работу'),act:'Открыть замечания'};
+ if(w.key==='r3-work'){var projected=r3Projection(x);return {who:'you',now:projected.label+(projected.state==='file_prepared'?' — проверьте работу':''),act:projected.state==='file_prepared'?'Проверить работу':'Открыть'};}
  if(w.key==='r3-delivered')return {who:'student',now:r.downloadedAt?'Студент скачал работу — ждём отметку о сдаче':'Передана — студент ещё не скачал'};
  if(w.key==='r3-handed')return {who:'done',now:'Студент отметил сдачу'};
  return {who:'',now:w.title||''};
 }
-function r3CurrentLabel(x){var r=x.r3||{},c=x.claude,w=requestWorkflow(x);return w.step===3&&!w.rework&&!r.result&&c&&!c.attachedAt&&!c.error&&!c.startedAt?'Ожидается запуск':R3_STEPS[w.step-1].label;}
+function r3CurrentLabel(x){var w=requestWorkflow(x);return x.r3Loaded&&w.step===3?r3Projection(x).label:R3_STEPS[w.step-1].label;}
 function r3TurnPill(t){return t.who==='you'?'<span class="r3turn you">Вы</span>':t.who==='student'?'<span class="r3turn st">Студент</span>':t.who==='done'?'<span class="r3turn done">Сдана</span>':'';}
 function r3Dots(x){var w=requestWorkflow(x),h='';for(var i=1;i<=5;i++)h+='<i class="'+(i<w.step||w.complete?'done':i===w.step?'cur':'')+'"></i>';return '<span class="r3dots" aria-hidden="true">'+h+'</span>';}
 function r3Workflow(x){
@@ -1644,17 +1647,65 @@ function r3Links(x,list){var id=esc(x.id);return '<div class="r3links">'+list.ma
 // UX-ASSISTANT-01: account-owned choice never launches or cancels preparation.
 var r3AssistantChecks=new Map();
 function r3Assistant(x){return ['claude','chatgpt','deepseek'].indexOf(x.preparationMethod)>=0?x.preparationMethod:'claude';}
+var r3AutomaticSessions=new Map();
+function r3AutomaticSession(x){
+ if(!x||!window.StudAssistantExecutor||!window.Oblako||!Oblako.requestApi)return null;
+ var key=r3ActionKey(x),entry=r3AutomaticSessions.get(key);if(entry)return entry;
+ var owner=KEY,identity=Oblako.identity(),requestId=x.id;
+ function current(){return KEY===owner&&Oblako.identity()===identity&&!!item(requestId);}
+ entry=StudAssistantExecutor.createAssistantSession({api:function(input){return Oblako.requestApi(Object.assign({id:requestId},input));},active:current,onChange:function(){if(current())render();},newOperation:function(){return crypto.randomUUID();}});
+ r3AutomaticSessions.set(key,entry);setTimeout(function(){if(current())entry.refresh();},0);return entry;
+}
+function r3Projection(x){
+ if(!window.StudAssistantExecutor)return {state:'unknown',label:'Проверяем состояние…',nextAction:'check_status',stale:false};
+ var session=r3AutomaticSessions.get(r3ActionKey(x));
+ return StudAssistantExecutor.executorProjection(x,session?session.state:{});
+}
 function r3AssistantChoice(x){
- var method=r3Assistant(x),id=esc(x.id),check=r3AssistantChecks.get(r3ActionKey(x)),h='<div class="r3-assistant"><p><b>Подготовить работу с помощью</b></p><div class="chips" role="group" aria-label="Способ подготовки">';
- [['claude','Claude — через чат'],['chatgpt','ChatGPT/Codex — через чат'],['deepseek','DeepSeek — автоматически']].forEach(function(a){h+='<button type="button" class="chip" data-act="r3-assistant-select" data-method="'+a[0]+'" data-id="'+id+'" aria-pressed="'+(method===a[0])+'">'+a[1]+'</button>';});
- h+='</div><p class="hint">Смена способа сохраняет заявку, материалы и прежние результаты. Уже начатая подготовка продолжается.</p>';
- if(method==='claude')h+='<p class="hint">Сохраните материалы для Claude, затем напишите в чат проекта «Студенты»: «заявка №'+esc(x.requestNumber)+'». Начало выполнения подтверждается отдельно.</p>';
- if(method==='chatgpt')h+='<p class="hint">Скачайте задание и проверьте требования, затем откройте чат. Вставьте запрос и приложите файлы самостоятельно. Готовую работу прикрепите здесь для проверки и передачи студенту.</p><button type="button" class="btn" data-act="r3-chatgpt" data-id="'+id+'">Скопировать запрос и открыть ChatGPT</button>';
- if(method==='deepseek'){
-  h+='<p class="hint">Отдельная платная подготовка. Сначала проверяются подключение и лимит, затем требования и стоимость. Запуск — только после подтверждения суммы.</p><p role="status">'+esc(check?check.message:'Подключение ещё не проверено.')+'</p><button type="button" class="chip" data-act="r3-deepseek-check" data-id="'+id+'"'+(check&&check.busy?' disabled':'')+'>'+(check&&check.busy?'Проверяем…':'Проверить подключение и лимит')+'</button>';
-  if(check&&check.available)h+='<button type="button" class="chip" data-act="r3-assistant-document" data-id="'+id+'">Проверить требования и подготовить документ</button>';
- }
- return h+'<p class="hint">Готовый файл нужно проверить и передать студенту. Подписка ChatGPT не оплачивает OpenAI API.</p></div>';
+ var id=esc(x.id),session=r3AutomaticSession(x),state=session&&session.state,h='<div class="r3-assistant"><h4>Подготовить работу</h4><div class="r3-assistant-options" role="group" aria-label="Помощники для подготовки">';
+ [['claude','Claude'],['chatgpt','ChatGPT / Codex'],['deepseek','DeepSeek']].forEach(function(a){
+  var cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===a[0];}),available=!!(cap&&cap.available),blocked=!available||state.busy||state.unknown||state.stale;
+  h+='<div class="r3-assistant-option"><button type="button" class="chip" data-act="r3-assistant-run" data-method="'+a[0]+'" data-id="'+id+'"'+(blocked?' disabled':'')+'>'+esc(state&&state.busy&&state.provider===a[0]?'Отправляем…':a[1])+'</button><small>'+esc(available?'Доступен':cap?({budget_exhausted:'Лимит подготовки исчерпан',budget_unavailable:'Лимит пока не подтверждён',not_connected:'Подключение не подтверждено',worker_disabled:'Подготовка отключена',worker_unverified:'Подключение не проверено'}[cap.reason]||'Подготовка недоступна'):'Доступность не проверена')+'</small></div>';
+ });
+ h+='</div>';
+ if(state&&state.message)h+='<p class="r3-assistant-state" role="status" aria-live="polite">'+esc(state.message)+'</p>';
+ h+='<button type="button" class="mini r3-state-refresh" data-act="r3-assistant-refresh" data-id="'+id+'"'+(state&&state.busy?' disabled':'')+'>'+(state&&state.busy?'Проверяем…':'Проверить подключения и состояние')+'</button></div>';
+ return h;
+}
+async function refreshR3Automatic(x){var session=x&&r3AutomaticSession(x);if(session)await session.refresh();}
+async function r3StartAssistant(x,provider){
+ var session=x&&r3AutomaticSession(x);if(!session||session.state.busy||session.state.unknown)return;
+ var cap=(session.state.capabilities||[]).find(function(c){return c.provider===provider;});if(!cap||!cap.available)return;
+ var owner=KEY,identity=Oblako.identity(),quote=await session.preflight(provider);
+ if(!quote||KEY!==owner||Oblako.identity()!==identity||!item(x.id))return;
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовить работу</h3><p>Стоимость: '+esc((quote.priceMicrousd/1000000).toLocaleString('ru-RU',{maximumFractionDigits:6}))+' USD.</p><button type="button" class="btn r3-main" data-assistant-start-confirm>Подтвердить и запустить</button>');
+ wrap.addEventListener('click',function(event){var button=event.target.closest('[data-assistant-start-confirm]');if(!button||KEY!==owner||Oblako.identity()!==identity||!item(x.id))return;button.disabled=true;button.textContent='Отправляем…';session.start(provider,quote.quoteId).finally(function(){if(wrap.isConnected)wrap.remove();});});
+}
+function r3AssistantPrepare(x){
+ var session=x&&r3AutomaticSession(x);if(!session)return;
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Проверить комплект</h3><p>Проверка комплекта не запускает подготовку работы.</p><label>Помощник<select data-kit-provider><option value="claude">Claude</option><option value="chatgpt">ChatGPT / Codex</option><option value="deepseek">DeepSeek</option></select></label><button type="button" class="btn" data-kit-confirm>Проверить комплект</button>');
+ wrap.addEventListener('click',function(e){var button=e.target.closest('[data-kit-confirm]');if(!button||session.state.busy||session.state.unknown)return;var provider=wrap.querySelector('[data-kit-provider]').value;button.disabled=true;button.textContent='Проверяем комплект…';session.prepare(provider).finally(function(){if(wrap.isConnected)wrap.remove();});});
+}
+function r3ReviewManualResult(x){
+ if(!x||!x.r3||!x.r3.result)return;
+ var owner=KEY,identity=Oblako.identity(),hash=x.r3.result.hash,session=r3AutomaticSession(x),durable=session&&session.state.job,needsReceipt=!!(durable&&durable.resultHash===hash),reviewBusy=false,reviewed=!!(needsReceipt&&r3Projection(x).state==='reviewed'&&!session.state.stale);
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Проверка готового файла</h3><div class="r3-file"><b>'+esc(x.r3.result.name)+'</b><small>'+esc(r3Size(x.r3.result.size))+'</small><button type="button" class="mini" data-review-download>Открыть файл</button></div><p>Проверьте ответы, расчёты и оформление по заданию.</p><label class="r3-confirm-review"><input type="checkbox" data-review-confirm>Я проверил эту версию работы</label><p role="status" data-review-status></p><button type="button" class="btn r3-main" data-review-deliver disabled>Передать студенту</button>');
+ function current(){var active=item(x.id);return KEY===owner&&Oblako.identity()===identity&&active&&active.r3&&active.r3.result&&active.r3.result.hash===hash;}
+ wrap.addEventListener('change',function(e){if(e.target.matches('[data-review-confirm]'))wrap.querySelector('[data-review-deliver]').disabled=reviewBusy||!e.target.checked||!current();});
+ wrap.addEventListener('click',async function(e){
+  var download=e.target.closest('[data-review-download]'),send=e.target.closest('[data-review-deliver]');
+  if(!current()){wrap.querySelector('[data-review-status]').textContent='Версия или аккаунт изменились. Откройте проверку заново.';return;}
+  if(download){download.disabled=true;download.textContent='Открываем…';try{var response=await Oblako.requestApi({action:'r3-result-download',id:x.id});if(!current()||!wrap.isConnected)return;if(!response.url)throw Error('Файл недоступен');window.open(response.url,'_blank','noopener,noreferrer');}catch(error){if(current()&&wrap.isConnected)wrap.querySelector('[data-review-status]').textContent='Не удалось открыть файл. Повторите.';}finally{if(wrap.isConnected){download.disabled=false;download.textContent='Открыть файл';}}}
+  if(send&&!reviewBusy&&wrap.querySelector('[data-review-confirm]').checked){
+   reviewBusy=true;send.disabled=true;send.textContent=needsReceipt&&!reviewed?'Сохраняем проверку…':'Передаём…';
+   if(needsReceipt&&!reviewed){
+    if(durable.state!=='returned'||durable.resultHash!==hash||durable.bindingCurrent===false){wrap.querySelector('[data-review-status]').textContent='Связь файла с подготовкой не подтверждена. Проверьте состояние заявки.';send.textContent='Передать студенту';reviewBusy=false;return;}
+    try{var verification=await Oblako.requestApi({action:'assistant-review',id:x.id,jobId:durable.id,hash:hash});if(!current()||!wrap.isConnected)return;if(!verification.ok||verification.resultHash!==hash||!Number.isFinite(Date.parse(verification.reviewedAt))||Date.parse(verification.reviewedAt)<Date.parse(x.r3.result.at))throw Error('Проверка не подтверждена');reviewed=true;await session.refresh();}
+    catch(error){await session.refresh();var confirmed=session.state.job;reviewed=!!(confirmed&&confirmed.id===durable.id&&confirmed.resultHash===hash&&r3Projection(item(x.id)).state==='reviewed'&&confirmed.bindingCurrent!==false&&!session.state.stale);if(!reviewed){if(current()&&wrap.isConnected){wrap.querySelector('[data-review-status]').textContent='Пока не удалось подтвердить сохранение проверки. Проверьте состояние.';send.textContent='Передать студенту';reviewBusy=false;}return;}}
+   }
+   if(current()&&wrap.isConnected){wrap.remove();performR3Action(item(x.id),'r3-deliver');}
+  }
+ });
 }
 function selectR3Assistant(x,method){
  if(!x||['claude','chatgpt','deepseek'].indexOf(method)<0)return;
@@ -1691,18 +1742,18 @@ async function openR3AssistantDocument(x){
 }
 function r3Card(x,route){
  var w=requestWorkflow(x),r=x.r3||{},id=esc(x.id),c=x.claude||null,num=x.requestNumber?'«заявка №'+x.requestNumber+'»':'номер заявки';
- var card=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'</div>';}:window.card;
+ var baseCard=route?function(inner){return '<div class="r3rc workflow-next">'+inner+'</div>';}:window.card;
+ var card=function(inner,kind){return baseCard(actionState&&actionState.busy?'<fieldset disabled style="border:0;padding:0;margin:0;min-width:0">'+inner+'</fieldset>':inner,kind);};
  if(x.r3LoadError)return card('<h3>Не удалось загрузить заявку</h3><p role="status">Проверьте соединение и повторите загрузку.</p><button type="button" class="btn" data-act="r3-retry-load" data-id="'+id+'">Повторить загрузку</button>','workflow-next');
- var title=w.title,copy=w.copy;
+ var title=w.title,copy=w.copy,projection=r3Projection(x);
  var claudeBusy=c&&!c.attachedAt&&!c.error;
- if(w.step===3&&!w.rework&&!r.result&&claudeBusy){title=c.startedAt?'Claude готовит работу':'Ожидается запуск Claude';copy=c.startedAt?'Начало выполнения подтверждено. Готовый файл появится здесь.':'Материалы сохранены для Claude. Начало выполнения ещё не подтверждено. Напишите в чат проекта «Студенты»: '+num+'.';}
- if(w.step===3&&!w.rework&&r.result&&!r.delivered){title='Файл подготовлен. Проверьте и передайте студенту';copy='Готовый файл прикреплён. Проверьте его перед передачей студенту. Прикрепление файла не означает передачу студенту или сдачу преподавателю.';}
- if(w.step===3&&r.result&&c&&c.attachedAt&&!r.delivered){title='Проверьте работу и передайте студенту';copy='Работу подготовил Claude. Откройте файл и прочитайте его перед передачей.';}
- if(c&&c.error)copy='Файл Claude не прикрепился: '+c.error+' Нажмите «Попросить Claude переделать» или прикрепите файл сами.';
+ if(w.step===3&&!w.rework&&!r.result){title=projection.label;copy=projection.state==='kit_prepared'?'Начало подготовки ещё не подтверждено.':projection.state==='queued'?'Начало подготовки ещё не подтверждено.':projection.state==='dispatched'?'Готовый файл появится здесь.':projection.state==='manual_work'?'Выберите способ подготовки или выполните работу самостоятельно.':'Проверьте состояние заявки.';}
+ if(w.step===3&&r.result&&!r.delivered){title='Файл подготовлен';copy='Проверьте работу перед передачей студенту.';}
+ if(c&&c.error)copy='Не удалось подтвердить результат подготовки. Проверьте состояние.';
  var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(r3CurrentLabel(x))+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'
   :workflowSteps(w)+lab('Шаг '+w.step+' из 5'+(w.rework?' · доработка № '+w.rework:''))+'<p class="workflow-title">'+esc(title)+'</p><p class="workflow-copy">'+esc(copy)+'</p>';
  var actionState=r3Actions.get(r3ActionKey(x));
- if(actionState&&actionState.busy)return card(h+'<p role="status">'+esc(actionState.message)+'</p><button type="button" class="btn" disabled>'+esc(actionState.message)+'</button>','workflow-next');
+ if(actionState&&actionState.busy)h+='<button type="button" class="btn" disabled>'+esc(actionState.message)+'</button>';
  if(actionState&&actionState.message)h+='<p role="status">'+esc(actionState.message)+'</p>';
  // R3-D: замечания преподавателя при возврате и история переданных версий.
  var rets=r.returnList||[],last=rets[rets.length-1],vers=r.versions||[];
@@ -1710,17 +1761,19 @@ function r3Card(x,route){
  if(vers.length&&(w.rework||vers.length>1))h+='<p class="hint r3-wrap">'+vers.map(function(v){return 'Версия '+v.n+' передана '+esc(r3When(v.at))+': '+esc(v.name);}).join('<br>')+'</p>';
  var base=[['r3-bundle','Скачать задание (архив)'],['executor-clarifications','Задать вопрос студенту']];
  if(!x.r3Loaded)return card(h+'<p role="status">Загружаем заявку…</p><div class="skel" aria-hidden="true"><i></i><i></i><i></i></div>','workflow-next');
- var chosen=r3Assistant(x);if(w.step<4||w.rework)h+=r3AssistantChoice(x);
- if(w.step<3)return card(h+(chosen==='claude'?'<button type="button" class="btn r3-main" data-act="claude-queue" data-id="'+id+'">Передать Claude</button>':'')+r3Links(x,base.concat([['r3-take','Сделаю сама']])),'workflow-next');
+ var chosen=r3Assistant(x);if((w.step<4||w.rework)&&!r.result&&!['queued','dispatched','return_pending'].includes(projection.state))h+=r3AssistantChoice(x);
+ if(['queued','dispatched','unknown','return_pending'].includes(projection.state))h+='<button type="button" class="mini r3-state-refresh" data-act="r3-assistant-refresh" data-id="'+id+'">Проверить состояние</button>';
+ if(w.step<3)return card(h+'<details class="r3-secondary"><summary>Другие действия</summary>'+r3Links(x,base.concat([['r3-take','Взять в работу самостоятельно'],['claude-queue','Сохранить для Claude через чат'],['r3-chatgpt','Подготовить через чат ChatGPT'],['r3-assistant-document','Требования и редактор'],['r3-assistant-prepare','Проверить автоматический комплект']]))+'</details>','workflow-next');
  var attach='<label class="r3-attach">Прикрепить готовую работу<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>';
  var file=r.result?'<div class="r3-file"><b>'+esc(r3Name(r.result.name))+'</b><small>'+esc(r3Size(r.result.size)+' · прикреплён '+r3When(r.result.at))+'</small><button type="button" class="mini" data-act="r3-result-download" data-id="'+id+'">Скачать</button><label class="mini" title="Загрузить другой файл вместо этого">Заменить файл<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label></div>'
   :claudeBusy?'':attach;
  var fresh=r.result&&(!r.delivered||r.delivered.hash!==r.result.hash);
- var send=fresh?'<button type="button" class="btn r3-main" data-act="r3-deliver" data-id="'+id+'">'+(r.delivered?'Передать новую версию':'Передать студенту')+'</button>':'';
- if(w.rework&&!fresh)send='<p class="hint">Прикрепите исправленную работу кнопкой «Заменить файл» или нажмите «Попросить Claude переделать».</p>';
+ var send=fresh?'<button type="button" class="btn r3-main" data-act="r3-result-review" data-id="'+id+'">'+(r.delivered?'Проверить новую версию':'Проверить работу')+'</button>':'';
+ if(w.rework&&!fresh)send='<p class="hint">Прикрепите исправленную работу. Предыдущие версии и замечания сохранены.</p>';
  var links=base.slice();if(claudeBusy&&!r.result)links.push(['r3-file','Прикрепить готовый файл']);
  if(chosen==='claude'&&!claudeBusy&&!(r.delivered&&!w.rework))links.push(['claude-queue',c?'Попросить Claude переделать':'Передать Claude']);
- return card(h+file+send+r3Links(x,links),'workflow-next');
+ links.push(['r3-assistant-document','Требования и редактор'],['r3-chatgpt','Подготовить через чат ChatGPT'],['r3-assistant-prepare','Проверить автоматический комплект']);
+ return card(h+file+send+'<details class="r3-secondary"><summary>Другие действия</summary>'+r3Links(x,links)+'</details>','workflow-next');
 }
 // «Скачать задание (архив)»: материалы студента и сведения для титульного листа одним архивом (собирается в браузере).
 var R3_CRC=(function(){var t=[];for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
@@ -1770,7 +1823,7 @@ async function loadR3(x){
  var questions=await Oblako.requestApi({action:'clarification-list',id:x.id});current();x.clarifications=questions.questions||[];x.passports=[];
  // «Передать Claude»: сначала состояние Claude — готовый файл прикрепляется до чтения состояния работы.
  try{var cs=await Oblako.requestApi({action:'claude-state',id:x.id});current();x.claude=cs.claude||null;}catch(e){if(/Аккаунт изменился/.test(e.message))throw e;x.claude=null;}
- var state=await Oblako.requestApi({action:'r3-state',id:x.id});current();x.r3=state.work||{};x.r3Loaded=true;render();
+ var state=await Oblako.requestApi({action:'r3-state',id:x.id});current();x.r3=state.work||{};x.r3Loaded=true;x.r3ConfirmedAt=new Date().toISOString();render();refreshR3Automatic(x);
 }
 async function r3Upload(x,file){
  var types={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},type=types[String(file.name).toLowerCase().split('.').pop()];
@@ -2119,10 +2172,13 @@ function stageCounts(){var c={all:D.items.length};STAGE_FILTERS.forEach(function
 function plural(n,one,few,many){var m=Math.abs(Number(n))%100,d=m%10;return m>10&&m<20?many:d===1?one:d>1&&d<5?few:many;}
 function markSaved(){}
 var appNavigation=StudNavigation.create({app:'executor',owner:function(){return KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():'');},read:function(){return {tab:tab,open:openId,ref:openRefId,filter:filter,query:query,page:listPage};},write:function(h){tab=['today','list','refs','more'].indexOf(h.tab)>=0?h.tab:'list';openId=h.open&&item(h.open)?h.open:null;openRefId=h.ref&&refById(h.ref)?h.ref:null;filter=h.filter||'all';query=h.query||'';listPage=h.page||1;},render:function(){render();}});
+// UI-04: keep drafts, expanded groups and focus during same-account refresh.
+function r3CapturePage(page){return window.StudViewState?StudViewState.captureViewState(page):null;}
+function r3RestorePage(page,snapshot){if(window.StudViewState)StudViewState.restoreViewState(page,snapshot);}
 function render(resetScroll){
   appNavigation.sync();
   var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openId||'')+'|'+(openRefId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
-  var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY;
+  var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY,pageSnapshot=keepScroll?r3CapturePage(existingPage):null;
   var c = counts();
   var bar = document.getElementById("tabbar");
   var mine=r3TodayLists().you.length;
@@ -2162,6 +2218,7 @@ function render(resetScroll){
   }
   var toolbar=p.querySelector(".registry-toolbar");
   if(toolbar)toolbar.appendChild(fab);else p.after(fab);
+  r3RestorePage(p,pageSnapshot);
   renderedOwner=ownerKey;renderedView=viewKey;p.scrollTop=keepScroll?previousPageScroll:0;
   window.scrollTo(0,keepScroll?previousWindowScroll:0); showStorageWarn();
 }
@@ -2820,7 +2877,7 @@ function viewMore(){
 
   function moreFold(title, body){ return '<details class="fold"><summary>' + title + '</summary><div class="in">' + body + '</div></details>'; }
 
-  return moreFold("Уведомления на этом устройстве",'<p class="hint">Уведомления о новых заявках и возвратах на доработку приходят на это устройство, даже когда реестр закрыт.</p><div class="chips"><button type="button" class="chip" data-act="push-enable">Включить уведомления</button><button type="button" class="chip" data-act="push-test">Проверить</button></div><p class="hint" id="push-status" role="status" aria-live="polite"></p>') +
+  return moreFold("Уведомления на этом устройстве",(window.StudNotificationChannels?StudNotificationChannels.panel():'<div data-notification-settings><p class="hint">Проверяем подключения…</p></div>')+'<p class="hint">Уведомления о новых заявках и возвратах на доработку приходят на это устройство, даже когда реестр закрыт.</p><div class="chips"><button type="button" class="chip" data-act="push-enable">Включить уведомления</button><button type="button" class="chip" data-act="push-test">Проверить</button></div><p class="hint" id="push-status" role="status" aria-live="polite"></p>') +
     moreFold("Оформление",'<button type="button" class="chip" data-act="theme-toggle">Светлая / тёмная тема</button>') +
     '<details class="fold"><summary>Автоматическая генерация через API' + (configured ? ' <span class="pill p-ok">настройки сохранены</span>'
       : ' <span class="pill p-och">' + 'нет поставщика' + '</span>') + '</summary><div class="in">' + nets + '</div></details>' +
@@ -3114,6 +3171,10 @@ document.addEventListener("click", function(ev){
     var ok7 = save(); render(); toast(ok7 ? "Справочник обновлён по заявке" : "Не сохранено: браузер не разрешает хранение"); return;
   }
   if (act === "open"){ listScroll=window.scrollY;listReturnId=id;openId = id;var opening=item(id);if(opening&&opening.requestNumber)delete opening.materialRevision;if(opening&&opening.r3LoadError){delete opening.r3LoadError;r3Seen.delete(opening);}render();document.querySelector('[data-act="back"]').focus({preventScroll:true});return; }
+  if(act==='r3-assistant-run')return r3StartAssistant(item(id),el.getAttribute('data-method'));
+  if(act==='r3-assistant-refresh'){var refreshing=item(id);if(!refreshing)return;el.disabled=true;el.textContent='Проверяем…';Promise.allSettled([refreshR3Automatic(refreshing),loadR3(refreshing).catch(function(){refreshing.r3LoadError=true;})]).then(function(){render();});return;}
+  if(act==='r3-assistant-prepare')return r3AssistantPrepare(item(id));
+  if(act==='r3-result-review')return r3ReviewManualResult(item(id));
   if(act==='r3-assistant-select')return selectR3Assistant(item(id),el.getAttribute('data-method'));
   if(act==='r3-deepseek-check')return checkR3Deepseek(item(id));
   if(act==='r3-chatgpt')return openR3Chatgpt(item(id));

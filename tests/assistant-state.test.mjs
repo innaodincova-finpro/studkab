@@ -103,3 +103,24 @@ test('conflicting accepted jobs and impossible chronology fail closed; inputs re
  assert.equal(project({...base,claude:{queuedAt:t(12),startedAt:t(11)}}).state,'unknown');
  assert.equal(project({...base,work:{...prepared,takenAt:t(14)}}).state,'unknown');
 });
+const durable=(state='prepared',extra={})=>({id:'durable-job',state,provider:'claude',acceptedAt:t(10),queuedAt:null,startedAt:null,returnedAt:null,reviewedAt:null,bindingCurrent:true,planReady:false,...extra});
+test('durable acceptance captures kit only; claimed lease is queued, not started',()=>{
+ assert.equal(project({...base,durable:durable()}).state,'kit_prepared');
+ assert.equal(project({...base,durable:durable()}).nextAction,'prepare_work');
+ assert.equal(project({...base,durable:durable('claimed',{queuedAt:t(11)})}).state,'queued');
+ assert.equal(project({...base,durable:durable('dispatched',{queuedAt:t(11),startedAt:t(12)})}).state,'dispatched');
+ assert.equal(project({...base,durable:durable('dispatched',{queuedAt:t(11)})}).state,'unknown');
+});
+test('durable return/review receipt matches current file; changed basis or mismatched hash blocks it',()=>{
+ const d=durable('returned',{queuedAt:t(11),startedAt:t(12),returnedAt:t(13),reviewedAt:t(14),resultHash:hash});
+ assert.equal(project({...base,work:prepared,durable:d}).state,'reviewed');
+ assert.equal(project({...base,work:prepared,durable:{...d,bindingCurrent:false}}).state,'unknown');
+ assert.equal(project({...base,work:prepared,durable:{...d,resultHash:otherHash}}).state,'unknown');
+ assert.equal(project({...base,durable:d}).state,'unknown');
+});
+test('redacted durable student state carries no worker or working file, and supports whole RPC body',()=>{
+ const d=durable('returned',{queuedAt:t(11),startedAt:t(12),returnedAt:t(13),provider:null,resultHash:null,reviewedAt:null});
+ const s=project({role:'student',durable:{job:d,work:{takenAt:t(10)}}});
+ assert.equal(s.label,'Работа у исполнителя');assert.equal(s.file,null);assert.equal(s.provider,null);
+ const stale=project({...base,durable:durable('unknown')});assert.equal(stale.nextAction,'check_status');
+});

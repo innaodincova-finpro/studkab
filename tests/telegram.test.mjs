@@ -73,3 +73,16 @@ test('bound owner enables callbacks only on the verified existing webhook',async
   if(changed){assert.deepEqual(changed.payload.allowed_updates,['message','callback_query']);assert.equal(changed.payload.secret_token,secret);}
  }
 });
+
+test('personal account link requires verified private sender and consumes only hash once',async()=>{
+ const raw='d'.repeat(64),expected=await digest(raw),secret=await webhookSecret(token),calls=[];
+ let consumed=false;
+ const app=handler({token,db:{get:async()=>({installed:true,owner_chat_id:999}),link:async args=>{calls.push(args);if(consumed||args.p_hash!==expected)return false;consumed=true;return true;}},telegram:async(method,payload)=>{calls.push({method,payload});return true;}});
+ const request=(overrides={},auth=secret)=>app(new Request(WEBHOOK,{method:'POST',headers:{'x-telegram-bot-api-secret-token':auth},body:JSON.stringify({message:{text:'/start link_'+raw,chat:{id:100,type:'private'},from:{id:100,is_bot:false},...overrides}})}));
+ assert.equal((await request({},'forged')).status,401);
+ await request({chat:{id:100,type:'group'}});await request({from:{id:200,is_bot:false}});await request({from:{id:100,is_bot:true}});
+ assert.equal(calls.length,0);
+ await request();assert.deepEqual(calls[0],{p_hash:expected,p_chat:100});assert.match(calls[1].payload.text,/подключён/);
+ await request();assert.match(calls.at(-1).payload.text,/недействительна/);
+ assert.doesNotMatch(JSON.stringify(calls),new RegExp(raw));
+});

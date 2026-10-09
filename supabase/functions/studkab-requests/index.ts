@@ -6,6 +6,10 @@ import {extract} from './extract.ts';
 import {attachmentDownloadUrl} from './download-url.mjs';
 import {saveOriginal} from './original-storage.mjs';
 import {removeStorageObject} from './storage-remove.mjs';
+import {requestEmailSettings,sendRequestEmail} from './request-email.mjs';
+import {deepseekCapability} from './assistant-service.mjs';
+import {sourceAssistantPlan} from './assistant-source-plan.mjs';
+import {probeDeepseekAssistant} from '../_shared/deepseek-assistant.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const bucket='studkab-request-materials';
 async function db(path:string,method='GET',body?:unknown){
@@ -66,5 +70,20 @@ const remove=(path:string)=>removeFrom(bucket,path);
 // Полное удаление заявки: исходные файлы, загруженные студентом.
 const removeIntake=(path:string)=>removeFrom('studkab-intake-materials',path);
 Deno.serve(handler({auth,db,send,
- emailSettings:()=>({}), // C175: email is superseded by app push; never claim its queue.
+ assistant:{
+  sourcePlan:(input:any)=>sourceAssistantPlan(input,{readFile:readIntake}),
+  capability:(actor:string)=>deepseekCapability(actor,{
+   rpc:(name:string,args:unknown)=>db('rpc/'+name,'POST',args),
+   enabled:Deno.env.get('STUDKAB_ASSISTANT_DEEPSEEK_ENABLED')==='true'&&Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true',
+   configured:!!Deno.env.get('STUDKAB_PROXY_TOKEN'),probe:()=>probeDeepseekAssistant(Deno.env.get('STUDKAB_PROXY_TOKEN'))
+  })
+ },
+ notification:{telegramConfigured:!!Deno.env.get('STUDKAB_TELEGRAM_BOT_TOKEN')},
+ // NOTIFY-03: configured existing SMTP only. Missing fields keep the channel
+ // unavailable; neither a new service nor credentials are created here.
+ emailSettings:(cfg:any)=>requestEmailSettings(cfg,{
+  host:Deno.env.get('STUDKAB_SMTP_HOST'),port:Deno.env.get('STUDKAB_SMTP_PORT'),
+  username:Deno.env.get('STUDKAB_SMTP_USERNAME'),password:Deno.env.get('STUDKAB_SMTP_PASSWORD'),
+  from:Deno.env.get('STUDKAB_SMTP_FROM')
+ }),sendEmail:sendRequestEmail,
  invite,isMember,upload,download,remove,removeIntake,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,loadRequestFile,config:async()=>(await db('studkab_request_config?id=eq.true'))[0]}));

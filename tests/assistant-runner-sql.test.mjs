@@ -1,0 +1,27 @@
+import test,{before,after} from 'node:test';
+import assert from 'node:assert/strict';
+import {PGlite} from '@electric-sql/pglite';
+import {randomUUID} from 'node:crypto';
+import {setupAssistantBudgetFixture} from './assistant-budget-fixture.mjs';
+import {assistantAction} from '../supabase/functions/studkab-requests/assistant-service.mjs';
+import {sourceAssistantPlan} from '../supabase/functions/studkab-requests/assistant-source-plan.mjs';
+import {runAssistant} from '../supabase/functions/studkab-generation/assistant-runner.mjs';
+const actor=randomUUID(),student=randomUUID(),other=randomUUID(),user={id:actor,email:'executor@offline.test'};let db;
+before(async()=>{db=new PGlite();await setupAssistantBudgetFixture(db,{actor,student,other});await db.exec("reset role; update studkab_gen_budget set limit_microusd=10000000,reserved_microusd=0; set role service_role");});after(async()=>db?.close());
+const rpc=async(n,args)=>(await db.query('select public.'+n+'('+Object.keys(args).map((k,i)=>k+'=> $'+(i+1)).join(',')+') value',Object.values(args))).rows[0].value;
+test('real R3 source plan, concrete paid quote, confirmed queue, shared reserve, proxy correlation, Word return and recovery',async()=>{
+ const id=randomUUID();await db.query('insert into studkab_requests(id,student_id,payload) values($1,$2,$3)',[id,student,{route:'r3',n:'Student',u:'University',k:'Практическая',d:'Право',rq:'Вопросы для ответа:\n1. Объясните правило\n2. Решите задачу'}]);
+ const input={id,provider:'deepseek',operation:randomUUID()};let writes=0,fetches=0,failStorage=true;
+ const deps={rpc,config:async()=>({executor_email:user.email}),loadRequestFile:async()=>{},readFile:async()=>{},sourcePlan:i=>sourceAssistantPlan(i,{readFile:async()=>{}}),capability:async()=>({available:true})};
+ const pre=await assistantAction({...input,action:'assistant-preflight'},user,deps);
+ assert.equal(pre.status,undefined,JSON.stringify(pre.data));assert.ok(pre.data.quoteId);assert.ok(pre.data.priceMicrousd>0);assert.equal(pre.data.requiresConfirmation,true);
+ const repeat=await assistantAction({...input,action:'assistant-preflight'},user,deps);assert.equal(repeat.data.quoteId,pre.data.quoteId);assert.equal(repeat.data.priceMicrousd,pre.data.priceMicrousd);
+ assert.equal((await rpc('studkab_assistant_state',{p_request:id,p_actor:actor})).job.state,'prepared');
+ assert.equal((await assistantAction({...input,action:'assistant-start'},user,deps)).data.error,'PAID_CONFIRMATION_REQUIRED');
+ const start=await assistantAction({...input,action:'assistant-start',quoteId:pre.data.quoteId,confirmedMicrousd:pre.data.priceMicrousd,confirmed:true},user,deps);assert.equal(start.data.queued,true);
+ const runner={actor,rpc,proxyToken:'offline',loadRequestFile:async()=>{},readFile:async()=>{},saveResult:async()=>{writes++;if(failStorage)throw Error('offline storage unavailable')},fetchProxy:async(url,opts)=>{fetches++;const q=JSON.parse(opts.body);const p=JSON.parse(q.user);return Response.json({complete:true,client_request_id:q.client_request_id,detail:{reason:'stop'},text:JSON.stringify({sections:p.expectedSections.map(id=>({id,name:'Ответ',text:'Полный ответ по заданию'}))})})}};
+ const result=await runAssistant(runner);assert.equal(result.status,'assistant_return_pending');assert.equal(fetches,1);
+ failStorage=false;const recovery=await runAssistant({...runner,recoveryOnly:true,proxyToken:undefined});assert.equal(recovery.status,'assistant_returned');assert.equal(fetches,1);assert.equal(writes,2);
+ const state=await rpc('studkab_assistant_state',{p_request:id,p_actor:actor});assert.equal(state.job.state,'returned');assert.ok(state.work.result.hash);
+ const b=(await db.query('select reserved_microusd from studkab_gen_budget where id')).rows[0];assert.equal(Number(b.reserved_microusd),pre.data.priceMicrousd);
+});

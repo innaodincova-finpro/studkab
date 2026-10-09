@@ -3,6 +3,8 @@ import {dueEvents,validSubscription} from './schedule.js';
 import {cronAllowed,memberAllowed} from './access.mjs';
 import {requestPush} from './request-push.mjs';
 import {returnPush,returnTelegram} from './r3-notify.mjs';
+import {processNotifications} from './process-notifications.mjs';
+import {requestEmailSettings} from '../studkab-requests/request-email.mjs';
 const URL_BASE=Deno.env.get('SUPABASE_URL')!;
 const SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const cors={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS'};
@@ -84,6 +86,15 @@ async function dialogueTelegram(){
 }
 async function dispatch(c:any){
  let sent=0,failed=0;
+ let process:any;
+ try{
+  const channels=['push','telegram','email'],offset=new Date().getUTCMinutes()%3;
+  process=await processNotifications({rpc:(name:string,args:unknown)=>db('rpc/'+name,'POST',args),configuration:c,sendPush:send,
+   channelOrder:[...channels.slice(offset),...channels.slice(0,offset)],
+   telegramToken:Deno.env.get('STUDKAB_TELEGRAM_BOT_TOKEN'),
+   emailSettings:requestEmailSettings({}, {host:Deno.env.get('STUDKAB_SMTP_HOST'),port:Deno.env.get('STUDKAB_SMTP_PORT'),username:Deno.env.get('STUDKAB_SMTP_USERNAME'),password:Deno.env.get('STUDKAB_SMTP_PASSWORD'),from:Deno.env.get('STUDKAB_SMTP_FROM')})});
+  sent+=process.accepted;failed+=process.failed+process.unknown+process.unconfirmed;
+ }catch{failed++;}
  try{const requests=await requestPush({db,send,configuration:c});sent+=requests.sent;failed+=requests.failed;}catch{failed++;}
  let cursor='';
  for(;;){
@@ -116,7 +127,7 @@ async function dispatch(c:any){
  try{const telegram=await dialogueTelegram();sent+=telegram.sent;failed+=telegram.failed;}catch{failed++;}
  try{const ret=await returnTelegram({db,fetch,token:Deno.env.get('STUDKAB_TELEGRAM_BOT_TOKEN')});sent+=ret.sent;failed+=ret.failed;}catch{failed++;}
  await db('studkab_push_configuration?id=eq.1','PATCH',{last_run_at:new Date().toISOString(),last_result:{sent,failed}});
- return {sent,failed};
+ return {sent,failed,process};
 }
 Deno.serve(async req=>{
  if(req.method==='OPTIONS')return new Response('ok',{headers:cors});

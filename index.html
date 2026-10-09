@@ -18,6 +18,9 @@
 <script src="oblako.js?v=19"></script>
 <script src="onboarding.js?v=2"></script><script src="cloud-ui.js?v=4"></script><script src="clarifications.js?v=4"></script><script src="result-docx.js?v=7"></script><script src="quality-evidence-ui.js?v=8"></script><script src="results-ui.js?v=23"></script>
 <script src="push.js?v=3"></script><script src="app-navigation.js?v=1"></script>
+<script type="module" src="student-assistant-ui.mjs?v=1"></script>
+<script type="module" src="view-state.mjs?v=1"></script>
+<script type="module" src="notification-channels-ui.mjs?v=1"></script>
 <script src="intake-confirmation-ui.js?v=2"></script>
 <script src="file-prep.js?v=1"></script><script src="intake-ui.js?v=12"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2291,8 +2294,8 @@ function r3Day(v){var d=new Date(v);return isNaN(d)?'':d.toLocaleDateString('ru-
 function r3StepCard(w,result){
   var id=esc(w.id),returns=result.returns||0,r=result.result,lr=result.lastReturn;
   var file=r?'<div class="r3file"><span class="r3ic">'+esc(String(r.name).split('.').pop().slice(0,4).toUpperCase())+'</span><span class="r3fn"><b>'+esc(String(r.name).replace(/_+/g,' '))+' · '+esc(r3Size(r.size))+'</b><small>передана '+esc(r3When(r.at))+'</small></span></div>':'';
-  if(lr&&result.stage!=='needs_answer')return {i:2,extra:' · доработка № '+lr.n,title:'Работу исправляют',
-   now:'<p>Вы вернули работу '+esc(r3When(lr.at))+'. Работу исправляют по замечаниям преподавателя.</p><div class="r3-quote">'+esc(lr.comment)+(lr.files&&lr.files.length?'<br><span class="small">Приложено: '+esc(lr.files.join(', '))+'</span>':'')+'</div>',
+  if(lr&&result.stage!=='needs_answer')return {i:2,extra:' · доработка № '+lr.n,title:result.assistantDisplay?result.assistantDisplay.label:'Работа возвращена на доработку',
+   now:'<p>Вы вернули работу '+esc(r3When(lr.at))+'. Замечания переданы исполнителю.</p><div class="r3-quote">'+esc(lr.comment)+(lr.files&&lr.files.length?'<br><span class="small">Приложено: '+esc(lr.files.join(', '))+'</span>':'')+'</div>',
    after:'Вам придёт уведомление, когда исправленная работа будет готова. Затем снова скачайте её и сдайте.'};
   if(r&&r.handedAt)return {i:4,title:'Работа сдана',
    now:'<p>Вы отметили сдачу '+esc(r3When(r.handedAt))+'. Ждём оценку преподавателя.</p>'+file+'<button type="button" class="mini" data-act="r3-download" data-id="'+id+'">Скачать ещё раз</button> '+(r3Forms[w.id]?r3ReturnForm(w):'<button type="button" class="b b-alt" data-act="r3-return-open" data-id="'+id+'">Вернули на доработку</button>'),
@@ -2306,7 +2309,7 @@ function r3StepCard(w,result){
   if(result.stage==='needs_answer')return {i:1,title:'Ответьте на вопрос по заданию',
    now:'<p>Вопросов без ответа: '+esc(result.openQuestions)+'. Без ответа работа может задержаться.</p><button type="button" class="b r3-download" data-act="student-clarifications" data-id="'+id+'">Открыть вопросы</button>',
    after:''};
-  if(result.stage==='r3_in_work')return {i:2,title:'Работа выполняется',
+  if(result.stage==='r3_in_work')return {i:2,title:result.assistantDisplay?result.assistantDisplay.label:'Задание у исполнителя',
    now:'<p>Мы пришлём уведомление, когда работа будет готова.</p>',
    after:'Готовая работа появится здесь — её можно будет скачать.'};
   if(result.stage==='r3_received')return {i:1,title:'Задание получено',
@@ -2316,6 +2319,7 @@ function r3StepCard(w,result){
 }
 function r3RouteHtml(w,result){
   var c=r3StepCard(w,result),r=result.result,lr=result.lastReturn,out=[];
+  if(result.assistantDisplay&&result.assistantDisplay.stale)c=Object.assign({},c,{now:c.now+'<p class="hint" role="status">Не удалось обновить состояние. Показаны последние подтверждённые сведения.</p>'});
   var res=['Отправлено'+(w.req.sent?' '+ruDate(w.req.sent):''),'Вопросов без ответа нет',r?'Работа выполнена '+r3Day(r.at):'Работа выполнена',r&&r.downloadedAt?'Работа скачана '+r3Day(r.downloadedAt):'Работа получена'];
   var fut=R3_FUT.slice();if(lr){fut[3]='Вы скачиваете исправленную работу.';fut[4]='Вы снова сдаёте работу и отмечаете это здесь.';}
   for(var i=0;i<5;i++){
@@ -2341,7 +2345,7 @@ function r3Fetch(list,done){
       if(r.route!=='r3'){if(!w.req.route)change(function(){w.req.route=r.route||'other';});return;}
       var fresh=w.req.route!=='r3';
       if(fresh)change(function(){w.req.route='r3';});
-      r3Last[w.id]=r;if(fresh)render();else done(w);
+      return r3ObserveAssistant(w,r,identity).then(function(observed){if(Oblako.identity()!==identity)return;r3Last[w.id]=observed;if(fresh)render();else done(w);});
     }).catch(function(){r3Fetched[w.id]=0;});
   });
 }
@@ -2484,7 +2488,7 @@ function viewMore(){
     fld("stContact", "Связь (телефон или Telegram)", s.contact, "Подставится в заявку") +
     '<button type="button" class="btn" data-act="save-settings">Сохранить</button>', true);
 
-  h += section("Уведомления и напоминания", ((window.Oblako && Oblako.mode === "cloud") ? '<p class="hint">Новые вопросы по заданию приходят сразу. Напоминания о сроках приходят в 10:00 за указанное число дней, о парах — за 30 минут до начала. Уведомления работают на подключённом устройстве, даже когда кабинет закрыт.</p>' +
+  h += section("Уведомления и напоминания", (window.StudNotificationChannels?StudNotificationChannels.panel():'<div data-notification-settings><p class="hint">Проверяем подключения…</p></div>') + ((window.Oblako && Oblako.mode === "cloud") ? '<p class="hint">Новые вопросы по заданию приходят сразу. Напоминания о сроках приходят в 10:00 за указанное число дней, о парах — за 30 минут до начала. Уведомления работают на подключённом устройстве, даже когда кабинет закрыт.</p>' +
     '<p class="hint">На iPhone откройте кабинет с ярлыка на экране «Домой» (iOS 16.4 или новее).</p>' +
     '<div class="chips"><button class="chip" data-act="push-enable">Включить уведомления</button><button class="chip" data-act="push-test">Проверить через минуту</button><button class="chip" data-act="push-status">Проверить состояние</button><button class="chip" data-act="push-disable">Отключить</button></div>' +
     '<p class="hint" id="push-status" role="status" aria-live="polite">Уведомления подключаются отдельно на каждом устройстве.</p>' : '<p class="hint">Напоминания о сроках и парах приходят на этот телефон, даже когда кабинет закрыт. Для этого нужен вход и сохранение работ в облаке.</p><button class="chip" data-act="cloud">Войти, чтобы включить уведомления</button>') +
@@ -2688,7 +2692,7 @@ function pickTemplate(workId){
 function render(resetScroll){
   appNavigation.sync();
   var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openWorkId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
-  var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY;
+  var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY,pageSnapshot=keepScroll&&window.StudViewState?StudViewState.captureViewState(existingPage):null;
   var c = counts();
   var bar = document.getElementById("tabbar");
   bar.innerHTML = TABS.map(function(x){
@@ -2722,6 +2726,7 @@ function render(resetScroll){
     fab.innerHTML = '<i aria-hidden="true">＋</i><span>Отправить задание</span>';
   }
   renderedOwner=ownerKey;renderedView=viewKey;
+  if(pageSnapshot)StudViewState.restoreViewState(p,pageSnapshot);
   p.scrollTop=keepScroll?previousPageScroll:0;
   window.scrollTo(0,keepScroll?previousWindowScroll:0);
   markSaved();
@@ -2730,7 +2735,17 @@ function render(resetScroll){
   refreshStudentProgress();
 }
 // R3-C/R3-D: заявка по форме — готовая работа, «Я сдал работу», «Вернули на доработку». Прежний блок «Результат заявки» скрыт.
-var r3Forms={},r3Pending={},r3Drafts={},r3Last={};
+var r3Forms={},r3Pending={},r3Drafts={},r3Last={},r3Observations={},r3Reading={};
+async function r3ObserveAssistant(w,progress,identity){
+ var key=identity+'|'+w.req.serverId,proof={connected:true,lastConfirmedAt:new Date().toISOString()},durable=null;
+ try{durable=await Oblako.requestApi({action:'assistant-state',id:w.req.serverId});}
+ catch(e){proof.connected=false;durable=r3Observations[key]||null;}
+ if(Oblako.identity()!==identity)return progress;
+ if(proof.connected)r3Observations[key]=durable;
+ var state=window.StudStudentAssistant&&StudStudentAssistant.studentPreparation(progress,durable,proof);
+ return Object.assign({},progress,state?{assistantDisplay:state}:{});
+}
+
 function r3When(v){var d=new Date(v);return isNaN(d)?'':d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})+' в '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
 function r3Size(n){return n>=1048576?(n/1048576).toFixed(1).replace('.',',')+' МБ':Math.max(1,Math.round(n/1024))+' КБ';}
 function r3ReturnForm(w){
@@ -2790,12 +2805,25 @@ function refreshStudentProgress(){
  var w=tab==='works'&&openWorkId&&work(openWorkId),host=document.querySelector('[data-student-progress]');
  if(!w||!w.req||!w.req.serverId||!host||!window.Oblako||!Oblako.requestApi)return;
  var identity=Oblako.identity(),requestId=w.req.serverId;
- host.textContent='Проверяем этап заявки…';
- var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Исполнитель готовит или проверяет Word; передача студенту ещё не зарегистрирована.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',r3_received:'Заявка у исполнителя. Он откроет материалы и, если чего-то не хватает, спросит здесь.',r3_in_work:'Исполнитель выполняет работу. Мы пришлём уведомление, когда она будет готова.',r3_ready:'Работа готова.',r3_handed:'Работа сдана.',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
+ var readKey=identity+'|'+requestId;if(r3Reading[readKey])return;r3Reading[readKey]=true;
+ if(!r3Last[w.id])host.textContent='Проверяем этап заявки…';
+ var labels={awaiting_materials:'Материалы ещё загружаются. Заявка не передана исполнителю.',received:'Комплект поступил исполнителю. Требования ещё не утверждены.',requirements_review:'Исполнитель проверяет требования. Подтверждённого Word для выдачи нет.',requirements_approved:'Требования утверждены. Исполнитель готовит или проверяет Word; передача студенту ещё не зарегистрирована.',needs_answer:'Исполнитель ждёт вашего ответа. Откройте «Вопросы исполнителя».',r3_received:'Заявка у исполнителя. Он откроет материалы и, если чего-то не хватает, спросит здесь.',r3_in_work:'Задание у исполнителя. Готовый файл появится здесь после передачи.',r3_ready:'Работа готова.',r3_handed:'Работа сдана.',delivered:'В реестре записана передача Word. Откройте результат заявки и проверьте актуальную версию файла.'};
  Oblako.requestApi({action:'student-progress',id:requestId}).then(function(result){
-  if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id&&result.route==='r3'&&w.req.route!=='r3'){change(function(){w.req.route='r3';});render();return;}
-  if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id){host.textContent=(result.lastReturn&&result.stage==='r3_in_work'?'Работа на доработке. Исполнитель исправляет её по замечаниям.':labels[result.stage]||'Этап не распознан. Повторите проверку.')+(result.openQuestions?' Вопросов без ответа: '+result.openQuestions+'.':'');r3ReadyBlock(w,result);}
- },function(err){if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)host.textContent='Не удалось получить этап из реестра: '+(err.message||'повторите позже');});
+  return r3ObserveAssistant(w,result,identity);
+ }).then(function(result){
+  if(!host.isConnected||Oblako.identity()!==identity||tab!=='works'||openWorkId!==w.id)return;
+  if(result.route==='r3'&&w.req.route!=='r3'){change(function(){w.req.route='r3';});render();return;}
+  var display=result.assistantDisplay;
+  host.textContent=(display?display.label:result.lastReturn&&result.stage==='r3_in_work'?'Работа возвращена на доработку.':labels[result.stage]||'Этап не подтверждён. Повторите проверку.')+(result.openQuestions?' Вопросов без ответа: '+result.openQuestions+'.':'')+(display&&display.stale?' · Не удалось обновить состояние.':'');
+  var old=r3Last[w.id];
+  // Polling updates only the route. Keep an open feedback form, its files,
+  // focus and text intact; state still refreshes in the status line above.
+  if(!r3Forms[w.id]&&JSON.stringify(old)!==JSON.stringify(result))r3ReadyBlock(w,result);
+  else r3Last[w.id]=result;
+ },function(err){
+  if(host.isConnected&&Oblako.identity()===identity&&tab==='works'&&openWorkId===w.id)
+   host.textContent='Не удалось обновить состояние. '+(r3Last[w.id]?'Показаны последние подтверждённые сведения.':'Повторите после подключения к сети.');
+ }).finally(function(){delete r3Reading[readKey];});
 }
 async function refreshStudentDialogue(){
  var w=tab==='works'&&openWorkId&&work(openWorkId),host=document.querySelector('[data-dialog-unread]');
@@ -2806,6 +2834,14 @@ async function refreshStudentDialogue(){
  }catch(e){if(host.isConnected)host.textContent='Не удалось проверить новые вопросы. Повторите после подключения к сети.';}
 }
 setInterval(refreshStudentDialogue,60000);
+setInterval(function(){
+ if(document.visibilityState==='hidden')return;
+ if(tab==='works'&&openWorkId)refreshStudentProgress();
+ else if(tab==='today'||tab==='works')r3Fetch(D.works.filter(isR3Work),r3HomeRefresh);
+},15000);
+window.addEventListener('online',refreshStudentProgress);
+window.addEventListener('student-assistant-ready',refreshStudentProgress);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')refreshStudentProgress();});
 
 /* ==================================================================
    СБОРКА .DOCX

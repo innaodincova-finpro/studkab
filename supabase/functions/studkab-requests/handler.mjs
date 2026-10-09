@@ -1,5 +1,7 @@
+import {notificationAction,NOTIFICATION_ACTIONS} from './notification-service.mjs';
 import {r3WorkAction,R3_ACTIONS,R3_UPLOADS} from './r3-work.mjs';
 import {claudeAction,CLAUDE_ACTIONS} from './claude-exec.mjs';
+import {assistantAction,ASSISTANT_ACTIONS} from './assistant-service.mjs';
 import {qualityAction,qualityError} from './quality-evidence.mjs';
 import {testDeliveryAction} from './test-delivery.mjs';
 import {registeredStudyAction} from './registered-study.mjs';
@@ -40,7 +42,7 @@ export function validatePayload(p,{newSubmission=false,previous=null}={}) {
 }
 const headers={'access-control-allow-origin':'https://innaodincova-finpro.github.io','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS','content-type':'application/json','cache-control':'no-store'};
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers});
-export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,removeIntake,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,loadRequestFile,fetchCloud=globalThis.fetch,now=()=>Date.now()}) {
+export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMember,upload,download,remove,removeIntake,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,saveResult,loadRequestFile,assistant,notification,fetchCloud=globalThis.fetch,now=()=>Date.now()}) {
  return async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers});
   if(req.method!=='POST')return json({error:'Используйте POST'},405);
@@ -84,6 +86,15 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    if(!user||!user.email_confirmed_at||user.is_anonymous)return json({error:'Сначала войдите в аккаунт приложения'},401);
    const raw=await req.text();if(raw.length>8500000)return json({error:'Заявка слишком большая'},413);
    let input;try{input=JSON.parse(raw);}catch{return json({error:'Неверный запрос'},400);}
+   if(NOTIFICATION_ACTIONS.includes(input?.action)){
+    if(raw.length>4096)return json({error:'Запрос слишком большой'},413);
+    const result=await notificationAction(input,user,{db,config,isMember,emailSettings,telegramConfigured:notification?.telegramConfigured});
+    return json(result.data,result.status||200);
+   }
+   if(ASSISTANT_ACTIONS.includes(input?.action)){
+    if(raw.length>16000)return json({error:'Запрос слишком большой'},413);
+    const r=await assistantAction(input,user,{config,rpc:assistant?.rpc||((name,args)=>db('rpc/'+name,'POST',args)),loadRequestFile,saveResult,planSections:assistant?.planSections,sourcePlan:assistant?.sourcePlan,readFile:readIntake,capability:assistant?.capability});return json(r.data,r.status||200);
+   }
    if(['intake-open','intake-notes','intake-upload','intake-download','intake-read','intake-analyze','intake-analysis-state','intake-confirmation-state','intake-confirmation-save','intake-submission-state','intake-submit','intake-receive-state','intake-receive','intake-link-check','intake-link-copy'].includes(input?.action)){
     if(input.action!=='intake-upload'&&raw.length>(input.action==='intake-confirmation-save'?300000:16000))return json({error:'Запрос слишком большой'},413);
     const r=await intakeAction(input,user,{db,isMember,saveIntake,downloadIntake,loadIntake,readIntake,transferIntake,validatePayload,fetchCloud});return json(r.data,r.status||200);
@@ -173,6 +184,7 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
       if(ret)lastReturn={n:ret.n,comment:ret.comment,at:ret.created_at,files:files.map(f=>f.name)};
      }
      return json({stage,openQuestions,route:'r3',returns,...(lastReturn?{lastReturn}:{}),
+      work:{takenAt:w?.taken_at||null,returnedAt:w?.returned_at||null,delivered:current?{name:w.delivered_name,size:w.delivered_size,at:w.delivered_at}:null,downloadedAt:current?w?.downloaded_at||null:null,handedAt:current?w?.handed_at||null:null},
       ...(current?{result:{name:w.delivered_name,size:w.delivered_size,at:w.delivered_at,downloadedAt:w.downloaded_at,handedAt:w.handed_at}}:{})});
     }
     const [questions,passports,delivered]=await Promise.all([

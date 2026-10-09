@@ -138,3 +138,11 @@ test('unknown DeepSeek model blocked before paid dispatch',async t=>{
   assert.equal((await worker.fetch(request({...basic,model:'deepseek-unapproved'}),env)).status,400);
   assert.equal(f.mock.callCount(),0);
 });
+test('authenticated capabilities proves configured route without a paid model request',async t=>{
+ const f=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not call');});
+ const r=await worker.fetch(request({action:'capabilities'}),env);
+ assert.deepEqual(await r.json(),{schema:1,provider:'deepseek',model:'deepseek-flash',configured:true,maxOutputTokens:4000});
+ assert.equal(f.mock.callCount(),0);
+ const denied=await worker.fetch(request({action:'capabilities'},{'X-Proxy-Token':'wrong'}),env);assert.equal(denied.status,401);
+ const noKey=await worker.fetch(request({action:'capabilities'}),{...env,DEEPSEEK_KEY:undefined});assert.equal((await noKey.json()).configured,false);
+});

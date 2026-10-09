@@ -1,0 +1,16 @@
+/* Shared STUDKAB hierarchy preserves the existing gradient, cards and route. */
+.r3-assistant{background:linear-gradient(135deg,#E7F0F7,#F4F8FB);border:1px solid #C8DAE9;border-radius:20px;padding:18px}
+.r3-assistant h4{font-size:16px;margin:0 0 12px;color:var(--ink)}
+.r3-assistant-options{display:flex;flex-direction:column;gap:10px}
+.r3-assistant-option{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center}
+.r3-assistant-option .chip{width:100%;text-align:left;min-height:44px;border:1px solid #C9DAE8;background:linear-gradient(145deg,#FFF,#EDF4FA);box-shadow:0 4px 12px rgba(40,66,92,.07);border-radius:14px;font-weight:600}
+.r3-assistant-option small{font-size:12px;color:var(--mut)}
+.r3-assistant-option button:disabled{opacity:.55;cursor:default}
+.r3-assistant-state{font-size:14px;margin:12px 0 0;overflow-wrap:anywhere}
+.r3-secondary{border-top:1px solid var(--line);margin-top:16px;padding-top:8px}
+.r3-secondary summary{padding:10px 0;cursor:pointer;color:var(--mut);font-weight:600}
+.r3-secondary .r3links{margin-top:6px}
+.r3-state-refresh{margin-top:12px;min-height:44px}
+.r3-confirm-review{display:flex;gap:10px;align-items:flex-start;margin:16px 0}
+.r3-confirm-review input{width:auto;flex:none;margin-top:4px}
+@media(max-width:959px){.r3-assistant-option{grid-template-columns:minmax(0,1fr)}.r3-assistant{padding:16px}.r3-assistant-option small{padding-left:3px}}

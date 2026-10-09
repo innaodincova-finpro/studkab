@@ -9,8 +9,29 @@ export async function digest(bytes){
  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(n=>n.toString(16).padStart(2,'0')).join('');
 }
 export async function verifyAssistantManifest(bundle){
- const manifest={schema:1,requestId:bundle.requestId,revision:bundle.revision,provider:bundle.provider,details:bundle.details,files:bundle.files.map(f=>({id:f.id,name:f.name,type:f.type,size:f.size,hash:f.hash}))};
- if(await digest(new TextEncoder().encode(JSON.stringify(manifest)))!==bundle.fingerprint)throw Error('BUNDLE_CHANGED');
+ const manifest=assistantManifest(bundle);
+ if(await digest(new TextEncoder().encode(JSON.stringify(manifest.schema===2?snapshotJson(manifest):manifest)))!==bundle.fingerprint)throw Error('BUNDLE_CHANGED');
+}
+// Context is complete server JSON, not an AI summary. Sort object keys only;
+// preserve array order and every value. Reject unsupported/oversized context.
+export function snapshotJson(value){
+ function copy(v,depth){
+  if(depth>32)throw Error('INVALID_ASSISTANT_CONTEXT');
+  if(v===null||typeof v==='boolean'||typeof v==='string')return v;
+  if(typeof v==='number'&&Number.isFinite(v))return v;
+  if(Array.isArray(v))return v.map(x=>copy(x,depth+1));
+  if(v&&Object.getPrototypeOf(v)===Object.prototype)return Object.fromEntries(Object.keys(v).sort().map(k=>[k,copy(v[k],depth+1)]));
+  throw Error('INVALID_ASSISTANT_CONTEXT');
+ }
+ const result=copy(value,0);
+ if(new TextEncoder().encode(JSON.stringify(result)).length>2000000)throw Error('ASSISTANT_CONTEXT_TOO_BIG');
+ return result;
+}
+export function assistantManifest(bundle){
+ const manifest={schema:bundle.schema||1,requestId:bundle.requestId,revision:bundle.revision,provider:bundle.provider,details:bundle.details,files:bundle.files.map(f=>({id:f.id,name:f.name,type:f.type,size:f.size,hash:f.hash}))};
+ if(manifest.schema===2)manifest.context=snapshotJson(bundle.context);
+ else if(manifest.schema!==1)throw Error('INVALID_ASSISTANT_CONTEXT');
+ return manifest;
 }
 function string(value,max=4000){
  if(value==null)return '';
@@ -30,7 +51,7 @@ export function requestDetails(p){
  if(f.fn!=null)details.format.font=string(f.fn,100);
  return details;
 }
-export async function collectAssistantBundle({request,provider,attachments,attachmentsComplete}, {loadRequestFile}){
+export async function collectAssistantBundle({request,provider,attachments,attachmentsComplete,context}, {loadRequestFile}){
  if(!ASSISTANTS.includes(provider))throw Error('ASSISTANT_REQUIRED');
  if(!request||!uuid.test(request.id)||!Number.isSafeInteger(request.revision)||request.revision<1||!request.ready_at||request.deleting_at)throw Error('INVALID_REQUEST');
  const details=requestDetails(request.payload);
@@ -54,6 +75,7 @@ export async function collectAssistantBundle({request,provider,attachments,attac
   if(!(bytes instanceof Uint8Array)||bytes.length!==a.size_bytes||await digest(bytes)!==a.file_hash)throw Error('DAMAGED_ATTACHMENT');
   files.push({id:a.id,name:a.file_name,type:a.content_type,size:a.size_bytes,hash:a.file_hash,bytes});
  }
- const manifest={schema:1,requestId:request.id,revision:request.revision,provider,details,files:files.map(({bytes,...f})=>f)};
- return {...manifest,fingerprint:await digest(new TextEncoder().encode(JSON.stringify(manifest))),files};
+ const manifest={schema:context===undefined?1:2,requestId:request.id,revision:request.revision,provider,details,files:files.map(({bytes,...f})=>f)};
+ if(context!==undefined)manifest.context=snapshotJson(context);
+ return {...manifest,fingerprint:await digest(new TextEncoder().encode(JSON.stringify(manifest.schema===2?snapshotJson(manifest):manifest))),files};
 }

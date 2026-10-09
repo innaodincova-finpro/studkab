@@ -19,7 +19,8 @@ const STATES = {
  file_prepared: ['Файл подготовлен', 'review_result'], reviewed: ['Работа проверена', 'deliver_result'],
  delivered: ['Работа передана', null], downloaded: ['Студент скачал работу', null],
  handed: ['Студент отметил сдачу', null], rework: ['Работа возвращена на доработку', 'open_feedback'],
- blocked: ['Подготовка недоступна', 'check_status']
+ blocked: ['Подготовка недоступна', 'check_status'],
+ kit_prepared: ['Комплект сохранён', 'prepare_work'], cancelled: ['Подготовка отменена', 'prepare_work']
 };
 function time(value) {
  if (value == null) return null;
@@ -64,6 +65,25 @@ export function adaptGenerationState(generation) {
  return {provider: 'deepseek', queuedAt, startedAt, status: job.status,
  unknown: job.status === 'unknown' || parts.some(p => p.state === 'unknown') || diagnostics.some(d => d.state === 'unknown')};
 }
+/** Durable RPC studkab_assistant_state.job; acceptedAt proves saved snapshot only.
+ * claimed is a lease before dispatch. bindingCurrent=false quarantines stale input.
+ * Student RPC intentionally redacts provider/fingerprint/resultHash/reviewedAt.
+ */
+export function adaptDurableState(value) {
+ if (!value) return null;
+ const j = Object.hasOwn(value, 'job') ? value.job : value;
+ if (!j) return null;
+ if (typeof j.id !== 'string' || !j.id || !['prepared','queued','claimed','dispatched','completed','returning','returned','unknown','cancelled'].includes(j.state)) throw Error('INVALID_DURABLE_JOB');
+ const d = {...j, acceptedAt: time(j.acceptedAt), queuedAt: time(j.queuedAt), startedAt: time(j.startedAt), returnedAt: time(j.returnedAt), reviewedAt: time(j.reviewedAt)};
+ if (!d.acceptedAt || (d.queuedAt && Date.parse(d.queuedAt)<Date.parse(d.acceptedAt)) ||
+ (d.startedAt && (!d.queuedAt || Date.parse(d.startedAt)<Date.parse(d.queuedAt))) ||
+ (d.returnedAt && (!d.startedAt || Date.parse(d.returnedAt)<Date.parse(d.startedAt))) ||
+ (d.reviewedAt && (!d.returnedAt || Date.parse(d.reviewedAt)<Date.parse(d.returnedAt)))) throw Error('INCONSISTENT_DURABLE_JOB');
+ if (['queued','claimed','dispatched','completed','returning','returned'].includes(d.state) && !d.queuedAt) throw Error('MISSING_ACCEPTANCE');
+ if (['dispatched','completed','returning','returned'].includes(d.state) && !d.startedAt) throw Error('MISSING_DISPATCH');
+ if (d.state==='returned' && !d.returnedAt) throw Error('MISSING_RETURN_RECEIPT');
+ return d;
+}
 function reviewed(reviewState, result) {
  if (!reviewState || reviewState.state !== 'reviewed') return false;
  const {receipt, review} = reviewState;
@@ -85,8 +105,10 @@ export function projectAssistantState(input = {}) {
  try {
   confirmedAt = time(input.observation?.lastConfirmedAt);
   if (!['student', 'executor'].includes(input.role)) throw Error('INVALID_ROLE');
-  if (!Object.hasOwn(input, 'work') || input.work === undefined) throw Error('MISSING_WORK_OBSERVATION');
-  const w = adaptR3Work(input.work), c = adaptClaudeState(input.claude), g = adaptGenerationState(input.generation);
+  const observedWork=Object.hasOwn(input,'work')?input.work:input.durable?.work;
+  if (observedWork===undefined) throw Error('MISSING_WORK_OBSERVATION');
+  const d=adaptDurableState(input.durable);
+  const w = adaptR3Work(observedWork), c = d?null:adaptClaudeState(input.claude), g = d?null:adaptGenerationState(input.generation);
   const returned = w.returnedAt;
   const delivered = w.delivered && after(w.delivered.at, returned) ? w.delivered : null;
   const result = w.result && after(w.result.at, returned) ? w.result : null;
@@ -100,10 +122,18 @@ export function projectAssistantState(input = {}) {
    state = 'delivered'; visibleFile = delivered;
    if (w.downloadedAt && Date.parse(w.downloadedAt) >= Date.parse(delivered.at)) state = 'downloaded';
    if (w.handedAt && Date.parse(w.handedAt) >= Date.parse(delivered.at)) state = 'handed';
+  } else if (d?.bindingCurrent===false) {
+   state='unknown';reason='MATERIALS_CHANGED';
   } else if (result) {
    if (!w.takenAt || Date.parse(result.at) < Date.parse(w.takenAt)) throw Error('INCONSISTENT_RESULT');
-   state = reviewed(input.reviewState, result) ? 'reviewed' : 'file_prepared';
+   if(d?.state==='returned' && d.resultHash && d.resultHash!==result.hash) throw Error('RESULT_BINDING_CHANGED');
+   const durableReview=d?.state==='returned' && d.resultHash===result.hash && d.reviewedAt && Date.parse(d.reviewedAt)>=Date.parse(result.at);
+   state = durableReview || reviewed(input.reviewState, result) ? 'reviewed' : 'file_prepared';
    if (role === 'executor') visibleFile = result;
+  } else if (d && after(d.acceptedAt,returned)) {
+   provider=PROVIDERS.has(d.provider)?d.provider:null;
+   state={prepared:'kit_prepared',queued:'queued',claimed:'queued',dispatched:'dispatched',completed:'sections_ready',returning:'return_pending',returned:role==='student'?'file_prepared':'unknown',unknown:'unknown',cancelled:'cancelled'}[d.state];
+   if(state==='unknown')reason='UNCONFIRMED_RETURN_OR_EXECUTION';
   } else if (currentC && currentG) {
    throw Error('CONFLICTING_JOBS');
   } else if (currentC) {
@@ -120,11 +150,13 @@ export function projectAssistantState(input = {}) {
    state = 'unavailable'; provider = input.connection.provider;
   } else state = 'received';
  } catch { state = 'unknown'; provider = null; visibleFile = null; reason = 'INCONSISTENT_EVIDENCE'; }
- const [label, action] = STATES[state];
+ const [label, defaultAction] = STATES[state];
+ // A saved kit proceeds to server preflight/planning; missing legacy plan is not a manual confirmation gate.
+ const action=defaultAction;
  // A student never receives an undelivered file, worker diagnostics, or capability
  // remediation. A received file is represented without internal storage/hash data.
  const studentLabel = {manual_work: 'Задание у исполнителя', file_prepared: 'Работа у исполнителя', reviewed: 'Работа у исполнителя',
- sections_ready: 'Работа у исполнителя', return_pending: 'Работа у исполнителя', unavailable: 'Задание у исполнителя', blocked: 'Работа у исполнителя'}[state];
+ kit_prepared: 'Задание у исполнителя', cancelled: 'Задание у исполнителя', sections_ready: 'Работа у исполнителя', return_pending: 'Работа у исполнителя', unavailable: 'Задание у исполнителя', blocked: 'Работа у исполнителя'}[state];
  const publicFile = visibleFile ? {name: visibleFile.name, size: visibleFile.size, at: visibleFile.at,
  ...(role === 'executor' && visibleFile.hash ? {hash: visibleFile.hash} : {})} : null;
  return {state, label: role === 'student' ? studentLabel || label : label,
