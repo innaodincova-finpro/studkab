@@ -93,7 +93,7 @@ export function handler({auth,config,db,send,sendEmail,emailSettings,invite,isMe
    }
    if(ASSISTANT_ACTIONS.includes(input?.action)){
     if(raw.length>16000)return json({error:'Запрос слишком большой'},413);
-    const r=await assistantAction(input,user,{config,rpc:assistant?.rpc||((name,args)=>db('rpc/'+name,'POST',args)),loadRequestFile,saveResult,planSections:assistant?.planSections,sourcePlan:assistant?.sourcePlan,readFile:readIntake,capability:assistant?.capability});return json(r.data,r.status||200);
+    const r=await assistantAction(input,user,{config,rpc:assistant?.rpc||((name,args)=>db('rpc/'+name,'POST',args)),loadRequestFile,saveResult,planSections:assistant?.planSections,sourcePlan:assistant?.sourcePlan,readFile:readIntake,capability:assistant?.capability,providerConfig:assistant?.providerConfig});return json(r.data,r.status||200);
    }
    if(['intake-open','intake-notes','intake-upload','intake-download','intake-read','intake-analyze','intake-analysis-state','intake-confirmation-state','intake-confirmation-save','intake-submission-state','intake-submit','intake-receive-state','intake-receive','intake-link-check','intake-link-copy'].includes(input?.action)){
     if(input.action!=='intake-upload'&&raw.length>(input.action==='intake-confirmation-save'?300000:16000))return json({error:'Запрос слишком большой'},413);

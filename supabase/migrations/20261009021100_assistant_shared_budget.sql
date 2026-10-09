@@ -2,7 +2,8 @@
 create table public.studkab_assistant_attempts (
  dispatch_id uuid primary key default gen_random_uuid(),
  job_id uuid not null unique,
- claim uuid not null, model text not null check(model='deepseek-flash'),
+ claim uuid not null, provider text not null check(provider in ('deepseek','claude','chatgpt')),
+ model text not null check(model ~ '^[a-zA-Z0-9_-]{1,120}$'), pricing_fingerprint text check(pricing_fingerprint ~ '^[a-f0-9]{64}$'),
  reservation_microusd bigint not null check(reservation_microusd between 1 and 75036),
  state text not null check(state in ('sent','unknown','done')),
  started_at timestamptz not null default clock_timestamp(), finished_at timestamptz
@@ -12,7 +13,7 @@ revoke all on public.studkab_assistant_attempts from public,anon,authenticated,s
 grant select,insert,update on public.studkab_assistant_attempts to service_role;
 create function public.studkab_assistant_attempt_immutable() returns trigger language plpgsql security invoker set search_path='' as $$
 begin
- if tg_op='DELETE' or (new.dispatch_id,new.job_id,new.claim,new.model,new.reservation_microusd,new.started_at) is distinct from (old.dispatch_id,old.job_id,old.claim,old.model,old.reservation_microusd,old.started_at)
+ if tg_op='DELETE' or (new.dispatch_id,new.job_id,new.claim,new.provider,new.model,new.pricing_fingerprint,new.reservation_microusd,new.started_at) is distinct from (old.dispatch_id,old.job_id,old.claim,old.provider,old.model,old.pricing_fingerprint,old.reservation_microusd,old.started_at)
  or (old.state in ('unknown','done') and new is distinct from old) then raise exception 'IMMUTABLE_ASSISTANT_RESERVE';end if;
  return new;
 end $$;
@@ -41,6 +42,7 @@ create table public.studkab_assistant_quotes (
  id uuid primary key default gen_random_uuid(),job_id uuid not null unique references public.studkab_assistant_jobs(id) on delete cascade,
  actor_id uuid not null,revision integer not null,fingerprint text not null,sections jsonb not null,
  estimated_microusd bigint not null check(estimated_microusd between 1 and 75036),
+ model text not null check(model ~ '^[a-zA-Z0-9_-]{1,120}$'), pricing_fingerprint text check(pricing_fingerprint ~ '^[a-f0-9]{64}$'),
  created_at timestamptz not null default clock_timestamp(),confirmed_at timestamptz
 );
 alter table public.studkab_assistant_quotes enable row level security;
@@ -49,25 +51,29 @@ grant select,insert,update(confirmed_at) on public.studkab_assistant_quotes to s
 create function public.studkab_assistant_quote_immutable() returns trigger language plpgsql security invoker set search_path='' as $$
 begin
  if tg_op='DELETE' and not exists(select 1 from public.studkab_assistant_jobs where id=old.job_id) then return old;end if;
- if tg_op='DELETE' or (new.id,new.job_id,new.actor_id,new.revision,new.fingerprint,new.sections,new.estimated_microusd,new.created_at) is distinct from (old.id,old.job_id,old.actor_id,old.revision,old.fingerprint,old.sections,old.estimated_microusd,old.created_at) or (old.confirmed_at is not null and new.confirmed_at is distinct from old.confirmed_at) then raise exception 'IMMUTABLE_ASSISTANT_QUOTE';end if;
+ if tg_op='DELETE' or (new.id,new.job_id,new.actor_id,new.revision,new.fingerprint,new.sections,new.estimated_microusd,new.model,new.pricing_fingerprint,new.created_at) is distinct from (old.id,old.job_id,old.actor_id,old.revision,old.fingerprint,old.sections,old.estimated_microusd,old.model,old.pricing_fingerprint,old.created_at) or (old.confirmed_at is not null and new.confirmed_at is distinct from old.confirmed_at) then raise exception 'IMMUTABLE_ASSISTANT_QUOTE';end if;
  return new;
 end $$;
 create trigger assistant_quote_immutable before update or delete on public.studkab_assistant_quotes for each row execute function public.studkab_assistant_quote_immutable();
 -- Only the trusted server computes p_estimated from its full verified prompt.
-create function public.studkab_assistant_quote(p_job uuid,p_actor uuid,p_estimated bigint) returns jsonb language plpgsql security invoker set search_path='' as $$
+create function public.studkab_assistant_quote(p_job uuid,p_actor uuid,p_estimated bigint,p_model text default 'deepseek-flash',p_pricing_fingerprint text default null) returns jsonb language plpgsql security invoker set search_path='' as $$
 declare j public.studkab_assistant_jobs;q public.studkab_assistant_quotes;b jsonb;
 begin
  if not public.studkab_assistant_executor(p_actor) then raise exception 'FORBIDDEN';end if;
  perform 1 from public.studkab_requests where id=(select request_id from public.studkab_assistant_jobs where id=p_job) for update;
  select * into j from public.studkab_assistant_jobs where id=p_job and owner_id=p_actor for update;
- if not found or j.provider!='deepseek' or j.state!='prepared' or j.basis is distinct from public.studkab_assistant_snapshot(j.request_id,p_actor)->'basis' then raise exception 'QUOTE_BINDING_CHANGED';end if;
+ if not found or j.basis is distinct from public.studkab_assistant_snapshot(j.request_id,p_actor)->'basis' then raise exception 'QUOTE_BINDING_CHANGED';end if;
  if jsonb_array_length(j.expected_sections)=0 then raise exception 'PLAN_REQUIRED';end if;
- if p_estimated is null or p_estimated not between 1 and 75036 then raise exception 'INVALID_RESERVE';end if;
+ if p_estimated is null or p_estimated not between 1 and 75036 or p_model is null or p_model !~ '^[a-zA-Z0-9_-]{1,120}$' or (j.provider='deepseek' and (p_model!='deepseek-flash' or p_pricing_fingerprint is not null)) or (j.provider!='deepseek' and (p_pricing_fingerprint is null or p_pricing_fingerprint !~ '^[a-f0-9]{64}$')) then raise exception 'INVALID_RESERVE';end if;
+ select * into q from public.studkab_assistant_quotes where job_id=j.id;
+ if found then
+  if (q.estimated_microusd,q.model,q.pricing_fingerprint) is distinct from (p_estimated,p_model,p_pricing_fingerprint) then raise exception 'QUOTE_PRICE_CHANGED';end if;
+  return jsonb_build_object('ok',true,'quoteId',q.id,'estimatedMicrousd',q.estimated_microusd,'confirmed',q.confirmed_at is not null);
+ end if;
+ if j.state!='prepared' then raise exception 'QUOTE_BINDING_CHANGED';end if;
  b=public.studkab_assistant_budget(p_actor);
  if (b->>'remainingMicrousd')::bigint<p_estimated then return jsonb_build_object('ok',false,'reason','budget','remainingMicrousd',(b->>'remainingMicrousd')::bigint);end if;
- select * into q from public.studkab_assistant_quotes where job_id=j.id;
- if found and q.estimated_microusd<>p_estimated then raise exception 'QUOTE_PRICE_CHANGED';end if;
- if not found then insert into public.studkab_assistant_quotes(job_id,actor_id,revision,fingerprint,sections,estimated_microusd) values(j.id,p_actor,j.revision,j.fingerprint,j.expected_sections,p_estimated) returning * into q;end if;
+ insert into public.studkab_assistant_quotes(job_id,actor_id,revision,fingerprint,sections,estimated_microusd,model,pricing_fingerprint) values(j.id,p_actor,j.revision,j.fingerprint,j.expected_sections,p_estimated,p_model,p_pricing_fingerprint) returning * into q;
  return jsonb_build_object('ok',true,'quoteId',q.id,'estimatedMicrousd',q.estimated_microusd,'confirmed',q.confirmed_at is not null);
 end $$;
 create function public.studkab_assistant_confirm_queue(p_job uuid,p_actor uuid,p_quote uuid,p_confirmed_microusd bigint) returns jsonb language plpgsql security invoker set search_path='' as $$
@@ -86,16 +92,16 @@ begin
  update public.studkab_assistant_jobs set state='queued',queued_at=clock_timestamp() where id=j.id;
  return jsonb_build_object('ok',true);
 end $$;
-create function public.studkab_assistant_reserve_dispatch(p_job uuid,p_actor uuid,p_claim uuid,p_estimated bigint,p_model text) returns jsonb language plpgsql security invoker set search_path='' as $$
+create function public.studkab_assistant_reserve_dispatch(p_job uuid,p_actor uuid,p_claim uuid,p_estimated bigint,p_model text,p_pricing_fingerprint text default null) returns jsonb language plpgsql security invoker set search_path='' as $$
 declare j public.studkab_assistant_jobs;b public.studkab_gen_budget;policy public.studkab_gen_policy;a public.studkab_assistant_attempts;available bigint;
 begin
  if not public.studkab_assistant_executor(p_actor) then raise exception 'FORBIDDEN';end if;
  perform 1 from public.studkab_requests where id=(select request_id from public.studkab_assistant_jobs where id=p_job) for update;
  select * into j from public.studkab_assistant_jobs where id=p_job and owner_id=p_actor for update;
  if not found or j.state!='claimed' or j.claim is distinct from p_claim or j.lease_until<=clock_timestamp() then raise exception 'STALE_CLAIM';end if;
- if j.provider!='deepseek' or p_model is distinct from 'deepseek-flash' or p_estimated is null or p_estimated not between 1 and 75036 then raise exception 'INVALID_RESERVE';end if;
+ if p_model is null or p_model !~ '^[a-zA-Z0-9_-]{1,120}$' or (j.provider='deepseek' and (p_model!='deepseek-flash' or p_pricing_fingerprint is not null)) or (j.provider!='deepseek' and (p_pricing_fingerprint is null or p_pricing_fingerprint !~ '^[a-f0-9]{64}$')) or p_estimated is null or p_estimated not between 1 and 75036 then raise exception 'INVALID_RESERVE';end if;
  if jsonb_array_length(j.expected_sections)=0 then raise exception 'PLAN_REQUIRED';end if;
- if not exists(select 1 from public.studkab_assistant_quotes q where q.job_id=j.id and q.actor_id=p_actor and q.confirmed_at is not null and q.estimated_microusd=p_estimated and q.revision=j.revision and q.fingerprint=j.fingerprint and q.sections=j.expected_sections) then raise exception 'PAID_CONFIRMATION_REQUIRED';end if;
+ if not exists(select 1 from public.studkab_assistant_quotes q where q.job_id=j.id and q.actor_id=p_actor and q.confirmed_at is not null and q.estimated_microusd=p_estimated and q.model=p_model and q.pricing_fingerprint is not distinct from p_pricing_fingerprint and q.revision=j.revision and q.fingerprint=j.fingerprint and q.sections=j.expected_sections) then raise exception 'PAID_CONFIRMATION_REQUIRED';end if;
  if j.basis is distinct from public.studkab_assistant_snapshot(j.request_id,p_actor)->'basis' then raise exception 'MATERIALS_CHANGED';end if;
  select * into policy from public.studkab_gen_policy where id;
  select * into b from public.studkab_gen_budget where id for update;
@@ -105,7 +111,7 @@ begin
   return jsonb_build_object('ok',false,'reason','budget','remainingMicrousd',coalesce(available,0));
  end if;
  if not public.studkab_intake_ledger_matches(b.reserved_microusd) then raise exception 'LEDGER_MISMATCH';end if;
- insert into public.studkab_assistant_attempts(job_id,claim,model,reservation_microusd,state) values(j.id,p_claim,p_model,p_estimated,'sent') returning * into a;
+ insert into public.studkab_assistant_attempts(job_id,claim,provider,model,pricing_fingerprint,reservation_microusd,state) values(j.id,p_claim,j.provider,p_model,p_pricing_fingerprint,p_estimated,'sent') returning * into a;
  update public.studkab_gen_budget set reserved_microusd=reserved_microusd+p_estimated where id;
  update public.studkab_assistant_jobs set state='dispatched',started_at=a.started_at,lease_until=clock_timestamp()+interval '4 minutes' where id=j.id;
  return jsonb_build_object('ok',true,'dispatchId',a.dispatch_id,'reservedMicrousd',a.reservation_microusd);
@@ -118,7 +124,7 @@ begin
  if not public.studkab_assistant_executor(p_actor) then raise exception 'FORBIDDEN';end if;
  select * into j from public.studkab_assistant_jobs where id=p_job and owner_id=p_actor for update;
  if not found or j.state!='claimed' or j.claim is distinct from p_claim or j.lease_until<=now() then raise exception 'STALE_CLAIM';end if;
- if j.provider='deepseek' then raise exception 'FINANCIAL_DISPATCH_REQUIRED';end if;
+ raise exception 'FINANCIAL_DISPATCH_REQUIRED';
  if j.basis is distinct from public.studkab_assistant_snapshot(j.request_id,p_actor)->'basis' then raise exception 'MATERIALS_CHANGED';end if;
  update public.studkab_assistant_jobs set state='dispatched',started_at=now(),lease_until=now()+interval '4 minutes' where id=j.id;
  return jsonb_build_object('ok',true,'dispatchId',j.claim);
@@ -127,7 +133,6 @@ end $$;
 create function public.studkab_assistant_financial_transition() returns trigger language plpgsql security invoker set search_path='' as $$
 declare a public.studkab_assistant_attempts;
 begin
- if new.provider!='deepseek' then return new;end if;
  if new.state='completed' and old.state!='completed' then
   select * into a from public.studkab_assistant_attempts where job_id=new.id;
   if not found or new.response->>'dispatchId' is distinct from a.dispatch_id::text then raise exception 'DISPATCH_RECEIPT_REQUIRED';end if;
@@ -151,11 +156,11 @@ begin
  update public.studkab_assistant_jobs set state='unknown',lease_until=null where id=j.id;
  return jsonb_build_object('ok',true);
 end $$;
-create function public.studkab_assistant_claim_next(p_actor uuid) returns jsonb language plpgsql security invoker set search_path='' as $$
+create function public.studkab_assistant_claim_next(p_actor uuid,p_providers text[] default array['deepseek']::text[]) returns jsonb language plpgsql security invoker set search_path='' as $$
 declare candidate record;j public.studkab_assistant_jobs;permit jsonb;
 begin
  if not public.studkab_assistant_executor(p_actor) then raise exception 'FORBIDDEN';end if;
- for candidate in select id,request_id from public.studkab_assistant_jobs where owner_id=p_actor and provider='deepseek' and state in ('queued','claimed','dispatched','completed','returning') order by accepted_at,id loop
+ for candidate in select id,request_id from public.studkab_assistant_jobs where owner_id=p_actor and provider=any(p_providers) and state in ('queued','claimed','dispatched','completed','returning') order by accepted_at,id loop
   -- Consistent request -> job order; both locks skip occupied work.
   perform 1 from public.studkab_requests where id=candidate.request_id for update skip locked;
   if not found then continue;end if;
@@ -174,8 +179,8 @@ begin
  end loop;
  return jsonb_build_object('allowed',false);
 end $$;
-revoke all on function public.studkab_assistant_attempt_immutable(),public.studkab_assistant_financial_transition(),public.studkab_assistant_budget(uuid),public.studkab_assistant_reserve_dispatch(uuid,uuid,uuid,bigint,text),public.studkab_assistant_unknown(uuid,uuid,uuid,uuid),public.studkab_assistant_claim_next(uuid) from public,anon,authenticated;
-grant execute on function public.studkab_assistant_budget(uuid),public.studkab_assistant_reserve_dispatch(uuid,uuid,uuid,bigint,text),public.studkab_assistant_unknown(uuid,uuid,uuid,uuid),public.studkab_assistant_claim_next(uuid) to service_role;
+revoke all on function public.studkab_assistant_attempt_immutable(),public.studkab_assistant_financial_transition(),public.studkab_assistant_budget(uuid),public.studkab_assistant_reserve_dispatch(uuid,uuid,uuid,bigint,text,text),public.studkab_assistant_unknown(uuid,uuid,uuid,uuid),public.studkab_assistant_claim_next(uuid,text[]) from public,anon,authenticated;
+grant execute on function public.studkab_assistant_budget(uuid),public.studkab_assistant_reserve_dispatch(uuid,uuid,uuid,bigint,text,text),public.studkab_assistant_unknown(uuid,uuid,uuid,uuid),public.studkab_assistant_claim_next(uuid,text[]) to service_role;
 
 create function public.studkab_assistant_runner_actor() returns uuid language sql stable security invoker set search_path='' as $$
  select case when count(*)=1 then (array_agg(u.id))[1] else null end from auth.users u where lower(u.email)=(select lower(executor_email) from public.studkab_request_config limit 1)
@@ -232,8 +237,8 @@ end $$;
 revoke all on function public.studkab_assistant_runner_actor(),public.studkab_assistant_fail_claim(uuid,uuid,uuid),public.studkab_assistant_plan_immutable(),public.studkab_assistant_freeze_plan(uuid,uuid,integer,text,jsonb,jsonb) from public,anon,authenticated;
 grant execute on function public.studkab_assistant_runner_actor(),public.studkab_assistant_fail_claim(uuid,uuid,uuid),public.studkab_assistant_freeze_plan(uuid,uuid,integer,text,jsonb,jsonb) to service_role;
 
-revoke all on function public.studkab_assistant_quote_immutable(),public.studkab_assistant_quote(uuid,uuid,bigint),public.studkab_assistant_confirm_queue(uuid,uuid,uuid,bigint) from public,anon,authenticated;
-grant execute on function public.studkab_assistant_quote(uuid,uuid,bigint),public.studkab_assistant_confirm_queue(uuid,uuid,uuid,bigint) to service_role;
+revoke all on function public.studkab_assistant_quote_immutable(),public.studkab_assistant_quote(uuid,uuid,bigint,text,text),public.studkab_assistant_confirm_queue(uuid,uuid,uuid,bigint) from public,anon,authenticated;
+grant execute on function public.studkab_assistant_quote(uuid,uuid,bigint,text,text),public.studkab_assistant_confirm_queue(uuid,uuid,uuid,bigint) to service_role;
 
 create or replace function public.studkab_assistant_return_snapshot(p_job uuid,p_actor uuid) returns jsonb
 language plpgsql security invoker set search_path='' as $$

@@ -672,7 +672,7 @@
       "name": "assistant_shared_budget",
       "status": "pending",
       "note": "Unified assistant implementation; local tests only, not installed in production",
-      "sha256": "575350260a8b0ec9744dea20b794122c94d108719994c20535cd40177b0cad40"
+      "sha256": "2ef0f43824522a13552bef0dbedd7b2314c8c41fd9d3a7f547aad82fa45a5f6e"
     },
     {
       "file": "20261009021521_assistant_notifications.sql",

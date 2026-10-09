@@ -124,11 +124,17 @@ def saved():
     job=json.loads(call(rpc('studkab_assistant_accept',*args)))['jobId']
     return q,job
 
-def completed(q,job):
-    call(rpc('studkab_assistant_queue',job,EXECUTOR))
+def financially_started(q,job):
+    quote=json.loads(call(rpc('studkab_assistant_quote',job,EXECUTOR,5000,'claude-offline','b'*64)))
+    call(rpc('studkab_assistant_confirm_queue',job,EXECUTOR,quote['quoteId'],5000))
     claim=json.loads(call(rpc('studkab_assistant_claim',job,EXECUTOR)))['claim']
-    call(rpc('studkab_assistant_dispatch',job,EXECUTOR,claim))
-    response={'status':'completed','jobId':job,'requestId':q,'provider':'claude','revision':1,'fingerprint':FP,'sections':[{'id':'answer','text':'Synthetic offline output'}]}
+    permit=json.loads(call(rpc('studkab_assistant_reserve_dispatch',job,EXECUTOR,claim,5000,'claude-offline','b'*64)))
+    assert permit['ok'] is True
+    return claim,permit['dispatchId']
+
+def completed(q,job):
+    claim,dispatch=financially_started(q,job)
+    response={'status':'completed','jobId':job,'requestId':q,'provider':'claude','revision':1,'fingerprint':FP,'dispatchId':dispatch,'sections':[{'id':'answer','text':'Synthetic offline output'}]}
     call(rpc('studkab_assistant_complete',job,EXECUTOR,claim,response))
 
 def returning(q,job):
@@ -141,6 +147,7 @@ try:
     sql('create database '+DB_NAME,ADMIN_ENV);created=True
     setup=subprocess.check_output(['node','tests/assistant-budget-fixture.mjs','--print-sql'],text=True,cwd=ROOT,timeout=15)
     sql(setup)
+    sql('update studkab_gen_budget set limit_microusd=10000000,reserved_microusd=0;')
     q,args=request()
     accept=rpc('studkab_assistant_accept',*args)
     race('duplicate acceptance receipt',accept,accept,expect_rejection=False)
@@ -156,11 +163,13 @@ try:
     race('review then delivery locks same current file',rpc('studkab_assistant_review',job,EXECUTOR,HASH),rpc('studkab_r3_deliver',q,HASH),expect_rejection=False)
     q,job=saved();call(returning(q,job))
     race('changed materials cannot borrow existing review','update studkab_requests set revision=2 where id='+lit(q)+';',rpc('studkab_assistant_review',job,EXECUTOR,HASH))
-    q,job=saved();call(rpc('studkab_assistant_queue',job,EXECUTOR));claim=json.loads(call(rpc('studkab_assistant_claim',job,EXECUTOR)))['claim'];call(rpc('studkab_assistant_dispatch',job,EXECUTOR,claim))
-    response={'status':'completed','jobId':job,'requestId':q,'provider':'claude','revision':1,'fingerprint':FP,'sections':[{'id':'answer','text':'Synthetic output'}]}
+    q,job=saved();claim,dispatch=financially_started(q,job)
+    response={'status':'completed','jobId':job,'requestId':q,'provider':'claude','revision':1,'fingerprint':FP,'dispatchId':dispatch,'sections':[{'id':'answer','text':'Synthetic output'}]}
     race('expired dispatch rejects late completion',"update studkab_assistant_jobs set lease_until=clock_timestamp()-interval '1 second' where id="+lit(job)+';',rpc('studkab_assistant_complete',job,EXECUTOR,claim,response))
     # Shared-budget races use disposable policy values, never production limits.
-    sql('update studkab_gen_budget set limit_microusd=10000000;update studkab_gen_policy set temporary_total_microusd=10000;')
+    baseline=int(call('select reserved_microusd from studkab_gen_budget'))
+    attempts=int(call('select count(*) from studkab_assistant_attempts'))
+    sql('update studkab_gen_budget set limit_microusd=10000000;update studkab_gen_policy set temporary_total_microusd='+str(baseline+10000)+';')
     def paid_candidate():
         q,args=request();args[2]='deepseek'
         job=json.loads(call(rpc('studkab_assistant_accept',*args)))['jobId']
@@ -172,9 +181,9 @@ try:
     reserve=rpc('studkab_assistant_reserve_dispatch',j,EXECUTOR,c,7000,'deepseek-flash')
     reserve2=rpc('studkab_assistant_reserve_dispatch',j2,EXECUTOR,c2,7000,'deepseek-flash')
     race('shared policy cap cannot overspend',reserve,reserve2,expect_rejection=False)
-    assert call('select reserved_microusd from studkab_gen_budget')=='7000'
-    assert call('select count(*) from studkab_assistant_attempts')=='1'
-    assert call(rpc('studkab_intake_ledger_matches',7000))=='t'
+    assert int(call('select reserved_microusd from studkab_gen_budget'))==baseline+7000
+    assert int(call('select count(*) from studkab_assistant_attempts'))==attempts+1
+    assert call(rpc('studkab_intake_ledger_matches',baseline+7000))=='t'
     sql('update studkab_gen_policy set temporary_total_microusd=100000;')
     q,j,c=paid_candidate();reserve=rpc('studkab_assistant_reserve_dispatch',j,EXECUTOR,c,7000,'deepseek-flash')
     race('duplicate dispatch claim pays once',reserve,reserve)

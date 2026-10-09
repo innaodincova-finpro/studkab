@@ -1,10 +1,11 @@
 // Unpaid server kit acceptance and durable reads. No inference/network adapters.
 import {ASSISTANTS,collectAssistantBundle,assistantManifest,snapshotJson} from '../_shared/assistant-bundle.mjs';
 import {returnAssistantWord} from '../_shared/assistant-result.mjs';
+import {prepareDirectAssistant} from '../_shared/direct-assistant.mjs';
 import {prepareDeepseekAssistant} from '../_shared/deepseek-assistant.mjs';
 const uuid=v=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v);
 export const ASSISTANT_ACTIONS=['assistant-capabilities','assistant-prepare','assistant-preflight','assistant-start','assistant-state','assistant-review'];
-export function assistantCapabilities(deepseek){return {providers:ASSISTANTS.map(provider=>provider==='deepseek'&&deepseek?{provider,...deepseek}:{provider,available:false,reason:'not_connected'})};}
+export function assistantCapabilities(capabilities){return {providers:ASSISTANTS.map(provider=>({provider,...(capabilities?.[provider]||(provider==='deepseek'&&capabilities?.available!==undefined?capabilities:{available:false,reason:'not_connected'}))}))};}
 export async function deepseekCapability(actor,{rpc,enabled=false,configured=false,probe}){
  let budget;try{budget=await rpc('studkab_assistant_budget',{p_actor:actor});}catch{return {available:false,reason:'budget_unavailable'};}
  if(budget?.budgetAvailable!==true)return {available:false,reason:'budget_exhausted'};
@@ -76,7 +77,7 @@ export async function returnAssistantResult(jobId,actor,response,{rpc,saveResult
   failReturn:({claim})=>rpc('studkab_assistant_fail_return',{p_job:jobId,p_actor:actor,p_claim:claim})
  });
 }
-export async function assistantAction(input,user,{config,rpc,loadRequestFile,saveResult,planSections,sourcePlan,readFile,capability}){
+export async function assistantAction(input,user,{config,rpc,loadRequestFile,saveResult,planSections,sourcePlan,readFile,capability,providerConfig}){
  if(input.action==='assistant-state'){
   if(!uuid(input.id)||!uuid(user?.id)||(input.operation!=null&&!uuid(input.operation)))return {status:400,data:{error:'INVALID_INPUT'}};
   const state=checked(await rpc('studkab_assistant_state',{p_request:input.id,p_actor:user.id,...(input.operation?{p_operation:input.operation}:{})}));
@@ -84,27 +85,36 @@ export async function assistantAction(input,user,{config,rpc,loadRequestFile,sav
  }
  const cfg=await config();
  if(!cfg?.executor_email||String(user?.email||'').toLowerCase()!==cfg.executor_email.toLowerCase())return {status:403,data:{error:'FORBIDDEN'}};
- if(input.action==='assistant-capabilities')return {data:assistantCapabilities(capability?await capability(user.id):null)};
+ if(input.action==='assistant-capabilities')return {data:assistantCapabilities(capability?Object.fromEntries(await Promise.all(ASSISTANTS.map(async p=>[p,await capability(user.id,p)]))):null)};
  if(input.action==='assistant-preflight'||input.action==='assistant-start'){
-  if(input.provider!=='deepseek'||!capability||(await capability(user.id)).available!==true)return {status:409,data:{error:'PROVIDER_NOT_CONNECTED'}};
+  if(!ASSISTANTS.includes(input.provider)||!capability||(await capability(user.id,input.provider)).available!==true)return {status:409,data:{error:'PROVIDER_NOT_CONNECTED'}};
   try{
    if(input.action==='assistant-start'){
     if(!uuid(input.id)||!uuid(input.operation)||input.confirmed!==true||!uuid(input.quoteId)||!Number.isSafeInteger(input.confirmedMicrousd)||input.confirmedMicrousd<1)return {status:409,data:{error:'PAID_CONFIRMATION_REQUIRED'}};
     const current=checked(await rpc('studkab_assistant_state',{p_request:input.id,p_actor:user.id,p_operation:input.operation}));
-    if(current.accepted!==true||!uuid(current.job?.id)||current.job.provider!=='deepseek'||current.job.bindingCurrent!==true)throw Error('QUOTE_BINDING_CHANGED');
+    if(current.accepted!==true||!uuid(current.job?.id)||current.job.provider!==input.provider||current.job.bindingCurrent!==true)throw Error('QUOTE_BINDING_CHANGED');
+    if(input.provider!=='deepseek'){
+     const stored=checked(await rpc('studkab_assistant_return_snapshot',{p_job:current.job.id,p_actor:user.id}));
+     const source=checked(await rpc('studkab_assistant_snapshot',{p_request:input.id,p_actor:user.id}));
+     const bundle=await collectAssistantBundle({...source,provider:input.provider,context:{...source.context,payload:source.request.payload}},{loadRequestFile});
+     if(bundle.fingerprint!==stored.fingerprint)throw Error('MATERIALS_CHANGED');
+     const prompt=await prepareDirectAssistant(bundle,stored.expectedSections,{readFile,config:providerConfig?.(input.provider)});
+     const checkedQuote=checked(await rpc('studkab_assistant_quote',{p_job:current.job.id,p_actor:user.id,p_estimated:prompt.estimatedMicrousd,p_model:prompt.model,p_pricing_fingerprint:prompt.pricingFingerprint}));
+     if(checkedQuote.quoteId!==input.quoteId)throw Error('QUOTE_BINDING_CHANGED');
+    }
     const queued=checked(await rpc('studkab_assistant_confirm_queue',{p_job:current.job.id,p_actor:user.id,p_quote:input.quoteId,p_confirmed_microusd:input.confirmedMicrousd}));
     if(queued.ok!==true)throw Error('QUEUE_NOT_CONFIRMED');
-    return {data:{jobId:current.job.id,duplicate:queued.duplicate===true,state:'queued',queued:true,receipt:{requestId:input.id,provider:'deepseek',operationId:input.operation,revision:current.job.revision,fingerprint:current.job.fingerprint,acceptedAt:current.job.acceptedAt}}};
+    return {data:{jobId:current.job.id,duplicate:queued.duplicate===true,state:'queued',queued:true,receipt:{requestId:input.id,provider:input.provider,operationId:input.operation,revision:current.job.revision,fingerprint:current.job.fingerprint,acceptedAt:current.job.acceptedAt}}};
    }
    const accepted=await prepareAssistant(input,user,{rpc,loadRequestFile,planSections,sourcePlan});
    if(!accepted.planReady)return {status:409,data:{error:'REQUIREMENTS_PLANNING_REQUIRED',receipt:accepted.receipt,jobId:accepted.jobId}};
    if(input.action==='assistant-preflight'){
     const stored=checked(await rpc('studkab_assistant_return_snapshot',{p_job:accepted.jobId,p_actor:user.id}));
     const source=checked(await rpc('studkab_assistant_snapshot',{p_request:input.id,p_actor:user.id}));
-    const bundle=await collectAssistantBundle({...source,provider:'deepseek',context:{...source.context,payload:source.request.payload}},{loadRequestFile});
+    const bundle=await collectAssistantBundle({...source,provider:input.provider,context:{...source.context,payload:source.request.payload}},{loadRequestFile});
     if(bundle.fingerprint!==stored.fingerprint)throw Error('MATERIALS_CHANGED');
-    const prompt=await prepareDeepseekAssistant(bundle,stored.expectedSections,{readFile});
-    const quote=checked(await rpc('studkab_assistant_quote',{p_job:accepted.jobId,p_actor:user.id,p_estimated:prompt.estimatedMicrousd}));
+    const prompt=input.provider==='deepseek'?await prepareDeepseekAssistant(bundle,stored.expectedSections,{readFile}):await prepareDirectAssistant(bundle,stored.expectedSections,{readFile,config:providerConfig?.(input.provider)});
+    const quote=checked(await rpc('studkab_assistant_quote',{p_job:accepted.jobId,p_actor:user.id,p_estimated:prompt.estimatedMicrousd,...(input.provider==='deepseek'?{}:{p_model:prompt.model,p_pricing_fingerprint:prompt.pricingFingerprint})}));
     if(quote.ok!==true)return {status:409,data:{error:'BUDGET_EXHAUSTED',receipt:accepted.receipt,jobId:accepted.jobId}};
     return {data:{...accepted,quoteId:quote.quoteId,priceMicrousd:quote.estimatedMicrousd,requiresConfirmation:true}};
    }

@@ -35,7 +35,7 @@ jobs:
           version: 2.117.0
       - run: npm ci
       - name: Check study and generation
-        run: node --test tests/kit-analysis.test.mjs tests/kit-bench.test.mjs tests/generation-runner.test.mjs tests/assistant-runner.test.mjs tests/deepseek-assistant.test.mjs
+        run: node --test tests/kit-analysis.test.mjs tests/kit-bench.test.mjs tests/generation-runner.test.mjs tests/assistant-runner.test.mjs tests/deepseek-assistant.test.mjs tests/direct-assistant.test.mjs tests/assistant-providers.test.mjs
       - name: Deploy existing function (gateway JWT check stays on)
         run: supabase functions deploy studkab-generation --project-ref dcpthwmuiodrjepifzsd --use-api
         env:

@@ -9,12 +9,12 @@ import {readIntake} from '../studkab-requests/reader-runtime.ts';
 import {loadOriginal} from '../studkab-requests/intake-reading.mjs';
 import {saveOriginal} from '../studkab-requests/original-storage.mjs';
 import {runAssistant} from './assistant-runner.mjs';
-import {probeDeepseekAssistant} from '../_shared/deepseek-assistant.mjs';
+import {createAssistantProviders} from '../_shared/assistant-providers.mjs';
 const base=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const token=Deno.env.get('STUDKAB_PROXY_TOKEN');
 const enabled=Deno.env.get('STUDKAB_GENERATION_ENABLED')==='true';
 // Separate default-off integration flag. Existing queues keep their enablement.
-const assistantEnabled=Deno.env.get('STUDKAB_ASSISTANT_DEEPSEEK_ENABLED')==='true';
+const assistantProviders=createAssistantProviders({get:(name:string)=>Deno.env.get(name),rpc:(name:string,args:unknown)=>db('rpc/'+name,args)});
 async function db(path:string,body?:unknown,method?:string){
  const r=await fetch(base+'/rest/v1/'+path,{method:method||(body===undefined?'GET':'POST'),
  headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'return=representation'},
@@ -56,8 +56,9 @@ Deno.serve(handler({
   // File recovery is unpaid and survives a disabled/disconnected paid provider.
   const recovered=await runAssistant({...deps,recoveryOnly:true});
   if(recovered)return recovered;
-  if(!assistantEnabled||!enabled||!token||!(await probeDeepseekAssistant(token)).verified)return null;
-  return runAssistant(deps);
+  const ready=await assistantProviders.ready(actor);
+  if(!ready.providers.length)return null;
+  return runAssistant({...deps,...ready});
  },
  // Share the existing minute schedule without starving ordinary generation.
  // Database policy is a second, independent fail-closed numerical budget gate.

@@ -1,9 +1,10 @@
 // Runs only inside the authenticated existing cron worker. No new schedule.
+import {dispatchDirectAssistant} from '../_shared/direct-assistant.mjs';
 import {dispatchDeepseekAssistant} from '../_shared/deepseek-assistant.mjs';
 import {verifyAssistantManifest,digest} from '../_shared/assistant-bundle.mjs';
 import {returnAssistantResult} from '../studkab-requests/assistant-service.mjs';
-export async function runAssistant({actor,rpc,loadRequestFile,readFile,saveResult,proxyToken,fetchProxy,recoveryOnly=false}){
- const c=await rpc(recoveryOnly?'studkab_assistant_recover_next':'studkab_assistant_claim_next',{p_actor:actor});
+export async function runAssistant({actor,rpc,loadRequestFile,readFile,saveResult,proxyToken,fetchProxy,fetchProvider,providerConfigs={},providers=['deepseek'],recoveryOnly=false}){
+ const c=await rpc(recoveryOnly?'studkab_assistant_recover_next':'studkab_assistant_claim_next',{p_actor:actor,...(recoveryOnly?{}:{p_providers:providers})});
  if(c?.recovery===true){
   const stored=await rpc('studkab_assistant_return_snapshot',{p_job:c.jobId,p_actor:actor});
   try{await returnAssistantResult(c.jobId,actor,stored.response,{rpc,saveResult});return {status:'assistant_returned',job:c.jobId};}
@@ -22,9 +23,10 @@ export async function runAssistant({actor,rpc,loadRequestFile,readFile,saveResul
    if(!(bytes instanceof Uint8Array)||bytes.length!==f.size||await digest(bytes)!==f.hash)throw Error('DAMAGED_ATTACHMENT');
    bundle.files.push({...f,bytes});
   }
-  response=await dispatchDeepseekAssistant(bundle,c.jobId,c.claim,c.expectedSections,{readFile,proxyToken,fetchProxy,
-   reserveAndDispatch:async({estimatedMicrousd,model})=>{
-    const permit=await rpc('studkab_assistant_reserve_dispatch',{p_job:c.jobId,p_actor:actor,p_claim:c.claim,p_estimated:estimatedMicrousd,p_model:model});
+  const dispatch=bundle.provider==='deepseek'?dispatchDeepseekAssistant:dispatchDirectAssistant;
+  response=await dispatch(bundle,c.jobId,c.claim,c.expectedSections,{readFile,proxyToken,fetchProxy,fetchProvider,config:providerConfigs[bundle.provider],
+   reserveAndDispatch:async({estimatedMicrousd,model,pricingFingerprint})=>{
+    const permit=await rpc('studkab_assistant_reserve_dispatch',{p_job:c.jobId,p_actor:actor,p_claim:c.claim,p_estimated:estimatedMicrousd,p_model:model,...(bundle.provider==='deepseek'?{}:{p_pricing_fingerprint:pricingFingerprint})});
     if(permit?.ok===true)dispatched=permit.dispatchId;
     return permit;
    }});
