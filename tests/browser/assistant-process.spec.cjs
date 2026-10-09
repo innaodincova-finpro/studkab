@@ -26,7 +26,7 @@ for(const width of [390,1440])test('unread originals open all three chats and ex
  }
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','passport-approve','reading-start'].includes(c.action)))).toBe(false);
 });
-async function seed(page){
+async function seed(page,choose=true){
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>QA.switchUser('assistant-process-synthetic'));
  await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy&&!!window.StudAssistantExecutor&&!!window.StudViewState)).toBe(true);
@@ -47,7 +47,7 @@ async function seed(page){
   const x={id:'assistant-process',requestNumber:101,route3:true,r3Loaded:true,r3ConfirmedAt:stamp,r3:{takenAt:stamp},student:'Учебный студент',topic:'Демонстрационное задание',univ:'Учебный университет',status:'work',format:{},attachments:[],passports:[],note:'Исходная заметка'};
   D.items=[x];r3Seen.add(x);tab='list';openId=x.id;render();
  },stamp);
- await page.locator('[data-r3-provider]').selectOption('claude');await expect(page.locator('.r3-assistant [role="status"]').first()).toHaveText('Помощник не подключён');
+ if(choose){await page.locator('[data-r3-provider]').selectOption('claude');await expect(page.locator('.r3-assistant [role="status"]').first()).toHaveText('Помощник не подключён');}
 }
 for(const width of [390,1440])test('rich R3 route keeps context and equal unavailable providers at '+width,async({page})=>{
  await page.setViewportSize({width,height:1000});await seed(page);
@@ -263,7 +263,7 @@ for(const width of [390,1440])test('finance screen reads supplier data separatel
  await expect(dialog.getByRole('link',{name:'Открыть кабинет DeepSeek'})).toHaveAttribute('href','https://platform.deepseek.com/');await expect(dialog.getByRole('link',{name:'Открыть кабинет ChatGPT'})).toHaveAttribute('href','https://platform.openai.com/settings/organization/billing/overview');await expect(dialog.getByRole('link',{name:'Открыть кабинет Claude'})).toHaveAttribute('href','https://platform.claude.com/settings/billing');
  await dialog.getByRole('button',{name:'Обновить данные',exact:true}).click();await expect(dialog.getByRole('button',{name:'Обновить данные',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>assistantCalls.filter(c=>c.action==='assistant-finances').length)).toBe(2);expect(await page.evaluate(()=>assistantCalls.filter(c=>c.action==='assistant-capabilities').length)).toBeGreaterThanOrEqual(3);expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-prepare','assistant-preflight'].includes(c.action)))).toBe(false);
- const buttons=await dialog.locator('button,a.btn').evaluateAll(elements=>elements.map(e=>e.getBoundingClientRect().height));expect(buttons.filter(h=>h>30).every(h=>h>=44)).toBe(true);
+ const buttons=await dialog.locator('button,a.btn').evaluateAll(elements=>elements.map(e=>({text:e.textContent.trim(),height:e.getBoundingClientRect().height})));expect(buttons.every(b=>b.height>=44),JSON.stringify(buttons)).toBe(true);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await dialog.getByRole('button',{name:'Вернуться к заявке',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
@@ -282,6 +282,6 @@ test('finance entry in More works without a request and account change discards 
  await page.evaluate(()=>resolveFinance({schema:1,checkedAt:new Date().toISOString(),application:{status:'unknown'},providers:[]}));await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 test('a new request does not choose Claude automatically',async({page})=>{
- await seed(page);await page.evaluate(()=>{r3PreparationChoices.clear();render();});await expect(page.locator('[data-r3-provider]')).toHaveValue('');await expect(page.locator('[data-act="r3-assistant-run"]')).toBeDisabled();await expect(page.locator('[data-act="r3-assistant-chat"]')).toBeDisabled();
+ await seed(page,false);await expect(page.locator('[data-r3-provider]')).toHaveValue('');await expect(page.locator('[data-act="r3-assistant-run"]')).toBeDisabled();await expect(page.locator('[data-act="r3-assistant-chat"]')).toBeDisabled();
  await page.locator('[data-r3-provider]').selectOption('chatgpt');await expect(page.locator('[data-act="r3-assistant-chat"]')).toBeEnabled();expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight','assistant-prepare'].includes(c.action)))).toBe(false);
 });
