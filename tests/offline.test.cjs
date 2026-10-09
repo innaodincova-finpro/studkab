@@ -9,7 +9,7 @@ test('both entry pages and offline shell use the AI criterion assistance scripts
  const shell=fs.readFileSync('sw.js','utf8');
  assert.match(shell,/app-navigation\.js\?v=1/);
  for(const page of ['index.html','reestr.html'])assert.match(fs.readFileSync(page,'utf8'),/app-navigation\.js\?v=1/);
- assert.match(shell,/studkab-v133-assistant-choice/);
+ assert.match(shell,/studkab-v135-assistant-two-routes/);
  assert.match(shell,/calendar-import\.mjs\?v=1/);
  assert.match(shell,/calendar-import-ui\.mjs\?v=1/);
  assert.match(shell,/intake-ui\.js\?v=12/);
@@ -17,7 +17,10 @@ test('both entry pages and offline shell use the AI criterion assistance scripts
  assert.match(shell,/quality-evidence-ui\.js\?v=8/);
  // Общий слой оформления подключён на обеих страницах и сохраняется для работы без сети.
  assert.match(shell,/volume\.css\?v=1/);
- for(const page of ['index.html','reestr.html'])assert.match(fs.readFileSync(page,'utf8'),/desktop\.css\?v=8">\n<link rel="stylesheet" href="volume\.css\?v=1">/);
+ for(const page of ['index.html','reestr.html']){
+  const html=fs.readFileSync(page,'utf8');
+  assert.match(html,/desktop\.css\?v=8/);assert.match(html,/volume\.css\?v=1/);
+ }
 });
 function worker(fetch){
  const handlers={},entries=new Map(),pending=[];

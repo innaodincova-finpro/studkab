@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - supabase/functions/studkab-push/**
+      - supabase/functions/studkab-requests/request-email.mjs
       - .github/workflows/deploy-studkab-dialog-push.yml
 permissions:
   contents: read

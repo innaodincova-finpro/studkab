@@ -14,6 +14,7 @@ async function rest(query: string, method='GET', body?: unknown) {
   return await response.json();
 }
 const db = {
+  async link(payload: unknown) { return rpc('studkab_telegram_link_consume',payload); },
   async action(payload: unknown) { return rpc('studkab_telegram_registered_action',payload); },
   async context(payload: unknown) { return rpc('studkab_telegram_dialog_context_save',payload); },
   async get() { return (await rest('id=eq.true&select=*'))[0]; },

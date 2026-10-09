@@ -139,3 +139,11 @@ test('unpaid registered reading requires both machine authorization and cron tok
  assert.equal((await call('Bearer user','synthetic-cron')).status,401);assert.equal((await call('Bearer synthetic-service','wrong')).status,401);assert.equal(reads,0);
  assert.equal((await(await call('Bearer synthetic-service','synthetic-cron')).json()).status,'registered_read_ready');assert.equal(reads,1);assert.equal(paid,0);
 });
+test('assistant priority alternates without replacing ordinary work or starving idle queues',async()=>{
+ let assistant=0,ordinary=0,priority=false;
+ const h=handler({authorize:async()=>true,config:async()=>({cron_token:'test-only'}),ready:()=>true,assistantPriority:()=>priority,
+ processAssistant:async()=>{assistant++;return {status:'assistant_returned'}},rpc:async n=>{ordinary++;return n.endsWith('_claim')?claim:'done'},provider:async()=>({complete:true,text:'Saved'})});
+ const request=()=>h(new Request('https://internal',{method:'POST',headers:{'X-Studkab-Runner':'test-only'}}));
+ assert.equal((await(await request()).json()).status,'done');assert.equal(assistant,0);assert.equal(ordinary,3);
+ priority=true;assert.equal((await(await request()).json()).status,'assistant_returned');assert.equal(ordinary,3);assert.equal(assistant,1);
+});

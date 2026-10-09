@@ -1,7 +1,7 @@
 import {sameSecret} from '../_shared/secret-equal.mjs';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
-export function handler({config,rpc,provider,ready,authorize,readiness,prepare,failClaim,processIntake}) {
+export function handler({config,rpc,provider,ready,authorize,readiness,prepare,failClaim,processIntake,processAssistant,assistantPriority=()=>false}) {
  return async req=>{
   if(req.method!=='POST')return reply({error:'METHOD'},405);
   // Fail closed before reading configuration or claiming any work.
@@ -19,10 +19,18 @@ export function handler({config,rpc,provider,ready,authorize,readiness,prepare,f
   if(processIntake){
    try{const intake=await processIntake();if(intake)return reply(intake);}catch{return reply({status:'intake_unavailable'},503);}
   }
+  if(processAssistant&&assistantPriority()){
+   try{const a=await processAssistant();if(a)return reply(a);}catch{/* Ordinary queue retains its schedule. */}
+  }
   if(!ready())return reply({status:'disabled',error:'PROVIDER_NOT_CONFIGURED'},503);
   let c;
   try{c=await rpc('studkab_gen_claim',{});}catch{return reply({error:'CLAIM_UNAVAILABLE'},503);}
-  if(!c)return reply({status:'idle'});
+  if(!c){
+   if(processAssistant&&!assistantPriority()){
+    try{const a=await processAssistant();if(a)return reply(a);}catch{return reply({status:'assistant_unavailable'},503);}
+   }
+   return reply({status:'idle'});
+  }
   if(prepare){
    try{c=await prepare(c);}catch(e){
     const code=['CONTEXT_TOO_BIG','REVIEW_FIRST_INVALID'].includes(e.message)?e.message:'PREPARATION_UNAVAILABLE';

@@ -54,6 +54,14 @@ export function handler({token, db, telegram, now=()=>Date.now()}) {
       }
       const m = update?.message;
       if (!m || m.chat?.type !== 'private' || !Number.isSafeInteger(m.chat.id) || m.chat.id <= 0 || m.from?.id !== m.chat.id || m.from?.is_bot) return json({ok:true});
+      const personalLink=typeof m.text==='string'&&m.text.match(/^\/start(?:@Studkab_Requests_bot)?\s+link_([a-f0-9]{64})\s*$/i);
+      if(personalLink){
+        const setup=await db.get();
+        if(!setup?.installed||typeof db.link!=='function')return json({error:'Setup incomplete'},503);
+        const linked=await db.link({p_hash:await digest(personalLink[1].toLowerCase()),p_chat:m.chat.id});
+        await telegram('sendMessage',{chat_id:m.chat.id,text:linked===true?'Telegram подключён к вашему кабинету.':'Ссылка недействительна или уже использована. Создайте новую ссылку в кабинете.'});
+        return json({ok:true});
+      }
       const command = typeof m.text === 'string' && m.text.match(/^\/start(?:@Studkab_Requests_bot)?(?:\s+(bind_[A-Za-z0-9_-]{43}))?\s*$/i);
       if (!command){
         const row=await db.get();

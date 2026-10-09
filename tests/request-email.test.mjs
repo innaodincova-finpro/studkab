@@ -91,3 +91,54 @@ test('cron records email independently; missing provider never claims email',asy
  const result=await (await app(req())).json();assert.equal(result.email.accepted,1);assert.equal(result.sent,0);
  assert.equal(calls.at(-1).body.p_message_id,'provider-id');
 });
+
+test('SMTP submission on 587 upgrades with STARTTLS before credentials and repeats EHLO on TLS',async()=>{
+ const plainWrites=[],tlsWrites=[];let upgraded=false,closed=0;
+ const transport=(replies,writes,plaintext=false)=>({
+  read:async bytes=>{assert.equal(plaintext&&upgraded,false,'old TCP channel cannot be reused');const reply=replies.shift();if(!reply)return null;const data=new TextEncoder().encode(reply+'\r\n');bytes.set(data);return data.length;},
+  write:async bytes=>{assert.equal(plaintext&&upgraded,false);writes.push(new TextDecoder().decode(bytes));return bytes.length;},
+  close:()=>closed++
+ });
+ const plain=transport(['220 ready','250-smtp.example.test\r\n250 STARTTLS','220 ready for TLS'],plainWrites,true);
+ const secure=transport(['250 AUTH LOGIN','334 username','334 password','235 authenticated','250 sender','250 recipient','354 go ahead','250 accepted'],tlsWrites);
+ const result=await sendRequestEmail({request_id:id,number:7},{...settings,port:587,connect:async()=>plain,startTls:async conn=>{assert.equal(conn,plain);assert.deepEqual(plainWrites,['EHLO studkab.local\r\n','STARTTLS\r\n']);upgraded=true;return secure;}});
+ assert.deepEqual(result,{status:'accepted'});assert.equal(closed,1);
+ assert.equal(tlsWrites[0],'EHLO studkab.local\r\n');assert.equal(tlsWrites[1],'AUTH LOGIN\r\n');
+ assert.ok(!plainWrites.some(x=>x.includes(btoa(settings.username))||x.includes(btoa(settings.password))));
+});
+
+test('SMTP 587 never sends credentials if STARTTLS is absent, refused, malformed or cannot be verified',async()=>{
+ for(const [replies,expected] of [
+  [['220 ready','250 AUTH LOGIN'],'failed'],
+  [['220 ready','250 STARTTLS','454 TLS unavailable'],'pending'],
+  [['220 ready','250 STARTTLS','220 ready\r\n250 injected plaintext'],'pending'],
+  [['220 ready','250 STARTTLS','220 ready'],'pending']
+ ]){
+  const writes=[];let upgrades=0;
+  const conn={read:async bytes=>{const reply=replies.shift();if(!reply)return null;const data=new TextEncoder().encode(reply+'\r\n');bytes.set(data);return data.length;},write:async bytes=>{writes.push(new TextDecoder().decode(bytes));return bytes.length;},close:()=>{}};
+  assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,port:587,connect:async()=>conn,startTls:async()=>{upgrades++;throw Error('certificate verification failed');}}),{status:expected});
+  assert.ok(writes.every(x=>!x.includes('AUTH LOGIN')&&!x.includes(btoa(settings.username))&&!x.includes(btoa(settings.password))));
+  assert.ok(upgrades<=1);
+ }
+});
+
+test('SMTP preserves fragmented replies and partial writes; only the final acceptance confirms email',async()=>{
+ const chunks=['220 re','ady\r\n','250-first\r\n250 ','AUTH LOGIN\r\n','334 user\r\n','334 pass\r\n','235 ok\r\n','250 sender\r\n','250 recipient\r\n','354 data\r\n','250 accept','ed\r\n'],written=[];
+ const conn={read:async bytes=>{const chunk=chunks.shift();if(!chunk)return null;const data=new TextEncoder().encode(chunk);bytes.set(data);return data.length;},write:async bytes=>{const part=bytes.subarray(0,Math.min(bytes.length,3));written.push(new TextDecoder().decode(part));return part.length;},close:()=>{}};
+ assert.deepEqual(await sendRequestEmail({request_id:id,number:7},{...settings,connect:async()=>conn}),{status:'accepted'});
+ assert.ok(written.join('').includes('RCPT TO:<executor@example.test>\r\n'));
+});
+
+test('SMTP deadline closes stalled and late transports, without authenticating or reporting acceptance',async(t)=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let lateResolve,closed=0;
+ const sending=sendRequestEmail({request_id:id,number:7},{...settings,connect:()=>new Promise(resolve=>{lateResolve=resolve;})});
+ await Promise.resolve();t.mock.timers.tick(10000);
+ assert.deepEqual(await sending,{status:'pending'});
+ lateResolve({close:()=>closed++});await Promise.resolve();await Promise.resolve();assert.equal(closed,1);
+ const stalled={read:()=>new Promise(()=>{}),write:()=>{throw Error('must not authenticate');},close:()=>closed++};
+ const stalledSend=sendRequestEmail({request_id:id,number:7},{...settings,connect:async()=>stalled});
+ // Wait for the connection to be assigned and its read to start.
+ for(let n=0;n<8;n++)await Promise.resolve();
+ t.mock.timers.tick(10000);assert.deepEqual(await stalledSend,{status:'pending'});assert.equal(closed,2);
+});

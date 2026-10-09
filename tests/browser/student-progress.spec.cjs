@@ -58,3 +58,74 @@ test('Home leads to «Отправить задание»; the own-work window o
  const kinds=await page.locator('#nType option').allTextContents();
  expect(kinds.slice(0,2)).toEqual(['Практические задания','Лабораторная работа']);expect(kinds).toContain('Курсовая работа');expect(kinds).toContain('Другое');
 });
+
+test('STATE-01 taken R3 request stays neutral and status refresh preserves feedback',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  const w={id:'state-r3',topic:'Проверка состояния',deadline:'2026-11-15',format:{workType:'Практическая работа'},structure:emptyStructure(),req:{id:'state-r3',serverId:'11111111-1111-4111-8111-111111111111',number:1,route:'r3'}};
+  D.works=[w];window.stateReads=0;
+  Oblako.requestApi=async body=>{
+   if(body.action==='student-progress')return {route:'r3',stage:'r3_in_work',openQuestions:0,work:{takenAt:'2026-10-09T09:00:00Z',returnedAt:null,delivered:null,downloadedAt:null,handedAt:null}};
+   if(body.action==='assistant-state'){stateReads++;return {job:null};}
+   return {question:0};
+  };
+  go('works',w.id);
+ });
+ await expect(page.locator('[data-student-progress]')).toContainText('Задание у исполнителя');
+ await expect(page.locator('[data-r3-route]')).not.toContainText('Работа выполняется');
+ await page.evaluate(()=>{
+  r3Forms['state-r3']=true;r3Drafts['state-r3']='Сохранить замечания';
+  document.querySelector('[data-r3-route]').innerHTML=r3ReturnForm(work('state-r3'));
+ });
+ const remarks=page.locator('[data-r3-comment]');
+ await remarks.fill('Замечания ещё не отправлены');await remarks.focus();
+ await page.evaluate(()=>refreshStudentProgress());
+ await expect.poll(()=>page.evaluate(()=>stateReads)).toBeGreaterThan(1);
+ await expect(remarks).toHaveValue('Замечания ещё не отправлены');await expect(remarks).toBeFocused();
+});
+
+test('STATE-02 a delayed former account response cannot repaint another request',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  const w={id:'owner-r3',topic:'Проверка доступа',format:{},structure:emptyStructure(),req:{serverId:'11111111-1111-4111-8111-111111111111',number:1,route:'r3'}};
+  D.works=[w];window.testOwner='old-account';Oblako.identity=()=>testOwner;
+  Oblako.requestApi=body=>body.action==='student-progress'?new Promise(resolve=>window.finishOldRead=resolve):Promise.resolve({job:null,question:0});
+  go('works',w.id);
+ });
+ await page.evaluate(()=>{testOwner='new-account';go('today');finishOldRead({route:'r3',stage:'r3_ready',result:{name:'old-private.docx',size:10,at:'2026-10-09T10:00:00Z'}});});
+ await expect(page.locator('#page')).not.toContainText('old-private.docx');
+ expect(await page.evaluate(()=>r3Last['owner-r3']?.result)).toBeUndefined();
+});
+
+test('UI-04 same-view refresh keeps profile drafts and folds without saving them',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>go('more'));
+ const name=page.getByRole('textbox',{name:'Фамилия, имя, отчество',exact:true});
+ const original=await page.evaluate(()=>D.settings.name);
+ await name.fill('Ещё не сохранено');await name.focus();
+ await page.evaluate(()=>{document.querySelectorAll('.profile-fold')[1].open=true;render();});
+ await expect(name).toHaveValue('Ещё не сохранено');await expect(name).toBeFocused();
+ expect(await page.evaluate(()=>D.settings.name)).toBe(original);
+ expect(await page.locator('.profile-fold').nth(1).evaluate(el=>el.open)).toBe(true);
+});
+
+test('STATE-01 account switch clears already observed file metadata and feedback drafts',async({page})=>{
+ await page.goto('http://127.0.0.1:4173/index.html');
+ await page.evaluate(()=>{
+  window.cacheOwner='previous-account';Oblako.identity=()=>cacheOwner;
+  const w={id:'same-local-work',topic:'Проверка владельца',deadline:'2026-11-15',format:{workType:'Практическая работа'},structure:emptyStructure(),req:{serverId:'11111111-1111-4111-8111-111111111111',number:1,route:'r3'}};
+  D.works=[w];Oblako.requestApi=async body=>{
+   if(cacheOwner==='next-account')return new Promise(()=>{});
+   if(body.action==='student-progress')return {route:'r3',stage:'r3_ready',result:{name:'Файл_предыдущего_аккаунта.docx',size:1024,at:'2026-10-09T09:00:00Z'}};
+   if(body.action==='assistant-state')return {job:null};return {question:0};
+  };go('works',w.id);
+ });
+ await expect(page.locator('[data-r3-ready]')).toContainText('Файл предыдущего аккаунта');
+ await page.evaluate(()=>{
+  r3Drafts['same-local-work']='Приватный черновик';cacheOwner='next-account';
+  D.works[0].req.serverId='22222222-2222-4222-8222-222222222222';render();
+ });
+ await expect(page.locator('#page')).not.toContainText('Файл предыдущего аккаунта');
+ expect(await page.evaluate(()=>r3Last['same-local-work'])).toBeUndefined();
+ expect(await page.evaluate(()=>r3Drafts['same-local-work'])).toBeUndefined();
+});

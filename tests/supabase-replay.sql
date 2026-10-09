@@ -42,7 +42,16 @@ begin
     'studkab_results',
     'studkab_test_request_grants',
     'studkab_test_deliveries',
-    'studkab_telegram_setup'
+    'studkab_telegram_setup',
+    'studkab_assistant_jobs',
+    'studkab_assistant_operations',
+    'studkab_assistant_events',
+    'studkab_assistant_attempts',
+    'studkab_assistant_quotes',
+    'studkab_assistant_plans',
+    'studkab_telegram_accounts',
+    'studkab_telegram_links',
+    'studkab_process_notifications'
   ]) as expected(name)
   where to_regclass('public.' || name) is null;
 
@@ -65,11 +74,11 @@ begin
     and c.relkind = 'r'
     and c.relname like 'studkab_%';
 
-  if table_count <> 58 then
-    raise exception 'Expected 58 STUDKAB tables, found %', table_count;
+  if table_count <> 67 then
+    raise exception 'Expected 67 STUDKAB tables, found %', table_count;
   end if;
-  if rls_count <> 58 then
-    raise exception 'RLS enabled on only % of 58 STUDKAB tables', rls_count;
+  if rls_count <> 67 then
+    raise exception 'RLS enabled on only % of 67 STUDKAB tables', rls_count;
   end if;
   if to_regclass('public.studkab_request_push_events') is null then
     raise exception 'Request push outbox is missing';

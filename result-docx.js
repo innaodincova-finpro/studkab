@@ -262,4 +262,4 @@ function buildDocx(w, chapters){
 
 
 global.ResultDocx=buildDocx;
-})(window);
+})(typeof window === 'object' ? window : globalThis);

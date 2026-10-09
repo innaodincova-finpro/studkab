@@ -119,6 +119,13 @@ export default {
     try { raw = await readBody(request); }
     catch (e) { return json({error: e.message === 'TOO_BIG' ? 'TOO_BIG' : 'BAD_REQUEST'}, 413, cors); }
     try { body = JSON.parse(raw); } catch { return json({error: 'BAD_JSON'}, 400, cors); }
+    // Authenticated, unpaid readiness proof. Never test supplier credentials by
+    // sending a model prompt, and never expose the credentials themselves.
+    if (body?.action === 'capabilities') {
+      const configuredLimit = Number(env.MAX_TOKENS);
+      const maxOutputTokens = Number.isFinite(configuredLimit) && configuredLimit >= 100 ? Math.min(Math.floor(configuredLimit), MAX_OUTPUT) : MAX_OUTPUT;
+      return json({schema:1,provider:'deepseek',model:'deepseek-flash',configured:!!env.DEEPSEEK_KEY,maxOutputTokens},200,cors);
+    }
     if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.system !== 'string' || typeof body.user !== 'string') return json({error: 'BAD_REQUEST'}, 400, cors);
     if (body.system.length + body.user.length > MAX_CONTEXT) return json({error: 'CONTEXT_TOO_BIG', max_characters: MAX_CONTEXT}, 413, cors);
     const provider = String(body.provider || 'deepseek');
