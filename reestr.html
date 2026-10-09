@@ -1662,10 +1662,10 @@ function r3Projection(x){
  return StudAssistantExecutor.executorProjection(x,session?session.state:{});
 }
 function r3AssistantChoice(x){
- var id=esc(x.id),session=r3AutomaticSession(x),state=session&&session.state,h='<div class="r3-assistant"><h4>Подготовить работу</h4><div class="r3-assistant-options" role="group" aria-label="Помощники для подготовки">';
+ var id=esc(x.id),session=r3AutomaticSession(x),state=session&&session.state,legacy=r3Projection(x).legacyChatAvailable,h='<div class="r3-assistant"><h4>Подготовить работу</h4><div class="r3-assistant-options" role="group" aria-label="Помощники для подготовки">';
  [['claude','Claude'],['chatgpt','ChatGPT / Codex'],['deepseek','DeepSeek']].forEach(function(a){
-  var cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===a[0];}),available=!!(cap&&cap.available),blocked=!available||state.busy||state.unknown||state.stale;
-  h+='<div class="r3-assistant-option"><b>'+esc(a[1])+'</b><button type="button" class="chip" data-act="r3-assistant-run" data-method="'+a[0]+'" data-id="'+id+'"'+(blocked?' disabled':'')+'>'+esc(state&&state.busy&&state.provider===a[0]?'Отправляем…':'Через API')+'</button><small>'+esc(available?'Доступен':cap?({budget_exhausted:'Лимит подготовки исчерпан',budget_unavailable:'Лимит пока не подтверждён',not_connected:'Подключение не подтверждено',worker_disabled:'Подготовка отключена',worker_unverified:'Подключение не проверено'}[cap.reason]||'Подготовка недоступна'):'Доступность не проверена')+'</small><button type="button" class="chip" data-act="r3-assistant-chat" data-method="'+a[0]+'" data-id="'+id+'">Через чат</button></div>';
+  var cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===a[0];}),available=!!(cap&&cap.available),blocked=legacy||!available||state.busy||state.unknown||state.stale;
+  h+='<div class="r3-assistant-option"><b>'+esc(a[1])+'</b><button type="button" class="chip" data-act="r3-assistant-run" data-method="'+a[0]+'" data-id="'+id+'"'+(blocked?' disabled':'')+'>'+esc(state&&state.busy&&state.provider===a[0]?'Отправляем…':'Через API')+'</button><small>'+esc(legacy?'Сначала нужно подтвердить состояние прежней подготовки':available?'Доступен':cap?({budget_exhausted:'Лимит подготовки исчерпан',budget_unavailable:'Лимит пока не подтверждён',not_connected:'Подключение не подтверждено',worker_disabled:'Подготовка отключена',worker_unverified:'Подключение не проверено'}[cap.reason]||'Подготовка недоступна'):'Доступность не проверена')+'</small><button type="button" class="chip" data-act="r3-assistant-chat" data-method="'+a[0]+'" data-id="'+id+'">Через чат</button></div>';
  });
  h+='</div><p class="hint">Через чат: вы прикрепляете комплект и возвращаете результат в заявку. Через API: автоматическая подготовка с отдельной оплатой и подтверждением стоимости.</p>';
  if(state&&state.message)h+='<p class="r3-assistant-state" role="status" aria-live="polite">'+esc(state.message)+'</p>';
@@ -1674,7 +1674,7 @@ function r3AssistantChoice(x){
 }
 async function refreshR3Automatic(x){var session=x&&r3AutomaticSession(x);if(session)await session.refresh();}
 async function r3StartAssistant(x,provider){
- var session=x&&r3AutomaticSession(x);if(!session||session.state.busy||session.state.unknown)return;
+ var session=x&&r3AutomaticSession(x);if(!session||session.state.busy||session.state.unknown||r3Projection(x).legacyChatAvailable)return;
  var cap=(session.state.capabilities||[]).find(function(c){return c.provider===provider;});if(!cap||!cap.available)return;
  var owner=KEY,identity=Oblako.identity(),quote=await session.preflight(provider);
  if(!quote||KEY!==owner||Oblako.identity()!==identity||!item(x.id))return;
@@ -1753,7 +1753,7 @@ function r3Card(x,route){
  if(x.r3LoadError)return card('<h3>Не удалось загрузить заявку</h3><p role="status">Проверьте соединение и повторите загрузку.</p><button type="button" class="btn" data-act="r3-retry-load" data-id="'+id+'">Повторить загрузку</button>','workflow-next');
  var title=w.title,copy=w.copy,projection=r3Projection(x);
  var claudeBusy=c&&!c.attachedAt&&!c.error;
- if(w.step===3&&!w.rework&&!r.result){title=projection.label;copy=projection.state==='kit_prepared'?'Начало подготовки ещё не подтверждено.':projection.state==='queued'?'Начало подготовки ещё не подтверждено.':projection.state==='dispatched'?'Готовый файл появится здесь.':projection.state==='manual_work'?'Выберите способ подготовки или выполните работу самостоятельно.':'Проверьте состояние заявки.';}
+ if(w.step===3&&!w.rework&&!r.result){title=projection.label;copy=projection.legacyChatAvailable?'Начало подготовки ещё не подтверждено. Можно подготовить работу через чат и прикрепить готовый файл.':projection.state==='kit_prepared'?'Начало подготовки ещё не подтверждено.':projection.state==='queued'?'Начало подготовки ещё не подтверждено.':projection.state==='dispatched'?'Готовый файл появится здесь.':projection.state==='manual_work'?'Выберите способ подготовки или выполните работу самостоятельно.':'Проверьте состояние заявки.';}
  if(w.step===3&&r.result&&!r.delivered){title='Файл подготовлен';copy='Проверьте работу перед передачей студенту.';}
  if(c&&c.error)copy='Не удалось подтвердить результат подготовки. Проверьте состояние.';
  var h=route?'<div class="r3eyebrow">Шаг '+w.step+' из 5 · '+esc(r3CurrentLabel(x))+(w.rework?' · доработка № '+esc(w.rework):'')+'</div><h3 class="r3h">'+esc(title)+'</h3><p class="workflow-copy">'+esc(copy)+'</p>'
@@ -1767,7 +1767,7 @@ function r3Card(x,route){
  if(vers.length&&(w.rework||vers.length>1))h+='<p class="hint r3-wrap">'+vers.map(function(v){return 'Версия '+v.n+' передана '+esc(r3When(v.at))+': '+esc(v.name);}).join('<br>')+'</p>';
  var base=[['r3-bundle','Скачать задание (архив)'],['executor-clarifications','Задать вопрос студенту']];
  if(!x.r3Loaded)return card(h+'<p role="status">Загружаем заявку…</p><div class="skel" aria-hidden="true"><i></i><i></i><i></i></div>','workflow-next');
- var chosen=r3Assistant(x);if((w.step<4||w.rework)&&!r.result&&!['queued','dispatched','return_pending'].includes(projection.state))h+=r3AssistantChoice(x);
+ var chosen=r3Assistant(x);if((w.step<4||w.rework)&&!r.result&&(projection.legacyChatAvailable||!['queued','dispatched','return_pending'].includes(projection.state)))h+=r3AssistantChoice(x);
  if(['queued','dispatched','unknown','return_pending'].includes(projection.state))h+='<button type="button" class="mini r3-state-refresh" data-act="r3-assistant-refresh" data-id="'+id+'">Проверить состояние</button>';
  if(w.step<3)return card(h+'<details class="r3-secondary"><summary>Другие действия</summary>'+r3Links(x,base.concat([['r3-take','Взять в работу самостоятельно'],['claude-queue','Сохранить для Claude через чат'],['r3-chatgpt','Подготовить через чат ChatGPT'],['r3-assistant-document','Требования и редактор'],['r3-assistant-prepare','Проверить автоматический комплект']]))+'</details>','workflow-next');
  var attach='<label class="r3-attach">Прикрепить готовую работу<input type="file" hidden data-r3-result-file="'+id+'" accept=".docx,.pdf,.xlsx"></label>';

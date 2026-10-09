@@ -126,3 +126,16 @@ for(const provider of ['claude','chatgpt','deepseek'])test('approved manual '+pr
  expect(await page.evaluate(()=>chatWindows)).toEqual([{claude:'https://claude.ai/',chatgpt:'https://chatgpt.com/',deepseek:'https://chat.deepseek.com/'}[provider]]);
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight','claude-queue'].includes(c.action)))).toBe(false);
 });
+
+for(const width of [390,1440])test('legacy saved copy restores chat choice without enabling duplicate API at '+width,async({page})=>{
+ await page.setViewportSize({width,height:1000});await seed(page);
+ await page.evaluate(stamp=>{item('assistant-process').claude={queuedAt:stamp,startedAt:null,readyAt:null,attachedAt:null,error:null};const s=r3AutomaticSession(item('assistant-process'));s.state.capabilities.forEach(p=>p.available=true);render();},stamp);
+ await expect(page.locator('.r3h')).toHaveText('Материалы сохранены для Claude');
+ const chats=page.locator('[data-act="r3-assistant-chat"]');await expect(chats).toHaveCount(3);for(let i=0;i<3;i++)await expect(chats.nth(i)).toBeEnabled();
+ const api=page.locator('[data-act="r3-assistant-run"]');await expect(api).toHaveCount(3);for(let i=0;i<3;i++)await expect(api.nth(i)).toBeDisabled();
+ await page.evaluate(()=>r3StartAssistant(item('assistant-process'),'deepseek'));
+ expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight'].includes(c.action)))).toBe(false);
+ await page.evaluate(stamp=>{observedJob={id:'active-job',provider:'claude',state:'queued',acceptedAt:stamp,queuedAt:stamp};return r3AutomaticSession(item('assistant-process')).refresh();},stamp);
+ await expect(chats).toHaveCount(0);await expect(page.locator('.r3h')).toHaveText('Ожидается запуск');
+ expect(await page.evaluate(()=>item('assistant-process').claude.queuedAt)).toBe(stamp);
+});
