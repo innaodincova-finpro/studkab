@@ -27,34 +27,39 @@ export async function sendProcessEmail(event,settings){
  const message=processNotificationMessage(event);
  return sendSmtpMessage({subject:message.subject,body:message.body+' Откройте заявку после входа: '+message.url},settings);
 }
-async function sendSmtpMessage({subject,body},{host,port,username,password,from,to,connect=()=>Deno.connectTls({hostname:host,port})}){
+async function sendSmtpMessage({subject,body},{host,port,username,password,from,to,connect=()=>port===587?Deno.connect({hostname:host,port}):Deno.connectTls({hostname:host,port}),startTls=conn=>Deno.startTls(conn,{hostname:host})}){
  if(!emailConfigured({host,port,username,password,from,to}))throw Error('Email not configured');
  const message='From: STUDKAB <'+from+'>\r\nTo: <'+to+'>\r\nSubject: =?UTF-8?B?'+b64(subject)+'?=\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'+fold(b64(body))+'\r\n.\r\n';
- let conn,deadlineTimer,dataStarted=false;
+ let conn,deadlineTimer,expired=false,dataStarted=false;
+ const closed=new WeakSet();
+ const close=socket=>{if(!socket||closed.has(socket))return;closed.add(socket);try{socket.close();}catch{}};
+ let timeoutReject;
+ const timeout=new Promise((_,reject)=>{timeoutReject=reject;});
+ // One deadline covers connection, TLS negotiation and the SMTP exchange.
+ // A late-opened connection must be closed too, without sending credentials.
+ const bounded=promise=>Promise.race([promise,timeout]);
  try{
-  let connectTimer;
-  const opening=connect();
-  try{conn=await Promise.race([opening,new Promise((_,reject)=>{connectTimer=setTimeout(()=>reject(Error('SMTP connect timeout')),10000);})]);}
-  finally{clearTimeout(connectTimer);}
-  deadlineTimer=setTimeout(()=>{try{conn?.close();}catch{}},10000);
+  deadlineTimer=setTimeout(()=>{expired=true;close(conn);timeoutReject(Error('SMTP timeout'));},10000);
+  conn=await bounded(Promise.resolve().then(connect).then(opened=>{if(expired){close(opened);throw Error('SMTP timeout');}return opened;}));
   let buffer='';
+  let responseLines=[];
   const write=async value=>{
    const bytes=enc.encode(value);
-   for(let at=0;at<bytes.length;){const n=await conn.write(bytes.subarray(at));if(!n)throw Error('SMTP write failed');at+=n;}
+   for(let at=0;at<bytes.length;){const n=await bounded(conn.write(bytes.subarray(at)));if(!Number.isInteger(n)||n<1||n>bytes.length-at)throw Error('SMTP write failed');at+=n;}
   };
   const response=async()=>{
-   let code;
+   let code;responseLines=[];
    for(let count=0;count<32;count++){
     while(!buffer.includes('\n')){
-     const bytes=new Uint8Array(2048),n=await conn.read(bytes);
-     if(n===null)throw Error('SMTP closed');
+     const bytes=new Uint8Array(2048),n=await bounded(conn.read(bytes));
+     if(!Number.isInteger(n)||n<1||n>bytes.length)throw Error('SMTP closed');
      buffer+=dec.decode(bytes.subarray(0,n));
      if(buffer.length>8192)throw Error('SMTP response too long');
     }
     const end=buffer.indexOf('\n'),line=buffer.slice(0,end).replace(/\r$/,'');buffer=buffer.slice(end+1);
     if(!/^\d{3}[ -]/.test(line))throw Error('SMTP response invalid');
     if(code&&line.slice(0,3)!==code)throw Error('SMTP response mismatch');
-    code=line.slice(0,3);
+    code=line.slice(0,3);responseLines.push(line.slice(4));
     if(line[3]===' ')return Number(code);
    }
    throw Error('SMTP response too long');
@@ -71,6 +76,16 @@ async function sendSmtpMessage({subject,body},{host,port,username,password,from,
   };
   let outcome=await step(null,[220]);if(outcome)return outcome;
   outcome=await step('EHLO studkab.local',[250]);if(outcome)return outcome;
+  if(port===587){
+   // RFC 3207: never authenticate on the plaintext connection. Require the
+   // upgrade and repeat EHLO using only the new, certificate-verified channel.
+   if(!responseLines.some(line=>/^STARTTLS(?:\s|$)/i.test(line)))return {status:'failed'};
+   outcome=await step('STARTTLS',[220]);if(outcome)return outcome;
+   if(buffer)throw Error('SMTP unexpected plaintext after STARTTLS');
+   conn=await bounded(Promise.resolve().then(()=>startTls(conn)).then(upgraded=>{if(expired){close(upgraded);throw Error('SMTP timeout');}return upgraded;}));
+   buffer='';
+   outcome=await step('EHLO studkab.local',[250]);if(outcome)return outcome;
+  }
   outcome=await step('AUTH LOGIN',[334]);if(outcome)return outcome;
   outcome=await step(b64(username),[334]);if(outcome)return outcome;
   outcome=await step(b64(password),[235]);if(outcome)return outcome;
@@ -87,6 +102,6 @@ async function sendSmtpMessage({subject,body},{host,port,username,password,from,
   return {status:dataStarted?'unknown':'pending'};
  }finally{
   clearTimeout(deadlineTimer);
-  try{conn?.close();}catch{}
+  close(conn);
  }
 }
