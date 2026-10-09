@@ -13,8 +13,8 @@ for(const width of [390,1440])test('unread originals open all three chats and ex
   render();
  });
  for(const provider of ['claude','chatgpt','deepseek']){
-  await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
-  const dialog=page.getByRole('dialog');await expect(dialog).toContainText('комментарием');
+  await page.locator('[data-r3-provider]').selectOption(provider);await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
+  const dialog=page.getByRole('dialog');await expect(dialog).toContainText('комментарий нейросети');
   await expect(dialog.locator('textarea')).toContainText('Original.docx');
   const downloaded=page.waitForEvent('download');await dialog.getByRole('button',{name:'Скачать комплект и запрос',exact:true}).click();
   const download=await downloaded;expect(await download.failure()).toBeNull();
@@ -26,7 +26,7 @@ for(const width of [390,1440])test('unread originals open all three chats and ex
  }
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','passport-approve','reading-start'].includes(c.action)))).toBe(false);
 });
-async function seed(page){
+async function seed(page,choose=true){
  await page.goto('http://127.0.0.1:4173/reestr.html');
  await page.evaluate(()=>QA.switchUser('assistant-process-synthetic'));
  await expect.poll(()=>page.evaluate(()=>Oblako.canSync()&&!Oblako.busy&&!!window.StudAssistantExecutor&&!!window.StudViewState)).toBe(true);
@@ -47,18 +47,18 @@ async function seed(page){
   const x={id:'assistant-process',requestNumber:101,route3:true,r3Loaded:true,r3ConfirmedAt:stamp,r3:{takenAt:stamp},student:'Учебный студент',topic:'Демонстрационное задание',univ:'Учебный университет',status:'work',format:{},attachments:[],passports:[],note:'Исходная заметка'};
   D.items=[x];r3Seen.add(x);tab='list';openId=x.id;render();
  },stamp);
- await expect(page.locator('.r3-assistant-option small').first()).toHaveText('API не подключён');
+ if(choose){await page.locator('[data-r3-provider]').selectOption('claude');await expect(page.locator('.r3-assistant [role="status"]').first()).toHaveText('Помощник не подключён');}
 }
 for(const width of [390,1440])test('rich R3 route keeps context and equal unavailable providers at '+width,async({page})=>{
  await page.setViewportSize({width,height:1000});await seed(page);
  await expect(page.locator('.request-head')).toContainText('Демонстрационное задание');
  await expect(page.locator('.r3route .r3mk')).toHaveCount(5);
  const buttons=page.locator('[data-act="r3-assistant-run"]');
- await expect(buttons).toHaveCount(3);expect(await buttons.allTextContents()).toEqual(['Через API','Через API','Через API']);
- for(let i=0;i<3;i++)await expect(buttons.nth(i)).toBeEnabled();
+ await expect(buttons).toHaveCount(1);expect(await buttons.allTextContents()).toEqual(['Подготовить автоматически']);
+ await expect(buttons).toBeEnabled();
  await expect(page.locator('.r3h')).not.toContainText('Claude');
- await expect(page.locator('[data-act="r3-assistant-chat"]')).toHaveCount(3);
- await expect(page.locator('.r3-assistant')).toContainText('отдельной оплатой');
+ await expect(page.locator('[data-act="r3-assistant-chat"]')).toHaveCount(1);
+ await expect(page.locator('.r3-assistant')).not.toContainText('отдельной оплатой');await expect(page.locator('[data-r3-provider] option')).toHaveCount(4);
  await expect(page.getByRole('tab',{name:'Материалы',exact:true})).toBeVisible();
  await expect(page.getByRole('tab',{name:'История',exact:true})).toBeVisible();
  await expect(page.locator('[data-act="executor-clarifications"]').first()).toBeVisible();
@@ -139,7 +139,7 @@ for(const file of ['index.html','reestr.html'])test('notification settings confi
 for(const provider of ['claude','chatgpt','deepseek'])test('manual '+provider+' is available with disconnected API and retains requirement gate',async({page})=>{
  await seed(page);
  await page.evaluate(()=>{window.chatWindows=[];window.open=u=>chatWindows.push(u);});
- await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
+ await page.locator('[data-r3-provider]').selectOption(provider);await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
  await expect(page.locator('[role="dialog"]')).toContainText('Перед подготовкой');
  expect(await page.evaluate(()=>chatWindows.length)).toBe(0);
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight','claude-queue'].includes(c.action)))).toBe(false);
@@ -147,7 +147,7 @@ for(const provider of ['claude','chatgpt','deepseek'])test('manual '+provider+' 
 
 for(const provider of ['claude','chatgpt','deepseek'])test('approved manual '+provider+' opens correct chat and offers export and return without launching API',async({page})=>{
  await seed(page);await page.evaluate(()=>{window.chatWindows=[];window.open=u=>chatWindows.push(u);preparationBlockers=()=>[];buildChatgptPrompt=()=> 'Approved requirements and structure';copyText=async()=>true;});
- await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
+ await page.locator('[data-r3-provider]').selectOption(provider);await page.locator('[data-act="r3-assistant-chat"][data-method="'+provider+'"]').click();
  const dialog=page.locator('[role="dialog"]');await expect(dialog.locator('textarea')).toHaveValue('Approved requirements and structure');await expect(dialog.locator('[data-chat-bundle]')).toBeVisible();await expect(dialog.locator('input[data-r3-result-file]')).toHaveCount(1);
  expect(await page.evaluate(()=>chatWindows)).toEqual([{claude:'https://claude.ai/',chatgpt:'https://chatgpt.com/',deepseek:'https://chat.deepseek.com/'}[provider]]);
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight','claude-queue'].includes(c.action)))).toBe(false);
@@ -157,9 +157,9 @@ for(const width of [390,1440])test('legacy saved copy restores chat choice witho
  await page.setViewportSize({width,height:1000});await seed(page);
  await page.evaluate(stamp=>{item('assistant-process').claude={queuedAt:stamp,startedAt:null,readyAt:null,attachedAt:null,error:null};const s=r3AutomaticSession(item('assistant-process'));s.state.capabilities.forEach(p=>p.available=true);render();},stamp);
  await expect(page.locator('.r3h')).toHaveText('Материалы получены');
- const chats=page.locator('[data-act="r3-assistant-chat"]');await expect(chats).toHaveCount(3);for(let i=0;i<3;i++)await expect(chats.nth(i)).toBeEnabled();
- const api=page.locator('[data-act="r3-assistant-run"]');await expect(api).toHaveCount(3);for(let i=0;i<3;i++)await expect(api.nth(i)).toBeEnabled();
- await api.nth(2).click();await expect(page.getByRole('dialog')).toContainText('Прежняя передача требует проверки');await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+ const chats=page.locator('[data-act="r3-assistant-chat"]');await expect(chats).toHaveCount(1);await expect(chats).toBeEnabled();
+ const api=page.locator('[data-act="r3-assistant-run"]');await expect(api).toHaveCount(1);await expect(api).toBeEnabled();
+ await page.locator('[data-r3-provider]').selectOption('deepseek');await api.click();await expect(page.getByRole('dialog')).toContainText('Прежняя передача требует проверки');await page.getByRole('button',{name:'Закрыть',exact:true}).click();
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight'].includes(c.action)))).toBe(false);
  await page.evaluate(stamp=>{observedJob={id:'active-job',provider:'claude',state:'queued',acceptedAt:stamp,queuedAt:stamp};return r3AutomaticSession(item('assistant-process')).refresh();},stamp);
  await expect(chats).toHaveCount(0);await expect(page.locator('.r3h')).toHaveText('Ожидается запуск');
@@ -176,7 +176,7 @@ for(const width of [390,1440])test('requirements refusal keeps materials and ret
    return original(body);
   };
  });
- if(width===390){await page.locator('[data-act="r3-assistant-chat"][data-method="claude"]').click();await page.getByRole('button',{name:'Проверить требования и материалы'}).click();}
+ if(width===390){await page.locator('[data-r3-provider]').selectOption('claude');await page.locator('[data-act="r3-assistant-chat"][data-method="claude"]').click();await page.getByRole('button',{name:'Проверить требования и материалы'}).click();}
  else{await page.locator('.r3-secondary summary').click();await page.getByText('Требования и редактор',{exact:true}).click();}
  await expect(page.getByRole('dialog')).toHaveCount(1);
  const dialog=page.getByRole('dialog',{name:'Требования перед подготовкой'});
@@ -223,14 +223,14 @@ for(const width of [390,1440])test('unavailable API explains each provider and r
  await expect(page.locator('.r3h')).toHaveText('Материалы получены');
  await expect(page.locator('.workflow-next')).toContainText('Выберите нейросеть и способ подготовки');
  for(const [provider,name] of [['claude','Claude'],['chatgpt','ChatGPT'],['deepseek','DeepSeek']]){
-  await page.locator('[data-act="r3-assistant-run"][data-method="'+provider+'"]').click();
-  const dialog=page.getByRole('dialog',{name:'Подготовка через API '+name,exact:true});
-  await expect(dialog.getByRole('status')).toHaveText('API не подключён');
-  await expect(dialog).toContainText('Для автоматической передачи нужно подключить API');
-  await dialog.getByRole('button',{name:'Проверить подключение и состояние',exact:true}).click();
-  await expect(page.getByRole('dialog',{name:'Подготовка через API '+name,exact:true}).getByRole('status')).toHaveText('API не подключён');
-  await expect(page.getByRole('dialog').locator('[data-api-check-result]')).toContainText('Проверка завершена');
-  await expect(page.getByRole('dialog').locator('[data-api-checked]')).toContainText('Проверено:');
+  await page.locator('[data-r3-provider]').selectOption(provider);await page.locator('[data-act="r3-assistant-run"][data-method="'+provider+'"]').click();
+  const dialog=page.getByRole('dialog',{name:'Подготовить работу',exact:true});
+  await expect(dialog.getByRole('status')).toHaveText('Помощник не подключён');
+  await expect(dialog).toContainText('Подключите помощника или подготовьте через чат.');
+  await dialog.getByRole('button',{name:'Обновить состояние',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'Подготовить работу',exact:true}).getByRole('status')).toHaveText('Помощник не подключён');
+  await expect(page.getByRole('dialog').locator('[data-api-check-result]')).toContainText('Состояние обновлено');
+  await expect(page.getByRole('dialog').locator('[data-api-checked]')).toHaveCount(0);
   const bounds=await page.getByRole('dialog').locator('.r3-api-actions button').evaluateAll(buttons=>buttons.map(b=>{const r=b.getBoundingClientRect();return {height:r.height,top:r.top,bottom:r.bottom,width:r.width};}));
   expect(bounds[0].height).toBeGreaterThanOrEqual(44);expect(bounds[1].top-bounds[0].bottom).toBeGreaterThanOrEqual(12);expect(bounds[0].width).toBe(bounds[1].width);
   await page.getByRole('button',{name:'Закрыть',exact:true}).click();
@@ -242,13 +242,46 @@ for(const width of [390,1440])test('unavailable API explains each provider and r
 
 for(const width of [390,1440])test('API diagnostic refresh shows progress and network failure without a false current result at '+width,async({page})=>{
  await page.setViewportSize({width,height:1000});await seed(page);
- await page.locator('[data-act="r3-assistant-run"][data-method="deepseek"]').click();
+ await page.locator('[data-r3-provider]').selectOption('deepseek');await page.locator('[data-act="r3-assistant-run"][data-method="deepseek"]').click();
  await page.evaluate(()=>{const api=Oblako.requestApi;Oblako.requestApi=input=>input.action==='assistant-capabilities'?new Promise((resolve,reject)=>{window.rejectDiagnostic=reject;}):api(input);});
- const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'Проверить подключение и состояние',exact:true}).click();
- await expect(dialog.getByRole('button',{name:'Проверяем…',exact:true})).toBeDisabled();await expect(dialog.locator('[data-api-check-result]')).toContainText('Проверяем бюджет и подключение');
+ const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'Обновить состояние',exact:true}).click();
+ await expect(dialog.getByRole('button',{name:'Проверяем…',exact:true})).toBeDisabled();await expect(dialog.locator('[data-api-check-result]')).toContainText('Проверяем состояние');
  await page.evaluate(()=>rejectDiagnostic(Error('network')));
- await expect(page.getByRole('dialog').locator('[data-api-check-result]')).toContainText('Не удалось получить свежие данные');
- await expect(page.getByRole('dialog').locator('[data-api-checked]')).toContainText('Последняя успешная проверка');
- await expect(page.getByRole('dialog').getByRole('button',{name:'Проверить подключение и состояние',exact:true})).toBeEnabled();
+ await expect(page.getByRole('dialog').locator('[data-api-check-result]')).toContainText('Не удалось обновить');
+ await expect(page.getByRole('dialog').locator('[data-api-checked]')).toHaveCount(0);
+ await expect(page.getByRole('dialog').getByRole('button',{name:'Обновить состояние',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-preflight','assistant-start','assistant-prepare'].includes(c.action)))).toBe(false);
+});
+
+for(const width of [390,1440])test('finance screen reads supplier data separately, offers three billing links and never starts work at '+width,async({page})=>{
+ await page.setViewportSize({width,height:1000});await seed(page);
+ await page.evaluate(stamp=>{const api=Oblako.requestApi;Oblako.requestApi=async input=>{if(input.action!=='assistant-finances')return api(input);assistantCalls.push(input);return {schema:1,checkedAt:stamp,application:{status:'blocked',availableMicrousd:0,currency:'USD',checkedAt:stamp},providers:[{provider:'deepseek',balance:{status:'verified',observedAt:stamp,checkedAt:stamp,balances:[{currency:'CNY',total:'12.34'},{currency:'USD',total:'0.5'}]},costs:{status:'unknown'}},{provider:'claude',balance:{status:'unknown'},costs:{status:'unknown',reason:'not_configured'}},{provider:'chatgpt',balance:{status:'unknown'},costs:{status:'verified',observedAt:stamp,checkedAt:stamp,currency:'USD',amount:'1.23',periodStart:'2026-10-01T00:00:00Z',periodEnd:stamp}}]};};},stamp);
+ await page.getByRole('button',{name:'Открыть расходы',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Подключения и расходы',exact:true});
+ await expect(dialog).toContainText('Доступно: $0');await expect(dialog.locator('[data-finance-provider="deepseek"]')).toContainText('12.34 CNY · 0.5 USD');
+ await expect(dialog.locator('[data-finance-provider="claude"]')).toContainText('Отчёт расходов: не подключён');await expect(dialog.locator('[data-finance-provider="chatgpt"]')).toContainText('Отчёт расходов: 1.23 USD');
+ await expect(dialog.getByRole('link',{name:'Открыть кабинет DeepSeek'})).toHaveAttribute('href','https://platform.deepseek.com/');await expect(dialog.getByRole('link',{name:'Открыть кабинет ChatGPT'})).toHaveAttribute('href','https://platform.openai.com/settings/organization/billing/overview');await expect(dialog.getByRole('link',{name:'Открыть кабинет Claude'})).toHaveAttribute('href','https://platform.claude.com/settings/billing');
+ await dialog.getByRole('button',{name:'Обновить данные',exact:true}).click();await expect(dialog.getByRole('button',{name:'Обновить данные',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>assistantCalls.filter(c=>c.action==='assistant-finances').length)).toBe(2);expect(await page.evaluate(()=>assistantCalls.filter(c=>c.action==='assistant-capabilities').length)).toBeGreaterThanOrEqual(3);expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-prepare','assistant-preflight'].includes(c.action)))).toBe(false);
+ const buttons=await dialog.locator('button,a.btn').evaluateAll(elements=>elements.map(e=>({text:e.textContent.trim(),height:e.getBoundingClientRect().height})));expect(buttons.every(b=>b.height>=44),JSON.stringify(buttons)).toBe(true);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await dialog.getByRole('button',{name:'Вернуться к заявке',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('finance loading and failure stay explicit; a closed screen cannot reopen from a late result',async({page})=>{
+ await seed(page);await page.evaluate(()=>{const api=Oblako.requestApi;Oblako.requestApi=input=>input.action==='assistant-finances'?new Promise((resolve,reject)=>{window.financePending={resolve,reject};}):api(input);});
+ await page.getByRole('button',{name:'Открыть расходы',exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog.getByRole('button',{name:'Обновляем…',exact:true})).toBeDisabled();await expect(dialog).toContainText('Баланс: не проверено');
+ await page.evaluate(()=>financePending.reject(Error('network')));await expect(dialog).toContainText('Не удалось обновить');await expect(dialog).toContainText('Доступно: не проверено');
+ await dialog.getByRole('button',{name:'Обновить данные',exact:true}).click();await dialog.getByRole('button',{name:'Закрыть',exact:true}).click();await page.evaluate(()=>financePending.resolve({schema:1,checkedAt:new Date().toISOString(),application:{status:'unknown'},providers:[]}));await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('finance entry in More works without a request and account change discards a late answer',async({page})=>{
+ await seed(page);await page.evaluate(()=>{const api=Oblako.requestApi;Oblako.requestApi=input=>input.action==='assistant-finances'?new Promise(resolve=>window.resolveFinance=resolve):api(input);});
+ await page.locator('[data-tab="more"]').click();await page.locator('summary').filter({hasText:/^Подключения и расходы$/}).click();await page.getByRole('button',{name:'Открыть подключения и расходы',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Подключения и расходы',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Обновляем…',exact:true})).toBeDisabled();
+ await page.evaluate(()=>QA.switchUser('other-finance-synthetic'));await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.evaluate(()=>resolveFinance({schema:1,checkedAt:new Date().toISOString(),application:{status:'unknown'},providers:[]}));await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+test('a new request does not choose Claude automatically',async({page})=>{
+ await seed(page,false);await expect(page.locator('[data-r3-provider]')).toHaveValue('');await expect(page.locator('[data-act="r3-assistant-run"]')).toBeDisabled();await expect(page.locator('[data-act="r3-assistant-chat"]')).toBeDisabled();
+ await page.locator('[data-r3-provider]').selectOption('chatgpt');await expect(page.locator('[data-act="r3-assistant-chat"]')).toBeEnabled();expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-start','assistant-preflight','assistant-prepare'].includes(c.action)))).toBe(false);
 });

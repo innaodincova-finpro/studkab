@@ -670,11 +670,11 @@ for(const width of [390,1440])test('UX-ASSISTANT equal controls retain manual ch
  // No working file is discarded by choosing a helper. Equal helper controls belong
  // to the preparation stage; the existing file's next action remains review.
  await page.evaluate(()=>{D.items[0].r3.result=null;render();});
- const controls=panel.locator('[data-act="r3-assistant-run"]');await expect(controls).toHaveCount(3);
- expect(await controls.allTextContents()).toEqual(['Через API','Через API','Через API']);
- await expect(panel.locator('[data-act="r3-assistant-chat"]')).toHaveCount(3);
- await expect(panel.locator('.r3-assistant')).toContainText('Расходы через API заблокированы');for(let i=0;i<3;i++)await expect(controls.nth(i)).toBeEnabled();
- await controls.nth(2).click();const apiInfo=page.getByRole('dialog',{name:'Подготовка через API DeepSeek',exact:true});await expect(apiInfo.getByRole('status')).toHaveText('Расходы через API заблокированы');await expect(apiInfo).toContainText('Платный запуск не выполнен');await apiInfo.getByRole('button',{name:'Закрыть',exact:true}).click();
+ await panel.locator('[data-r3-provider]').selectOption('deepseek');const controls=panel.locator('[data-act="r3-assistant-run"]');await expect(controls).toHaveCount(1);
+ expect(await controls.allTextContents()).toEqual(['Подготовить автоматически']);
+ await expect(panel.locator('[data-act="r3-assistant-chat"]')).toHaveCount(1);
+ await expect(panel.locator('.r3-assistant')).toContainText('Лимит расходов исчерпан');await expect(controls).toBeEnabled();
+ await controls.click();const apiInfo=page.getByRole('dialog',{name:'Подготовить работу',exact:true});await expect(apiInfo.getByRole('status')).toHaveText('Лимит расходов исчерпан');await expect(apiInfo).toContainText('Подготовьте работу через чат');await apiInfo.getByRole('button',{name:'Закрыть',exact:true}).click();
  await expect(panel.locator('[aria-pressed]')).toHaveCount(0);
  await page.evaluate(()=>failAssistantCheck=true);await panel.locator('[data-act="r3-assistant-refresh"]').first().click();
  await expect(panel.locator('.r3-assistant-state')).toContainText('Не удалось проверить подключения');

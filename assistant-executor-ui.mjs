@@ -1,4 +1,5 @@
 import {projectAssistantState} from './assistant-state.mjs';
+import {createFinanceSession} from './assistant-finance-ui.mjs';
 
 const providers=['claude','chatgpt','deepseek'];
 export function createAssistantSession({api,active,onChange,newOperation}) {
@@ -97,6 +98,6 @@ export function executorProjection(request,observation={}){
 }
 
 if(typeof window==='object'){
- window.StudAssistantExecutor={createAssistantSession,executorProjection};
+ window.StudAssistantExecutor={createAssistantSession,executorProjection,createFinanceSession};
  if(typeof window.render==='function'&&window.D)window.render();
 }
