@@ -31,14 +31,14 @@ test('approved manual chat copies a prompt and opens chat without queueing work 
  const f=fixture();let copied='',opened='',modal='',status={textContent:''};const before=JSON.stringify(f.x);
  f.c.preparationBlockers=()=>[];f.c.buildChatgptPrompt=()=> 'Verified request';f.c.copyText=async text=>{copied=text;return true;};f.c.window={open:url=>{opened=url;}};f.c.openModal=h=>{modal=h;return {isConnected:true,querySelector:()=>status,addEventListener:()=>{}};};
  f.c.openR3Chatgpt(f.x);await Promise.resolve();await Promise.resolve();
- assert.equal(copied,'Verified request');assert.equal(opened,'https://chatgpt.com/');assert.match(modal,/readonly/);assert.match(modal,/приложите скачанные материалы вручную/);assert.match(status.textContent,/Запрос скопирован/);assert.equal(f.calls.length,0);assert.equal(JSON.stringify(f.x),before);
+ assert.equal(copied,'Verified request');assert.equal(opened,'https://chatgpt.com/');assert.match(modal,/readonly/);assert.match(modal,/прикрепите все файлы вместе с запросом в чат/);assert.match(status.textContent,/Запрос скопирован/);assert.equal(f.calls.length,0);assert.equal(JSON.stringify(f.x),before);
 });
 
 for(const [provider,url] of [['claude','https://claude.ai/'],['chatgpt','https://chatgpt.com/'],['deepseek','https://chat.deepseek.com/']])test(provider+' manual route needs no connection or API request and preserves the existing result',async()=>{
  const f=fixture();let opened='',modal='',status={textContent:''};const before=JSON.stringify(f.x);
  f.c.preparationBlockers=()=>[];f.c.buildChatgptPrompt=()=> 'Verified request';f.c.copyText=async()=>true;f.c.window={open:u=>opened=u};f.c.openModal=h=>{modal=h;return {isConnected:true,querySelector:()=>status,addEventListener:()=>{}};};
  f.c.openR3Chat(f.x,provider);await Promise.resolve();await Promise.resolve();
- assert.equal(opened,url);assert.match(modal,/data-chat-bundle/);assert.match(modal,/data-r3-result-file="request"/);assert.match(modal,/не отправляет документы в чат/);assert.equal(f.calls.length,0);assert.equal(JSON.stringify(f.x),before);
+ assert.equal(opened,url);assert.match(modal,/data-chat-bundle/);assert.match(modal,/data-r3-result-file="request"/);assert.match(modal,/Получите работу и комментарий нейросети/);assert.equal(f.calls.length,0);assert.equal(JSON.stringify(f.x),before);
 });
 test('every manual provider obeys the same preparation blockers and unknown providers cannot open a URL',()=>{
  const f=fixture();let opened=0,copied=0;f.c.window={open:()=>opened++};f.c.copyText=()=>copied++;f.c.openModal=()=>{};f.c.preparationBlockers=()=>['ИИ запрещён'];

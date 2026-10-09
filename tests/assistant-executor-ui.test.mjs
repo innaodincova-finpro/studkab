@@ -49,11 +49,11 @@ const source=fs.readFileSync(new URL('../reestr.html',import.meta.url),'utf8');
 function section(start,end){return source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));}
 const escape=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 test('each provider offers manual chat independently of blocked API launch',()=>{
- const context={esc:escape,r3Projection:()=>({}),r3AutomaticSession:()=>({state:{capabilities:caps.providers,busy:false}})};vm.createContext(context);
+ const context={esc:escape,r3Projection:()=>({}),r3PreparationProvider:()=> 'claude',r3AutomaticSession:()=>({state:{capabilities:caps.providers,busy:false}})};vm.createContext(context);
  vm.runInContext(section('function r3AssistantChoice(x){','async function refreshR3Automatic'),context);
  const html=vm.runInContext("r3AssistantChoice({id:'request-one'})",context);
- assert.equal((html.match(/data-act="r3-assistant-run"/g)||[]).length,3);assert.equal((html.match(/ disabled/g)||[]).length,0);
- assert.equal((html.match(/data-act="r3-assistant-chat"/g)||[]).length,3);assert.match(html,/Через API/);assert.match(html,/Через чат/);assert.match(html,/отдельной оплатой/);assert.doesNotMatch(html,/aria-pressed/);assert.match(html,/Подготовить работу/);
+ assert.equal((html.match(/data-act="r3-assistant-run"/g)||[]).length,1);assert.equal((html.match(/ disabled/g)||[]).length,0);
+ assert.equal((html.match(/data-act="r3-assistant-chat"/g)||[]).length,1);assert.match(html,/Подготовить автоматически/);assert.match(html,/Подготовить через чат/);assert.doesNotMatch(html,/отдельной оплатой/);assert.match(html,/data-r3-provider/);assert.doesNotMatch(html,/aria-pressed/);assert.match(html,/Подготовить работу/);
 });
 test('actual prepared-file card offers review before delivery and keeps secondary actions',()=>{
  const x={id:'request-one',r3Loaded:true,r3:{result:{hash:'a'.repeat(64),name:'Работа.docx',size:2000,at:stamp}}};
@@ -94,10 +94,10 @@ test('legacy saved Claude copy permits manual choice without rewriting queued ev
  for(const change of [{startedAt:stamp},{error:'unconfirmed'},{queuedAt:'invalid'}])assert.notEqual(executorProjection({...legacyRequest,claude:{...legacyRequest.claude,...change}}).legacyChatAvailable,true);
 });
 test('actual legacy card restores all three chats but refuses API even with available capabilities',async()=>{
- const context={esc:escape,window:{},requestWorkflow:()=>({step:3,title:'Подготовка',copy:'',rework:0}),r3Projection:x=>executorProjection(x,{job:null}),r3ActionKey:()=> 'one',r3Actions:new Map(),r3CurrentLabel:()=> 'В работе',r3Assistant:()=> 'claude',r3Links:()=> 'secondary-links',r3AutomaticSession:()=>({state:{capabilities:caps.providers.map(p=>({...p,available:true})),busy:false},preflight:()=>{throw Error('must not preflight');}})};
+ const context={esc:escape,window:{},requestWorkflow:()=>({step:3,title:'Подготовка',copy:'',rework:0}),r3Projection:x=>executorProjection(x,{job:null}),r3ActionKey:()=> 'one',r3Actions:new Map(),r3CurrentLabel:()=> 'В работе',r3Assistant:()=> 'claude',r3PreparationProvider:()=> 'claude',r3Links:()=> 'secondary-links',r3AutomaticSession:()=>({state:{capabilities:caps.providers.map(p=>({...p,available:true})),busy:false},preflight:()=>{throw Error('must not preflight');}})};
  vm.createContext(context);vm.runInContext(section('function r3AssistantChoice(x){','async function refreshR3Automatic'),context);vm.runInContext(section('async function r3StartAssistant(x,provider){','function r3AssistantPrepare'),context);vm.runInContext(section('function r3Card(x,route){','// «Скачать задание'),context);context.x=structuredClone(legacyRequest);context.r3ApiInformation=()=>{};
  const before=JSON.stringify(context.x),html=vm.runInContext('r3Card(x,true)',context);
- assert.equal((html.match(/data-act="r3-assistant-chat"/g)||[]).length,3);assert.equal((html.match(/data-act="r3-assistant-run"[^>]* disabled/g)||[]).length,0);assert.match(html,/Материалы получены/);assert.match(html,/Выберите нейросеть и способ подготовки/);
+ assert.equal((html.match(/data-act="r3-assistant-chat"/g)||[]).length,1);assert.equal((html.match(/data-act="r3-assistant-run"[^>]* disabled/g)||[]).length,0);assert.match(html,/Материалы получены/);assert.match(html,/Выберите нейросеть и способ подготовки/);
  await vm.runInContext("r3StartAssistant(x,'deepseek')",context);assert.equal(JSON.stringify(context.x),before);
  context.r3Projection=()=>executorProjection(context.x,{job:{id:'active-job',provider:'claude',state:'queued',acceptedAt:stamp,queuedAt:stamp}});
  assert.doesNotMatch(vm.runInContext('r3Card(x,true)',context),/data-act="r3-assistant-chat"/);
@@ -107,10 +107,10 @@ test('API reasons distinguish configuration, budget and unresolved dispatch with
  const state={busy:false,capabilities:[{provider:'deepseek',available:false,reason:'not_connected'}]},context={esc:escape,r3Projection:()=>({legacyChatAvailable:true}),r3AutomaticSession:()=>({state})};vm.createContext(context);
  vm.runInContext(section('function r3AssistantChoice(x){','async function refreshR3Automatic'),context);
  const check=()=>vm.runInContext("r3ApiAvailability({id:'one'},'deepseek')",context);
- assert.equal(check().label,'API не подключён');assert.equal(check().launchable,false);
- state.capabilities[0].reason='budget_exhausted';assert.equal(check().label,'Расходы через API заблокированы');
+ assert.equal(check().label,'Помощник не подключён');assert.equal(check().launchable,false);
+ state.capabilities[0].reason='budget_exhausted';assert.equal(check().label,'Лимит расходов исчерпан');
  state.capabilities[0].available=true;assert.equal(check().label,'Прежняя передача требует проверки');assert.equal(check().launchable,false);
- state.unknown=true;assert.equal(check().label,'Состояние запуска не подтверждено');assert.equal(check().launchable,false);
+ state.unknown=true;assert.equal(check().label,'Запуск не подтверждён');assert.equal(check().launchable,false);
  state.unknown=false;context.r3Projection=()=>({});assert.equal(check().launchable,true);
 });
 

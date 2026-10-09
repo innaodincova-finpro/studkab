@@ -1670,45 +1670,65 @@ function r3Projection(x){
  var session=r3AutomaticSessions.get(r3ActionKey(x));
  return StudAssistantExecutor.executorProjection(x,session?session.state:{});
 }
+var r3PreparationChoices=new Map();
+function r3PreparationProvider(x){return r3PreparationChoices.get(r3ActionKey(x))||'';}
 function r3AssistantChoice(x){
- var id=esc(x.id),session=r3AutomaticSession(x),state=session&&session.state,legacy=r3Projection(x).legacyChatAvailable,h='<div class="r3-assistant"><h4>Подготовить работу</h4><div class="r3-assistant-options" role="group" aria-label="Помощники для подготовки">';
- [['claude','Claude'],['chatgpt','ChatGPT / Codex'],['deepseek','DeepSeek']].forEach(function(a){
-  var status=r3ApiAvailability(x,a[0]);
-  h+='<div class="r3-assistant-option"><b>'+esc(a[1])+'</b><button type="button" class="chip" data-act="r3-assistant-run" data-method="'+a[0]+'" data-id="'+id+'"'+(state&&state.busy?' disabled':'')+'>'+esc(state&&state.busy&&state.provider===a[0]?'Отправляем…':'Через API')+'</button><small>'+esc(status.label)+'</small><button type="button" class="chip" data-act="r3-assistant-chat" data-method="'+a[0]+'" data-id="'+id+'">Через чат</button></div>';
- });
- h+='</div><p class="hint">Через чат: вы прикрепляете комплект и возвращаете результат в заявку. Через API: автоматическая подготовка с отдельной оплатой и подтверждением стоимости.</p>';
+ var id=esc(x.id),provider=r3PreparationProvider(x),session=r3AutomaticSession(x),state=session&&session.state,status=provider?r3ApiAvailability(x,provider):null;
+ var h='<div class="r3-assistant"><h4>Подготовить работу</h4><label>Нейросеть<select data-r3-provider="'+id+'" aria-label="Нейросеть"><option value="">Выберите помощника</option>';
+ [['claude','Claude'],['chatgpt','ChatGPT / Codex'],['deepseek','DeepSeek']].forEach(function(a){h+='<option value="'+a[0]+'"'+(provider===a[0]?' selected':'')+'>'+a[1]+'</option>';});
+ h+='</select></label><div class="r3-assistant-options" role="group" aria-label="Помощники для подготовки">';
+ if(status)h+='<p role="status">'+esc(status.label)+'</p>';
+ h+='<button type="button" class="btn '+(status&&!status.launchable?'ghost':'')+'" data-act="r3-assistant-run" data-method="'+provider+'" data-id="'+id+'"'+(!provider||state&&state.busy?' disabled':'')+'>Подготовить автоматически</button><button type="button" class="btn '+(status&&status.launchable?'ghost':'')+'" data-act="r3-assistant-chat" data-method="'+provider+'" data-id="'+id+'"'+(!provider?' disabled':'')+'>Подготовить через чат</button></div>';
  if(state&&state.message)h+='<p class="r3-assistant-state" role="status" aria-live="polite">'+esc(state.message)+'</p>';
- h+='<button type="button" class="mini r3-state-refresh" data-act="r3-assistant-refresh" data-id="'+id+'"'+(state&&state.busy?' disabled':'')+'>'+(state&&state.busy?'Проверяем…':'Проверить подключения и состояние')+'</button></div>';
+ h+='<div class="r3-api-actions"><button type="button" class="btn ghost" data-act="r3-finances" data-id="'+id+'">Открыть расходы</button><button type="button" class="mini r3-state-refresh" data-act="r3-assistant-refresh" data-id="'+id+'"'+(state&&state.busy?' disabled':'')+'>'+(state&&state.busy?'Проверяем…':'Обновить состояние')+'</button></div></div>';
  return h;
 }
 function r3ApiAvailability(x,provider){
  var session=r3AutomaticSession(x),state=session&&session.state,cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===provider;});
- var reasons={not_connected:['API не подключён','Для автоматической передачи нужно подключить API выбранной нейросети на сервере. Подписка на чат сама по себе это подключение не создаёт. Сейчас можно передать полный комплект через чат.'],worker_disabled:['Подготовка через API отключена','Автоматическая подготовка отключена в настройках сервера. Через чат можно передать полный комплект без API-запуска.'],worker_unverified:['Подключение API не подтверждено','Сервер не подтвердил доступность обработчика. Платный запуск не выполнен. Повторите проверку или используйте чат.'],budget_exhausted:['Расходы через API заблокированы','Доступного бюджета приложения нет. Это не баланс вашего аккаунта нейросети и не подтверждение списания денег. Платный запуск не выполнен. Можно использовать чат.'],budget_unavailable:['Лимит расходов не подтверждён','Сервер не подтвердил лимит расходов. Платный запуск не выполнен. Повторите проверку или используйте чат.']};
- if(!state||!cap)return {launchable:false,label:'API ещё не проверен',message:'Сначала проверьте подключение. Проверка не запускает работу и не списывает оплату.'};
- if(!cap.available){var reason=reasons[cap.reason]||['API недоступен','Сервер не подтвердил возможность автоматической подготовки. Можно передать комплект через чат.'];return {launchable:false,label:reason[0],message:reason[1]};}
- if(state.stale||state.unknown)return {launchable:false,label:'Состояние запуска не подтверждено',message:'Не удалось подтвердить состояние предыдущего запроса. Повторный платный запуск запрещён до проверки. Через чат можно скачать комплект.'};
- if(r3Projection(x).legacyChatAvailable)return {launchable:false,label:'Прежняя передача требует проверки',message:'Сохранена прежняя запись передачи материалов. Подтверждённого запуска нейросети нет; повторный автоматический запуск заблокирован для защиты от дубля. Запись не выбирает нейросеть за вас. Комплект доступен через любой из трёх чатов.'};
- return {launchable:true,label:'API доступен',message:'Подключение подтверждено. Закройте это окно и выберите «Через API», чтобы проверить комплект и стоимость. Запуск возможен только после отдельного подтверждения стоимости.'};
-}
-function r3ApiDiagnostics(x,provider,rechecked){
- var session=r3AutomaticSession(x),state=session&&session.state,cap=state&&state.capabilities&&state.capabilities.find(function(c){return c.provider===provider;}),h='';
- if(rechecked)h+='<p class="r3-api-check-result" data-api-check-result aria-live="polite">'+(cap?'Проверка завершена. Получено состояние с сервера.':'Не удалось получить свежие данные. Повторите проверку.')+'</p>';
- else h+='<p class="r3-api-check-result" data-api-check-result aria-live="polite"></p>';
- if(state&&state.checkedAt)h+='<p class="small" data-api-checked>'+esc((cap?'Проверено: ':'Последняя успешная проверка: ')+new Date(state.checkedAt).toLocaleString('ru-RU'))+'</p>';
- if(cap&&cap.budget){h+='<p>Бюджет приложения: '+esc(cap.budget.status==='unavailable'?'не удалось проверить':Number.isSafeInteger(cap.budget.remainingMicrousd)?'доступно $'+(cap.budget.remainingMicrousd/1000000).toLocaleString('ru-RU',{maximumFractionDigits:6}):cap.budget.status==='blocked'?'расходы заблокированы':'доступен')+'.</p>';}
- var connections={not_connected:'API не настроен или отключён. Возможность запуска не подтверждена.',worker_disabled:'Автоматическая подготовка отключена.',worker_unverified:'Не удалось подтвердить доступность обработчика.',ready:provider==='deepseek'?'Обработчик доступен. Платное выполнение нейросетью не проверялось.':'Доступ к настроенной модели подтверждён. Платное выполнение не проверялось.'};
- if(cap&&connections[cap.connection])h+='<p data-api-connection>Подключение: '+esc(connections[cap.connection])+'</p>';
- return h;
+ var reasons={not_connected:['Помощник не подключён','Подключите помощника или подготовьте через чат.'],worker_disabled:['Автоматическая подготовка отключена','Подготовьте работу через чат.'],worker_unverified:['Подключение не подтверждено','Обновите состояние или подготовьте через чат.'],budget_exhausted:['Лимит расходов исчерпан','Подготовьте работу через чат или откройте расходы.'],budget_unavailable:['Лимит расходов не проверен','Обновите состояние или подготовьте через чат.']};
+ if(!state||!cap)return {launchable:false,label:'Подключение не проверено',message:'Обновите состояние или подготовьте через чат.'};
+ if(!cap.available){var reason=reasons[cap.reason]||['Автоматическая подготовка недоступна','Подготовьте работу через чат.'];return {launchable:false,label:reason[0],message:reason[1]};}
+ if(state.stale||state.unknown)return {launchable:false,label:'Запуск не подтверждён',message:'Обновите состояние. Пока можно подготовить через чат.'};
+ if(r3Projection(x).legacyChatAvailable)return {launchable:false,label:'Прежняя передача требует проверки',message:'Обновите состояние или подготовьте через чат.'};
+ return {launchable:true,label:'Автоматическая подготовка доступна',message:'Проверьте стоимость перед запуском.'};
 }
 function r3ApiInformation(x,provider,rechecked=false){
  var status=r3ApiAvailability(x,provider),names={claude:'Claude',chatgpt:'ChatGPT',deepseek:'DeepSeek'},owner=KEY,identity=Oblako.identity();
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через API '+esc(names[provider])+'</h3><p role="status">'+esc(status.label)+'</p><p>'+esc(status.message)+'</p>'+r3ApiDiagnostics(x,provider,rechecked)+'<div class="r3-api-actions"><button type="button" class="btn ghost" data-api-recheck>Проверить подключение и состояние</button><button type="button" class="btn" data-api-chat>Подготовить через чат</button></div>');
- function current(){return wrap.isConnected&&KEY===owner&&Oblako.identity()===identity&&!!item(x.id);}
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовить работу</h3><p>Нейросеть: '+esc(names[provider])+'</p><p role="status">'+esc(status.label)+'</p><p>'+esc(status.message)+'</p><p data-api-check-result aria-live="polite">'+(rechecked?'Состояние обновлено.':'')+'</p><div class="r3-api-actions"><button type="button" class="btn" data-api-chat>Подготовить через чат</button><button type="button" class="btn ghost" data-api-finances>Открыть расходы</button><button type="button" class="btn ghost" data-api-recheck>Обновить состояние</button><label class="btn ghost">Прикрепить результат<input type="file" hidden data-r3-result-file="'+esc(x.id)+'" accept=".docx,.pdf,.xlsx"></label></div>');
+ wrap.dataset.assistantOwner=owner+'|'+identity;
+ function current(){return wrap.isConnected&&KEY===owner&&Oblako.identity()===identity&&(!x||!!item(x.id));}
+ wrap.addEventListener('change',function(e){if(e.target.matches('input[data-r3-result-file]')&&!current()){e.stopPropagation();e.target.value='';}});
  wrap.addEventListener('click',async function(e){
   if(!current())return;
   if(e.target.closest('[data-api-chat]')){wrap.remove();openR3Chat(item(x.id),provider);}
-  if(e.target.closest('[data-api-recheck]')){var button=wrap.querySelector('[data-api-recheck]');if(button.disabled)return;button.disabled=true;button.textContent='Проверяем…';wrap.querySelector('[data-api-check-result]').textContent='Проверяем бюджет и подключение…';await refreshR3Automatic(item(x.id));if(!current())return;wrap.remove();r3ApiInformation(item(x.id),provider,true);}
+  if(e.target.closest('[data-api-finances]')){wrap.remove();r3FinanceInformation(item(x.id),provider);}
+  if(e.target.closest('[data-api-recheck]')){var button=wrap.querySelector('[data-api-recheck]');if(button.disabled)return;button.disabled=true;button.textContent='Проверяем…';wrap.querySelector('[data-api-check-result]').textContent='Проверяем состояние…';await refreshR3Automatic(item(x.id));if(!current())return;var currentSession=r3AutomaticSession(item(x.id));wrap.remove();r3ApiInformation(item(x.id),provider,true);if(!currentSession.state.capabilities)document.querySelector('[data-api-check-result]').textContent='Не удалось обновить. Повторите проверку.';}
  });
+}
+function r3FinanceInformation(x,backProvider){
+ var financeCaps=null;
+ var owner=KEY,identity=Oblako.identity(),wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подключения и расходы</h3><div data-finance-body></div><p data-finance-status role="status" aria-live="polite"></p><div class="r3-api-actions"><button type="button" class="btn" data-finance-refresh>Обновить данные</button><button type="button" class="btn ghost" data-finance-back>'+(x?'Вернуться к заявке':'Вернуться')+'</button></div>');
+ wrap.dataset.assistantOwner=owner+'|'+identity;
+ function current(){return wrap.isConnected&&KEY===owner&&Oblako.identity()===identity&&(!x||!!item(x.id));}
+ function checked(v){return v&&v.observedAt?'<p class="small">'+(v.status==='stale'?'Последние данные: ':'Проверено: ')+esc(new Date(v.observedAt).toLocaleString('ru-RU'))+(v.status==='stale'?' · требуют обновления':'')+'</p>':'<p class="small">Не проверялось</p>';}
+ function paint(state){
+  if(!current())return;
+  var value=state.value,a=value&&value.application,session=x&&r3AutomaticSession(item(x.id)),caps=session?session.state.capabilities:financeCaps;
+  var h='<section class="r3-finance-card"><h4>Лимит приложения</h4><p>Доступно: '+(a&&Number.isSafeInteger(a.availableMicrousd)?'$'+esc((a.availableMicrousd/1000000).toLocaleString('ru-RU',{maximumFractionDigits:6})):'не проверено')+'</p>'+(a&&a.checkedAt?'<p class="small">Проверено: '+esc(new Date(a.checkedAt).toLocaleString('ru-RU'))+'</p>':'')+'</section>';
+  [['deepseek','DeepSeek','https://platform.deepseek.com/'],['chatgpt','ChatGPT','https://platform.openai.com/settings/organization/billing/overview'],['claude','Claude','https://platform.claude.com/settings/billing']].forEach(function(row){
+   var p=value&&value.providers.find(function(v){return v.provider===row[0];}),b=p&&p.balance,c=p&&p.costs,cap=caps&&caps.find(function(v){return v.provider===row[0];});
+   h+='<section class="r3-finance-card" data-finance-provider="'+row[0]+'"><h4>'+row[1]+'</h4><p>Автоматическая подготовка: '+esc(!cap?'не проверена':cap.available?'доступна':cap.connection==='worker_disabled'?'отключена':cap.connection==='not_connected'?'не подключена':'недоступна')+'</p>';
+   h+='<p>Баланс: '+(b&&b.balances?b.balances.map(function(v){return esc(v.total+' '+v.currency);}).join(' · '):row[0]==='deepseek'?'не проверено':'посмотреть в кабинете')+'</p>'+checked(b);
+   h+='<p>Отчёт расходов: '+(c&&c.amount!==undefined?esc(c.amount+' USD'):p&&p.reportReason==='access_denied'?'нет доступа':p&&p.reportReason?'не подключён':'не получен')+'</p>'+checked(c);
+   if(c&&c.amount!==undefined)h+='<p class="small">За '+esc(new Date(c.periodStart).toLocaleDateString('ru-RU'))+' — '+esc(new Date(c.periodEnd).toLocaleDateString('ru-RU'))+(c.coverage==='excludes_priority_tier'?' · без Priority Tier':'')+'</p>';
+   h+='<a class="btn ghost" href="'+row[2]+'" target="_blank" rel="noopener noreferrer">Открыть кабинет '+row[1]+'</a></section>';
+  });
+  h+='<p class="small">Расход по этой заявке: пока не подтверждён.</p>';
+  wrap.querySelector('[data-finance-body]').innerHTML=h;wrap.querySelector('[data-finance-status]').textContent=state.message;
+  var button=wrap.querySelector('[data-finance-refresh]');button.disabled=state.busy;button.textContent=state.busy?'Обновляем…':'Обновить данные';
+ }
+ var reader=StudAssistantExecutor.createFinanceSession({api:function(input){return Oblako.requestApi(input);},active:current,onChange:paint});paint(reader.state);reader.refresh();if(!x)Oblako.requestApi({action:'assistant-capabilities'}).then(function(value){if(!current())return;financeCaps=Array.isArray(value.providers)?value.providers:null;paint(reader.state);}).catch(function(){});
+ wrap.addEventListener('click',function(e){if(!current())return;if(e.target.closest('[data-finance-refresh]'))reader.refresh();if(e.target.closest('[data-finance-back]')){wrap.remove();if(backProvider&&x)r3ApiInformation(item(x.id),backProvider);}});
 }
 async function refreshR3Automatic(x){var session=x&&r3AutomaticSession(x);if(session)await session.refresh();}
 async function r3StartAssistant(x,provider){
@@ -1716,7 +1736,7 @@ async function r3StartAssistant(x,provider){
  if(!r3ApiAvailability(x,provider).launchable){r3ApiInformation(x,provider);return;}
  var owner=KEY,identity=Oblako.identity(),quote=await session.preflight(provider);
  if(!quote||KEY!==owner||Oblako.identity()!==identity||!item(x.id))return;
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовить работу</h3><p>Стоимость: '+esc((quote.priceMicrousd/1000000).toLocaleString('ru-RU',{maximumFractionDigits:6}))+' USD.</p><button type="button" class="btn r3-main" data-assistant-start-confirm>Подтвердить и запустить</button>');
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовить работу</h3><p>Максимальная стоимость: '+esc((quote.priceMicrousd/1000000).toLocaleString('ru-RU',{maximumFractionDigits:6}))+' USD.</p><button type="button" class="btn r3-main" data-assistant-start-confirm>Подтвердить и запустить</button>');
  wrap.addEventListener('click',function(event){var button=event.target.closest('[data-assistant-start-confirm]');if(!button||KEY!==owner||Oblako.identity()!==identity||!item(x.id))return;button.disabled=true;button.textContent='Отправляем…';session.start(provider,quote.quoteId).finally(function(){if(wrap.isConnected)wrap.remove();});});
 }
 function r3AssistantPrepare(x){
@@ -1770,7 +1790,7 @@ function openR3Chat(x,provider){
  if(blockers.length){openModal('<button type="button" class="close" data-x="1">✕</button><h3>Перед подготовкой</h3><p role="status">'+esc(blockers.join(' '))+'</p><button type="button" class="chip" data-act="r3-assistant-document" data-id="'+esc(x.id)+'">Проверить требования и материалы</button>');return;}
  var owner=KEY,identity=Oblako.identity(),data=D,prompt=buildChatgptPrompt(x);
  function current(){return KEY===owner&&Oblako.identity()===identity&&D===data&&item(x.id)===x&&wrap.isConnected;}
- var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через чат '+esc(chat.name)+'</h3><p role="status" data-chat-status>Копируем запрос…</p><label>Запрос<textarea readonly style="min-height:220px">'+esc(prompt)+'</textarea></label><button type="button" class="btn" data-chat-bundle>Скачать комплект и запрос</button><p>Распакуйте архив и приложите скачанные материалы вручную вместе с запросом. Приложение не отправляет документы в чат. Доступ и ограничения определяются вашим аккаунтом выбранной нейросети; отдельного API-запроса нет.</p><a href="'+esc(chat.url)+'" target="_blank" rel="noopener noreferrer">Открыть '+esc(chat.name)+'</a><p>После выполнения прикрепите готовую работу вместе с комментарием нейросети в одном файле. Комментарий должен описывать полученный комплект, выполненные задания и ограничения.</p><label class="mini">Прикрепить работу и комментарий<input type="file" hidden data-r3-result-file="'+esc(x.id)+'" accept=".docx,.pdf,.xlsx"></label>');
+ var wrap=openModal('<button type="button" class="close" data-x="1">✕</button><h3>Подготовка через чат '+esc(chat.name)+'</h3><p role="status" data-chat-status>Копируем запрос…</p><label>Запрос<textarea readonly style="min-height:220px">'+esc(prompt)+'</textarea></label><button type="button" class="btn" data-chat-bundle>Скачать комплект и запрос</button><p>Скачайте комплект, распакуйте архив и прикрепите все файлы вместе с запросом в чат.</p><a href="'+esc(chat.url)+'" target="_blank" rel="noopener noreferrer">Открыть '+esc(chat.name)+'</a><p>Получите работу и комментарий нейросети, затем прикрепите результат к заявке.</p><label class="mini">Прикрепить работу и комментарий<input type="file" hidden data-r3-result-file="'+esc(x.id)+'" accept=".docx,.pdf,.xlsx"></label>');
  wrap.addEventListener('change',function(e){if(e.target.matches('input[data-r3-result-file]')&&!current()){e.stopPropagation();e.target.value='';}});
  window.open(chat.url,'_blank','noopener,noreferrer');
  Promise.resolve(copyText(prompt)).then(function(ok){if(!current())return;wrap.querySelector('[data-chat-status]').textContent=ok?'Запрос скопирован. Вставьте его в чат. Если окно не открылось, используйте ссылку ниже.':'Копирование недоступно. Скопируйте запрос из поля ниже и откройте чат по ссылке.';}).catch(function(){if(current())wrap.querySelector('[data-chat-status]').textContent='Не удалось скопировать. Запрос сохранён в поле ниже.';});
@@ -2248,6 +2268,7 @@ function r3RestorePage(page,snapshot){if(window.StudViewState)StudViewState.rest
 function render(resetScroll){
   appNavigation.sync();
   var existingPage=document.getElementById('page'),viewKey=tab+'|'+(openId||'')+'|'+(openRefId||''),ownerKey=KEY+'|'+(window.Oblako&&Oblako.identity?Oblako.identity():''),keepScroll=!resetScroll&&renderedOwner===ownerKey&&renderedView===viewKey;
+  document.querySelectorAll('[data-assistant-owner]').forEach(function(w){if(w.dataset.assistantOwner!==ownerKey)w.remove();});
   var previousPageScroll=existingPage.scrollTop,previousWindowScroll=window.scrollY,pageSnapshot=keepScroll?r3CapturePage(existingPage):null;
   var c = counts();
   var bar = document.getElementById("tabbar");
@@ -2947,7 +2968,7 @@ function viewMore(){
 
   function moreFold(title, body){ return '<details class="fold"><summary>' + title + '</summary><div class="in">' + body + '</div></details>'; }
 
-  return moreFold("Уведомления на этом устройстве",(window.StudNotificationChannels?StudNotificationChannels.panel():'<div data-notification-settings><p class="hint">Проверяем подключения…</p></div>')+'<p class="hint">Уведомления о новых заявках и возвратах на доработку приходят на это устройство, даже когда реестр закрыт.</p><div class="chips"><button type="button" class="chip" data-act="push-enable">Включить уведомления</button><button type="button" class="chip" data-act="push-test">Проверить</button></div><p class="hint" id="push-status" role="status" aria-live="polite"></p>') +
+  return moreFold("Подключения и расходы",'<button type="button" class="btn" data-act="r3-finance-settings">Открыть подключения и расходы</button>')+moreFold("Уведомления на этом устройстве",(window.StudNotificationChannels?StudNotificationChannels.panel():'<div data-notification-settings><p class="hint">Проверяем подключения…</p></div>')+'<p class="hint">Уведомления о новых заявках и возвратах на доработку приходят на это устройство, даже когда реестр закрыт.</p><div class="chips"><button type="button" class="chip" data-act="push-enable">Включить уведомления</button><button type="button" class="chip" data-act="push-test">Проверить</button></div><p class="hint" id="push-status" role="status" aria-live="polite"></p>') +
     moreFold("Оформление",'<button type="button" class="chip" data-act="theme-toggle">Светлая / тёмная тема</button>') +
     '<details class="fold"><summary>Автоматическая генерация через API' + (configured ? ' <span class="pill p-ok">настройки сохранены</span>'
       : ' <span class="pill p-och">' + 'нет поставщика' + '</span>') + '</summary><div class="in">' + nets + '</div></details>' +
@@ -3174,6 +3195,7 @@ document.addEventListener("input", function(ev){
 });
 document.addEventListener("change", function(ev){
   var el = ev.target;
+  if(el.matches('[data-r3-provider]')){var selectedRequest=item(el.getAttribute('data-r3-provider'));if(!selectedRequest)return;r3PreparationChoices.set(r3ActionKey(selectedRequest),el.value);render();return;}
   if(el.matches('input[data-r3-result-file]')){var ux=item(el.getAttribute('data-r3-result-file')),uf=el.files&&el.files[0];if(!ux||!uf)return;el.disabled=true;toast('Прикрепляем файл…');r3Upload(ux,uf).then(function(){toast('Файл прикреплён. Проверьте и передайте студенту.');}).catch(function(e){toast(e.message||'Файл не прикреплён');}).finally(function(){el.disabled=false;el.value='';});return;}
   if(el.matches('select[data-act="page-size"]')){listPageSize=Number(el.value)===50?50:25;listPage=1;render(true);document.querySelector('[data-act="page-size"]').focus();return;}
   if (el.tagName === "SELECT" && el.getAttribute("data-act") === "status"){
@@ -3241,6 +3263,8 @@ document.addEventListener("click", function(ev){
     var ok7 = save(); render(); toast(ok7 ? "Справочник обновлён по заявке" : "Не сохранено: браузер не разрешает хранение"); return;
   }
   if (act === "open"){ listScroll=window.scrollY;listReturnId=id;openId = id;var opening=item(id);if(opening&&opening.requestNumber)delete opening.materialRevision;if(opening&&opening.r3LoadError){delete opening.r3LoadError;r3Seen.delete(opening);}render();document.querySelector('[data-act="back"]').focus({preventScroll:true});return; }
+  if(act==='r3-finance-settings'){r3FinanceInformation(null);return;}
+  if(act==='r3-finances'){var financialRequest=item(id);if(financialRequest)r3FinanceInformation(financialRequest);return;}
   if(act==='r3-assistant-run')return r3StartAssistant(item(id),el.getAttribute('data-method'));
   if(act==='r3-assistant-refresh'){var refreshing=item(id);if(!refreshing)return;el.disabled=true;el.textContent='Проверяем…';Promise.allSettled([refreshR3Automatic(refreshing),loadR3(refreshing).catch(function(){refreshing.r3LoadError=true;})]).then(function(){render();});return;}
   if(act==='r3-assistant-prepare')return r3AssistantPrepare(item(id));
