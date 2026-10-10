@@ -231,8 +231,13 @@ for(const width of [390,1440])test('unavailable API explains each provider and r
   await expect(page.getByRole('dialog',{name:'Подготовить работу',exact:true}).getByRole('status')).toHaveText('Помощник не подключён');
   await expect(page.getByRole('dialog').locator('[data-api-check-result]')).toContainText('Состояние обновлено');
   await expect(page.getByRole('dialog').locator('[data-api-checked]')).toHaveCount(0);
-  const bounds=await page.getByRole('dialog').locator('.r3-api-actions button').evaluateAll(buttons=>buttons.map(b=>{const r=b.getBoundingClientRect();return {height:r.height,top:r.top,bottom:r.bottom,width:r.width};}));
-  expect(bounds[0].height).toBeGreaterThanOrEqual(44);expect(bounds[1].top-bounds[0].bottom).toBeGreaterThanOrEqual(12);expect(bounds[0].width).toBe(bounds[1].width);
+  // Refresh replaces the sheet under the pointer. Its hover/entrance motion
+  // must finish before measuring the resting layout; keep the 12px contract.
+  await page.mouse.move(0,0);
+  await expect.poll(async()=>{
+   const bounds=await page.getByRole('dialog').locator('.r3-api-actions button').evaluateAll(buttons=>buttons.map(b=>{const r=b.getBoundingClientRect();return {height:r.height,top:r.top,bottom:r.bottom,width:r.width};}));
+   return bounds.length===3&&bounds.every(b=>b.height>=44)&&bounds.every(b=>b.width===bounds[0].width)&&bounds.slice(1).every((b,i)=>b.top-bounds[i].bottom>=12);
+  },{message:'All API actions retain 44px targets, equal widths and 12px resting gaps'}).toBe(true);
   await page.getByRole('button',{name:'Закрыть',exact:true}).click();
  }
  expect(await page.evaluate(()=>assistantCalls.some(c=>['assistant-prepare','assistant-preflight','assistant-start','claude-queue'].includes(c.action)))).toBe(false);
